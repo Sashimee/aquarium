@@ -6,6 +6,8 @@ import { MeshoptDecoder } from 'meshoptimizer';
 import { speciesLengthM } from './fish.ts';
 import { readKtx2Info } from './textures.ts';
 import { FISH_RECIPES } from './recipes.ts';
+import { BLACKWATER_FISH_RECIPES } from './blackwater-fish.ts';
+import { LOFT_FISH_RECIPES } from './loft-fish.ts';
 import { shrimpLength } from './shrimp.ts';
 import {
   backgroundContentProblems,
@@ -449,7 +451,10 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
     }
     return;
   }
-  const lengthFactor = FISH_RECIPES.find((r) => r.id === asset.id)?.lengthFactor ?? 1;
+  const lengthFactor =
+    [...FISH_RECIPES, ...LOFT_FISH_RECIPES, ...BLACKWATER_FISH_RECIPES].find(
+      (r) => r.id === asset.id,
+    )?.lengthFactor ?? 1;
   const expectedLength = speciesLength * lengthFactor;
   if (asset.fish.lengthSource !== 'species-json') {
     problems.push(

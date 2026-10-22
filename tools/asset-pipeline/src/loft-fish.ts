@@ -64,6 +64,8 @@ export interface LoftFishRecipe {
   id: string;
   species: string;
   fallbackLengthM: number;
+  /** Multiplies the species-JSON length, for a sex that grows larger or smaller than the species value. */
+  lengthFactor?: number;
   spec: Omit<LoftSpec, 'standardLengthM'>;
   texture: PhotoSource | SyntheticSource;
   roughness: number;
@@ -1133,7 +1135,8 @@ export async function buildLoftFish(
   ctx: FishContext,
 ): Promise<OutputAsset> {
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
-  const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
+  const standardLengthM =
+    fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
   if (recipe.texture.kind === 'photo') ctx.verifySource(recipe.texture.sourceId);
   else for (const id of recipe.texture.references ?? []) ctx.verifySource(id);
   const { image, project, finUv, finTexture, sources } = await loadTexture(recipe);

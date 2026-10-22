@@ -20,7 +20,11 @@
     "cherry-shrimp": { "juvenile": 20, "adult": 50 },
     "cleaner-shrimp": { "juvenile": 150, "adult": 375 },
     "nerite-snail": { "juvenile": 15, "adult": 38 },
-    "hermit-crab": { "juvenile": 40, "adult": 100 }
+    "hermit-crab": { "juvenile": 40, "adult": 100 },
+    "cardinal-tetra": { "juvenile": 20, "adult": 50 },
+    "rummy-nose-tetra": { "juvenile": 25, "adult": 60 },
+    "dwarf-pencilfish": { "juvenile": 25, "adult": 60 },
+    "apistogramma-hongsloi": { "juvenile": 100, "adult": 250 }
   },
   "items": {
     "plant": {

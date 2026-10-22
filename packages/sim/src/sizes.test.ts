@@ -207,6 +207,41 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxTlM: 0.2,
       source: 'FishBase: 20 cm TL (Ref. 9710); TL = 1.163 SL',
     },
+    'apistogramma-hongsloi': {
+      model: 'apistogramma-hongsloi',
+      maxSlM: 0.034,
+      maxTlM: 0.034 * 1.231,
+      source:
+        'Female model. FishBase: 3.4 cm SL is the male/unsexed maximum (Ref. 36377, the original ' +
+        'description), used here for the smaller female because it matches the catalog 4 cm TL ' +
+        'female and Seriously Fish (females 40-45 mm); the 5.0 cm female field in FishBase has no ' +
+        'length type and is not used. FishBase has no length-length relationship, so TL = 1.231 SL, ' +
+        'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
+    },
+    'cardinal-tetra': {
+      model: 'cardinal-tetra',
+      maxSlM: 0.04 / 1.1708,
+      maxTlM: 0.04,
+      source:
+        'FishBase: 2.51 cm SL (Ref. 38376) is the wild-caught record; the larger aquarium adult is ' +
+        'used instead: Seriously Fish, 35 mm SL, about 4.1 cm TL, rounded to the catalog 4 cm TL; ' +
+        'TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
+    },
+    'dwarf-pencilfish': {
+      model: 'dwarf-pencilfish',
+      maxSlM: 0.035 / 1.2,
+      maxTlM: 0.035,
+      source:
+        'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
+        'so TL = 1.2 SL, the proportion of the lofted model',
+    },
+    'rummy-nose-tetra': {
+      model: 'rummy-nose-tetra',
+      maxSlM: 0.036,
+      maxTlM: 0.036 * 1.2506,
+      source:
+        'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
+    },
   };
 
 /**
@@ -226,17 +261,6 @@ const AWAITING_CONTENT: Record<
     source:
       'FishBase: 13.5 cm TL (Ref. 5598); FishBase has no length-length relationship, so TL = ' +
       '1.231 SL, the proportion of the lofted model',
-  },
-  'apistogramma-hongsloi': {
-    model: 'apistogramma-hongsloi',
-    maxSlM: 0.034,
-    maxTlM: 0.034 * 1.231,
-    source:
-      'Female model. FishBase: 3.4 cm SL is the male/unsexed maximum (Ref. 36377, the original ' +
-      'description), used here for the smaller female because it matches the catalog 4 cm TL ' +
-      'female and Seriously Fish (females 40-45 mm); the 5.0 cm female field in FishBase has no ' +
-      'length type and is not used. FishBase has no length-length relationship, so TL = 1.231 SL, ' +
-      'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
   },
   'aulonocara-baenschi': {
     model: 'aulonocara-baenschi-female',
@@ -286,23 +310,6 @@ const AWAITING_CONTENT: Record<
     source:
       'FishBase (Brachygobius doriae, the species of the reference photos): 4.2 cm TL (Ref. 7050); ' +
       'TL = 1.2338 SL',
-  },
-  'cardinal-tetra': {
-    model: 'cardinal-tetra',
-    maxSlM: 0.04 / 1.1708,
-    maxTlM: 0.04,
-    source:
-      'FishBase: 2.51 cm SL (Ref. 38376) is the wild-caught record; the larger aquarium adult is ' +
-      'used instead: Seriously Fish, 35 mm SL, about 4.1 cm TL, rounded to the catalog 4 cm TL; ' +
-      'TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
-  },
-  'dwarf-pencilfish': {
-    model: 'dwarf-pencilfish',
-    maxSlM: 0.035 / 1.2,
-    maxTlM: 0.035,
-    source:
-      'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
-      'so TL = 1.2 SL, the proportion of the lofted model',
   },
   'figure-8-puffer': {
     model: 'figure-8-puffer',
@@ -354,13 +361,6 @@ const AWAITING_CONTENT: Record<
     source:
       'FishBase (as Chindongo demasoni): 6.3 cm SL (Ref. 40900); FishBase has no length-length ' +
       'relationship, so TL = 1.215 SL, the proportion of the lofted model',
-  },
-  'rummy-nose-tetra': {
-    model: 'rummy-nose-tetra',
-    maxSlM: 0.036,
-    maxTlM: 0.036 * 1.2506,
-    source:
-      'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
   },
   'silver-mono': {
     model: 'silver-mono',

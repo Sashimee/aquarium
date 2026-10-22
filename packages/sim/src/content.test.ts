@@ -36,15 +36,18 @@ const roster = load(dir);
 
 const MVP_ROSTER = [
   ['angelfish', 'Pterophyllum scalare', 'freshwater'],
+  ['apistogramma-hongsloi', 'Apistogramma hongsloi', 'blackwater'],
   ['banggai-cardinalfish', 'Pterapogon kauderni', 'reef'],
   ['betta', 'Betta splendens', 'freshwater'],
   ['blue-tang', 'Paracanthurus hepatus', 'reef'],
   ['bristlenose-pleco', 'Ancistrus cirrhosus', 'freshwater'],
   ['bronze-corydoras', 'Corydoras aeneus', 'freshwater'],
+  ['cardinal-tetra', 'Paracheirodon axelrodi', 'blackwater'],
   ['cherry-shrimp', 'Neocaridina davidi', 'freshwater'],
   ['cleaner-shrimp', 'Lysmata amboinensis', 'reef'],
   ['cleaner-wrasse', 'Labroides dimidiatus', 'reef'],
   ['discus', 'Symphysodon aequifasciatus', 'freshwater'],
+  ['dwarf-pencilfish', 'Nannostomus marginatus', 'blackwater'],
   ['firefish', 'Nemateleotris magnifica', 'reef'],
   ['guppy', 'Poecilia reticulata', 'freshwater'],
   ['harlequin-rasbora', 'Trigonostigma heteromorpha', 'freshwater'],
@@ -53,6 +56,7 @@ const MVP_ROSTER = [
   ['nerite-snail', 'Neritina natalensis', 'freshwater'],
   ['ocellaris-clownfish', 'Amphiprion ocellaris', 'reef'],
   ['royal-gramma', 'Gramma loreto', 'reef'],
+  ['rummy-nose-tetra', 'Petitella bleheri', 'blackwater'],
   ['six-line-wrasse', 'Pseudocheilinus hexataenia', 'reef'],
   ['yellow-tang', 'Zebrasoma flavescens', 'reef'],
 ] as const;
@@ -206,11 +210,18 @@ describe('a mixed community left alone', { timeout: LONG }, () => {
     ...spawnMany('neon-tetra', 20),
     ...spawnMany('guppy', 6),
   ];
+  const blackwater = [
+    ...spawnMany('cardinal-tetra', 10),
+    ...spawnMany('rummy-nose-tetra', 10),
+    ...spawnMany('dwarf-pencilfish', 6),
+    ...spawnMany('apistogramma-hongsloi', 2),
+  ];
 
   it.each([
     { name: 'reef', fish: reef, reef: true },
     { name: 'clownfish pair', fish: reef.slice(0, 2), reef: true },
     { name: 'freshwater', fish: freshwater, reef: false },
+    { name: 'blackwater', fish: blackwater, reef: false },
   ])('$name: territorial chases set off no escape responses', ({ fish, reef: isReef }) => {
     const minutes = 10;
     const w = new World({

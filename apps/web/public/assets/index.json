@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 125421280,
+  "totalBytes": 125427956,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -344,37 +344,37 @@
       ],
       "bounds": {
         "min": [
-          -0.005512,
-          -0.008278,
-          -0.025893
+          -0.004864,
+          -0.007304,
+          -0.022846
         ],
         "max": [
-          0.005512,
-          0.007331,
-          0.015978
+          0.004864,
+          0.006468,
+          0.014098
         ]
       },
       "lods": [
         {
           "file": "fish/apistogramma-hongsloi/lod0.glb",
-          "bytes": 43048,
-          "sha256": "9799232858e1910ee7ba693952607dc63ac883a5c4d8fae7b2eb0b17384d4bff",
+          "bytes": 42996,
+          "sha256": "45c63a09a9331e1f6823b0f3d36ba0ef93e5acf01730f4d38192a9c9442aeb5e",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/apistogramma-hongsloi/lod1.glb",
-          "bytes": 23076,
-          "sha256": "a0c5c6288b06c28b43a96f40097530678ecff2c291016b47166944cb8deb9736",
+          "bytes": 22960,
+          "sha256": "2f8e7f07c044e64773e600b88c5ea3c987c87f64c232a171612bd631f56b634d",
           "triangles": 1727,
           "vertices": 968
         },
         {
           "file": "fish/apistogramma-hongsloi/lod2.glb",
-          "bytes": 11688,
-          "sha256": "cdee5b83405ac9fe04c39bb9685bf788234bbf22e339c389bd81fb054b155e4d",
+          "bytes": 11592,
+          "sha256": "95c1454181768481d1163408cd736ee13b462f0a6b263a63d5e5ca8bf100a8c4",
           "triangles": 647,
-          "vertices": 379
+          "vertices": 380
         }
       ],
       "textures": [
@@ -403,28 +403,28 @@
       "files": [
         {
           "file": "fish/apistogramma-hongsloi/impostor_albedo.ktx2",
-          "bytes": 115352,
-          "sha256": "2d636fe5b06c786b10bd899cb5698010f74f366a6ba2a0208e64549d7fc6954f"
+          "bytes": 115022,
+          "sha256": "af9c0ed49377e6013b2efdf016b1d96d9aec8d0ec027606070aa1669813496c9"
         },
         {
           "file": "fish/apistogramma-hongsloi/impostor_normal.ktx2",
-          "bytes": 313531,
-          "sha256": "5ef0091135a8c7db84ccae0d5ec5cd0744f2c7887ed8df0257d32e84814288c3"
+          "bytes": 312469,
+          "sha256": "38ea7eedad4814f5223b4308737664c24af2b643407bce5658747755cb8bed80"
         },
         {
           "file": "fish/apistogramma-hongsloi/lod0.glb",
-          "bytes": 43048,
-          "sha256": "9799232858e1910ee7ba693952607dc63ac883a5c4d8fae7b2eb0b17384d4bff"
+          "bytes": 42996,
+          "sha256": "45c63a09a9331e1f6823b0f3d36ba0ef93e5acf01730f4d38192a9c9442aeb5e"
         },
         {
           "file": "fish/apistogramma-hongsloi/lod1.glb",
-          "bytes": 23076,
-          "sha256": "a0c5c6288b06c28b43a96f40097530678ecff2c291016b47166944cb8deb9736"
+          "bytes": 22960,
+          "sha256": "2f8e7f07c044e64773e600b88c5ea3c987c87f64c232a171612bd631f56b634d"
         },
         {
           "file": "fish/apistogramma-hongsloi/lod2.glb",
-          "bytes": 11688,
-          "sha256": "cdee5b83405ac9fe04c39bb9685bf788234bbf22e339c389bd81fb054b155e4d"
+          "bytes": 11592,
+          "sha256": "95c1454181768481d1163408cd736ee13b462f0a6b263a63d5e5ca8bf100a8c4"
         },
         {
           "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_1k.ktx2",
@@ -433,8 +433,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.034,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.03,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -465,20 +465,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.000473,
-          -0.004957
+          -0.000418,
+          -0.004374
         ],
-        "radius": 0.022421,
+        "radius": 0.019783,
         "albedo": {
           "file": "fish/apistogramma-hongsloi/impostor_albedo.ktx2",
-          "bytes": 115352,
-          "sha256": "2d636fe5b06c786b10bd899cb5698010f74f366a6ba2a0208e64549d7fc6954f",
+          "bytes": 115022,
+          "sha256": "af9c0ed49377e6013b2efdf016b1d96d9aec8d0ec027606070aa1669813496c9",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/apistogramma-hongsloi/impostor_normal.ktx2",
-          "bytes": 313531,
-          "sha256": "5ef0091135a8c7db84ccae0d5ec5cd0744f2c7887ed8df0257d32e84814288c3",
+          "bytes": 312469,
+          "sha256": "38ea7eedad4814f5223b4308737664c24af2b643407bce5658747755cb8bed80",
           "codec": "uastc"
         }
       }
@@ -596,7 +596,7 @@
       ],
       "fish": {
         "standardLengthM": 0.05,
-        "lengthSource": "recipe",
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -2533,37 +2533,37 @@
       ],
       "bounds": {
         "min": [
-          -0.004529,
-          -0.007707,
-          -0.025511
+          -0.003708,
+          -0.00631,
+          -0.020887
         ],
         "max": [
-          0.004529,
-          0.007659,
-          0.015719
+          0.003708,
+          0.00627,
+          0.012869
         ]
       },
       "lods": [
         {
           "file": "fish/cardinal-tetra/lod0.glb",
-          "bytes": 43812,
-          "sha256": "720887081df02445bc2493e6217277972816634c86f5926f22ae5ad7a9822a75",
+          "bytes": 43744,
+          "sha256": "125a9bc3d13441642291b1afc7dba2512fa80781b6e6bbdb24bfefe878834f34",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/cardinal-tetra/lod1.glb",
-          "bytes": 23332,
-          "sha256": "f8cc95b16347358c854113889c4e8d6ba80eb651382fdcb2293f0b4408adca0f",
+          "bytes": 23288,
+          "sha256": "c24cd42c977bf34ba8e11ad906d1c0e77c9d2099f3015354d6db1935f9268afd",
           "triangles": 1728,
-          "vertices": 968
+          "vertices": 971
         },
         {
           "file": "fish/cardinal-tetra/lod2.glb",
-          "bytes": 11692,
-          "sha256": "c24afe4fbdefae322a0842ec4b863171ea5fb5ea62d18f2f974ef21131861cca",
+          "bytes": 11724,
+          "sha256": "cc63ff6f3acdcd11036523e3dc3ff67887133d92459130d6322c09cb92c771f9",
           "triangles": 647,
-          "vertices": 383
+          "vertices": 384
         }
       ],
       "textures": [
@@ -2592,28 +2592,28 @@
       "files": [
         {
           "file": "fish/cardinal-tetra/impostor_albedo.ktx2",
-          "bytes": 111177,
-          "sha256": "5b14338dbaf8d77c3c4d58ecedc1b643cf8d2d6333272fb1f859bc50f16ba97a"
+          "bytes": 111749,
+          "sha256": "1217f65a2541d6dfd36a244e12f36d199023ec2a568e3668e8bdeb9d8f066dcb"
         },
         {
           "file": "fish/cardinal-tetra/impostor_normal.ktx2",
-          "bytes": 282995,
-          "sha256": "ddbac5308867e6f867de524b179556b58ef7c31593b2a994ef4d818a2988e58e"
+          "bytes": 283618,
+          "sha256": "b3009a8a8ef5cfc93fb442a4921b6dba5ecc7da34b5efdd7f411dae7d3838a46"
         },
         {
           "file": "fish/cardinal-tetra/lod0.glb",
-          "bytes": 43812,
-          "sha256": "720887081df02445bc2493e6217277972816634c86f5926f22ae5ad7a9822a75"
+          "bytes": 43744,
+          "sha256": "125a9bc3d13441642291b1afc7dba2512fa80781b6e6bbdb24bfefe878834f34"
         },
         {
           "file": "fish/cardinal-tetra/lod1.glb",
-          "bytes": 23332,
-          "sha256": "f8cc95b16347358c854113889c4e8d6ba80eb651382fdcb2293f0b4408adca0f"
+          "bytes": 23288,
+          "sha256": "c24cd42c977bf34ba8e11ad906d1c0e77c9d2099f3015354d6db1935f9268afd"
         },
         {
           "file": "fish/cardinal-tetra/lod2.glb",
-          "bytes": 11692,
-          "sha256": "c24afe4fbdefae322a0842ec4b863171ea5fb5ea62d18f2f974ef21131861cca"
+          "bytes": 11724,
+          "sha256": "cc63ff6f3acdcd11036523e3dc3ff67887133d92459130d6322c09cb92c771f9"
         },
         {
           "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_1k.ktx2",
@@ -2622,8 +2622,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.0342,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.028,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -2654,20 +2654,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.000024,
-          -0.004896
+          -0.00002,
+          -0.004009
         ],
-        "radius": 0.022148,
+        "radius": 0.018133,
         "albedo": {
           "file": "fish/cardinal-tetra/impostor_albedo.ktx2",
-          "bytes": 111177,
-          "sha256": "5b14338dbaf8d77c3c4d58ecedc1b643cf8d2d6333272fb1f859bc50f16ba97a",
+          "bytes": 111749,
+          "sha256": "1217f65a2541d6dfd36a244e12f36d199023ec2a568e3668e8bdeb9d8f066dcb",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/cardinal-tetra/impostor_normal.ktx2",
-          "bytes": 282995,
-          "sha256": "ddbac5308867e6f867de524b179556b58ef7c31593b2a994ef4d818a2988e58e",
+          "bytes": 283618,
+          "sha256": "b3009a8a8ef5cfc93fb442a4921b6dba5ecc7da34b5efdd7f411dae7d3838a46",
           "codec": "uastc"
         }
       }
@@ -3070,37 +3070,37 @@
       ],
       "bounds": {
         "min": [
-          -0.003862,
-          -0.005992,
-          -0.020868
+          -0.003174,
+          -0.004925,
+          -0.017152
         ],
         "max": [
-          0.003862,
-          0.007235,
-          0.014194
+          0.003174,
+          0.005947,
+          0.011666
         ]
       },
       "lods": [
         {
           "file": "fish/dwarf-pencilfish/lod0.glb",
           "bytes": 44128,
-          "sha256": "decafd6033849eb8fb0a41d5d8731d43178f5d40a5b3c28ff704dac79607000a",
+          "sha256": "09fe8f61b895ff30545d135b644d08fdc490607be699e1214b9f3655e8823bf0",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/dwarf-pencilfish/lod1.glb",
-          "bytes": 23396,
-          "sha256": "b9e3cbda875978054b86787088bef0b3e6c4525c5110de7d4ab94bcfec9ef7ca",
-          "triangles": 1727,
-          "vertices": 966
+          "bytes": 23572,
+          "sha256": "4ad8574526f3037448a6bf653bf58ce67a21b1bf137bde0ccd0864e454bd435c",
+          "triangles": 1728,
+          "vertices": 967
         },
         {
           "file": "fish/dwarf-pencilfish/lod2.glb",
-          "bytes": 11748,
-          "sha256": "7c18457183c269bca9a7f95d53ede7110b2d5d4ae513bcaf792f3bf8068024fd",
+          "bytes": 11888,
+          "sha256": "18f3bd207d2abdb0b3732e6716c712d0ef4b17c8189fe18244b33dffb1bb92c9",
           "triangles": 647,
-          "vertices": 383
+          "vertices": 378
         }
       ],
       "textures": [
@@ -3129,28 +3129,28 @@
       "files": [
         {
           "file": "fish/dwarf-pencilfish/impostor_albedo.ktx2",
-          "bytes": 117259,
-          "sha256": "45e33b16edd0b503c5bbab6baa5fdd8213fa370ce199231fa32b642004c05798"
+          "bytes": 117330,
+          "sha256": "887ef27bf05acca20a998fd50746cf5e0ac1b1e219916464ab8e69d2050d2593"
         },
         {
           "file": "fish/dwarf-pencilfish/impostor_normal.ktx2",
-          "bytes": 284136,
-          "sha256": "d88677cd41153c9e8ca69f6e44c9e0dad3fb93c4884d0934305f5253bb5be8ed"
+          "bytes": 290233,
+          "sha256": "d0ba5067afd7ce26367389542868b43ee8e038dad97f281643185a74dba62039"
         },
         {
           "file": "fish/dwarf-pencilfish/lod0.glb",
           "bytes": 44128,
-          "sha256": "decafd6033849eb8fb0a41d5d8731d43178f5d40a5b3c28ff704dac79607000a"
+          "sha256": "09fe8f61b895ff30545d135b644d08fdc490607be699e1214b9f3655e8823bf0"
         },
         {
           "file": "fish/dwarf-pencilfish/lod1.glb",
-          "bytes": 23396,
-          "sha256": "b9e3cbda875978054b86787088bef0b3e6c4525c5110de7d4ab94bcfec9ef7ca"
+          "bytes": 23572,
+          "sha256": "4ad8574526f3037448a6bf653bf58ce67a21b1bf137bde0ccd0864e454bd435c"
         },
         {
           "file": "fish/dwarf-pencilfish/lod2.glb",
-          "bytes": 11748,
-          "sha256": "7c18457183c269bca9a7f95d53ede7110b2d5d4ae513bcaf792f3bf8068024fd"
+          "bytes": 11888,
+          "sha256": "18f3bd207d2abdb0b3732e6716c712d0ef4b17c8189fe18244b33dffb1bb92c9"
         },
         {
           "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_1k.ktx2",
@@ -3159,8 +3159,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.0292,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.024,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -3190,21 +3190,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          0,
-          0.000622,
-          -0.003337
+          -0.000005,
+          0.000511,
+          -0.002743
         ],
-        "radius": 0.018887,
+        "radius": 0.015523,
         "albedo": {
           "file": "fish/dwarf-pencilfish/impostor_albedo.ktx2",
-          "bytes": 117259,
-          "sha256": "45e33b16edd0b503c5bbab6baa5fdd8213fa370ce199231fa32b642004c05798",
+          "bytes": 117330,
+          "sha256": "887ef27bf05acca20a998fd50746cf5e0ac1b1e219916464ab8e69d2050d2593",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/dwarf-pencilfish/impostor_normal.ktx2",
-          "bytes": 284136,
-          "sha256": "d88677cd41153c9e8ca69f6e44c9e0dad3fb93c4884d0934305f5253bb5be8ed",
+          "bytes": 290233,
+          "sha256": "d0ba5067afd7ce26367389542868b43ee8e038dad97f281643185a74dba62039",
           "codec": "uastc"
         }
       }
@@ -3227,37 +3227,37 @@
       ],
       "bounds": {
         "min": [
-          -0.00342,
-          -0.005146,
-          -0.021102
+          -0.002811,
+          -0.00423,
+          -0.017344
         ],
         "max": [
-          0.00342,
-          0.005665,
-          0.01396
+          0.002811,
+          0.004656,
+          0.011474
         ]
       },
       "lods": [
         {
           "file": "fish/dwarf-pencilfish-male/lod0.glb",
-          "bytes": 44144,
-          "sha256": "12b29f6e4ad8895784fc491bf65576e2e78d698001677ee707523f9bc2e05742",
+          "bytes": 44160,
+          "sha256": "38f94c4b8878ac411d17b53c129b1898fed7166f2cca88b2b56816ab79e624e2",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/dwarf-pencilfish-male/lod1.glb",
-          "bytes": 23432,
-          "sha256": "50ea2256372ccbb435950ec049f27368f4f9b19d1d56603368dad64d59a39c5a",
-          "triangles": 1727,
-          "vertices": 974
+          "bytes": 23300,
+          "sha256": "c058d1b505c2ed753b808681304a419fccfc4a8716c602a4621f0c628a67cc58",
+          "triangles": 1728,
+          "vertices": 976
         },
         {
           "file": "fish/dwarf-pencilfish-male/lod2.glb",
-          "bytes": 11860,
-          "sha256": "c252d5e8644ebd74da91328274bad47a1e87f60b8e7d7aa4e82543c20edbab2d",
-          "triangles": 648,
-          "vertices": 384
+          "bytes": 11812,
+          "sha256": "3862fc7e054ef93fba1213cc4d63b9972c1375bc9320b1190387c6c79c12f4c3",
+          "triangles": 647,
+          "vertices": 382
         }
       ],
       "textures": [
@@ -3286,28 +3286,28 @@
       "files": [
         {
           "file": "fish/dwarf-pencilfish-male/impostor_albedo.ktx2",
-          "bytes": 111366,
-          "sha256": "225ff25d0b5b7a427e46c458d880d808d94ce1e6cf4a0fb6ba2fc1030deb0868"
+          "bytes": 110780,
+          "sha256": "4006125c35aa3f84b6c3aa2dac6266b560c30df87c383f846b70d823db7b619d"
         },
         {
           "file": "fish/dwarf-pencilfish-male/impostor_normal.ktx2",
-          "bytes": 258451,
-          "sha256": "44d71dd0bff2b6e8727e9c8b17d0eeee414cc5dcd7ab8831bfcba82702199979"
+          "bytes": 258401,
+          "sha256": "c71b14ccb764687f342176788ca5cf0b5fe2ac1e221d96ade9da42be3080be4a"
         },
         {
           "file": "fish/dwarf-pencilfish-male/lod0.glb",
-          "bytes": 44144,
-          "sha256": "12b29f6e4ad8895784fc491bf65576e2e78d698001677ee707523f9bc2e05742"
+          "bytes": 44160,
+          "sha256": "38f94c4b8878ac411d17b53c129b1898fed7166f2cca88b2b56816ab79e624e2"
         },
         {
           "file": "fish/dwarf-pencilfish-male/lod1.glb",
-          "bytes": 23432,
-          "sha256": "50ea2256372ccbb435950ec049f27368f4f9b19d1d56603368dad64d59a39c5a"
+          "bytes": 23300,
+          "sha256": "c058d1b505c2ed753b808681304a419fccfc4a8716c602a4621f0c628a67cc58"
         },
         {
           "file": "fish/dwarf-pencilfish-male/lod2.glb",
-          "bytes": 11860,
-          "sha256": "c252d5e8644ebd74da91328274bad47a1e87f60b8e7d7aa4e82543c20edbab2d"
+          "bytes": 11812,
+          "sha256": "3862fc7e054ef93fba1213cc4d63b9972c1375bc9320b1190387c6c79c12f4c3"
         },
         {
           "file": "fish/dwarf-pencilfish-male/textures/dwarf-pencilfish-male_basecolor_1k.ktx2",
@@ -3321,8 +3321,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.0292,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.024,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -3353,20 +3353,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          0.000259,
-          -0.003571
+          0.000213,
+          -0.002935
         ],
-        "radius": 0.018867,
+        "radius": 0.015508,
         "albedo": {
           "file": "fish/dwarf-pencilfish-male/impostor_albedo.ktx2",
-          "bytes": 111366,
-          "sha256": "225ff25d0b5b7a427e46c458d880d808d94ce1e6cf4a0fb6ba2fc1030deb0868",
+          "bytes": 110780,
+          "sha256": "4006125c35aa3f84b6c3aa2dac6266b560c30df87c383f846b70d823db7b619d",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/dwarf-pencilfish-male/impostor_normal.ktx2",
-          "bytes": 258451,
-          "sha256": "44d71dd0bff2b6e8727e9c8b17d0eeee414cc5dcd7ab8831bfcba82702199979",
+          "bytes": 258401,
+          "sha256": "c71b14ccb764687f342176788ca5cf0b5fe2ac1e221d96ade9da42be3080be4a",
           "codec": "uastc"
         }
       }
@@ -5920,37 +5920,37 @@
       ],
       "bounds": {
         "min": [
-          -0.004767,
-          -0.007741,
-          -0.028827
+          -0.003973,
+          -0.006451,
+          -0.024023
         ],
         "max": [
-          0.004767,
-          0.007649,
-          0.016533
+          0.003973,
+          0.006374,
+          0.013777
         ]
       },
       "lods": [
         {
           "file": "fish/rummy-nose-tetra/lod0.glb",
-          "bytes": 43708,
-          "sha256": "ff2c9d4c3ab3a5dbcb3733659b0ecb8cc0ae699b914b6e4b546c9831c3ea5dfb",
+          "bytes": 43656,
+          "sha256": "9c6db815c43922c89350d08cfb306d3fd27ad952fec9a4220f3ba2fac8f27805",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/rummy-nose-tetra/lod1.glb",
-          "bytes": 23292,
-          "sha256": "ac41f7710e566f4e8f909ea4c920c382e26305c0f0fafc104b9ca27c8634f097",
-          "triangles": 1728,
-          "vertices": 971
+          "bytes": 23252,
+          "sha256": "000ae72cf039170cb5392fff0b90b0795aa051e695f95cf54dadba583d50df7e",
+          "triangles": 1727,
+          "vertices": 968
         },
         {
           "file": "fish/rummy-nose-tetra/lod2.glb",
-          "bytes": 11640,
-          "sha256": "364793323b14bde46e442d2f5bea3a5b5fc4b6e7f06d8dfc28ed5bc834a351e2",
-          "triangles": 647,
-          "vertices": 381
+          "bytes": 11740,
+          "sha256": "44d7d09c1abc4b09008219e48f29f487cc213bffaf204f567ec933b258f24ed4",
+          "triangles": 648,
+          "vertices": 383
         }
       ],
       "textures": [
@@ -5979,28 +5979,28 @@
       "files": [
         {
           "file": "fish/rummy-nose-tetra/impostor_albedo.ktx2",
-          "bytes": 105579,
-          "sha256": "fd7237946bc691e7ca4e434e4a49f6c391e2dfa1ba283338a8546b62ecf4387f"
+          "bytes": 105978,
+          "sha256": "f59dcd309991b6b2182d1787bcd247ebb006de0f0c752ebd0c247478d17c5e68"
         },
         {
           "file": "fish/rummy-nose-tetra/impostor_normal.ktx2",
-          "bytes": 267315,
-          "sha256": "41d645c81140062fdd8a2c4529aaa94e30531c03cee43ff05f4f1712217445f8"
+          "bytes": 268441,
+          "sha256": "582ab9aef2626cd74dbc8955a985c84f8ab822d156fd41a254f8d03e13518936"
         },
         {
           "file": "fish/rummy-nose-tetra/lod0.glb",
-          "bytes": 43708,
-          "sha256": "ff2c9d4c3ab3a5dbcb3733659b0ecb8cc0ae699b914b6e4b546c9831c3ea5dfb"
+          "bytes": 43656,
+          "sha256": "9c6db815c43922c89350d08cfb306d3fd27ad952fec9a4220f3ba2fac8f27805"
         },
         {
           "file": "fish/rummy-nose-tetra/lod1.glb",
-          "bytes": 23292,
-          "sha256": "ac41f7710e566f4e8f909ea4c920c382e26305c0f0fafc104b9ca27c8634f097"
+          "bytes": 23252,
+          "sha256": "000ae72cf039170cb5392fff0b90b0795aa051e695f95cf54dadba583d50df7e"
         },
         {
           "file": "fish/rummy-nose-tetra/lod2.glb",
-          "bytes": 11640,
-          "sha256": "364793323b14bde46e442d2f5bea3a5b5fc4b6e7f06d8dfc28ed5bc834a351e2"
+          "bytes": 11740,
+          "sha256": "44d7d09c1abc4b09008219e48f29f487cc213bffaf204f567ec933b258f24ed4"
         },
         {
           "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_1k.ktx2",
@@ -6009,8 +6009,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.036,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.03,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -6041,20 +6041,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.000046,
-          -0.006147
+          -0.000038,
+          -0.005123
         ],
-        "radius": 0.024411,
+        "radius": 0.020342,
         "albedo": {
           "file": "fish/rummy-nose-tetra/impostor_albedo.ktx2",
-          "bytes": 105579,
-          "sha256": "fd7237946bc691e7ca4e434e4a49f6c391e2dfa1ba283338a8546b62ecf4387f",
+          "bytes": 105978,
+          "sha256": "f59dcd309991b6b2182d1787bcd247ebb006de0f0c752ebd0c247478d17c5e68",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/rummy-nose-tetra/impostor_normal.ktx2",
-          "bytes": 267315,
-          "sha256": "41d645c81140062fdd8a2c4529aaa94e30531c03cee43ff05f4f1712217445f8",
+          "bytes": 268441,
+          "sha256": "582ab9aef2626cd74dbc8955a985c84f8ab822d156fd41a254f8d03e13518936",
           "codec": "uastc"
         }
       }

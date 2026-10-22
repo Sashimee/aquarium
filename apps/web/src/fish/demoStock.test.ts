@@ -5,6 +5,7 @@ import {
   speciesSchema,
   tankWaterBounds,
   tankWaterTop,
+  type PlayableBiome,
 } from '@aquarium/shared';
 import { BEHAVIOUR, World } from '@aquarium/sim';
 import shippedIndex from '../../public/assets/index.json';
@@ -17,10 +18,13 @@ import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock
 import bettaContent from '../../../../content/species/betta.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
-// The cichlid, blackwater and mangrove stocks arrive with their species content (T48-T50).
-const BIOMES = playableBiomeSchema.options.filter(
-  (b) => b !== 'cichlid' && b !== 'blackwater' && b !== 'mangrove',
-);
+// The cichlid and mangrove stocks arrive with their species content (T48, T50).
+const BIOMES = playableBiomeSchema.options.filter((b) => b !== 'cichlid' && b !== 'mangrove');
+const SCHOOLERS: Partial<Record<PlayableBiome, readonly string[]>> = {
+  freshwater: ['neon-tetra', 'bronze-corydoras'],
+  reef: ['banggai-cardinalfish'],
+  blackwater: ['cardinal-tetra', 'rummy-nose-tetra', 'dwarf-pencilfish'],
+};
 // PLAN §2.7: the mobile tier draws at most 30 fish per tank, and the demo runs on mobile too.
 const MOBILE_FISH_BUDGET = 30;
 
@@ -134,13 +138,10 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
       const { schooling } = speciesSchema.partial({ render: true }).parse(raw).behaviour;
       return schooling === undefined ? [] : [{ id: species.id, minGroup: schooling.minGroup }];
     });
-    if (biome === 'freshwater') {
-      expect(schooling.map((s) => s.id)).toEqual(
-        expect.arrayContaining(['neon-tetra', 'bronze-corydoras']),
-      );
-    } else {
-      expect(schooling.map((s) => s.id)).toContain('banggai-cardinalfish');
-    }
+    expect(SCHOOLERS[biome], biome).toBeDefined();
+    expect(schooling.map((s) => s.id)).toEqual(
+      expect.arrayContaining([...(SCHOOLERS[biome] ?? [])]),
+    );
     const spawned = demoTank(DEFAULT_TANK, 1, biome).config.fish;
     for (const { id, minGroup } of schooling) {
       expect(stock.counts[id] ?? 0, id).toBeGreaterThanOrEqual(minGroup);

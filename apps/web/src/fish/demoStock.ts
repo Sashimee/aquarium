@@ -16,13 +16,17 @@ import {
   type TankSpaceWorldConfig,
 } from '@aquarium/sim';
 import angelfishContent from '../../../../content/species/angelfish.json';
+import apistogrammaHongsloiContent from '../../../../content/species/apistogramma-hongsloi.json';
 import banggaiCardinalfishContent from '../../../../content/species/banggai-cardinalfish.json';
 import bettaContent from '../../../../content/species/betta.json';
 import bronzeCorydorasContent from '../../../../content/species/bronze-corydoras.json';
+import cardinalTetraContent from '../../../../content/species/cardinal-tetra.json';
+import dwarfPencilfishContent from '../../../../content/species/dwarf-pencilfish.json';
 import guppyContent from '../../../../content/species/guppy.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 import ocellarisClownfishContent from '../../../../content/species/ocellaris-clownfish.json';
 import royalGrammaContent from '../../../../content/species/royal-gramma.json';
+import rummyNoseTetraContent from '../../../../content/species/rummy-nose-tetra.json';
 import yellowTangContent from '../../../../content/species/yellow-tang.json';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import { WATER_INSET } from '../engine/tank/dimensions';
@@ -76,6 +80,8 @@ export function demoStock(
  * Guppies are about half male: each fish's sex, and with it its model, comes from its key.
  * The reef has one clownfish pair for its one host anemone, a yellow rather than a blue tang
  * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
+ * Blackwater is a Rio Negro community: two tetra schools, a pencilfish shoal and one dwarf cichlid
+ * pair, 28 fish against the mobile tier's 30.
  */
 export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
   freshwater: demoStock(
@@ -87,7 +93,20 @@ export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
     { 'ocellaris-clownfish': 2, 'yellow-tang': 1, 'royal-gramma': 1, 'banggai-cardinalfish': 1 },
   ),
   cichlid: demoStock([], {}),
-  blackwater: demoStock([], {}),
+  blackwater: demoStock(
+    [
+      cardinalTetraContent,
+      rummyNoseTetraContent,
+      dwarfPencilfishContent,
+      apistogrammaHongsloiContent,
+    ],
+    {
+      'cardinal-tetra': 10,
+      'rummy-nose-tetra': 10,
+      'dwarf-pencilfish': 6,
+      'apistogramma-hongsloi': 2,
+    },
+  ),
   mangrove: demoStock([], {}),
 };
 
