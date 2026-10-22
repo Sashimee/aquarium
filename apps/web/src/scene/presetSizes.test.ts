@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { legacyTintSeed, TANK_SIZES, type DecorItem, type TankSize } from '@aquarium/shared';
+import {
+  fitPresetItem,
+  legacyTintSeed,
+  TANK_SIZES,
+  type DecorItem,
+  type TankSize,
+} from '@aquarium/shared';
 import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import type { WebGPURenderer } from 'three/webgpu';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
@@ -124,6 +130,28 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
         );
       const authored = loadPreset(biome);
       expect(keysOf(fitted().decor)).toEqual(keysOf(authored.decor));
+    });
+
+    it('agrees with the server fit except where the glass nudged an item inward', () => {
+      const authored = loadPreset(biome);
+      const client = fitted().decor;
+      expect(client).toHaveLength(authored.decor.length);
+      authored.decor.forEach((item, i) => {
+        const server = fitPresetItem(item, size);
+        const mine = client[i];
+        if (!mine) throw new Error(`${item.assetId} is missing from the fitted preset`);
+        for (const axis of [0, 2] as const) {
+          const was = server.position[axis];
+          const now = mine.position[axis];
+          const label = `${item.assetId} axis ${axis}`;
+          expect(Math.abs(now), label).toBeLessThanOrEqual(Math.abs(was) + 1e-9);
+          if (Math.sign(now) !== 0) expect(Math.sign(now), label).toBe(Math.sign(was));
+        }
+        expect(mine.scale, item.assetId).toBeLessThanOrEqual(server.scale + 1e-9);
+        expect(mine.tintSeed, item.assetId).toBe(server.tintSeed);
+        expect(mine.assetId).toBe(server.assetId);
+        expect(mine.rotationY).toBe(server.rotationY);
+      });
     });
 
     it('keeps every decor item inside the glass and under the waterline', () => {

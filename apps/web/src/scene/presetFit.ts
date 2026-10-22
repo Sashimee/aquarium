@@ -1,8 +1,11 @@
 import {
-  legacyTintSeed,
+  fitPresetItem,
+  presetFit,
+  TANK_SIZES,
   type DecorItem,
   type PlantPatch,
   type PresetLayout,
+  type TankSize,
 } from '@aquarium/shared';
 import { DEFAULT_TANK, sameTank, type TankDimensions } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
@@ -49,13 +52,23 @@ export function boundsFromCatalog(
   };
 }
 
+function tankSizeOf(dimensions: TankDimensions): TankSize {
+  const match = (Object.keys(TANK_SIZES) as TankSize[]).find(
+    (size) =>
+      TANK_SIZES[size].dimensions.length === dimensions.length &&
+      TANK_SIZES[size].dimensions.depth === dimensions.depth,
+  );
+  if (!match) {
+    throw new RangeError(
+      `No tank size is ${dimensions.length} x ${dimensions.depth} m; presets fit only the sizes in TANK_SIZES.`,
+    );
+  }
+  return match;
+}
+
 /** How the standard-tank layouts the presets are authored in shrink to fit a smaller tank. */
 export function layoutScale(dimensions: TankDimensions): number {
-  return Math.min(
-    1,
-    dimensions.length / DEFAULT_TANK.length,
-    dimensions.depth / DEFAULT_TANK.depth,
-  );
+  return presetFit(tankSizeOf(dimensions)).scale;
 }
 
 function rotatedReach(bounds: Footprint, rotationY: number): { x: number; z: number } {
@@ -113,19 +126,18 @@ export function maxScaleAt(
 }
 
 function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf): DecorItem {
-  const lenR = dimensions.length / DEFAULT_TANK.length;
-  const depR = dimensions.depth / DEFAULT_TANK.depth;
+  const stretched = fitPresetItem(item, tankSizeOf(dimensions));
   const k = layoutScale(dimensions);
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const waterTop = dimensions.height - dimensions.freeboard;
 
-  let x = item.position[0] * lenR;
-  let z = item.position[2] * depR;
+  let x = stretched.position[0];
+  let z = stretched.position[2];
   const seatOffset =
     item.position[1] - substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
   let y = substrateHeight(dimensions, x, z) + seatOffset * k;
-  let scale = item.scale * k;
+  let scale = stretched.scale;
 
   const model = boundsOf(item.assetId);
   if (model) {
@@ -155,8 +167,7 @@ function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf
     if (height > 0) scale = Math.min(scale, (waterTop - SURFACE_MARGIN - y) / height);
   }
   return {
-    ...item,
-    tintSeed: item.tintSeed ?? legacyTintSeed(item),
+    ...stretched,
     position: [x, y, z],
     scale: Math.max(scale, MIN_PLANT_SCALE),
   };
@@ -167,7 +178,7 @@ function fitPatch(
   dimensions: TankDimensions,
   reachOf: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PlantPatch {
-  const k = layoutScale(dimensions);
+  const { scale: k } = presetFit(tankSizeOf(dimensions));
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const scale: [number, number] = [
