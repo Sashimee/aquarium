@@ -10,11 +10,11 @@ import {
   type Equipment,
   type Tank,
 } from '@aquarium/shared';
-import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
+import { fragCoral, layoutPlantKeys, type CoralState } from '@aquarium/sim/lifecycle';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadCoralTable } from './corals.ts';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { loadCoralTable, rehomeRawFrags } from './corals.ts';
 import { loadPlantTable, substrateBounds } from './plants.ts';
 import { loadPresets } from './presets.ts';
 import { schema } from './db/index.ts';
@@ -507,12 +507,13 @@ describe('fragging a coral', () => {
       const reef = await makeTank(h, alice, { layout: null, size });
       const first = (await wait(h, alice, reef, 1)).corals?.[0];
       if (!first) throw new Error('preset has no coral');
-      const authored = (presets.reef?.decor ?? []).find((item) =>
-        coralTable.species.has(coralSpeciesId(item.assetId)),
-      );
-      expect(first.key).toBe(
-        `s${legacyTintSeed(authored ?? { position: [0, 0, 0], rotationY: 0 })}`,
-      );
+      const authored = (presets.reef?.decor ?? [])
+        .filter((item) => coralTable.species.has(coralSpeciesId(item.assetId)))
+        .map((item) => ({ ...item, tintSeed: legacyTintSeed(item) }));
+      const expectedKeys = layoutPlantKeys(authored);
+      expect(expectedKeys.length).toBeGreaterThan(1);
+      expect((await wait(h, alice, reef, 0)).corals?.map((c) => c.key)).toEqual(expectedKeys);
+      expect(first.key).toBe(expectedKeys[0]);
       const row = (await rowOf(h, reef)).corals as { key: string; size: number }[];
       await setCorals(
         h,
@@ -576,6 +577,102 @@ describe('fragging a coral', () => {
           fragRadiusM + edgeMarginM,
         );
       }
+    });
+  });
+
+  describe.each(['nano30', 'long300'] as const)('re-homing raw fragments on a %s tank', (size) => {
+    const authoredRoots = (presets.reef?.decor ?? []).filter((item) =>
+      coralTable.species.has(coralSpeciesId(item.assetId)),
+    );
+    const bounds = substrateBounds(size);
+
+    async function rawTank(): Promise<{ tankId: string; keys: string[]; fragKeys: string[] }> {
+      const tankId = await makeTank(h, alice, { layout: null, size });
+      const keys = ((await wait(h, alice, tankId, 1)).corals ?? []).map((c) => c.key);
+      const rows: CoralState[] = [];
+      authoredRoots.forEach((item, i) => {
+        const key = keys[i] ?? '';
+        let colony: CoralState[] = [
+          {
+            ...stored(key, 3, 0, item.assetId),
+            parentKey: null,
+            position: [item.position[0], item.position[2]],
+          },
+        ];
+        for (let n = 0; n < 8; n++) {
+          const cut = fragCoral(colony, key, coralTable, bounds);
+          if (!cut.ok) throw new Error(cut.reason);
+          colony = cut.corals.map((c) => (c.key === key ? { ...c, size: 3 } : c));
+        }
+        rows.push(...colony);
+      });
+      await setCorals(h, tankId, rows);
+      return { tankId, keys, fragKeys: rows.filter((r) => r.parentKey !== null).map((r) => r.key) };
+    }
+
+    const positions = async (tankId: string) =>
+      new Map(
+        ((await rowOf(h, tankId)).corals as { key: string; position: [number, number] }[]).map(
+          (c) => [c.key, c.position] as const,
+        ),
+      );
+
+    it('moves fragments cut beside the raw colony into reach of the fitted one, once only', async () => {
+      const { tankId, keys, fragKeys } = await rawTank();
+      const before = await positions(tankId);
+      const report = await rehomeRawFrags(h.database, presets, coralTable);
+      expect(report.failed).toBe(0);
+      const after = await positions(tankId);
+      const { fragRadiusM } = coralTable.params;
+      authoredRoots.forEach((item, i) => {
+        const fitted = fitPresetItem(item, size);
+        for (const key of fragKeys.filter((k) => k.startsWith(`${keys[i]}.`))) {
+          const [x, z] = after.get(key) ?? [Infinity, Infinity];
+          expect(Math.hypot(x - fitted.position[0], z - fitted.position[2])).toBeLessThanOrEqual(
+            fragRadiusM + 1e-6,
+          );
+        }
+      });
+      const movedKeys = fragKeys.filter((k) => before.get(k)?.join() !== after.get(k)?.join());
+      expect(report.moved).toBe(movedKeys.length);
+      if (size === 'long300') expect(movedKeys.length).toBeGreaterThan(0);
+
+      expect(await rehomeRawFrags(h.database, presets, coralTable)).toEqual({
+        moved: 0,
+        failed: 0,
+      });
+      expect(await positions(tankId)).toEqual(after);
+    });
+
+    it('skips a malformed tank and still re-homes the others', async () => {
+      const bad = await makeTank(h, mallory, { layout: null, size });
+      await setCorals(h, bad, [
+        { key: 's1', assetId: 'brain-coral', parentKey: 's0', size: 'big' },
+      ]);
+      const { tankId, fragKeys } = await rawTank();
+      const before = await positions(tankId);
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const report = await rehomeRawFrags(h.database, presets, coralTable);
+        expect(report.failed).toBe(1);
+        expect(errors).toHaveBeenCalledWith(expect.stringContaining(bad), expect.any(String));
+        const after = await positions(tankId);
+        const movedKeys = fragKeys.filter((k) => before.get(k)?.join() !== after.get(k)?.join());
+        expect(report.moved).toBe(movedKeys.length);
+        if (size === 'long300') expect(movedKeys.length).toBeGreaterThan(0);
+        expect((await rowOf(h, bad)).corals).toMatchObject([{ key: 's1', size: 'big' }]);
+      } finally {
+        errors.mockRestore();
+        await h.database.db.delete(schema.tanks).where(eq(schema.tanks.id, bad));
+      }
+    });
+
+    it('leaves a custom layout alone', async () => {
+      const tankId = await makeTank(h, alice, { size });
+      const frag31 = { ...stored('s31.1', 0.5), parentKey: 's31', position: [0.05, 0.03] };
+      await setCorals(h, tankId, [stored('s31', 2), frag31]);
+      await rehomeRawFrags(h.database, presets, coralTable);
+      expect((await rowOf(h, tankId)).corals).toMatchObject([{ key: 's31' }, frag31]);
     });
   });
 
