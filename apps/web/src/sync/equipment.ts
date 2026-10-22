@@ -82,7 +82,15 @@ export function devicesForBiome(biome: Biome): Device[] {
   );
 }
 
-export type TierState = 'installed' | 'better-installed' | 'available';
+export type TierState = 'installed' | 'better-installed' | 'owned' | 'available';
+
+type EquipmentTank = Pick<Tank, 'biome' | 'equipment'> & Partial<Pick<Tank, 'co2OwnedTier'>>;
+
+/** The server refuses a purchase at or below this: the best tier installed or, for CO2, ever bought. */
+function ownedBaseline(tank: EquipmentTank, device: Device): number {
+  const running = tank.equipment[device].tier;
+  return device === 'co2' ? Math.max(running, tank.co2OwnedTier ?? 0) : running;
+}
 
 export interface TierOffer {
   tier: number;
@@ -101,21 +109,28 @@ export interface DeviceOffer {
 }
 
 export function deviceOffers(
-  tank: Pick<Tank, 'biome' | 'equipment'>,
+  tank: EquipmentTank,
   economy: Economy,
   cp: ChemistryParameters,
 ): DeviceOffer[] {
   return devicesForBiome(tank.biome).map((device) => {
     const currentTier = tank.equipment[device].tier;
+    const baseline = ownedBaseline(tank, device);
     const tiers = economy.items.equipment[device].map((price, i): TierOffer => {
       const tier = i + 1;
       const state: TierState =
-        tier === currentTier ? 'installed' : tier < currentTier ? 'better-installed' : 'available';
+        tier === currentTier
+          ? 'installed'
+          : tier > baseline
+            ? 'available'
+            : device === 'co2'
+              ? 'owned'
+              : 'better-installed';
       return {
         tier,
         price,
         state,
-        skipped: state === 'available' ? tier - currentTier - 1 : 0,
+        skipped: state === 'available' ? tier - baseline - 1 : 0,
         effect: effectText(device, tier, cp),
       };
     });
@@ -128,7 +143,7 @@ export type EquipmentChoice =
 
 /** The same refusals the server makes, so a downgrade never reaches the wire. */
 export function chooseEquipment(
-  tank: Pick<Tank, 'biome' | 'equipment'>,
+  tank: EquipmentTank,
   economy: Economy,
   device: Device,
   tier: number,
@@ -139,7 +154,13 @@ export function chooseEquipment(
   }
   const price = economy.items.equipment[device][tier - 1];
   if (price === undefined) return { ok: false, reason: `There is no tier ${tier} ${label}.` };
-  const current = tank.equipment[device].tier;
+  const current = ownedBaseline(tank, device);
+  if (device === 'co2' && tier <= current) {
+    return {
+      ok: false,
+      reason: `This tank already owns a tier ${current} ${label}; pick tier ${tier} in Care for free.`,
+    };
+  }
   if (tier === current)
     return { ok: false, reason: `This tank already has a tier ${tier} ${label}.` };
   if (tier < current) {

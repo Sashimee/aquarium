@@ -57,7 +57,7 @@ export function Co2Control({
               data-co2-state={c.state}
               aria-pressed={c.state === 'running'}
               aria-describedby={c.reason ? note : undefined}
-              disabled={c.state === 'refused' || (c.state === 'running' ? false : state.busy)}
+              disabled={c.state === 'refused' || c.state === 'running' || state.busy}
               onClick={() => {
                 if (c.state === 'available') void session.setCo2(c.tier);
               }}

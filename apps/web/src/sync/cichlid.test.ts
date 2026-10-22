@@ -125,7 +125,10 @@ describe('lakeWaterNotes', () => {
       fix: 'water-change',
     });
     const tank = { ...base, equipment: { ...base.equipment, co2: { tier: 1 } } };
-    expect(lakeWaterNotes(tank, all, readings)[0]).toMatchObject({ level: 'watch', fix: 'no-fix' });
+    const [note] = lakeWaterNotes(tank, all, readings);
+    expect(note).toMatchObject({ level: 'watch', fix: 'no-fix' });
+    expect(note?.text).toContain('CO2');
+    expect(lakeWaterNotes(base, all, readings)[0]?.text).not.toContain('CO2');
   });
 
   it('says the ranges clash when no pH suits every species', () => {

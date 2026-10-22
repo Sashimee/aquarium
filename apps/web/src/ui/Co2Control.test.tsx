@@ -60,6 +60,7 @@ describe('the CO2 control', () => {
   it('marks the running tier pressed and does not resend it', () => {
     show(tankWith(2, 2));
     expect(button(2)?.getAttribute('aria-pressed')).toBe('true');
+    expect(button(2)?.disabled).toBe(true);
     act(() => button(2)?.click());
     expect(setCo2).not.toHaveBeenCalled();
   });

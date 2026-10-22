@@ -207,3 +207,27 @@ describe('co2Choices', () => {
     expect(choices[1]?.state).toBe('running');
   });
 });
+
+describe('the shop with CO2 owned but switched off', () => {
+  const tank = { ...withTiers({ co2: 0 }), co2OwnedTier: 2 };
+
+  it('shows owned tiers as owned and counts skips from the owned tier', () => {
+    const offer = deviceOffers(tank, economy, cp).find((o) => o.device === 'co2');
+    expect(offer?.tiers.map((t) => [t.tier, t.state, t.skipped])).toEqual([
+      [1, 'owned', 0],
+      [2, 'owned', 0],
+    ]);
+  });
+
+  it('refuses to sell an owned tier and points to Care', () => {
+    const choice = chooseEquipment(tank, economy, 'co2', 1);
+    expect(choice.ok).toBe(false);
+    expect(choice.ok === false && choice.reason).toMatch(/Care/);
+  });
+
+  it('counts a skipped tier from the owned tier, not the running one', () => {
+    const owned1 = { ...withTiers({ co2: 0 }), co2OwnedTier: 1 };
+    const choice = chooseEquipment(owned1, economy, 'co2', 2);
+    expect(choice).toMatchObject({ ok: true, skipped: 0 });
+  });
+});

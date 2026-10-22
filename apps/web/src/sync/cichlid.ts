@@ -96,7 +96,7 @@ export function lakeWaterNotes(
       notes.push({
         metric: 'ph',
         level: 'watch',
-        text: `pH is ${ph}, near the bottom of what your fish need (${low}).`,
+        text: `pH is ${ph}, near the bottom of what your fish need (${low}).${tank.equipment.co2.tier > 0 ? ' The CO2 system pulls the pH down.' : ''}`,
         fix: tank.equipment.co2.tier > 0 ? 'no-fix' : 'water-change',
       });
     }
