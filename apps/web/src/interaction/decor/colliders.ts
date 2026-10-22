@@ -1,6 +1,7 @@
 import type { Collider, DecorItem } from '@aquarium/shared';
 import { footprintOf } from './footprint';
-import { hasShelterParts, shelterColliders } from './shelterColliders';
+import { hasShelterParts } from '../../scene/shelterParts';
+import { shelterColliders } from './shelterColliders';
 import type { DecorSpec } from './spec';
 
 export const COLLIDER_PREFIX = 'decor:';
@@ -9,6 +10,7 @@ type Vec3 = readonly [number, number, number];
 const UPRIGHT: Vec3 = [0, 1, 0];
 const MIN_PLANT_COLLIDER_HEIGHT = 0.15;
 const MIN_PLANT_COLLIDER_RADIUS = 0.04;
+const warnedTilted = new Set<string>();
 
 /** Mirrors the scene's soft plant capsule so the sim and the render agree on where a plant pushes fish. */
 function plantCollider(colliderId: string, spec: DecorSpec, item: DecorItem, up: Vec3): Collider[] {
@@ -36,7 +38,7 @@ function plantCollider(colliderId: string, spec: DecorSpec, item: DecorItem, up:
 /**
  * Sim collision proxies for one placed piece, in tank space. Long thin driftwood becomes a
  * capsule so fish can swim under a raised end; shelters are convex parts that keep their opening
- * clear; everything else is a rounded box.
+ * clear (a tilted one falls back to a closed box); everything else is a rounded box.
  */
 export function collidersFor(
   id: string,
@@ -50,13 +52,15 @@ export function collidersFor(
   const colliderId = `${COLLIDER_PREFIX}${id}`;
   if (spec.kind === 'plant') return plantCollider(colliderId, spec, item, up);
   if (hasShelterParts(spec.assetId)) {
-    if (up !== UPRIGHT && (up[0] !== 0 || up[1] !== 1 || up[2] !== 0)) {
-      console.warn(
-        `"${spec.assetId}" is a shelter and can only stand upright, got up ${up.join(',')}; leaving it out of the sim colliders`,
-      );
-      return [];
+    if (up === UPRIGHT || (up[0] === 0 && up[1] === 1 && up[2] === 0)) {
+      return shelterColliders(colliderId, item);
     }
-    return shelterColliders(colliderId, item);
+    if (!warnedTilted.has(colliderId)) {
+      warnedTilted.add(colliderId);
+      console.warn(
+        `"${spec.assetId}" is a shelter and can only stand upright, got up ${up.join(',')}; using a closed box collider`,
+      );
+    }
   }
   if (spec.kind === 'driftwood') {
     const upright = height / 2 > Math.max(f.hx, f.hz);

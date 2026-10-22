@@ -11,6 +11,7 @@ import {
   DEFAULT_BACKGROUND_ID,
   decorLayoutSchema,
   diseaseStateSchema,
+  equipmentProblems,
   equipmentSchema,
   findDecorProblems,
   idSchema,
@@ -1158,8 +1159,24 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
-        const equipment =
-          body.light === undefined ? undefined : equipmentSchema.parse(ticked.tank.equipment);
+        const current = equipmentSchema.parse(ticked.tank.equipment);
+        if (body.co2 !== undefined) {
+          const problems = equipmentProblems(ticked.tank.biome, { ...current, co2: body.co2 });
+          if (body.co2.tier > ticked.tank.co2OwnedTier) {
+            problems.push(`this tank has not bought CO2 tier ${body.co2.tier}`);
+          }
+          if (problems.length > 0) {
+            throw new HttpError(
+              400,
+              apiError(
+                'validation_failed',
+                `${problems.join('; ')}. Pick a tier this tank owns, or 0 for off.`,
+                [{ path: ['co2', 'tier'], message: 'not a tier this tank can run' }],
+              ),
+            );
+          }
+        }
+        const equipment = body.light === undefined && body.co2 === undefined ? undefined : current;
         await requireOwnedBackground(tx, user.id, ticked.tank, body.backgroundId);
         if (body.decorLayout !== undefined) {
           await requireOwnedPieces(tx, user.id, ticked.tank, body.decorLayout);
@@ -1172,7 +1189,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ...(body.acceptsGifts !== undefined ? { acceptsGifts: body.acceptsGifts } : {}),
             ...(equipment !== undefined
               ? {
-                  equipment: { ...equipment, light: { tier: equipment.light.tier, ...body.light } },
+                  equipment: {
+                    ...equipment,
+                    ...(body.co2 !== undefined ? { co2: body.co2 } : {}),
+                    ...(body.light !== undefined
+                      ? { light: { tier: equipment.light.tier, ...body.light } }
+                      : {}),
+                  },
                 }
               : {}),
             ...(body.decorLayout !== undefined
