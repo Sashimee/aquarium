@@ -77,6 +77,41 @@ function rotatedReach(bounds: Footprint, rotationY: number): { x: number; z: num
   return { x, z };
 }
 
+/**
+ * The largest scale an item can take at its own position and yaw before it crosses the glass or
+ * the waterline, by the same reach model `fitPresetToTank` places it with. Rigid items reach in
+ * proportion to scale; swaying ones add their lean.
+ */
+export function maxScaleAt(
+  item: DecorItem,
+  dimensions: TankDimensions,
+  model: FitModel | null,
+): number {
+  if (!model) return Infinity;
+  const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
+  const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
+  const waterTop = dimensions.height - dimensions.freeboard;
+  const height = model.bounds.max[1] ?? 0;
+  const footprint = rotatedReach(model.bounds, item.rotationY);
+  const { swayReach } = model;
+  const reachAt = (axis: 'x' | 'z', scale: number) =>
+    swayReach ? swayReach({ ...item, scale }) : footprint[axis] * scale;
+  const growth = (room: number, axis: 'x' | 'z') => {
+    const base = reachAt(axis, 0);
+    const slope = reachAt(axis, 1) - base;
+    return slope > 0 ? (room - base) / slope : Infinity;
+  };
+  const surface = height > 0 ? (waterTop - SURFACE_MARGIN - item.position[1]) / height : Infinity;
+  return Math.max(
+    0,
+    Math.min(
+      surface,
+      growth(halfL - Math.abs(item.position[0]), 'x'),
+      growth(halfD - Math.abs(item.position[2]), 'z'),
+    ),
+  );
+}
+
 function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf): DecorItem {
   const lenR = dimensions.length / DEFAULT_TANK.length;
   const depR = dimensions.depth / DEFAULT_TANK.depth;

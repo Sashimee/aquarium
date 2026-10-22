@@ -89,7 +89,11 @@ export function limitLean(shear: number, linear: number, room: number): number {
 }
 
 /** `limitLean` on a horizontal shear vector, keeping its direction. */
-export function limitLeanNode(shear: Node<'vec3'>, linear: number, room: number): Node<'vec3'> {
+export function limitLeanNode(
+  shear: Node<'vec3'>,
+  linear: number | Node<'float'>,
+  room: number,
+): Node<'vec3'> {
   const length = max(shear.length(), 1e-6);
   const over = max(length.sub(linear), 0);
   const limited = min(length, linear).add(over.mul(room).div(over.add(room)));

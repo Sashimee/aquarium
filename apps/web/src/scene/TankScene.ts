@@ -4,6 +4,7 @@ import { uniform } from 'three/tsl';
 import {
   legacyTintSeed,
   type Biome,
+  type Coral,
   type DecorItem,
   type Plant,
   type PlantPatch,
@@ -45,7 +46,7 @@ import {
   HARDSCAPE_KINDS,
   PLANT_KIND,
 } from './hardscape';
-import { boundsFromCatalog, fitPresetToTank } from './presetFit';
+import { boundsFromCatalog, fitPresetToTank, maxScaleAt, type FitModel } from './presetFit';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
@@ -74,6 +75,14 @@ import {
   type PlantPick,
 } from './plantGrowth';
 import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
+import {
+  grownCoralItem,
+  matchLayoutCorals,
+  placeFragments,
+  type CoralSlot,
+  type ScaleCap,
+  type PlacedFragment,
+} from './coralGrowth';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
 const FALLBACK_PLANT_HEIGHT = 0.2;
@@ -101,6 +110,8 @@ interface SubstrateInstall {
   readonly textures: readonly Texture[];
   readonly textureSize: 1024 | 2048;
 }
+
+type CoralOrigin = { readonly hard: number } | { readonly euphyllia: number };
 
 interface EuphylliaItem {
   readonly item: DecorItem;
@@ -174,6 +185,14 @@ export class TankScene {
   private plantGroups: PlantGroup[] = [];
   private offsetGroups = new Map<string, PlantGroup>();
   private plantState: ReadonlyMap<string, Plant> = new Map();
+  private coralState: readonly Coral[] = [];
+  private fragHardscape: Hardscape | null = null;
+  private fragEuphyllias: EuphylliaGroup[] = [];
+  private fragLayout = '';
+  private fragRun = 0;
+  private coralFit = '';
+  private readonly fitModels = new Map<string, FitModel | null>();
+  private coralFitRun = 0;
   private installedKey: VisualKey | null = null;
   private readonly queue: RebuildQueue<VisualKey>;
   private substrate: SubstrateInstall | null = null;
@@ -436,7 +455,7 @@ export class TankScene {
           hardscape.add(catalog.get(item.assetId), model, item);
         }
         built = await this.buildPlantGroups(key, next, this.plantGroups);
-        const movable = await movableColliders(this.library, next, waterTop);
+        const movable = await movableColliders(this.library, this.withGrownCorals(next), waterTop);
         if (this.disposed || this.installedKey !== key) {
           hardscape.dispose();
           for (const group of built.created) group.dispose();
@@ -568,6 +587,218 @@ export class TankScene {
         context,
       ),
     );
+    this.syncCorals();
+  }
+
+  /**
+   * Shows the coral state: colonies at their grown size and bleached colour, and fragments as
+   * extra pieces on the substrate. Absent or empty `corals` is the layout as drawn. Colliders
+   * follow the grown size.
+   */
+  setCorals(corals: readonly Coral[] | undefined): void {
+    this.coralState = corals ?? [];
+    this.syncCorals();
+  }
+
+  /**
+   * The corals of the layout in the order the server numbers repeated tint seeds: the preset's own
+   * order, with edited pieces taking the place of the preset piece before them and any extra after.
+   */
+  private coralLayout(items: readonly { item: DecorItem; kind: string }[]): {
+    slots: CoralSlot[];
+    origins: CoralOrigin[];
+  } {
+    const hard = items.flatMap(({ kind }, index) => (kind === 'coral' ? [index] : []));
+    const slots: CoralSlot[] = [];
+    const origins: CoralOrigin[] = [];
+    let nextHard = 0;
+    let nextEuphyllia = 0;
+    const takeHard = () => {
+      const index = hard[nextHard++];
+      const entry = index === undefined ? undefined : items[index];
+      if (index === undefined || !entry) return;
+      slots.push({ assetId: entry.item.assetId, item: entry.item });
+      origins.push({ hard: index });
+    };
+    for (const decor of this.preset.decor) {
+      if (parseEuphylliaId(decor.assetId)) {
+        const euphyllia = this.euphylliaItems[nextEuphyllia];
+        if (!euphyllia) continue;
+        slots.push({ assetId: euphyllia.item.assetId, item: euphyllia.item });
+        origins.push({ euphyllia: nextEuphyllia++ });
+      } else if (this.library.catalog.get(decor.assetId).kind === 'coral') {
+        takeHard();
+      }
+    }
+    while (nextHard < hard.length) takeHard();
+    return { slots, origins };
+  }
+
+  private fitModel(assetId: string): FitModel | null {
+    if (!this.fitModels.has(assetId)) {
+      const current = reachCurrent(this.preset.current ?? DEFAULT_CURRENT, this.preset.biome);
+      this.fitModels.set(assetId, boundsFromCatalog(this.library.catalog, current)(assetId));
+    }
+    return this.fitModels.get(assetId) ?? null;
+  }
+
+  private readonly coralCap: ScaleCap = (item) =>
+    maxScaleAt(item, this.engine.tank.dimensions, this.fitModel(item.assetId));
+
+  private withGrownCorals(
+    items: readonly { item: DecorItem; kind: string }[],
+  ): { item: DecorItem; kind: string }[] {
+    const { slots, origins } = this.coralLayout(items);
+    const matched = matchLayoutCorals(slots, this.coralState);
+    const grown = items.map((h) => h);
+    origins.forEach((origin, s) => {
+      if (!('hard' in origin)) return;
+      const entry = items[origin.hard];
+      if (!entry) return;
+      grown[origin.hard] = {
+        ...entry,
+        item: grownCoralItem(entry.item, matched.get(s), this.coralCap),
+      };
+    });
+    return grown;
+  }
+
+  private syncCorals(): void {
+    if (this.disposed) return;
+    const { slots, origins } = this.coralLayout(this.hardItems);
+    const matched = matchLayoutCorals(slots, this.coralState);
+    slots.forEach((slot, s) => {
+      const origin = origins[s];
+      const coral = matched.get(s);
+      const grown = grownCoralItem(slot.item, coral, this.coralCap);
+      const bleach = coral?.bleach ?? 0;
+      if (origin && 'hard' in origin) {
+        const target = locateMovable(this.hardItems, origin.hard);
+        if (target?.kind !== 'hardscape') return;
+        this.hardscape?.setItem(target.index, grown);
+        this.hardscape?.setBleach(target.index, bleach);
+      } else if (origin) {
+        const group = this.euphyllias[origin.euphyllia];
+        group?.setItem(grown);
+        group?.setBleach(bleach);
+      }
+    });
+    this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
+    this.report(this.syncFragments(slots), 'fragments');
+  }
+
+  private report(work: Promise<void>, what: string): void {
+    work.catch((cause: unknown) =>
+      this.engine.events.emit('engine:error', {
+        message: `Could not update the coral ${what}`,
+        cause,
+      }),
+    );
+  }
+
+  private async refitCoralColliders(
+    slots: readonly CoralSlot[],
+    origins: readonly CoralOrigin[],
+    matched: ReadonlyMap<number, Coral>,
+  ): Promise<void> {
+    const grownItems = slots.map((slot, s) =>
+      grownCoralItem(slot.item, matched.get(s), this.coralCap),
+    );
+    const fit = grownItems.map((grown) => grown.scale).join(',');
+    if (fit === this.coralFit) return;
+    const run = ++this.coralFitRun;
+    const version = this.layoutVersion;
+    const movable = await movableColliders(
+      this.library,
+      this.withGrownCorals(this.hardItems),
+      this.waterTop,
+    );
+    if (this.disposed || run !== this.coralFitRun || version !== this.layoutVersion) return;
+    this.plantSlots = new Map(movable.plantSlots);
+    this.replaceMovableColliders(movable.colliders);
+    const first = this.colliderData.length - this.euphylliaItems.length;
+    const colliders = [...this.colliderData];
+    origins.forEach((origin, s) => {
+      const grown = grownItems[s];
+      if (!('euphyllia' in origin) || !grown) return;
+      const detail = this.euphylliaItems[origin.euphyllia]?.fullDetail;
+      if (detail) colliders[first + origin.euphyllia] = euphylliaCollider(detail.bounds, grown);
+    });
+    this.colliderData = colliders;
+    this.colliderField = new ColliderField(this.colliderData);
+    this.overlay.setColliders(this.colliderData);
+    this.coralFit = fit;
+    this.syncGrowth();
+  }
+
+  private async syncFragments(slots: readonly CoralSlot[]): Promise<void> {
+    const key = this.installedKey;
+    const placed = placeFragments(
+      slots,
+      this.coralState,
+      (x, z) => this.groundHeight(x, z),
+      this.coralCap,
+    );
+    const layout = placed
+      .map((f) => `${f.coral.key}:${f.coral.assetId}:${f.item.position.join(',')}`)
+      .join('|');
+    if (layout === this.fragLayout && (placed.length === 0 || key)) {
+      this.updateFragments(placed);
+      return;
+    }
+    if (!key) return;
+    const run = ++this.fragRun;
+    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode, this.polyps.node);
+    const euphyllias: EuphylliaGroup[] = [];
+    try {
+      for (const frag of placed) {
+        const procedural = parseEuphylliaId(frag.item.assetId);
+        if (procedural) {
+          const mesh = generateEuphyllia(procedural.variant, procedural.seed, key.euphylliaDetail);
+          euphyllias.push(new EuphylliaGroup(mesh, frag.item, this.current, this.polyps.node));
+        } else {
+          const entry = this.library.catalog.get(frag.item.assetId);
+          const model = await this.library.load(
+            frag.item.assetId,
+            key.hardscapeLod,
+            key.textureSize,
+          );
+          hardscape.add(entry, model, frag.item);
+        }
+      }
+    } catch (error) {
+      hardscape.dispose();
+      for (const coral of euphyllias) coral.dispose();
+      throw error;
+    }
+    if (this.disposed || run !== this.fragRun || this.installedKey !== key) {
+      hardscape.dispose();
+      for (const coral of euphyllias) coral.dispose();
+      return;
+    }
+    this.fragHardscape?.dispose();
+    for (const coral of this.fragEuphyllias) coral.dispose();
+    this.fragHardscape = hardscape;
+    this.fragEuphyllias = euphyllias;
+    this.fragLayout = layout;
+    this.engine.scene.add(hardscape.group);
+    for (const coral of euphyllias) this.engine.scene.add(coral.object);
+    this.updateFragments(placed);
+  }
+
+  private updateFragments(placed: readonly PlacedFragment[]): void {
+    let hard = 0;
+    let soft = 0;
+    for (const { item, coral } of placed) {
+      if (parseEuphylliaId(item.assetId)) {
+        const group = this.fragEuphyllias[soft++];
+        group?.setItem(item);
+        group?.setBleach(coral.bleach);
+      } else {
+        this.fragHardscape?.setItem(hard, item);
+        this.fragHardscape?.setBleach(hard++, coral.bleach);
+      }
+    }
   }
 
   private syncOffsets(entries: ReadonlyMap<string, readonly PlantEntry[]>): void {
@@ -600,6 +831,7 @@ export class TankScene {
     this.hardItems = this.hardItems.map((h, i) => (i === index ? { item, kind: h.kind } : h));
     if (target.kind === 'hardscape') {
       this.hardscape?.setItem(target.index, item);
+      if (this.coralState.length > 0) this.syncCorals();
       return;
     }
     const group = this.plantGroups.find((g) => g.assetId === target.assetId);
@@ -836,6 +1068,8 @@ export class TankScene {
       if (previous) this.discardSubstrate(previous);
     }
     this.installedKey = key;
+    this.fragLayout = '';
+    this.syncCorals();
     await this.evictUnused();
     return true;
   }
@@ -870,6 +1104,8 @@ export class TankScene {
     this.offsetGroups.clear();
     for (const anemone of this.anemones) anemone.dispose();
     for (const coral of this.euphyllias) coral.dispose();
+    this.fragHardscape?.dispose();
+    for (const coral of this.fragEuphyllias) coral.dispose();
     this.overlay.dispose();
     if (this.substrate) {
       this.engine.tank.substrate.material = this.placeholderSubstrate;

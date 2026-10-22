@@ -8,7 +8,7 @@ import {
   type MeshStandardMaterial,
   type Node,
 } from 'three/webgpu';
-import { attribute, positionLocal, sin, vec3 } from 'three/tsl';
+import { attribute, float, positionLocal, sin, vec3 } from 'three/tsl';
 import type { DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
 import type { CapsuleCollider } from './colliders';
@@ -112,6 +112,7 @@ export function swayPositionNode(
   pumpRoom: number,
   pump: PumpRoot,
   base: Node<'vec3'> = positionLocal,
+  scale: Node<'float'> = float(item.scale),
 ) {
   const sway = attribute(SWAY_ATTRIBUTE, 'float');
   const tip = sway.mul(sway);
@@ -123,7 +124,7 @@ export function swayPositionNode(
   );
   const origin = vec3(...item.position);
   const flow = current
-    .velocityNode(positionLocal.mul(item.scale).add(origin))
+    .velocityNode(positionLocal.mul(scale).add(origin))
     .add(current.pumpVelocity(pump.gain));
   const [cos, sinYaw] = [Math.cos(item.rotationY), Math.sin(item.rotationY)];
   const localFlow = vec3(
@@ -133,8 +134,12 @@ export function swayPositionNode(
   );
   const { speed, gustDepth } = current.parameters;
   const ambientPeak = Math.hypot(speed * (1 + gustDepth), speed * gustDepth * MEANDER_AMPLITUDE);
-  const linear = (ambientPeak * leanSeconds) / item.scale;
-  const lean = limitLeanNode(localFlow.mul(leanSeconds / item.scale), linear, pumpRoom).mul(tip);
+  const linear = scale.reciprocal().mul(ambientPeak * leanSeconds);
+  const lean = limitLeanNode(
+    localFlow.mul(scale.reciprocal().mul(leanSeconds)),
+    linear,
+    pumpRoom,
+  ).mul(tip);
   return base.add(lean).add(wave);
 }
 

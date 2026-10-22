@@ -6,8 +6,9 @@ import {
   Mesh,
   MeshStandardNodeMaterial,
   type Node,
+  type UniformNode,
 } from 'three/webgpu';
-import { attribute, positionLocal, vertexColor } from 'three/tsl';
+import { attribute, float, mix, vec3, positionLocal, uniform, vertexColor } from 'three/tsl';
 import { PROCEDURAL_EUPHYLLIA_ID, type DecorItem } from '@aquarium/shared';
 import type { Tier } from '../engine/quality/tiers';
 import { SWAY_ATTRIBUTE, swayPositionNode } from './anemone';
@@ -57,6 +58,7 @@ export const EUPHYLLIA_TRIANGLE_BUDGET: Readonly<Record<EuphylliaDetail, number>
 export const RETRACT_ATTRIBUTE = '_retract';
 export const WAVE_METRES = 0.0035;
 export const LEAN_SECONDS = 0.5;
+const BLEACHED_COLONY = 0.85;
 const COLONY_HEIGHT = 0.1;
 
 export function euphylliaId(variant: EuphylliaVariant, seed: number): string {
@@ -489,18 +491,23 @@ export class EuphylliaGroup {
   private readonly geometry: BufferGeometry;
   private readonly material: MeshStandardNodeMaterial;
   private readonly pump: PumpRoot;
+  private readonly bleach = uniform(0);
+  private readonly scale: UniformNode<'float', number>;
+  private readonly colony: Mesh;
 
   constructor(mesh: EuphylliaMesh, item: DecorItem, current: CurrentField, polyps: Node<'float'>) {
     this.object.name = `euphyllia:${item.assetId}`;
     this.geometry = euphylliaGeometry(mesh);
     this.pump = current.pumpRoot(...item.position);
+    this.scale = uniform(item.scale);
     this.material = new MeshStandardNodeMaterial();
     this.material.name = 'euphyllia-sway';
     this.material.roughness = 0.55;
     this.material.metalness = 0;
     this.material.side = DoubleSide;
-    this.material.colorNode = vertexColor().pow(1.8);
-    this.material.emissiveNode = vertexColor().pow(1.8).mul(0.06);
+    const live = vertexColor().pow(1.8);
+    this.material.colorNode = mix(live, vec3(BLEACHED_COLONY), this.bleach);
+    this.material.emissiveNode = live.mul(0.06).mul(float(1).sub(this.bleach));
     this.material.positionNode = swayPositionNode(
       item,
       current,
@@ -509,6 +516,7 @@ export class EuphylliaGroup {
       PUMP_LEAN_HEIGHT * mesh.bounds.max[1],
       this.pump,
       retractedPosition(polypSizeNode(polyps, EUPHYLLIA_POLYP_GAIN)),
+      this.scale,
     );
     const colony = new Mesh(this.geometry, this.material);
     colony.name = this.object.name;
@@ -517,7 +525,17 @@ export class EuphylliaGroup {
     colony.castShadow = true;
     colony.receiveShadow = true;
     colony.frustumCulled = false;
+    this.colony = colony;
     this.object.add(colony);
+  }
+
+  setItem(item: DecorItem): void {
+    this.scale.value = item.scale;
+    this.colony.matrix.copy(decorMatrix(item));
+  }
+
+  setBleach(bleach: number): void {
+    this.bleach.value = Math.min(1, Math.max(0, bleach));
   }
 
   dispose(): void {
