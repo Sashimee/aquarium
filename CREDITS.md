@@ -99,7 +99,6 @@ ShareAlike applies to any texture derived from these photos: such derived textur
 - Lambis Shell by Kuutti Siitonen ([source](https://polyhaven.com/a/lambis_shell))
 - Dead Quiver Trunk by Dario Barresi, James Ray Cock, Rico Cilliers ([source](https://polyhaven.com/a/dead_quiver_trunk))
 - Dead Tree Trunk 02 by Jenelle van Heerden, Rico Cilliers ([source](https://polyhaven.com/a/dead_tree_trunk_02))
-- Kloofendal 48d Partly Cloudy (Pure Sky) by Greg Zaal, Jarod Guest ([source](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky))
 - Studio Small 09 by Sergej Majboroda ([source](https://polyhaven.com/a/studio_small_09))
 - Paracanthurus hepatus 244215093.jpg by Jean-Paul Boerekamps ([source](https://commons.wikimedia.org/wiki/File:Paracanthurus_hepatus_244215093.jpg))
 - Female Bronze Corydoras (Corydoras aeneus).jpg by Andrew Keller ([source](<https://commons.wikimedia.org/wiki/File:Female_Bronze_Corydoras_(Corydoras_aeneus).jpg>))
