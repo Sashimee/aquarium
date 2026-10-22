@@ -39,6 +39,19 @@ export interface FitModel {
   readonly swayReach: ((item: DecorItem) => number) | null;
 }
 
+const MIN_KEPT_PATCH = 3;
+/**
+ * Plants shrink with the tank only down to this share of their authored size; a smaller tank holds
+ * fewer of them instead. Below it a plant would be miniature next to the life-size fish.
+ */
+export const MIN_PLANT_FIT = 0.6;
+
+/** Share of the standard tank's floor a tank offers, never above 1. */
+export function footprintShare(size: TankSize): number {
+  const { lengthRatio, depthRatio } = presetFit(size);
+  return Math.min(1, lengthRatio * depthRatio);
+}
+
 /** The model of an asset at scale 1, or null when the catalog has no bounds for it. */
 export type BoundsOf = (assetId: string) => FitModel | null;
 
@@ -195,13 +208,16 @@ function fitPatch(
   reachOf: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PlantPatch {
   const { lengthRatio, depthRatio, scale: k } = presetFit(size);
+  const share = footprintShare(size);
+  const plantScale = Math.max(k, MIN_PLANT_FIT);
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const scale: [number, number] = [
-    Math.max(MIN_FIT_SCALE, patch.scale[0] * k),
-    Math.max(MIN_FIT_SCALE, patch.scale[1] * k),
+    Math.max(MIN_FIT_SCALE, patch.scale[0] * plantScale),
+    Math.max(MIN_FIT_SCALE, patch.scale[1] * plantScale),
   ];
-  const fitted = { ...patch, scale, radius: patch.radius * k };
+  const count = Math.min(patch.count, Math.max(MIN_KEPT_PATCH, Math.round(patch.count * share)));
+  const fitted = { ...patch, scale, count, radius: patch.radius * Math.sqrt(share) };
   const smallest = scale[0] * GLASS_SHRINK_FLOOR;
   const smallestPatch = { ...fitted, scale: [smallest, smallest] as [number, number] };
   const limitX = Math.max(0, halfL - reachOf(smallestPatch, 'x'));

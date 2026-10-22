@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { PresetLayout } from '@aquarium/shared';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
-import { fitPresetToTank, type BoundsOf } from './presetFit';
+import { TANK_SIZES } from '@aquarium/shared';
+import { fitPresetToTank, footprintShare, MIN_PLANT_FIT, type BoundsOf } from './presetFit';
 
 const boundsOf: BoundsOf = () => ({
   bounds: { min: [-0.2, 0, -0.2], max: [0.2, 0.1, 0.2] },
@@ -56,5 +57,43 @@ describe('fitPresetToTank', () => {
     ).plantPatches;
     expect(patch?.center[1]).toBeLessThan(-0.07);
     expect(patch?.center[1]).toBeGreaterThanOrEqual((-0.15 * 0.4) / DEFAULT_TANK.depth);
+  });
+
+  describe('a smaller tank', () => {
+    const preset: PresetLayout = {
+      id: 'test',
+      name: 'test',
+      biome: 'freshwater',
+      decor: [],
+      plantPatches: [
+        {
+          id: 'carpet',
+          assetId: 'weed',
+          center: [0, 0],
+          radius: 0.2,
+          count: 70,
+          scale: [0.7, 1],
+          seed: 1,
+        },
+      ],
+    };
+    const nano = { ...DEFAULT_TANK, ...TANK_SIZES.nano30.dimensions };
+
+    it('keeps plants near life size and plants fewer of them, in step with the floor area', () => {
+      const [patch] = fitPresetToTank(preset, 'nano30', nano, boundsOf, () => 0).plantPatches;
+      expect(footprintShare('nano30')).toBeCloseTo((0.4 / 1.2) * (0.25 / 0.5), 6);
+      expect(patch?.scale[0]).toBeGreaterThanOrEqual(0.7 * MIN_PLANT_FIT - 1e-9);
+      expect(patch?.scale[1]).toBeGreaterThanOrEqual(MIN_PLANT_FIT - 1e-9);
+      expect(patch?.count).toBe(Math.round(70 * footprintShare('nano30')));
+      expect(patch?.count).toBeLessThan(20);
+    });
+
+    it('keeps the authored patch on the standard tank and never grows past it', () => {
+      const same = fitPresetToTank(preset, 'standard', DEFAULT_TANK, boundsOf, () => 0);
+      expect(same.plantPatches).toEqual(preset.plantPatches);
+      const long = { ...DEFAULT_TANK, ...TANK_SIZES.long300.dimensions };
+      const [patch] = fitPresetToTank(preset, 'long300', long, boundsOf, () => 0).plantPatches;
+      expect(patch?.count).toBeLessThanOrEqual(70);
+    });
   });
 });

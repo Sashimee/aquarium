@@ -41,9 +41,11 @@ const MAX_NUDGED_ITEMS = { freshwater: 1, reef: 5 } as const;
 
 /**
  * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
- * `<size>:<patch id>`, with the mean root z band they settle in. Empty while every patch fits.
+ * `<size>:<patch id>`, with the mean root z band they settle in. A nano holds its plants near life size, so a tall back patch cannot settle as deep as authored.
  */
-const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {};
+const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
+  'nano30:vallisneria-right': [-0.02, 0],
+};
 
 let library: ModelLibrary;
 let catalog: AssetCatalog;

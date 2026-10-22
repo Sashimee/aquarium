@@ -68,6 +68,7 @@ import { RebuildQueue } from './rebuildQueue';
 import {
   PlantGroup,
   maxSway,
+  plantLodFor,
   surfaceScaleCeiling,
   SURFACE_MARGIN,
   type PlantEntry,
@@ -111,7 +112,7 @@ export const DEFAULT_CURRENT: CurrentParameters = {
   gustDepth: 0.4,
 };
 
-const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
+export const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
 const HARDSCAPE_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 0, ultra: 0 };
 const WALL_MARGIN = 0.005;
 const BLOCKED_CLEARANCE = 0.005;
@@ -974,7 +975,11 @@ export class TankScene {
           groups.push(kept);
           continue;
         }
-        const model = await this.library.load(assetId, key.plantLod, key.textureSize);
+        const model = await this.library.load(
+          assetId,
+          plantLodFor(assetId, key.plantLod),
+          key.textureSize,
+        );
         const group = new PlantGroup(
           assetId,
           model,
@@ -1129,14 +1134,17 @@ export class TankScene {
     const keep = new Set<string>();
     if (key) {
       for (const { item, kind } of this.hardItems) {
-        const lod = kind === PLANT_KIND ? key.plantLod : key.hardscapeLod;
+        const lod =
+          kind === PLANT_KIND ? plantLodFor(item.assetId, key.plantLod) : key.hardscapeLod;
         keep.add(this.library.modelKey(item.assetId, lod, key.textureSize));
       }
       for (const item of this.anemoneItems) {
         keep.add(this.library.modelKey(item.assetId, key.hardscapeLod, key.textureSize));
       }
       for (const assetId of this.patchEntries.keys()) {
-        keep.add(this.library.modelKey(assetId, key.plantLod, key.textureSize));
+        keep.add(
+          this.library.modelKey(assetId, plantLodFor(assetId, key.plantLod), key.textureSize),
+        );
       }
     }
     await this.library.retainOnly(keep);

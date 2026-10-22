@@ -32,7 +32,7 @@ import {
   type CurrentField,
   type CurrentParameters,
 } from './current';
-import type { LoadedModel } from './assets';
+import type { LoadedModel, ModelLod } from './assets';
 import type { PlantInstance } from './placement';
 
 /** Seconds of current a leaf tip leans into; the bend grows with the square of the height. */
@@ -49,6 +49,21 @@ const STIFFNESS: Readonly<Record<string, number>> = {
   'java-fern': 0.45,
   'staurogyne-repens': 0.35,
 };
+
+/**
+ * Ground-cover species planted in the hundreds: their shadow is a few millimetres of soft contact
+ * under leaves that already shade the sand, and their triangles dominate the frame, so they cast
+ * none and draw one LOD coarser than the tier asks of other plants.
+ */
+const CARPET: ReadonlySet<string> = new Set(['staurogyne-repens']);
+
+export function plantCastsShadow(assetId: string): boolean {
+  return !CARPET.has(assetId);
+}
+
+export function plantLodFor(assetId: string, tierLod: ModelLod): ModelLod {
+  return CARPET.has(assetId) ? (Math.min(2, tierLod + 1) as ModelLod) : tierLod;
+}
 
 /** Gap kept between the tallest leaf tip and the water surface, which ripples. */
 export const SURFACE_MARGIN = 0.03;
@@ -219,7 +234,7 @@ export class PlantGroup {
       this.materials.push(material);
       const mesh = new InstancedMesh(geometry, material, this.capacity);
       mesh.name = `${assetId}:${source.name}`;
-      mesh.castShadow = true;
+      mesh.castShadow = plantCastsShadow(assetId);
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       mesh.setColorAt(0, colour.setScalar(1));
