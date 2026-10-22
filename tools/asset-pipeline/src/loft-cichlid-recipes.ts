@@ -155,6 +155,79 @@ function paintMbunaMale(tn: number, yn: number): Rgb {
   return colour;
 }
 
+const BAENSCHI_SECTIONS = profile(BAENSCHI_PROFILE, 0.5);
+
+function paintBaenschiFemale(tn: number, yn: number): Rgb {
+  const back: Rgb = [0.34, 0.29, 0.22];
+  const flank: Rgb = [0.5, 0.45, 0.37];
+  const belly: Rgb = [0.74, 0.7, 0.62];
+  const bar: Rgb = [0.27, 0.24, 0.19];
+  const { top, bottom } = sectionEdges(BAENSCHI_SECTIONS, Math.min(1, Math.max(0, tn)));
+  const outside =
+    tn < 0 ? 1 : Math.max(smoothstep(top, top + 0.004, yn), smoothstep(bottom, bottom - 0.004, yn));
+  if (tn > 1 || outside > 0.5) {
+    const edge = smoothstep(0.04, 0.12, Math.max(yn - top, bottom - yn, tn - 1));
+    return mixRgb([0.4, 0.36, 0.3], [0.55, 0.5, 0.42], 0.5 * edge);
+  }
+  const across = (yn - bottom) / (top - bottom);
+  let colour = mixRgb(belly, flank, smoothstep(0.1, 0.45, across));
+  colour = mixRgb(colour, back, smoothstep(0.55, 0.95, across));
+  const bars = 0.5 + 0.5 * Math.cos(((tn - 0.2) * 2 * Math.PI) / 0.12);
+  const barZone = smoothstep(0.22, 0.3, tn) * (1 - smoothstep(0.82, 0.9, tn));
+  colour = mixRgb(colour, bar, 0.22 * bars * barZone * smoothstep(0.15, 0.4, across));
+  const eye = Math.hypot(tn - 0.1, yn - 0.045);
+  if (eye < 0.03)
+    colour = mixRgb([0.03, 0.03, 0.03], [0.62, 0.58, 0.4], smoothstep(0.02, 0.03, eye));
+  return colour;
+}
+
+const BAENSCHI_FINS: LoftSpec['fins'] = [
+  {
+    fin: 'dorsal',
+    from: 0.38,
+    to: 1,
+    anchor: 'top',
+    shape: [0.02, 0.03, 0.04, 0.045, 0.05, 0.06, 0.08, 0.11, 0.14, 0.12],
+    sweep: 0.9,
+  },
+  {
+    fin: 'anal',
+    from: 0.7,
+    to: 0.98,
+    anchor: 'bottom',
+    shape: [0.02, 0.06, 0.09, 0.1, 0.09, 0.06, 0.03],
+    sweep: 0.8,
+  },
+  {
+    fin: 'pelvic',
+    from: 0.28,
+    to: 0.4,
+    anchor: 'side',
+    flankHeight: 0.05,
+    direction: [0.35, -0.9],
+    shape: [0.05, 0.12, 0.16, 0.1],
+    sweep: 0.8,
+  },
+  {
+    fin: 'pectoral',
+    from: 0.33,
+    to: 0.38,
+    anchor: 'side',
+    flankHeight: 0.35,
+    direction: [0.9, -0.3],
+    shape: [0.04, 0.08, 0.1, 0.06],
+    sweep: 0.6,
+  },
+];
+
+const BAENSCHI_SPEC: Omit<LoftSpec, 'standardLengthM'> = {
+  membrane: true,
+  roundness: 2.3,
+  sections: BAENSCHI_SECTIONS,
+  fins: BAENSCHI_FINS,
+  caudal: { shape: [0.23, 0.22, 0.17, 0.15, 0.14, 0.15, 0.17, 0.2, 0.24, 0.27], spread: 0.085 },
+};
+
 export const CICHLID_LOFT_RECIPES: LoftFishRecipe[] = [
   {
     id: 'labidochromis-caeruleus',
@@ -595,6 +668,7 @@ export const CICHLID_LOFT_RECIPES: LoftFishRecipe[] = [
     id: 'aulonocara-baenschi',
     species: 'aulonocara-baenschi',
     fallbackLengthM: 0.1,
+    lengthFactor: 1.33,
     roughness: 0.4,
     note: 'Aulonocara baenschi (peacock cichlid) male by Rjcastillo (CC-BY-SA-4.0), side view projected onto the loft; fins painted as translucent membranes. This colour map is a derivative of the photo and stays CC-BY-SA-4.0',
     texture: {
@@ -654,50 +728,68 @@ export const CICHLID_LOFT_RECIPES: LoftFishRecipe[] = [
         },
       },
     },
-    spec: {
-      membrane: true,
-      roundness: 2.3,
-      sections: profile(BAENSCHI_PROFILE, 0.5),
-      fins: [
-        {
-          fin: 'dorsal',
-          from: 0.38,
-          to: 1,
-          anchor: 'top',
-          shape: [0.02, 0.03, 0.04, 0.045, 0.05, 0.06, 0.08, 0.11, 0.14, 0.12],
-          sweep: 0.9,
+    spec: BAENSCHI_SPEC,
+  },
+  {
+    id: 'aulonocara-baenschi-female',
+    species: 'aulonocara-baenschi',
+    fallbackLengthM: (0.13 * 0.75) / 1.2725,
+    roughness: 0.4,
+    note: 'Aulonocara baenschi (peacock cichlid) female: no allowed female photograph exists, so the colour map is painted from the described plain grey-brown body with a pale belly and faint vertical bars (Konings 2007) and no photo pixels are reused, so the asset is CC0',
+    texture: {
+      kind: 'synthetic',
+      width: 1400,
+      height: 700,
+      snoutPixel: [100, 350],
+      tailPixel: [1100, 350],
+      references: ['wm-aulonocara-baenschi-rjcastillo'],
+      paint: paintBaenschiFemale,
+      finPalette: {
+        caudal: {
+          root: [112, 100, 82],
+          tip: [150, 140, 120],
+          rays: 16,
+          rayDepth: 0.25,
+          opacity: { root: 1, tip: 0.55 },
+          seed: 86,
         },
-        {
-          fin: 'anal',
-          from: 0.7,
-          to: 0.98,
-          anchor: 'bottom',
-          shape: [0.02, 0.06, 0.09, 0.1, 0.09, 0.06, 0.03],
-          sweep: 0.8,
+        dorsal: {
+          root: [105, 95, 78],
+          tip: [150, 142, 124],
+          rim: [175, 168, 148],
+          rimStart: 0.92,
+          rays: 20,
+          rayDepth: 0.3,
+          opacity: { root: 1, tip: 0.6 },
+          seed: 87,
         },
-        {
-          fin: 'pelvic',
-          from: 0.28,
-          to: 0.4,
-          anchor: 'side',
-          flankHeight: 0.05,
-          direction: [0.35, -0.9],
-          shape: [0.05, 0.12, 0.16, 0.1],
-          sweep: 0.8,
+        anal: {
+          root: [140, 130, 112],
+          tip: [165, 158, 140],
+          rays: 12,
+          rayDepth: 0.3,
+          opacity: { root: 1, tip: 0.6 },
+          seed: 88,
         },
-        {
-          fin: 'pectoral',
-          from: 0.33,
-          to: 0.38,
-          anchor: 'side',
-          flankHeight: 0.35,
-          direction: [0.9, -0.3],
-          shape: [0.04, 0.08, 0.1, 0.06],
-          sweep: 0.6,
+        pectoral: {
+          root: [150, 142, 124],
+          tip: [185, 180, 165],
+          rays: 10,
+          rayDepth: 0.25,
+          opacity: { root: 0.6, tip: 0.2 },
+          seed: 89,
         },
-      ],
-      caudal: { shape: [0.23, 0.22, 0.17, 0.15, 0.14, 0.15, 0.17, 0.2, 0.24, 0.27], spread: 0.085 },
+        pelvic: {
+          root: [140, 130, 112],
+          tip: [175, 168, 150],
+          rays: 5,
+          rayDepth: 0.25,
+          opacity: { root: 0.7, tip: 0.35 },
+          seed: 90,
+        },
+      },
     },
+    spec: BAENSCHI_SPEC,
   },
   {
     id: 'neolamprologus-multifasciatus',
