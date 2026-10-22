@@ -23,6 +23,13 @@ Set in the Dokploy app, never in the repo: `DATABASE_URL`, `BETTER_AUTH_SECRET`,
 `SMTP_PORT`, `MAIL_FROM` (must be `@bas.lu`), `SITE_INDEXABLE`, `NODE_ENV`. Optional: `TRUSTED_PROXIES` (comma-separated
 IPs/CIDRs of the reverse proxy, default private ranges) so rate limits key on the real client IP.
 
+Payments (optional): `STRIPE_SECRET_KEY` (`sk_` or `rk_`) and `STRIPE_WEBHOOK_SECRET` (`whsec_`) must be set both or
+neither. Without them `/api/health` reports `payments: disabled` and the payment routes return 503. The webhook endpoint
+is `https://<host>/api/payments/webhook`, subscribed to `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`, `invoice.paid`, `invoice_payment.paid`,
+`customer.subscription.created`/`updated`/`deleted`, `refund.created`/`updated`, and
+`charge.dispute.closed`/`updated`/`funds_reinstated`. Test keys go on the devfish app only.
+
 Care reminders (T52): `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (base64url, set both or neither) turn on web push;
 without them the server logs `web push is off` once at start and mail reminders keep working. `VAPID_SUBJECT`
 (`mailto:` or `https:`, default `mailto:$MAIL_FROM`) and `REMINDER_DAILY_CAP` (global reminders per 24 h, default 500) are
