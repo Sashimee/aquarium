@@ -6,6 +6,8 @@ import { SavedDecor, type SavedTank } from './binding';
 import type { DecorMode } from './mode';
 import type { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
+import type { CoralFeed } from '../../sync/coralFeed';
+import { generateEuphyllia, parseEuphylliaId } from '../../scene/euphyllia';
 
 export interface DecorSystem {
   readonly active: boolean;
@@ -24,6 +26,7 @@ export function createDecorSystem(
   interaction: EventBus<InteractionEvents>,
   initial: SavedTank | null,
   feeders: FeederLayer,
+  corals?: CoralFeed,
 ): DecorSystem {
   const saved = new SavedDecor(
     interaction,
@@ -31,9 +34,22 @@ export function createDecorSystem(
     initial,
   );
   let disposed = false;
-  const world = new DecorWorld(scene, interaction, feeders);
+  const euphylliaBounds = new Map<string, ReturnType<typeof generateEuphyllia>['bounds']>();
+  const world = new DecorWorld(scene, interaction, feeders, {
+    dimensions: () => engine.tank.dimensions,
+    proceduralBounds(assetId) {
+      const held = euphylliaBounds.get(assetId);
+      if (held) return held;
+      const id = parseEuphylliaId(assetId);
+      if (!id) return null;
+      const { bounds } = generateEuphyllia(id.variant, id.seed, 2);
+      euphylliaBounds.set(assetId, bounds);
+      return bounds;
+    },
+  });
   engine.scene.add(feeders.group);
   saved.attach(world);
+  const detachCorals = corals?.attach({ setCorals: (state) => world.setCorals(state) });
 
   let reduced = false;
   const stopMotion = watchReducedMotion((value) => {
@@ -82,6 +98,7 @@ export function createDecorSystem(
     dispose() {
       disposed = true;
       stopRequests();
+      detachCorals?.();
       stopMotion();
       mode?.dispose();
       saved.dispose();

@@ -462,6 +462,28 @@ describe('api client sharing', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('posts a frag to the corals route and refuses a request the server would not read', async () => {
+    const refusal = new Response(
+      JSON.stringify({
+        error: { code: 'conflict', message: 'Too bleached.', reason: 'coral_bleached' },
+      }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = { coralKey: 's7', idempotencyKey: 'frag-key-0001' };
+    await expect(createApiClient(fetcher).fragCoral(TANK_A, request)).rejects.toMatchObject({
+      status: 409,
+      reason: 'coral_bleached',
+    });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/corals/frag`);
+    expect(JSON.parse(init.body as string)).toEqual(request);
+    await expect(
+      createApiClient(fetcher).fragCoral(TANK_A, { ...request, coralKey: '' }),
+    ).rejects.toBeDefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a public tank response it cannot read', async () => {
     const fetcher = vi.fn().mockResolvedValue(json({ name: 'x' }));
     await expect(createApiClient(fetcher).publicTank(TOKEN)).rejects.toMatchObject({

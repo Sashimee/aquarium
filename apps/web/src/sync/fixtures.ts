@@ -110,6 +110,7 @@ export function recordBus() {
     'tank:fish-removed',
     'tank:water',
     'tank:plants',
+    'tank:corals',
     'tank:care',
     'tank:decor',
     'tank:background',

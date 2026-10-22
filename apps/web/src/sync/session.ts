@@ -34,6 +34,7 @@ import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
 import { moveRefusalText } from './moveFish';
 import { INITIAL_STATE, type SessionState } from './state';
+import { coralLabel, fragRefusalText, sameCorals } from './coralCare';
 import { plantLabel, samePlants, trimRefusalText } from './plantTrim';
 import { DISEASE_LABEL } from './treatment';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
@@ -71,6 +72,11 @@ export interface MoveOutcome {
 }
 
 export interface TrimOutcome {
+  ok: boolean;
+  refusal: string | null;
+}
+
+export interface FragOutcome {
   ok: boolean;
   refusal: string | null;
 }
@@ -537,6 +543,42 @@ export class TankSession {
     return outcome;
   }
 
+  /**
+   * Cuts a fragment off one coral of the active tank. The key is kept across an unknown outcome, so
+   * pressing again is a retry the server replays instead of cutting twice.
+   */
+  async fragCoral(coralKey: string): Promise<FragOutcome> {
+    const tank = this.activeTank;
+    const outcome: FragOutcome = { ok: false, refusal: null };
+    const coral = tank?.corals?.find((c) => c.key === coralKey);
+    if (!tank || !coral) return outcome;
+    const label = coralLabel(coral.assetId);
+    const gen = this.loadId;
+    const intent = `frag:${tank.id}:${coralKey}`;
+    const key = this.trimKeys.keyFor(intent);
+    outcome.ok = await this.perform(async () => {
+      let next;
+      try {
+        next = await this.deps.api.fragCoral(tank.id, { coralKey, idempotencyKey: key });
+      } catch (error) {
+        const refusal = fragRefusalText(error, label);
+        if (!outcomeUnknown(error)) this.trimKeys.settle(intent);
+        if (refusal === null) throw error;
+        outcome.refusal = refusal;
+        if (error instanceof ApiRequestError && error.status === 409) {
+          await this.resyncTank(tank.id, gen);
+        }
+        return;
+      }
+      this.trimKeys.settle(intent);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({ notice: `A fragment was cut from the ${label}.` });
+    });
+    if (outcome.refusal !== null) outcome.ok = false;
+    return outcome;
+  }
+
   /** Moves a fish out of the active tank. A refusal is handed back as text for the player. */
   async move(fishId: string, toTankId: string): Promise<MoveOutcome> {
     const tank = this.activeTank;
@@ -761,6 +803,7 @@ export class TankSession {
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
     this.deps.interaction.emit('tank:plants', { tankId, plants: tank.plants ?? [] });
+    this.deps.interaction.emit('tank:corals', { tankId, corals: tank.corals ?? [] });
     this.deps.interaction.emit('tank:wave-maker', {
       tankId,
       tier: tank.equipment.waveMaker.tier,
@@ -930,6 +973,9 @@ export class TankSession {
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
     if (!samePlants(held.plants, tank.plants)) {
       interaction.emit('tank:plants', { tankId: tank.id, plants: tank.plants ?? [] });
+    }
+    if (!sameCorals(held.corals, tank.corals)) {
+      interaction.emit('tank:corals', { tankId: tank.id, corals: tank.corals ?? [] });
     }
     if (held.equipment.waveMaker.tier !== tank.equipment.waveMaker.tier) {
       interaction.emit('tank:wave-maker', {
