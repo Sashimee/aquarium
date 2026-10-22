@@ -155,6 +155,14 @@ describe('euphyllia meander reach', () => {
   });
 });
 
+describe('euphyllia reach at scale 0', () => {
+  it('stays finite with no pump and no gust', () => {
+    const bounds: EuphylliaMesh['bounds'] = { min: [-0.1, 0, -0.1], max: [0.1, 0.1, 0.1] };
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    expect(euphylliaReach(bounds, { ...item, scale: 0 }, still)).toBe(0);
+  });
+});
+
 describe('euphyllia glass reach', () => {
   it('counts a rotated corner, not just the largest single-axis extent', () => {
     const bounds: EuphylliaMesh['bounds'] = { min: [-0.1, 0, -0.1], max: [0.1, 0.1, 0.1] };
