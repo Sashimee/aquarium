@@ -57,7 +57,14 @@ export class AssetCatalog {
       const pairs = sharperTextures(entry.textures, `assets[${entry.id}].textures`);
       this.sharper.set(entry.id, pairs);
       for (const [small, large] of pairs) {
-        this.sharperUrls.set(`${ASSET_BASE}${small}`, `${ASSET_BASE}${large}`);
+        const url = `${ASSET_BASE}${small}`;
+        const earlier = this.sharperUrls.get(url);
+        if (earlier !== undefined && earlier !== `${ASSET_BASE}${large}`) {
+          throw new Error(
+            `assets/index.json: ${small} has two different 2k variants (${earlier}, ${large}); re-run the asset pipeline`,
+          );
+        }
+        this.sharperUrls.set(url, `${ASSET_BASE}${large}`);
       }
     }
   }
@@ -112,9 +119,28 @@ export class AssetCatalog {
     if (textureSize === 1024) return url;
     const query = url.indexOf('?');
     const path = query < 0 ? url : url.slice(0, query);
-    const large = this.sharperUrls.get(path);
+    const large = this.sharperUrls.get(collapseDotSegments(path));
     return large === undefined ? url : `${large}${query < 0 ? '' : url.slice(query)}`;
   }
+}
+
+/** GLTFLoader joins a map's relative URI onto the GLB's folder as is, so a borrowed `../x/` map arrives uncollapsed. */
+export function collapseDotSegments(path: string): string {
+  const out: string[] = [];
+  for (const segment of path.split('/')) {
+    if (segment === '.') continue;
+    if (
+      segment === '..' &&
+      out.length > 0 &&
+      out[out.length - 1] !== '..' &&
+      out[out.length - 1] !== ''
+    ) {
+      out.pop();
+      continue;
+    }
+    out.push(segment);
+  }
+  return out.join('/');
 }
 
 export interface LoadedPrimitive {
