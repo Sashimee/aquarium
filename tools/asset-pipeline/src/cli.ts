@@ -72,15 +72,20 @@ async function main(argv: string[]): Promise<number> {
     console.log(`rendered ${rendered}; recorded sha256 ${entry.sha256} in assets/manifest.json`);
     return 0;
   }
-  if (command === 'render-cichlid-backgrounds') {
+  if (command === 'render-cichlid-backgrounds' || command === 'render-water-backgrounds') {
     const { renderAllCichlidBackgrounds } = await import('./cichlid-render.ts');
+    const { renderAllWaterBackgrounds } = await import('./water-render.ts');
+    const renderAll =
+      command === 'render-cichlid-backgrounds'
+        ? renderAllCichlidBackgrounds
+        : renderAllWaterBackgrounds;
     const only = rest.filter((a) => !a.startsWith('--'));
     const manifestPath = join(REPO_ROOT, 'assets', 'manifest.json');
     let text = readFileSync(manifestPath, 'utf8');
     const manifest = manifestSchema.parse(JSON.parse(text));
     const byId = new Map(manifest.assets.map((a) => [a.id, a]));
     const verified = new Set<string>();
-    const rendered = await renderAllCichlidBackgrounds(
+    const rendered = await renderAll(
       {
         verifySource: (sourceId) => {
           if (verified.has(sourceId)) return;
@@ -109,7 +114,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   console.error(
-    'usage: cli.ts check | sync-manifest | render-misty-lake | render-cichlid-backgrounds [id ...] | build [asset-id ...] [--impostor-sheets=dir] [--background-sheet=file.png]',
+    'usage: cli.ts check | sync-manifest | render-misty-lake | render-cichlid-backgrounds [id ...] | render-water-backgrounds [id ...] | build [asset-id ...] [--impostor-sheets=dir] [--background-sheet=file.png]',
   );
   return 2;
 }

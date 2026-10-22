@@ -144,10 +144,20 @@ export function backgroundFile(id: string, tier: BackgroundTier): string {
 
 const RENDER_INPUTS: Record<string, string> = {
   'bg-cichlid-tanganyika-shell-bed': 'CC0 rocks and a CC0 ground texture and a CC-BY shell model',
+  'bg-blackwater-root-tangle':
+    'a driftwood root scan (HeartOfLines, CC-BY-4.0) with CC0 trunk, twig and leaf-litter assets',
+  'bg-blackwater-driftwood-wall':
+    'a driftwood scan (jasonwebb, CC-BY-4.0) with CC0 twig and leaf-litter assets',
+  'bg-mangrove-prop-root-thicket':
+    'mangrove prop roots (lucq22, CC-BY-4.0) with a CC0 red mangrove scan and a CC0 mud texture',
+  'bg-mangrove-petrified-stump':
+    'a petrified mangrove stump scan (JFN / db4, CC-BY-4.0) and mangrove prop roots (lucq22, CC-BY-4.0) with CC0 rocks and a CC0 mud texture',
 };
 
 const RENDER_INPUTS_BY_BIOME: Record<string, string> = {
   cichlid: 'CC0 rocks and a CC0 ground texture',
+  blackwater: 'CC0 twigs, trunks and leaf-litter textures',
+  mangrove: 'a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures',
 };
 
 function renderInputs(entry: ManifestAsset): string {
