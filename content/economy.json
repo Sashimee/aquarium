@@ -45,6 +45,7 @@
       "min": 10,
       "max": 60,
       "prices": {
+        "amazon-sword": 30,
         "java-fern": 25,
         "pond-weed": 10,
         "red-tiger-lotus": 40,
@@ -75,6 +76,7 @@
         "driftwood-scan-b": 130,
         "dry-branches": 60,
         "oak-leaf-card": 40,
+        "catappa-leaf-card": 40,
         "mangrove-stump": 120,
         "mangrove-prop-roots": 140,
         "mangrove-propagule": 45,

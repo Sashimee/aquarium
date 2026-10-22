@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
+import { PaymentsSettings } from './PaymentsSettings';
 import { HapticsSetting } from './HapticsSetting';
 import { DisplaySetting } from './DisplaySetting';
 import { RoomSetting } from './RoomSetting';
@@ -778,6 +779,7 @@ export function SettingsScreen() {
       <HapticsSetting />
       <RoomSetting />
       <DisplaySetting />
+      <PaymentsSettings />
       <section aria-labelledby="export-title">
         <h2 id="export-title">Your data</h2>
         <p>Download everything we store about you as a JSON file.</p>
@@ -792,7 +794,8 @@ export function SettingsScreen() {
       <section aria-labelledby="delete-title">
         <h2 id="delete-title">Delete account</h2>
         <p>
-          This permanently deletes your account, tanks, fish and memorials. It cannot be undone.
+          This permanently deletes your account, tanks, fish and memorials. Any Pearls you have not
+          spent are lost, the ones you bought included. It cannot be undone.
         </p>
         {!confirming ? (
           <button type="button" className="danger" onClick={() => setConfirming(true)}>

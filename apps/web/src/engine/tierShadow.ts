@@ -1,4 +1,11 @@
-import { Matrix4, ShadowNode, Vector4, type DirectionalLight, type NodeFrame } from 'three/webgpu';
+import {
+  Matrix4,
+  ShadowNode,
+  Vector4,
+  type DirectionalLight,
+  type NodeFrame,
+  type NodeMaterial,
+} from 'three/webgpu';
 
 /**
  * Where a shadow drawn at `size` texels sits in a square map of `capacity` texels: the viewport in
@@ -30,10 +37,29 @@ export function shadowRegion(
  */
 export class TierShadowNode extends ShadowNode {
   drawnSize: number;
+  private drawnWith: NodeMaterial | null = null;
 
   constructor(light: DirectionalLight) {
     super(light, light.shadow);
     this.drawnSize = light.shadow.mapSize.width;
+  }
+
+  /**
+   * The material its shadow passes draw with, null before the first; unlike `getShadowMaterial`,
+   * which creates the light's if it has none, reading it has no side effect.
+   */
+  get shadowMaterial(): NodeMaterial | null {
+    return this.drawnWith;
+  }
+
+  override getShadowMaterial(): NodeMaterial {
+    this.drawnWith = super.getShadowMaterial();
+    return this.drawnWith;
+  }
+
+  override disposeShadowMaterial(): void {
+    super.disposeShadowMaterial();
+    this.drawnWith = null;
   }
 
   override renderShadow(frame: NodeFrame): void {
