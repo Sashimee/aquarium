@@ -4877,7 +4877,6 @@
     {
       "id": "sketchfab-3701243a",
       "kind": "plant",
-      "species": "Echinodorus sp. (Amazon sword)",
       "title": "echinodorus",
       "author": "trueblack",
       "author_url": "https://sketchfab.com/pizzabones",
@@ -4889,7 +4888,7 @@
       "polycount": 3632,
       "textures": "none: 24 flat-colour materials (base colour 0.55, 0.76, 0.29)",
       "rigged": false,
-      "notes": "Amazon sword rosette for the Rio Negro blackwater and freshwater presets. Licence (CC Attribution 4.0, downloadable) read from the Sketchfab API model record and the bundled license.txt. Verified from the downloaded glTF: 3632 triangles, 24 meshes, no skins, no animations, no images. The raw bounds are about 55 x 161 x 11 units (unscaled, units unknown), so the pipeline must normalise the scale. Flat green with no texture: the pipeline should vary the 24 per-leaf base colours slightly and may add a leaf-vein texture. Zip sha256 4f1cd1f2bfea8fb31e84bdb9b481215080912ffec7b428a9aca68bbe929fca7c; sha256 is the aggregate over files[].",
+      "notes": "Echinodorus sp. (Amazon sword) rosette for the Rio Negro blackwater and freshwater presets. Licence (CC Attribution 4.0, downloadable) read from the Sketchfab API model record and the bundled license.txt. Verified from the downloaded glTF: 3632 triangles, 24 meshes, no skins, no animations, no images. The raw bounds are about 55 x 161 x 11 units (unscaled, units unknown), so the pipeline must normalise the scale. Flat green with no texture: the pipeline should vary the 24 per-leaf base colours slightly and may add a leaf-vein texture. Zip sha256 4f1cd1f2bfea8fb31e84bdb9b481215080912ffec7b428a9aca68bbe929fca7c; sha256 is the aggregate over files[].",
       "modifications": [],
       "status": "downloaded",
       "files": [
