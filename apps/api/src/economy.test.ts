@@ -118,7 +118,12 @@ async function setBalance(h: Harness, who: Account, target: number) {
 async function createTank(
   h: Harness,
   who: Account,
-  extra: { biome?: 'freshwater' | 'reef'; size?: string; quarantine?: boolean; key?: string } = {},
+  extra: {
+    biome?: 'freshwater' | 'reef' | 'blackwater';
+    size?: string;
+    quarantine?: boolean;
+    key?: string;
+  } = {},
 ) {
   const { key: idempotencyKey, ...rest } = extra;
   return call(h, who, 'POST', '/api/tanks', {
@@ -129,7 +134,11 @@ async function createTank(
   });
 }
 
-async function freeTank(h: Harness, who: Account, biome: 'freshwater' | 'reef' = 'freshwater') {
+async function freeTank(
+  h: Harness,
+  who: Account,
+  biome: 'freshwater' | 'reef' | 'blackwater' = 'freshwater',
+) {
   const res = await createTank(h, who, { biome });
   expect(res.statusCode).toBe(201);
   return tankSchema.parse(res.json());
@@ -677,6 +686,25 @@ describe('wallet, shop and ledger', () => {
       const before = await balance(h, who);
       expect((await purchase(h, who, 'equipment:co2:1', reef.id)).statusCode).toBe(400);
       expect(await balance(h, who)).toBe(before);
+    });
+
+    it('refuses CO2 for a blackwater tank, and a leftover CO2 unit never blocks other upgrades', async () => {
+      const who = await account(h);
+      const tank = await freeTank(h, who, 'blackwater');
+      await setBalance(h, who, 5000);
+      expect((await purchase(h, who, 'equipment:co2:1', tank.id)).statusCode).toBe(400);
+      expect(await balance(h, who)).toBe(5000);
+
+      await h.database.pool.query(
+        `update tanks set equipment = jsonb_set(equipment, '{co2,tier}', '2') where id = $1`,
+        [tank.id],
+      );
+      const res = await purchase(h, who, 'equipment:heater:2', tank.id);
+      expect(res.statusCode).toBe(200);
+      const read = tankSchema.parse((await call(h, who, 'GET', `/api/tanks/${tank.id}`)).json());
+      expect(read.equipment.heater.tier).toBe(2);
+      expect(read.equipment.co2.tier).toBe(2);
+      expect((await purchase(h, who, 'equipment:co2:2', tank.id)).statusCode).toBe(409);
     });
 
     it('licenses plants and decor, charged once and checked against the saved layout', async () => {

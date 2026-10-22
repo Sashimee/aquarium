@@ -1699,7 +1699,10 @@ describe('blackwater pH under good care', () => {
     (tier) => equipmentProblems('blackwater', { ...DEFAULT_EQUIPMENT, co2: { tier } }).length === 0,
   );
 
-  function phRangeOverGoodCare(co2Tier: number, days: number): { low: number; high: number } {
+  function phRangeOverGoodCare(
+    co2Tier: number,
+    days: number,
+  ): { low: number; high: number; lowestHealth: number } {
     const equipment = { ...DEFAULT_EQUIPMENT, co2: { tier: co2Tier } };
     let state: LifecycleState = {
       water: cleanWater,
@@ -1714,6 +1717,7 @@ describe('blackwater pH under good care', () => {
     let now = T0;
     let low = Infinity;
     let high = -Infinity;
+    let lowestHealth = 1;
     for (let day = 0; day < days; day++) {
       state = {
         ...state,
@@ -1726,7 +1730,7 @@ describe('blackwater pH under good care', () => {
           { type: 'water_change' },
           'blackwater',
           chemistryParams,
-          T0,
+          now,
         );
         if (!changed.ok) throw new Error(changed.reason);
         state = changed.value;
@@ -1747,9 +1751,10 @@ describe('blackwater pH under good care', () => {
         now += HOUR;
         low = Math.min(low, state.chemistry.ph);
         high = Math.max(high, state.chemistry.ph);
+        lowestHealth = Math.min(lowestHealth, ...state.fish.map((f) => f.health));
       }
     }
-    return { low, high };
+    return { low, high, lowestHealth };
   }
 
   it('still offers the no-CO2 tier', () => {
@@ -1763,13 +1768,21 @@ describe('blackwater pH under good care', () => {
   });
 
   it.each(allowedCo2Tiers)('CO2 tier %d stays inside every blackwater species range', (tier) => {
-    const { low, high } = phRangeOverGoodCare(tier, 90);
+    const { low, high, lowestHealth } = phRangeOverGoodCare(tier, 90);
+    expect(lowestHealth).toBe(1);
     for (const s of blackwater) {
       const [min, max] = s.chemistry.phRange;
       expect(low, s.id).toBeGreaterThanOrEqual(Math.max(min, PH_FLOOR_ASSUMED_FOR_APISTOGRAMMA));
       expect(high, s.id).toBeLessThanOrEqual(max);
     }
   });
+
+  it.each([1, 2, 3])(
+    'ignores CO2 tier %d left over in a blackwater tank, so catch-up matches a tank without it',
+    (tier) => {
+      expect(phRangeOverGoodCare(tier, 30)).toEqual(phRangeOverGoodCare(0, 30));
+    },
+  );
 
   it('issue repro: CO2 tier 2 is refused in blackwater rather than driving pH to about 4.5', () => {
     expect(equipmentProblems('blackwater', { ...DEFAULT_EQUIPMENT, co2: { tier: 2 } })).toEqual([

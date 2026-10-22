@@ -156,8 +156,12 @@ export function registerShopRoutes(ctx: ShopContext): void {
         ...equipment,
         [item.device]: { ...equipment[item.device], tier: item.tier },
       };
-      const problems = equipmentProblems(ticked.tank.biome, equipmentSchema.parse(upgraded));
-      if (problems.length > 0) throw refused(`${problems.join('; ')}.`);
+      const before = new Set(equipmentProblems(ticked.tank.biome, equipment));
+      const introduced = equipmentProblems(
+        ticked.tank.biome,
+        equipmentSchema.parse(upgraded),
+      ).filter((problem) => !before.has(problem));
+      if (introduced.length > 0) throw refused(`${introduced.join('; ')}.`);
       const charged = await charge(item.price);
       await tx
         .update(schema.tanks)
