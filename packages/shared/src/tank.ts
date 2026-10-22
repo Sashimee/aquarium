@@ -157,6 +157,11 @@ export const tankSchema = z.object({
   lastTickAt: timestampSchema,
   chemistry: chemistrySchema,
   equipment: equipmentSchema,
+  co2OwnedTier: z
+    .int()
+    .min(0)
+    .max(MAX_EQUIPMENT_TIER)
+    .describe('highest CO2 tier bought; any tier up to it can be switched to for free'),
   recentVisitDays: z
     .number()
     .int()
