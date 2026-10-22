@@ -4,13 +4,13 @@ import {
   UNCONFIRMED_NOTICE,
   awaitCredit,
   canSubscribe,
-  claimPaymentReturn,
   euros,
   goToCheckout,
   loadPayments,
   parsePending,
   paymentErrorText,
   paymentNotice,
+  WAITING_NOTICE,
   paymentReturn,
   withoutPaymentReturn,
   type PaymentReturn,
@@ -20,6 +20,7 @@ import {
 import type { TankSession } from '../sync/session';
 import { useApi } from './context';
 import { Link } from './screens';
+import { PEARL_PACKS_ID } from './spend';
 
 const PENDING_KEY = 'aquarium.payment-pending';
 
@@ -83,7 +84,7 @@ export function PaymentsShop({ session, balance }: Props) {
       const first = await load();
       if (abort.signal.aborted) return;
       setLoaded(first);
-      if (!returned || !claimPaymentReturn()) return;
+      if (!returned || paymentReturn(window.location.search) === null) return;
       window.history.replaceState(
         window.history.state,
         '',
@@ -101,7 +102,7 @@ export function PaymentsShop({ session, balance }: Props) {
         paymentNotice.set(UNCONFIRMED_NOTICE);
         return;
       }
-      paymentNotice.set('Thank you. Waiting for the payment to be confirmed.');
+      paymentNotice.set(WAITING_NOTICE);
       const subscription = pending.kind === 'subscription';
       const read = async (): Promise<number | null> => {
         try {
@@ -135,6 +136,13 @@ export function PaymentsShop({ session, balance }: Props) {
     return () => abort.abort();
   }, [load, returned, session]);
 
+  useEffect(
+    () => () => {
+      if (paymentNotice.get() !== WAITING_NOTICE) paymentNotice.set(null);
+    },
+    [],
+  );
+
   const attempt = async (work: () => Promise<void>) => {
     setBusy(true);
     setProblem(null);
@@ -149,11 +157,15 @@ export function PaymentsShop({ session, balance }: Props) {
     }
   };
 
-  const heading = <h3 id={`${id}-h`}>Pearl packs and Aquarist Club</h3>;
+  const heading = (
+    <h3 id={`${id}-h`} tabIndex={-1}>
+      Pearl packs and Aquarist Club
+    </h3>
+  );
 
   if (loaded.phase === 'loading') {
     return (
-      <section aria-labelledby={`${id}-h`} className="block" aria-busy="true">
+      <section id={PEARL_PACKS_ID} aria-labelledby={`${id}-h`} className="block" aria-busy="true">
         {heading}
         <p className="hint">Loading prices.</p>
       </section>
@@ -164,7 +176,7 @@ export function PaymentsShop({ session, balance }: Props) {
 
   if (loaded.phase === 'failed') {
     return (
-      <section aria-labelledby={`${id}-h`} className="block">
+      <section id={PEARL_PACKS_ID} aria-labelledby={`${id}-h`} className="block">
         {heading}
         {status}
         <p className="hint">Prices could not be loaded. {loaded.message}</p>
@@ -174,7 +186,7 @@ export function PaymentsShop({ session, balance }: Props) {
 
   if (loaded.view.kind === 'off') {
     return (
-      <section aria-labelledby={`${id}-h`} className="block">
+      <section id={PEARL_PACKS_ID} aria-labelledby={`${id}-h`} className="block">
         {heading}
         {status}
         <p className="hint">Purchases are not available yet. Everything else works as usual.</p>
@@ -220,7 +232,7 @@ export function PaymentsShop({ session, balance }: Props) {
   };
 
   return (
-    <section aria-labelledby={`${id}-h`} className="block">
+    <section id={PEARL_PACKS_ID} aria-labelledby={`${id}-h`} className="block">
       {heading}
       {status}
       <p className="hint">

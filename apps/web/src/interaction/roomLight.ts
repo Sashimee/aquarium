@@ -62,6 +62,7 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
   const stopSeed = binding.seed.subscribe(rebuild);
   const stopFrames = binding.onFrame(() => {
     if (!light) {
+      // Reading the clock advances its ease, so a room chosen mid-fade does not start from a stale minute.
       binding.clock();
       return;
     }
