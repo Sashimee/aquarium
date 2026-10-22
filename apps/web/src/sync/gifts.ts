@@ -284,6 +284,7 @@ export class GiftBook {
   private readonly keys: IntentKeys;
   private disposed = false;
   private refreshSeq = 0;
+  private messageEpoch = 0;
 
   constructor(private readonly deps: GiftBookDeps) {
     this.keys = new IntentKeys(deps.newKey);
@@ -302,6 +303,7 @@ export class GiftBook {
   }
 
   clearMessages(): void {
+    this.messageEpoch += 1;
     this.patch({ error: null, notice: null });
   }
 
@@ -381,15 +383,17 @@ export class GiftBook {
     if (this.state.busy !== null) return false;
     const key = intent === null ? '' : this.keys.keyFor(intent);
     this.patch({ busy, error: null, notice: null });
+    const epoch = this.messageEpoch;
+    const stillWanted = () => epoch === this.messageEpoch;
     try {
       const notice = await call(key);
       if (intent !== null) this.keys.settle(intent);
-      this.patch({ busy: null, notice });
+      this.patch({ busy: null, notice: stillWanted() ? notice : null });
       await this.refresh();
       return true;
     } catch (error) {
       if (intent !== null && !outcomeUnknown(error)) this.keys.settle(intent);
-      this.patch({ busy: null, error: giftRefusalText(error, ctx) });
+      this.patch({ busy: null, error: stillWanted() ? giftRefusalText(error, ctx) : null });
       if (staleOffer(error)) await this.refresh();
       return false;
     }

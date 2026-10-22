@@ -2,11 +2,10 @@ import { DEFAULT_TANK_SIZE, tankSizeSchema, type TankSize } from '@aquarium/shar
 import { parseClock } from './daylight';
 import {
   FRAME_RATE_CHOICES,
-  isFrameRateChoice,
-  isPixelRatioChoice,
   PIXEL_RATIO_CHOICES,
   type FrameRateChoice,
   type PixelRatioChoice,
+  urlDisplayOverrides,
 } from './displayPreference';
 import { isTier, TIERS, type Tier } from './quality/tiers';
 
@@ -77,14 +76,15 @@ export function parseEngineOptions(search: string): EngineOptions {
     throw new Error(`Unknown ?size=${sizeParam}; use one of ${tankSizeSchema.options.join(', ')}`);
   }
 
-  const frameRate = params.get('fps');
-  if (frameRate !== null && !isFrameRateChoice(frameRate)) {
-    throw new Error(`Unknown ?fps=${frameRate}; use one of ${FRAME_RATE_CHOICES.join(', ')}`);
+  const forced = urlDisplayOverrides(search);
+  const fpsParam = params.get('fps');
+  if (fpsParam !== null && forced.frameRate === undefined) {
+    throw new Error(`Unknown ?fps=${fpsParam}; use one of ${FRAME_RATE_CHOICES.join(', ')}`);
   }
 
-  const pixelRatio = params.get('dpr');
-  if (pixelRatio !== null && !isPixelRatioChoice(pixelRatio)) {
-    throw new Error(`Unknown ?dpr=${pixelRatio}; use one of ${PIXEL_RATIO_CHOICES.join(', ')}`);
+  const dprParam = params.get('dpr');
+  if (dprParam !== null && forced.pixelRatio === undefined) {
+    throw new Error(`Unknown ?dpr=${dprParam}; use one of ${PIXEL_RATIO_CHOICES.join(', ')}`);
   }
 
   const tier = tierParam ?? null;
@@ -95,7 +95,7 @@ export function parseEngineOptions(search: string): EngineOptions {
     clock,
     stats: statsParam === '1',
     tankSize: size?.data ?? DEFAULT_TANK_SIZE,
-    frameRate,
-    pixelRatio,
+    frameRate: forced.frameRate ?? null,
+    pixelRatio: forced.pixelRatio ?? null,
   };
 }

@@ -35,6 +35,7 @@ import { showDeviceNotice } from './deviceNotice';
 import {
   displayLimits,
   displayPreference,
+  isTouchFirstDevice,
   type DisplayChoice,
   type DisplayLimits,
   type DisplayPreference,
@@ -53,7 +54,7 @@ import { FrameCap } from './framePacing';
 import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
-import { isTouchFirst, qualityProfile } from './quality/profile';
+import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio, type TierSettings } from './quality/tiers';
 import { TankBackground } from './tank/background';
@@ -94,14 +95,6 @@ const CAPTURE_EFFECTS_WAIT_MS = 15000;
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
 /** At the water surface; the hood's spread leaves about three quarters of it on average below. */
 const HOOD_INTENSITY = 4;
-
-function hasCoarsePointer(): boolean {
-  return isTouchFirst({
-    coarsePointer: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches,
-    platform: navigator.platform,
-    maxTouchPoints: navigator.maxTouchPoints,
-  });
-}
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
 export interface StartableRenderer extends LossSource {
@@ -271,7 +264,7 @@ export class Engine {
     this.clock = config.options.clock;
     this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
-    const profile = qualityProfile(hasCoarsePointer());
+    const profile = qualityProfile(isTouchFirstDevice());
     const display = config.display ?? displayPreference;
     const chosenDisplay = (): DisplayChoice => ({
       frameRate: config.options.frameRate ?? display.snapshot().frameRate,

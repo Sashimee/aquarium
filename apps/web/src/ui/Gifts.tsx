@@ -114,7 +114,7 @@ export function GiftFishButton({
         aria-expanded={open}
         aria-controls={`${id}-form`}
         onClick={() => {
-          book.clearMessages();
+          if (bookState.busy === null) book.clearMessages();
           setOpen(!open);
         }}
       >

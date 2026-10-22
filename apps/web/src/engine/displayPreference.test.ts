@@ -1,11 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_DISPLAY_CHOICE,
   DISPLAY_STORAGE_KEY,
   DisplayPreference,
   type DisplayStorage,
   displayLimits,
+  isTouchFirstDevice,
   parseDisplayChoice,
+  resetTouchFirstForTests,
+  urlDisplayOverrides,
 } from './displayPreference';
 import { DESKTOP_PROFILE, MOBILE_PROFILE } from './quality/profile';
 
@@ -131,5 +134,47 @@ describe('displayLimits', () => {
       frameCapFps: null,
       pixelRatioCeiling: Number.POSITIVE_INFINITY,
     });
+  });
+});
+
+describe('urlDisplayOverrides', () => {
+  it('reads valid fps and dpr and ignores anything else', () => {
+    expect(urlDisplayOverrides('?fps=display&dpr=device')).toEqual({
+      frameRate: 'display',
+      pixelRatio: 'device',
+    });
+    expect(urlDisplayOverrides('?fps=capped')).toEqual({ frameRate: 'capped' });
+    expect(urlDisplayOverrides('?fps=120&dpr=')).toEqual({});
+    expect(urlDisplayOverrides('')).toEqual({});
+  });
+});
+
+describe('isTouchFirstDevice', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetTouchFirstForTests();
+  });
+
+  it('is read once and then stays the same for the session', () => {
+    resetTouchFirstForTests();
+    const media = vi.fn(() => ({ matches: true }));
+    vi.stubGlobal('matchMedia', media);
+    expect(isTouchFirstDevice()).toBe(true);
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    expect(isTouchFirstDevice()).toBe(true);
+    expect(media).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts a MacIntel with touch points as touch first, like an iPad with a trackpad', () => {
+    resetTouchFirstForTests();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    vi.stubGlobal('navigator', { platform: 'MacIntel', maxTouchPoints: 5 });
+    expect(isTouchFirstDevice()).toBe(true);
   });
 });
