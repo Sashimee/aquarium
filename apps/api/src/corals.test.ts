@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import {
   apiErrorSchema,
   coralSpeciesId,
-  fitPresetItem,
+  fitPresetDecor,
+  keptPresetDecor,
   legacyTintSeed,
   tankSchema,
   type TankSize,
   type Coral,
+  type DecorItem,
   type Equipment,
   type Tank,
 } from '@aquarium/shared';
@@ -485,10 +487,10 @@ describe('fragging a coral', () => {
     });
   });
 
-  describe.each(['nano30', 'long300'] as const)('on a %s tank with the default layout', (size) => {
-    const roots = (presets.reef?.decor ?? [])
-      .map((item) => fitPresetItem(item, size))
-      .filter((item) => coralTable.species.has(coralSpeciesId(item.assetId)));
+  describe.each(['long300'] as const)('on a %s tank with the default layout', (size) => {
+    const roots = fitPresetDecor(presets.reef?.decor ?? [], size).filter((item) =>
+      coralTable.species.has(coralSpeciesId(item.assetId)),
+    );
 
     it('keeps colonies where the client draws them', async () => {
       const tankId = await makeTank(h, alice, { layout: null, size });
@@ -507,7 +509,7 @@ describe('fragging a coral', () => {
       const reef = await makeTank(h, alice, { layout: null, size });
       const first = (await wait(h, alice, reef, 1)).corals?.[0];
       if (!first) throw new Error('preset has no coral');
-      const authored = (presets.reef?.decor ?? [])
+      const authored = keptPresetDecor(presets.reef?.decor ?? [], size)
         .filter((item) => coralTable.species.has(coralSpeciesId(item.assetId)))
         .map((item) => ({ ...item, tintSeed: legacyTintSeed(item) }));
       const expectedKeys = layoutPlantKeys(authored);
@@ -532,7 +534,7 @@ describe('fragging a coral', () => {
 
       const pond = await makeTank(h, alice, { layout: null, size, biome: 'freshwater' });
       const seeded = (await wait(h, alice, pond, 1)).plants?.map((p) => p.key) ?? [];
-      const authoredPlants = (presets.freshwater?.decor ?? [])
+      const authoredPlants = keptPresetDecor(presets.freshwater?.decor ?? [], size)
         .filter((item) => plantTable.species.has(item.assetId))
         .map((item) => ({ ...item, tintSeed: legacyTintSeed(item) }));
       expect(seeded).toEqual(layoutPlantKeys(authoredPlants));
@@ -643,5 +645,71 @@ describe('fragging a coral', () => {
     } finally {
       await limited.close();
     }
+  });
+});
+
+describe('preset decor kept per tank size', () => {
+  let h: Harness;
+  let alice: Account;
+  beforeAll(async () => {
+    h = await createHarness();
+    alice = await account(h);
+  });
+  afterAll(() => h.close());
+
+  const authoredReef = presets.reef?.decor ?? [];
+  const reefRoots = (items: readonly DecorItem[]) =>
+    items.filter((item) => coralTable.species.has(coralSpeciesId(item.assetId)));
+
+  it('tracks only the kept decor on a nano30 preset tank', async () => {
+    const kept = keptPresetDecor(authoredReef, 'nano30');
+    expect(kept.length).toBeLessThan(authoredReef.length);
+    expect(reefRoots(kept).length).toBeLessThan(reefRoots(authoredReef).length);
+    const tankId = await makeTank(h, alice, { layout: null, size: 'nano30' });
+    const tank = await wait(h, alice, tankId, 1);
+    const keptKeys = layoutPlantKeys(
+      reefRoots(kept).map((item) => ({ ...item, tintSeed: legacyTintSeed(item) })),
+    );
+    expect(tank.corals?.map((c) => c.key)).toEqual(keptKeys);
+  });
+
+  it('tracks only the kept plants on a nano30 freshwater preset tank', async () => {
+    const pond = presets.freshwater?.decor ?? [];
+    const kept = keptPresetDecor(pond, 'nano30');
+    const plants = (items: readonly DecorItem[]) =>
+      items
+        .filter((item) => plantTable.species.has(item.assetId))
+        .map((item) => ({ ...item, tintSeed: legacyTintSeed(item) }));
+    expect(plants(kept).length).toBeLessThan(plants(pond).length);
+    const tankId = await makeTank(h, alice, { layout: null, size: 'nano30', biome: 'freshwater' });
+    const tank = await wait(h, alice, tankId, 1);
+    expect(tank.plants?.map((p) => p.key) ?? []).toEqual(layoutPlantKeys(plants(kept)));
+  });
+
+  it('drops growth state of the trimmed tail without error', async () => {
+    const tankId = await makeTank(h, alice, { layout: null, size: 'nano30' });
+    const live = (await wait(h, alice, tankId, 1)).corals ?? [];
+    const row = (await rowOf(h, tankId)).corals as object[];
+    const orphan = { ...stored('s999999', 3), position: [0.1, 0.1] };
+    const orphanChild = { ...stored('s999999.1', 1), parentKey: 's999999', position: [0.2, 0.1] };
+    await setCorals(h, tankId, [...row, orphan, orphanChild]);
+    const after = await wait(h, alice, tankId, 1);
+    expect(after.corals?.map((c) => c.key)).toEqual(live.map((c) => c.key));
+    const saved = (await rowOf(h, tankId)).corals as { key: string }[];
+    expect(saved.map((c) => c.key)).toEqual(live.map((c) => c.key));
+  });
+
+  it('leaves a std200 preset tank with all its decor', async () => {
+    expect(keptPresetDecor(authoredReef, 'standard')).toHaveLength(authoredReef.length);
+    const tankId = await makeTank(h, alice, { layout: null, size: 'standard' });
+    const tank = await wait(h, alice, tankId, 1);
+    expect(tank.corals).toHaveLength(reefRoots(authoredReef).length);
+  });
+
+  it('does not thin a saved layout on nano30', async () => {
+    const saved = Array.from({ length: 16 }, (_, i) => layoutItem('acropora-cytherea', 100 + i));
+    const tankId = await makeTank(h, alice, { layout: saved, size: 'nano30' });
+    const tank = await wait(h, alice, tankId, 1);
+    expect(tank.corals).toHaveLength(16);
   });
 });

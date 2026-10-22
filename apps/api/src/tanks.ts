@@ -10,6 +10,7 @@ import {
   createTankRequestSchema,
   DEFAULT_BACKGROUND_ID,
   decorLayoutSchema,
+  keptPresetDecor,
   diseaseStateSchema,
   equipmentProblems,
   equipmentSchema,
@@ -899,7 +900,9 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       return out;
     };
     const shown =
-      tank.decorLayout === null ? (presets[tank.biome]?.decor ?? []) : storedLayout(tank);
+      tank.decorLayout === null
+        ? keptPresetDecor(presets[tank.biome]?.decor ?? [], tank.size)
+        : storedLayout(tank);
     const before = count(shown);
     const needed = new Set<string>();
     for (const [assetId, n] of count(layout)) {
