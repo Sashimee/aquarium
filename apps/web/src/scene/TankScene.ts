@@ -478,9 +478,9 @@ export class TankScene {
         this.engine.scene.add(group.object);
       }
       this.syncGrowth();
+      await this.evictUnused();
       const anchors = this.anchors;
       for (const listener of this.anchorListeners) listener(anchors);
-      await this.evictUnused();
       return;
     }
   }
