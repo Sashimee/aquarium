@@ -2,7 +2,10 @@ import type { EngineEventBus } from '../events';
 import { DEFAULT_CONTROLLER_CONFIG, TierController } from './controller';
 import { gpuTimeSpansFrames, median, selectInitialTier, type TimingSignal } from './probe';
 import {
+  frameTimedMaxTier,
+  lowerTier,
   TIER_SETTINGS,
+  TIERS,
   tierIndex,
   type Tier,
   type TierChangeReason,
@@ -23,6 +26,8 @@ export interface QualityOptions {
   probeTier?: Tier;
   /** The highest tier the probe and adaptation may choose; a pinned or manual tier may exceed it. */
   maxTier?: Tier;
+  /** Caps every tier's `textureSize`, pinned and manual tiers included; defaults to 2048. */
+  maxTextureSize?: 1024 | 2048;
   probeMs?: number;
   /** Frames right after start-up include pipeline compiles and are not representative. */
   warmupMs?: number;
@@ -68,6 +73,7 @@ export class QualityManager {
   private contentDeadline = Infinity;
   private tierAnnounced = false;
   private signal: TimingSignal | null = null;
+  private readonly table: Readonly<Record<Tier, Readonly<TierSettings>>>;
 
   constructor(
     private readonly events: EngineEventBus,
@@ -86,6 +92,7 @@ export class QualityManager {
     this.contentTimeoutMs = options.contentTimeoutMs ?? 15_000;
     this.hasContent = !(options.awaitContent ?? false);
     this.current = options.pinned ?? this.probeTier;
+    this.table = cappedSettings(options.maxTextureSize ?? 2048);
   }
 
   get tier(): Tier {
@@ -93,7 +100,7 @@ export class QualityManager {
   }
 
   get settings(): Readonly<TierSettings> {
-    return TIER_SETTINGS[this.current];
+    return this.table[this.current];
   }
 
   /** True from `start()` until the probe picks a tier, including any wait for content. */
@@ -197,6 +204,7 @@ export class QualityManager {
     const signal: TimingSignal = this.trustsGpu(phase) ? 'gpu' : 'frame';
     this.signal = signal;
     const measured = this.current;
+    const maxTier = signal === 'gpu' ? this.maxTier : frameTimedMaxTier(this.maxTier);
     const result = selectInitialTier({
       samples: signal === 'gpu' ? phase.gpu : phase.frame,
       signal,
@@ -204,7 +212,7 @@ export class QualityManager {
       targetMs: this.options.targetMs,
       refreshMs: this.refreshMs,
       // The empty tank runs faster than the furnished one will, so it may only lower the tier.
-      maxTier: phase.content ? this.maxTier : measured,
+      maxTier: phase.content ? maxTier : lowerTier(measured, maxTier),
     });
     if (!phase.content) {
       this.settle(result.tier);
@@ -218,7 +226,7 @@ export class QualityManager {
         ...DEFAULT_CONTROLLER_CONFIG,
         targetMs: this.options.targetMs,
         refreshMs: this.refreshMs,
-        maxTier: this.maxTier,
+        maxTier,
         signal,
       });
       this.controller.reset(result.tier, nowMs);
@@ -257,4 +265,17 @@ export class QualityManager {
     this.tierAnnounced = true;
     this.events.emit('quality:tier-changed', { from, to, reason });
   }
+}
+
+function cappedSettings(
+  maxTextureSize: 1024 | 2048,
+): Readonly<Record<Tier, Readonly<TierSettings>>> {
+  const table = { ...TIER_SETTINGS };
+  for (const tier of TIERS) {
+    const settings = TIER_SETTINGS[tier];
+    if (settings.textureSize > maxTextureSize) {
+      table[tier] = { ...settings, textureSize: maxTextureSize };
+    }
+  }
+  return table;
 }

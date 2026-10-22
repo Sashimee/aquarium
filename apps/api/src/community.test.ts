@@ -11,9 +11,9 @@ import {
   communityStreamStateSchema,
   dataExportSchema,
 } from '@aquarium/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { secondsUntilRoom } from './community.ts';
 import { schema } from './db/index.ts';
 import { pruneExpired } from './maintenance.ts';
@@ -827,6 +827,191 @@ describe('community tank', () => {
       await advance(harness, 3 * 24 * HOUR);
       await pause(250);
       expect(await waterChanges(harness)()).toHaveLength(1);
+    });
+
+    const communityTankId = async (harness: Harness) => {
+      const [row] = await harness.database.db.select().from(schema.communityTank);
+      if (!row) throw new Error('community tank not created');
+      return row.tankId;
+    };
+    const setAmmonia = async (harness: Harness, ammonia: number) => {
+      const id = await communityTankId(harness);
+      await harness.database.db
+        .update(schema.tanks)
+        .set({ water: { ammonia, nitrate: 0, algae: 0, uneatenFood: 0 } })
+        .where(eq(schema.tanks.id, id));
+    };
+
+    it('runs once at startup instead of after the first interval', async () => {
+      const harness = await start({ community: { upkeepMs: 60 * 60_000 } });
+      const rows = await waitFor(
+        async () => harness.database.db.select().from(schema.communityTank),
+        (found) => found.length === 1,
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it('does not restock into lethal water, changes the water first and restocks once it is safe', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await setAmmonia(harness, 50);
+      await killSome(harness, totalStock - COMMUNITY_UPKEEP.restockBelowAlive + 1, longDead);
+      await waitFor(waterChanges(harness), (rows) => rows.length >= 2);
+      expect(await fishOf(harness)()).toHaveLength(COMMUNITY_UPKEEP.restockBelowAlive - 1);
+      await setAmmonia(harness, 0.3);
+      const fish = await waitFor(fishOf(harness), (f) => f.length === totalStock);
+      expect(fish.every((f) => f.status === 'alive')).toBe(true);
+      expect((await waterChanges(harness)()).length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('leaves a memorial for each long-dead fish it clears, as netting does', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await killSome(harness, 2, longDead);
+      await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+      const memorials = await harness.database.db.select().from(schema.memorials);
+      expect(memorials).toHaveLength(2);
+      expect(memorials.every((m) => m.cause === 'starvation')).toBe(true);
+      const state = communityStateSchema.parse((await getState(harness)).json());
+      expect(state.tank.memorials).toHaveLength(2);
+    });
+
+    it('reads the tank in one read-only snapshot transaction', async () => {
+      const harness = await start();
+      await getState(harness);
+      const spy = vi.spyOn(harness.database.db, 'transaction');
+      try {
+        expect((await getState(harness)).statusCode).toBe(200);
+        expect(spy.mock.calls.map(([, config]) => config)).toContainEqual({
+          isolationLevel: 'repeatable read',
+          accessMode: 'read only',
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    it('waits for an upkeep run in flight before the app closes', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      const held = await holdTankLock(harness);
+      try {
+        await held.blocked();
+        let closed = false;
+        const closing = harness.app.close().then(() => {
+          closed = true;
+        });
+        await pause(300);
+        expect(closed).toBe(false);
+        await held.release();
+        await closing;
+        expect(closed).toBe(true);
+      } finally {
+        await held.release();
+      }
+    });
+
+    const holdTankLock = async (harness: Harness) => {
+      const id = await communityTankId(harness);
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let held: (pid: unknown) => void = () => undefined;
+      const holding = new Promise<unknown>((resolve) => {
+        held = resolve;
+      });
+      const lock = harness.database.db.transaction(async (tx) => {
+        await tx.execute(sql`select 1 from tanks where id = ${id} for update`);
+        held((await tx.execute(sql`select pg_backend_pid() as pid`)).rows[0]?.['pid']);
+        await gate;
+      });
+      const pid = await holding;
+      return {
+        release: async () => {
+          release();
+          await lock;
+        },
+        blocked: () =>
+          waitFor(
+            async () =>
+              (
+                await harness.database.db.execute(
+                  sql`select 1 from pg_stat_activity
+                    where datname = current_database() and ${pid} = any(pg_blocking_pids(pid))`,
+                )
+              ).rows.length,
+            (n) => n > 0,
+          ),
+      };
+    };
+
+    it('keeps only the newest memorials of the community tank', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await killSome(harness, totalStock, longDead);
+      await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+      const memorials = await harness.database.db.select().from(schema.memorials);
+      expect(totalStock).toBeGreaterThan(10);
+      expect(memorials).toHaveLength(10);
+      const state = communityStateSchema.parse((await getState(harness)).json());
+      expect(state.tank.memorials).toHaveLength(10);
+    });
+
+    it('clears a long-dead fish whose cause was never recorded', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      const fish = await fishOf(harness)();
+      for (const f of fish.slice(0, 2)) {
+        await harness.database.db
+          .update(schema.fish)
+          .set({
+            status: 'dead',
+            diedAt: new Date(harness.clock.now() - longDead * HOUR),
+            cause: null,
+            health: 0,
+          })
+          .where(eq(schema.fish.id, f.id));
+      }
+      await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+      const memorials = await harness.database.db.select().from(schema.memorials);
+      expect(memorials.map((m) => m.cause)).toEqual(['unknown', 'unknown']);
+    });
+
+    it('frees the guard after a failed run so the next one goes ahead', async () => {
+      const lines: string[] = [];
+      const harness = await start({
+        community: { upkeepMs: 40 },
+        logStream: { write: (chunk) => void lines.push(chunk) },
+      });
+      await getState(harness);
+      const id = await communityTankId(harness);
+      await harness.database.db
+        .update(schema.tanks)
+        .set({ water: { broken: true } })
+        .where(eq(schema.tanks.id, id));
+      await waitFor(
+        async () => lines.filter((l) => l.includes('community upkeep failed')).length,
+        (n) => n >= 2,
+      );
+      await setAmmonia(harness, 0);
+      await killSome(harness, 1, longDead);
+      await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+    });
+
+    it('does not start a second run while one is blocked', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      const held = await holdTankLock(harness);
+      const spy = vi.spyOn(harness.database.db, 'transaction');
+      try {
+        await held.blocked();
+        spy.mockClear();
+        await pause(250);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+        await held.release();
+      }
     });
 
     it('leaves the water of a fresh tank alone', async () => {
