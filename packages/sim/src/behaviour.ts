@@ -1367,6 +1367,11 @@ export class Behaviour {
 
     if (this.banks.planEmersed(i, plan, at(this.startlePhase, i) !== StartlePhase.None)) {
       this.startlePhase[i] = StartlePhase.None;
+      // Out on the perch it breathes air, so a breath it owed in the water is taken.
+      if (this.banks.perched(i)) {
+        this.gulpDue[i] = 0;
+        this._gulpWait[i] = 0;
+      }
       return;
     }
     if (at(this.startlePhase, i) !== StartlePhase.None) {
