@@ -9,7 +9,12 @@ export type AuditAction =
   | 'vote_set'
   | 'vote_removed'
   | 'gallery_listed'
-  | 'gallery_unlisted';
+  | 'gallery_unlisted'
+  | 'gift_offered'
+  | 'gift_accepted'
+  | 'gift_declined'
+  | 'gift_cancelled'
+  | 'gift_expired';
 
 type Executor = Pick<Database['db'], 'insert'>;
 

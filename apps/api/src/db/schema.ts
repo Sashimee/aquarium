@@ -152,6 +152,7 @@ export const tanks = pgTable(
     shareTokenHash: text('share_token_hash').unique(),
     // A public link is not a gallery listing: this is a second opt-in, honoured only while the link is on.
     inGallery: boolean('in_gallery').notNull().default(false),
+    acceptsGifts: boolean('accepts_gifts').notNull().default(false),
     name: text('name').notNull(),
     // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
     // row, so this is what lets a retry find the tank it already got.
@@ -464,6 +465,50 @@ export const ledger = pgTable(
     index('ledger_user_id_created_at_idx').on(t.userId, t.createdAt),
     check('ledger_delta_nonzero', sql`${t.delta} <> 0`),
     check('ledger_game_has_user', sql`${t.source} <> 'game' or ${t.userId} is not null`),
+  ],
+);
+
+export const giftStatusEnum = pgEnum('gift_status', [
+  'open',
+  'countered',
+  'accepted',
+  'declined',
+  'cancelled',
+  'expired',
+]);
+
+// The sender's fish is deleted from the tank and kept here as a snapshot while the offer is open;
+// it is re-inserted with the same id into the sender's tank on a return, or the recipient's on
+// acceptance. to_user_id is SET NULL so deleting the recipient's account leaves the fish findable:
+// the next settle returns it to the sender. A deleted sender takes the offer, and its fish, along.
+export const giftOffers = pgTable(
+  'gift_offers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromUserId: text('from_user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    toUserId: text('to_user_id').references(() => user.id, { onDelete: 'set null' }),
+    fromTankId: uuid('from_tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    status: giftStatusEnum('status').notNull().default('open'),
+    fish: jsonb('fish').notNull(),
+    wantsReturn: boolean('wants_return').notNull().default(false),
+    recipientTankId: uuid('recipient_tank_id'),
+    pledgedFishId: uuid('pledged_fish_id'),
+    creationKey: text('creation_key').notNull(),
+    acceptKey: text('accept_key'),
+    confirmKey: text('confirm_key'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    settledAt: timestamptz('settled_at'),
+  },
+  (t) => [
+    uniqueIndex('gift_offers_creation_key_idx').on(t.fromUserId, t.creationKey),
+    index('gift_offers_from_user_idx').on(t.fromUserId, t.status),
+    index('gift_offers_to_user_idx').on(t.toUserId, t.status),
+    index('gift_offers_from_tank_idx').on(t.fromTankId),
   ],
 );
 

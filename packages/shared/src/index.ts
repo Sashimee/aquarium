@@ -24,4 +24,5 @@ export * from './treatment.js';
 export * from './seed.js';
 export * from './plants.js';
 export * from './corals.js';
+export * from './gifts.js';
 export * from './community.js';

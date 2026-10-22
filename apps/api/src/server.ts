@@ -64,7 +64,7 @@ const app = buildApp({
   push,
 });
 
-const stopMaintenance = startMaintenance(database, clock);
+const stopMaintenance = startMaintenance(database, clock, () => app.settleDueGifts());
 const reminders = startReminders(
   {
     database,

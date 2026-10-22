@@ -92,6 +92,7 @@ import {
   claimAchievementRewards,
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
+import { registerGiftRoutes } from './gifts.ts';
 import { registerMoveRoutes } from './moveFish.ts';
 import { registerPlantRoutes } from './plantTrim.ts';
 import { registerCoralRoutes } from './coralFrag.ts';
@@ -120,6 +121,7 @@ export interface CareLimits {
   wallet: Limit;
   purchase: Limit;
   replay: Limit;
+  gift: Limit;
 }
 
 export const DEFAULT_CARE_LIMITS: CareLimits = {
@@ -130,6 +132,7 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   wallet: { max: 60, windowMs: 60_000 },
   purchase: { max: 60, windowMs: 10 * 60_000 },
   replay: { max: 30, windowMs: 60_000 },
+  gift: { max: 20, windowMs: 60 * 60_000 },
 };
 
 const EVENT_RETENTION_MS = 90 * 86_400_000;
@@ -198,7 +201,7 @@ const nameNotPublic = () =>
 
 const notFound = () => new HttpError(404, apiError('not_found', 'Tank not found.'));
 
-function toLifecycleFish(row: FishRow): LifecycleFish {
+export function toLifecycleFish(row: FishRow): LifecycleFish {
   return {
     id: row.id,
     species: row.species,
@@ -613,6 +616,7 @@ export async function render(
     quarantine: tank.quarantine,
     shared: tank.shareTokenHash !== null,
     inGallery: tank.inGallery,
+    acceptsGifts: tank.acceptsGifts,
     shareToken: issuedShareToken,
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
@@ -781,32 +785,55 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     return database.db.transaction(async (tx) => fn(tx, await lockAndTick(tx, deps, tankId, user)));
   }
 
-  async function withTanks<T>(
-    user: SessionUser,
-    tankIds: readonly string[],
+  async function withTanksOf<T>(
+    targets: readonly { user: SessionUser; tankId: string }[],
     fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
   ): Promise<T> {
     return database.db.transaction(async (tx) => {
       // Every tank row is locked, in id order, before any catch-up runs: a catch-up can claim an
       // achievement reward and take the wallet lock, and the order must stay user, tank, wallet.
-      // Id order also makes two opposite moves wait for each other instead of deadlocking.
+      // Id order also makes two opposite moves wait for each other instead of deadlocking. The
+      // catch-ups then run grouped by owner in user-id order, so two requests touching the same two
+      // players always reach their wallets in the same order.
+      const ownerOf = new Map(targets.map((t) => [t.tankId, t.user]));
       const locked = new Map<string, TankRow>();
-      for (const id of [...new Set(tankIds)].toSorted()) {
-        locked.set(id, await lockTank(tx, id, user));
+      for (const id of [...ownerOf.keys()].toSorted()) {
+        const owner = ownerOf.get(id);
+        if (!owner) throw new Error('withTanksOf lost a target it listed');
+        locked.set(id, await lockTank(tx, id, owner));
       }
       const byId = new Map<string, Ticked>();
-      for (const [id, tank] of locked) {
-        byId.set(id, await tickLocked(tx, deps, tank, user));
+      const inTickOrder = [...locked].toSorted(([idA, a], [idB, b]) => {
+        const ownerA = ownerOf.get(idA)?.id ?? '';
+        const ownerB = ownerOf.get(idB)?.id ?? '';
+        if (ownerA !== ownerB) return ownerA < ownerB ? -1 : 1;
+        return a.id < b.id ? -1 : 1;
+      });
+      for (const [id, tank] of inTickOrder) {
+        const owner = ownerOf.get(id);
+        if (!owner) throw new Error('withTanksOf lost a target it listed');
+        byId.set(id, await tickLocked(tx, deps, tank, owner));
       }
       return fn(
         tx,
-        tankIds.map((id) => {
-          const ticked = byId.get(id);
-          if (!ticked) throw new Error('withTanks lost a tank it locked');
+        targets.map(({ tankId }) => {
+          const ticked = byId.get(tankId);
+          if (!ticked) throw new Error('withTanksOf lost a tank it locked');
           return ticked;
         }),
       );
     });
+  }
+
+  function withTanks<T>(
+    user: SessionUser,
+    tankIds: readonly string[],
+    fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
+  ): Promise<T> {
+    return withTanksOf(
+      tankIds.map((tankId) => ({ user, tankId })),
+      fn,
+    );
   }
 
   const buyFirst = (what: string) =>
@@ -1105,6 +1132,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .set({
             ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
+            ...(body.acceptsGifts !== undefined ? { acceptsGifts: body.acceptsGifts } : {}),
             ...(equipment !== undefined && body.light !== undefined
               ? {
                   equipment: { ...equipment, light: { tier: equipment.light.tier, ...body.light } },
@@ -1473,6 +1501,19 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     throttle,
     guarded,
     withTanks,
+    render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
+
+  registerGiftRoutes({
+    app,
+    database,
+    species,
+    chemistryParams,
+    clock,
+    authorize,
+    throttle,
+    guarded,
+    withTanksOf,
     render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
   });
 

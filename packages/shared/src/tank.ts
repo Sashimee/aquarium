@@ -134,6 +134,11 @@ export const tankSchema = z.object({
   quarantine: z.boolean().describe('the one nano tank kept apart for new fish and treatment'),
   shared: z.boolean().describe('whether a public link is active'),
   inGallery: z.boolean().describe('listed in the tank of the week gallery; needs an active link'),
+  acceptsGifts: z
+    .boolean()
+    .describe(
+      'opt-in, default false: this tank may receive gifted or traded fish from other players',
+    ),
   shareToken: shareTokenSchema
     .nullable()
     .describe('only in the response that enabled or rotated the link, null on every other read'),
@@ -198,13 +203,18 @@ export const updateTankRequestSchema = z
     decorLayout: decorLayoutSchema.optional(),
     backgroundId: backgroundIdSchema.nullable().optional(),
     light: lightScheduleSchema.optional().describe('free: the lamp schedule and intensity'),
+    acceptsGifts: z
+      .boolean()
+      .optional()
+      .describe('opt this tank in or out of receiving gifted fish'),
   })
   .refine(
     (v) =>
       v.name !== undefined ||
       v.decorLayout !== undefined ||
       v.backgroundId !== undefined ||
-      v.light !== undefined,
+      v.light !== undefined ||
+      v.acceptsGifts !== undefined,
     'nothing to update',
   );
 export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
