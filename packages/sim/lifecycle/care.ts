@@ -14,6 +14,7 @@ import {
   WATER_CHANGE_FRACTION,
 } from './params.ts';
 import { diluteMedicine, syncTreatment } from './disease.ts';
+import { FOOD_PARTICLES } from '../src/food.ts';
 import type { LifecycleState } from './types.ts';
 
 const FRESHWATER_FOODS: readonly FoodType[] = ['flakes', 'pellets', 'bloodworms', 'algae-wafer'];
@@ -45,8 +46,11 @@ function accept(
   };
 }
 
+const SETTLED_FOOD_MIN_PORTIONS = Math.min(...Object.values(FOOD_PARTICLES).map((p) => p.portion));
+
 function withFoodType(water: Water, food: FoodType): FoodType[] | undefined {
-  if (water.uneatenFood > 0 && water.uneatenFoodTypes === undefined) return undefined;
+  if (water.uneatenFood < SETTLED_FOOD_MIN_PORTIONS) return [food];
+  if (water.uneatenFoodTypes === undefined) return undefined;
   const kept = water.uneatenFoodTypes ?? [];
   return kept.includes(food) ? kept : [...kept, food];
 }

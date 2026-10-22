@@ -223,6 +223,32 @@ describe('clean-up crew in the offline catch-up', () => {
       expect(vacuumed.value.water.uneatenFoodTypes).toEqual([]);
     });
 
+    it('starts a fresh record once earlier food has decayed below a particle', () => {
+      const params = env.chemistryParams;
+      const feed = (state: LifecycleState, food: FoodType, nowMs: number) => {
+        const fed = applyCare(
+          state,
+          { type: 'feed', food, portion: 1 },
+          'freshwater',
+          params,
+          nowMs,
+        );
+        if (!fed.ok) throw new Error(fed.reason);
+        return fed.value;
+      };
+      const flaked = feed(tank(plecos(1), {}), 'flakes', T0);
+      const later = run(flaked, T0, T0 + DAY, false);
+      expect(later.state.water.uneatenFood).toBeGreaterThan(0);
+      const bloodworms = feed(later.state, 'bloodworms', T0 + DAY);
+      expect(bloodworms.water.uneatenFoodTypes).toEqual(['bloodworms']);
+
+      const legacy = feed(tank(plecos(1), { uneatenFood: 1e-4 }), 'bloodworms', T0);
+      expect(legacy.water.uneatenFoodTypes).toEqual(['bloodworms']);
+
+      const stillThere = feed(feed(tank(plecos(1), {}), 'flakes', T0), 'bloodworms', T0);
+      expect(stillThere.water.uneatenFoodTypes).toEqual(['flakes', 'bloodworms']);
+    });
+
     it('keeps treating food as any type on a tank that has no record of it', () => {
       const params = env.chemistryParams;
       const legacy = tank(plecos(1), { uneatenFood: 2 });
