@@ -36,6 +36,30 @@ describe('QualityManager', () => {
     expect(applied).toEqual(['high']);
   });
 
+  it('keeps 2k textures on high and ultra when nothing caps them', () => {
+    const { quality } = setup();
+    expect(quality.settings).toBe(TIER_SETTINGS.high);
+    quality.setTier('ultra', 0);
+    expect(quality.settings.textureSize).toBe(2048);
+  });
+
+  it('caps the texture size of every tier, a manual pick included, and nothing else', () => {
+    const { quality } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    const seen: number[] = [];
+    quality.register('textures', (s) => seen.push(s.textureSize));
+    for (const tier of ['low', 'high', 'ultra'] as const) {
+      quality.setTier(tier, 0);
+      expect(quality.settings).toEqual({ ...TIER_SETTINGS[tier], textureSize: 1024 });
+    }
+    expect(seen).toEqual([1024, 1024, 1024, 1024]);
+  });
+
+  it('caps a pinned tier too', () => {
+    const { quality } = setup({ pinned: 'ultra', maxTextureSize: 1024 });
+    expect(quality.settings.textureSize).toBe(1024);
+    expect(quality.settings.shadowMapSize).toBe(TIER_SETTINGS.ultra.shadowMapSize);
+  });
+
   it('rejects duplicate feature names and allows unregistering', () => {
     const { quality } = setup();
     expect(() => quality.register('recorder', () => undefined)).toThrow(/already registered/);
