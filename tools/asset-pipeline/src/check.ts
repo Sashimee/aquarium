@@ -569,9 +569,8 @@ export function borrowedTextureProblems(assets: readonly OutputAsset[]): string[
         const from = owner.get(variant.file);
         if (own.has(variant.file) || from === undefined || from === asset) continue;
         const missing = from.sources.filter((source) => !asset.sources.includes(source));
-        const key = `${variant.file}`;
-        if (missing.length === 0 || reported.has(key)) continue;
-        reported.add(key);
+        if (missing.length === 0 || reported.has(variant.file)) continue;
+        reported.add(variant.file);
         problems.push(
           `${asset.kind}/${asset.id}: borrows ${variant.file} from ${from.kind}/${from.id} but does not list its source ${missing.join(', ')} (the borrower inherits the owner's licence and credit)`,
         );

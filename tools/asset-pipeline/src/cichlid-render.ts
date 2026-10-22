@@ -1,13 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mulberry32 } from './anemone.ts';
-import { loadEnvironment, sceneBaseColor } from './environment.ts';
+import { loadEnvironment, sceneBaseColor, sceneMaterial } from './environment.ts';
 import type { FishContext } from './fish.ts';
 import { developRender, type DepthParams } from './misty-lake.ts';
 import type { MaterialDef } from './parts.ts';
 import { ENVIRONMENT_RECIPES } from './recipes.ts';
 import {
   buildMips,
+  GREY_TEXEL,
   groundMesh,
   renderScene,
   type Instance,
@@ -43,12 +44,6 @@ interface Library {
   sand: MipTexture;
 }
 
-const GREY_TEXEL: MipTexture = buildMips({
-  width: 1,
-  height: 1,
-  data: Uint8Array.from([128, 128, 128, 255]),
-});
-
 async function loadMeshes(
   recipeId: string,
   ctx: Pick<FishContext, 'verifySource'>,
@@ -59,14 +54,14 @@ async function loadMeshes(
   const byName = new Map<string, MaterialDef>(materials.map((m) => [m.name, m]));
   const textures = new Map<string, MipTexture>();
   return parts.map((part) => {
-    const material = byName.get(part.material);
+    const material = sceneMaterial(byName, part.material, recipe.id);
     let texture = textures.get(part.material);
     if (!texture) {
       const baseColor = sceneBaseColor(material, part.material, recipe.id);
       texture = baseColor ? buildMips(baseColor.image) : GREY_TEXEL;
       textures.set(part.material, texture);
     }
-    const factor = material?.baseColorFactor ?? [1, 1, 1, 1];
+    const factor = material.baseColorFactor;
     return {
       positions: part.positions,
       normals: part.normals,

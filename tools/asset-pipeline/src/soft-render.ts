@@ -56,6 +56,12 @@ function mipLevel(levels: MipTexture['levels'], index: number): MipTexture['leve
   return level;
 }
 
+export const GREY_TEXEL: MipTexture = buildMips({
+  width: 1,
+  height: 1,
+  data: Uint8Array.from([128, 128, 128, 255]),
+});
+
 export function buildMips(image: Rgba): MipTexture {
   const levels = [{ width: image.width, height: image.height, data: image.data }];
   for (;;) {
