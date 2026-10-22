@@ -11,6 +11,7 @@ import type {
   Water,
 } from '@aquarium/shared';
 import { speciesNameMap, type SpeciesNames } from './speciesNames';
+import { salinityNotice } from './salinityCare';
 import {
   BIOLOAD_CAPACITY_BY_SIZE,
   hasCapacityFor,
@@ -300,5 +301,7 @@ export function tankReportLines(tank: Tank, species: readonly SpeciesSummary[]):
     `Water: ammonia ${water.ammonia}, nitrate ${water.nitrate}, algae ${water.algae}, leftover food ${water.leftoverFood}.`,
   );
   if (water.needsVacuum) lines.push('Leftover food is building up. Vacuum the gravel.');
+  const salinity = salinityNotice(tank, species);
+  if (salinity) lines.push(salinity.text);
   return lines;
 }
