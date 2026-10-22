@@ -11,11 +11,11 @@ import {
 } from '@aquarium/shared';
 import { compileCollider, FishState, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
-import { DEFAULT_TANK, TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
 import { SimWorldSpec } from '../fish/simWorld';
 import { AssetCatalog, ModelLibrary } from './assets';
-import { caveAnchors } from './caves';
+import { caveAnchors, waterReach } from './caves';
 import { sceneCollidersToSim } from '../fish/simColliders';
 import { collidersFor } from '../interaction/decor/colliders';
 import { specsFromCatalog } from '../interaction/decor/spec';
@@ -123,11 +123,7 @@ describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
     it.each(SIZES)('%s: every anchor has a clear way out along its facing', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
       const clearance = clearanceTo(await hardColliders(biome, layer, fitted.decor));
-      const dim = TANK_DIMENSIONS[size];
-      const reach = {
-        halfX: dim.length / 2 - dim.glass - WATER_INSET,
-        halfZ: dim.depth / 2 - dim.glass - WATER_INSET,
-      };
+      const reach = waterReach(TANK_DIMENSIONS[size]);
       const anchors = caveAnchors(fitted.decor, reach);
       expect(anchors.length, 'anchors kept inside the water').toBe(
         caveAnchors(fitted.decor).length,
