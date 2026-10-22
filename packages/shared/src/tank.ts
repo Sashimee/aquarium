@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { backgroundIdSchema } from './backgrounds.js';
 import {
   biomeSchema,
-  playableBiomeSchema,
+  creatableBiomeSchema,
   decorLayoutResponseSchema,
   decorLayoutSchema,
   idSchema,
@@ -179,7 +179,7 @@ export type Tank = z.infer<typeof tankSchema>;
 export const createTankRequestSchema = z
   .strictObject({
     name: z.string().trim().min(1).max(60),
-    biome: playableBiomeSchema,
+    biome: creatableBiomeSchema,
     size: tankSizeSchema.default('standard'),
     quarantine: z.boolean().default(false),
     idempotencyKey: idempotencyKeySchema.describe(

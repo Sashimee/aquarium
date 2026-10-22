@@ -21,14 +21,26 @@ export const BACKGROUND_IDS = {
     'bg-reef-soft-coral',
     'bg-reef-deep-blue',
   ],
+  cichlid: [
+    'bg-cichlid-malawi-rock-pile',
+    'bg-cichlid-rock-wall',
+    'bg-cichlid-tanganyika-shell-bed',
+    'bg-cichlid-rock-cave',
+    'bg-cichlid-open-blue',
+  ],
 } as const satisfies Record<PlayableBiome, readonly [string, ...string[]]>;
 
-export const backgroundIdSchema = z.enum([...BACKGROUND_IDS.freshwater, ...BACKGROUND_IDS.reef]);
+export const backgroundIdSchema = z.enum([
+  ...BACKGROUND_IDS.freshwater,
+  ...BACKGROUND_IDS.reef,
+  ...BACKGROUND_IDS.cichlid,
+]);
 export type BackgroundId = z.infer<typeof backgroundIdSchema>;
 
 export const DEFAULT_BACKGROUND_ID: Record<PlayableBiome, BackgroundId> = {
   freshwater: BACKGROUND_IDS.freshwater[0],
   reef: BACKGROUND_IDS.reef[0],
+  cichlid: BACKGROUND_IDS.cichlid[0],
 };
 
 export function isBackgroundForBiome(biome: Biome, id: string): id is BackgroundId {
