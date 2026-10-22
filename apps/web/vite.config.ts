@@ -3,9 +3,10 @@ import { defineConfig } from 'vite';
 import { ktx2WorkerPlugin } from './build/ktx2-worker-plugin.ts';
 import { swBuildIdPlugin } from './build/sw-build-id-plugin.ts';
 import { tankPreloadPlugin } from './build/tank-preload-plugin.ts';
+import { vitestGlobCachePlugin } from './build/vitest-glob-cache-plugin.ts';
 
 export default defineConfig({
-  plugins: [ktx2WorkerPlugin(), tankPreloadPlugin(), swBuildIdPlugin()],
+  plugins: [ktx2WorkerPlugin(), tankPreloadPlugin(), swBuildIdPlugin(), vitestGlobCachePlugin()],
   build: {
     target: ['es2022', 'safari16'],
     sourcemap: false,
