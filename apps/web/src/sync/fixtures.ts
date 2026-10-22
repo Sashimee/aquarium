@@ -111,6 +111,7 @@ export function recordBus() {
     'tank:water',
     'tank:lamp',
     'tank:plants',
+    'tank:corals',
     'tank:care',
     'tank:decor',
     'tank:background',

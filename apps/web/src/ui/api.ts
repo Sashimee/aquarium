@@ -67,10 +67,12 @@ import {
   treatRequestSchema,
   treatResponseSchema,
   trimPlantRequestSchema,
+  fragCoralRequestSchema,
   type AchievementList,
   type AteReport,
   type BackgroundId,
   type CareAction,
+  type FragCoralRequest,
   type Collection,
   type CommunityFeedRequest,
   type CommunityFeedResponse,
@@ -290,6 +292,7 @@ export interface ApiClient {
   care(tankId: string, action: CareAction): Promise<Tank>;
   treat(tankId: string, request: TreatRequest): Promise<TreatResponse>;
   trimPlant(tankId: string, request: TrimPlantRequest): Promise<Tank>;
+  fragCoral(tankId: string, request: FragCoralRequest): Promise<Tank>;
   moveFish(tankId: string, fishId: string, request: MoveFishRequest): Promise<MoveFishResponse>;
   replay(
     tankId: string,
@@ -810,6 +813,13 @@ export function createApiClient(
       const body = validate(trimPlantRequestSchema, request);
       return parsed(
         await post(`/api/tanks/${encodeURIComponent(tankId)}/plants/trim`, body),
+        tankSchema,
+      );
+    },
+    async fragCoral(tankId, request) {
+      const body = validate(fragCoralRequestSchema, request);
+      return parsed(
+        await post(`/api/tanks/${encodeURIComponent(tankId)}/corals/frag`, body),
         tankSchema,
       );
     },
