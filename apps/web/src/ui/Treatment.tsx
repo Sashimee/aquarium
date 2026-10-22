@@ -284,7 +284,7 @@ function DiseaseCard({
 
 function FishMover({ session, state, tank, fish }: FishMoverProps) {
   const [refusal, setRefusal] = useState<string | null>(null);
-  const targets = moveTargets(tank, state.tanks);
+  const targets = moveTargets(tank, state.tanks, fish.species);
   if (targets.length === 0) return null;
   return (
     <span className="fish-mover">

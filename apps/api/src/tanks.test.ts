@@ -1,5 +1,7 @@
 import {
   apiErrorSchema,
+  biomeSchema,
+  creatableBiomeSchema,
   decorLayoutSchema,
   DEFAULT_EQUIPMENT,
   personalitySchema,
@@ -208,7 +210,7 @@ describe('tanks and fish', () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
     expect(tank).toMatchObject({ name: 'Home', biome: 'freshwater', fish: [], memorials: [] });
-    expect(tank.water).toEqual({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 });
+    expect(tank.water).toEqual({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 });
 
     const list = tankListSchema.parse((await call(h, cookie, 'GET', '/api/tanks')).json());
     expect(list.map((t) => t.id)).toEqual([tank.id]);
@@ -1420,6 +1422,9 @@ describe('tank sizes, quarantine and sharing', () => {
       { name: 'Q', biome: 'freshwater', quarantine: true },
       { name: 'Q', biome: 'freshwater', size: 'huge' },
       { name: 'Q', biome: 'tundra' },
+      ...biomeSchema.options
+        .filter((biome) => !creatableBiomeSchema.safeParse(biome).success)
+        .map((biome) => ({ name: 'Q', biome })),
     ]) {
       expect((await create(cookie, body)).statusCode).toBe(400);
     }

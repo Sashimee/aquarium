@@ -44,6 +44,10 @@ export const decorItemSchema = z.strictObject({
     .default(0),
   scale: z.number().min(0.01).max(10).default(1),
   tintSeed: z.number().int().min(0).max(0xffffffff).optional().describe('stable colour seed'),
+  perch: z
+    .boolean()
+    .optional()
+    .describe('a bank asset that stands clear of the water as the tank perch'),
 });
 export type DecorItem = z.infer<typeof decorItemSchema>;
 

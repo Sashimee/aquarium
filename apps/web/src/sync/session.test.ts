@@ -1446,6 +1446,54 @@ describe('Pearls and the T70 request contract', () => {
     expect(api.care).toHaveBeenCalledWith(TANK_A, { type: 'water_change' });
   });
 
+  it.each(['buffer_dose', 'add_botanicals'] as const)(
+    'sends a key with %s and reuses it on a retry',
+    async (type) => {
+      const { api, session } = setup();
+      await session.setUser(verified);
+      api.care
+        .mockRejectedValueOnce(apiError(0, 'timeout'))
+        .mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+      await session.careAction({ type });
+      await session.careAction({ type });
+      await session.careAction({ type });
+      const keys = api.care.mock.calls.map((c) => keyOf(c[1]));
+      expect(api.care.mock.calls[0]?.[1]).toMatchObject({ type });
+      expect(keys[0]).toEqual(expect.any(String));
+      expect(keys[1]).toBe(keys[0]);
+      expect(keys[2]).not.toBe(keys[0]);
+    },
+  );
+
+  it('sends the salt dose without a key', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    await session.careAction({ type: 'salt_dose' });
+    expect(api.care).toHaveBeenCalledWith(TANK_A, { type: 'salt_dose' });
+  });
+
+  it('is busy while a dose is in flight and shows a refusal inline', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    let release: (error: unknown) => void = () => undefined;
+    api.care.mockReturnValue(new Promise((_, reject) => (release = reject)));
+    const pending = session.careAction({ type: 'salt_dose' });
+    expect(session.getState().busy).toBe(true);
+    release(apiError(422, 'feeding_rejected'));
+    expect(await pending).toBe(false);
+    expect(session.getState().busy).toBe(false);
+    expect(session.getState().error).not.toBeNull();
+  });
+
+  it('flags a refusal for too few Pearls on a buffer dose', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care.mockRejectedValue(apiError(402, 'insufficient_pearls'));
+    expect(await session.careAction({ type: 'buffer_dose' })).toBe(false);
+    expect(session.getState().pearlsRefused).toBe(true);
+  });
+
   it('buys equipment, shows the new balance and the upgraded tank', async () => {
     const { api, session } = setup();
     await session.setUser(verified);

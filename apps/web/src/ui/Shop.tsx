@@ -8,7 +8,8 @@ import {
 } from '@aquarium/shared';
 import { useEffect, useId, useState } from 'react';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
-import { euroText, heaterWarning, priceText, speciesPrice } from '../sync/economy';
+import { euroText, priceText, purchaseWarning, speciesPrice } from '../sync/economy';
+import { equipmentNote } from '../sync/blackwater';
 import { chooseEquipment, deviceOffers, equipmentRef, type DeviceOffer } from '../sync/equipment';
 import { checkLamp, clockText, hourOptions, lampSummary, localOffsetMinutes } from '../sync/lamp';
 import { canBuy, tankCapacity } from '../sync/life';
@@ -73,6 +74,9 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
   const taken = tank.fish.map((f) => f.name);
   const suggestion = suggestFishName(taken, tank.fish.length);
 
+  const warningFor = (s: SpeciesSummary) =>
+    purchaseWarning(tank, s, state.species, BUNDLED_CHEMISTRY.temperature.roomC);
+
   useEffect(() => setProblem(null), [name]);
   useEffect(() => setConfirming(null), [stage, tank.id, tank.equipment.heater.tier]);
 
@@ -81,10 +85,7 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
     if (!checked.ok) return setProblem(checked.message);
     const price = speciesPrice(economy, species.id, stage);
     if (price === undefined) return setProblem(`${species.commonName} is not for sale.`);
-    if (
-      heaterWarning(tank, species, BUNDLED_CHEMISTRY.temperature.roomC) &&
-      confirming !== species.id
-    ) {
+    if (warningFor(species) && confirming !== species.id) {
       return setConfirming(species.id);
     }
     setConfirming(null);
@@ -146,7 +147,7 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
         {offered.map((s) => {
           const verdict = canBuy(tank, s, state.species);
           const price = speciesPrice(economy, s.id, stage);
-          const warning = heaterWarning(tank, s, BUNDLED_CHEMISTRY.temperature.roomC);
+          const warning = warningFor(s);
           const asking = confirming === s.id && warning !== null;
           return (
             <li key={s.id}>
@@ -280,6 +281,7 @@ function EquipmentShop({ session, state, tank, spend }: ShopProps & { spend: Spe
   return (
     <section aria-labelledby={`${id}-h`} className="block">
       <h3 id={`${id}-h`}>Equipment</h3>
+      {equipmentNote(tank.biome) && <p className="hint">{equipmentNote(tank.biome)}</p>}
       <ul className="equipment">
         {offers.map((o) => (
           <DeviceRow

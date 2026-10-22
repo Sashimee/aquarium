@@ -19,7 +19,8 @@
       "assetId": "mangrove-stump",
       "position": [0.06, 0.09, -0.09],
       "rotationY": 0.3,
-      "scale": 1.4
+      "scale": 1.4,
+      "perch": true
     },
     {
       "assetId": "mangrove-prop-roots",
@@ -59,7 +60,7 @@
     },
     {
       "assetId": "driftwood-branch",
-      "position": [-0.06, 0.054, 0.1],
+      "position": [-0.06, 0.054, 0.13],
       "rotationY": 0.0,
       "scale": 0.9
     },

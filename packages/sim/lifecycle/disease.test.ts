@@ -70,7 +70,7 @@ const env: TankEnvironment = {
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const T0 = Date.UTC(2026, 0, 1);
-const clean: Water = { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 };
+const clean: Water = { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 };
 
 const sickWith = (kind: FishDisease['kind'], severity: number): FishDisease => ({
   kind,

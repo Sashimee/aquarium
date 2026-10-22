@@ -7,7 +7,7 @@ import {
   timestampSchema,
 } from './common.js';
 import { diseaseKindSchema } from './fishState.js';
-import { tankSizeSchema } from './tankSize.js';
+import { TANK_SIZES, tankSizeSchema, type TankSize } from './tankSize.js';
 
 // Tables and routes live in apps/api (T70, PLAN 9.2).
 //   wallet(user_id PK -> user ON DELETE CASCADE, balance integer): cache of the ledger sum, kept
@@ -161,7 +161,15 @@ const pricedRange = (keys: z.ZodType<string>) =>
     );
 
 const speciesPriceSchema = z
-  .strictObject({ juvenile: priceSchema, adult: priceSchema })
+  .strictObject({
+    juvenile: priceSchema,
+    adult: priceSchema,
+    minTankLengthM: z
+      .number()
+      .positive()
+      .optional()
+      .describe('shortest tank, outer length in metres, the fish is sold for'),
+  })
   .refine((p) => p.adult > p.juvenile, 'an adult costs more than a juvenile');
 
 const dailyCap = z.int().positive();
@@ -199,6 +207,8 @@ export const economySchema = z
         premiumFood: priceSchema,
         premiumMedicine: pricedRange(diseaseKindSchema).describe('prices keyed by disease kind'),
         bottledBacteria: priceSchema,
+        bufferDose: priceSchema,
+        botanicals: priceSchema,
         testKit: priceSchema,
       }),
       tankSlots: z.array(priceSchema).length(5).describe('extra tanks 2 to 6, in order'),
@@ -252,6 +262,21 @@ export const economySchema = z
     });
   });
 export type Economy = z.infer<typeof economySchema>;
+
+export function tankLengthRefusal(
+  economy: Economy,
+  speciesId: string,
+  tank: { size: TankSize; quarantine: boolean },
+  commonName: string,
+): string | undefined {
+  if (tank.quarantine) return undefined;
+  const minLength = Object.hasOwn(economy.species, speciesId)
+    ? economy.species[speciesId]?.minTankLengthM
+    : undefined;
+  if (minLength === undefined || TANK_SIZES[tank.size].dimensions.length >= minLength)
+    return undefined;
+  return `${commonName} needs a tank at least ${Math.round(minLength * 100)} cm long.`;
+}
 
 export function decorPrice(economy: Economy, assetId: string): number | undefined {
   if (PROCEDURAL_EUPHYLLIA_ID.test(assetId)) return economy.items.euphyllia;

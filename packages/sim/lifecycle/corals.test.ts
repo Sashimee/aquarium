@@ -71,7 +71,7 @@ const coralsOf = (assetId: string, n: number): CoralState[] =>
 
 function tank(chemistry: Partial<Chemistry> = {}): LifecycleState {
   return {
-    water: { ammonia: 0, nitrate: 5, algae: 0, uneatenFood: 0 },
+    water: { ammonia: 0, nitrate: 5, algae: 0, tannin: 0, uneatenFood: 0 },
     chemistry: { ...newTankChemistry('reef'), ...chemistry },
     fish: [],
     medicine: null,

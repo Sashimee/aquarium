@@ -25,7 +25,7 @@
     "orange-chromide": { "juvenile": 50, "adult": 125 },
     "barred-mudskipper": { "juvenile": 80, "adult": 200 },
     "blue-spotted-mudskipper": { "juvenile": 100, "adult": 250 },
-    "silver-mono": { "juvenile": 100, "adult": 250 },
+    "silver-mono": { "juvenile": 100, "adult": 250, "minTankLengthM": 1.5 },
     "banded-archerfish": { "juvenile": 150, "adult": 375 },
     "pseudotropheus-demasoni": { "juvenile": 60, "adult": 150 },
     "labidochromis-caeruleus": { "juvenile": 50, "adult": 125 },
@@ -101,6 +101,8 @@
         "prices": { "ich": 40, "fin-rot": 50, "velvet": 60 }
       },
       "bottledBacteria": 40,
+      "bufferDose": 30,
+      "botanicals": 15,
       "testKit": 25
     },
     "tankSlots": [500, 1000, 1500, 2500, 4000],

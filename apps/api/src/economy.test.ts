@@ -119,7 +119,7 @@ async function createTank(
   h: Harness,
   who: Account,
   extra: {
-    biome?: 'freshwater' | 'reef' | 'blackwater';
+    biome?: 'freshwater' | 'reef' | 'blackwater' | 'mangrove';
     size?: string;
     quarantine?: boolean;
     key?: string;
@@ -437,6 +437,29 @@ describe('wallet, shop and ledger', () => {
       const before = await balance(h, who);
       expect((await buyFish(h, who, tank.id, 'blue-tang', 'adult')).statusCode).toBe(400);
       expect(await balance(h, who)).toBe(before);
+    });
+
+    it('sells the silver mono only for a tank at least 150 cm long', async () => {
+      const who = await account(h);
+      await setBalance(h, who, 10_000);
+      const standard = tankSchema.parse((await createTank(h, who, { biome: 'mangrove' })).json());
+      const before = await balance(h, who);
+      const refused = await buyFish(h, who, standard.id, 'silver-mono', 'juvenile');
+      expect(refused.statusCode).toBe(400);
+      expect(errorCode(refused)).toBe('validation_failed');
+      expect(await balance(h, who)).toBe(before);
+
+      const long = tankSchema.parse(
+        (await createTank(h, who, { biome: 'mangrove', size: 'long300' })).json(),
+      );
+      expect((await buyFish(h, who, long.id, 'silver-mono', 'juvenile')).statusCode).toBe(201);
+
+      const quarantine = tankSchema.parse(
+        (await createTank(h, who, { biome: 'mangrove', size: 'nano30', quarantine: true })).json(),
+      );
+      expect((await buyFish(h, who, quarantine.id, 'silver-mono', 'juvenile')).statusCode).toBe(
+        201,
+      );
     });
 
     it('grows a bought juvenile of a species with no fry timeline into an adult', async () => {
@@ -863,6 +886,66 @@ describe('wallet, shop and ledger', () => {
         .from(schema.events)
         .where(eq(schema.events.tankId, tank.id));
       expect(events.map((e) => e.kind)).not.toContain('bottled_bacteria');
+    });
+  });
+
+  describe.each([
+    ['buffer_dose', 'bufferDose', 'blackwater'],
+    ['add_botanicals', 'botanicals', 'reef'],
+  ] as const)('%s', (type, price, refusedBiome) => {
+    it('charges once per key, applies once and logs one event', async () => {
+      const { who, tank } = await primed(h);
+      const dose = (k: string) =>
+        call(h, who, 'POST', `/api/tanks/${tank.id}/care`, { type, idempotencyKey: k });
+      const before = await balance(h, who);
+      const k = key();
+      expect((await dose(k)).statusCode).toBe(200);
+      const once = await call(h, who, 'GET', `/api/tanks/${tank.id}`);
+      expect((await dose(k)).statusCode).toBe(200);
+      const twice = await call(h, who, 'GET', `/api/tanks/${tank.id}`);
+      expect(twice.json().chemistry).toEqual(once.json().chemistry);
+      expect(await balance(h, who)).toBe(before - economy.items.consumables[price]);
+      const events = await h.database.db
+        .select()
+        .from(schema.events)
+        .where(and(eq(schema.events.tankId, tank.id), eq(schema.events.kind, type)));
+      expect(events).toHaveLength(1);
+    });
+
+    it('402s when the user cannot afford it', async () => {
+      const { who, tank } = await primed(h);
+      await setBalance(h, who, economy.items.consumables[price] - 1);
+      const res = await call(h, who, 'POST', `/api/tanks/${tank.id}/care`, {
+        type,
+        idempotencyKey: key(),
+      });
+      expect(res.statusCode).toBe(402);
+    });
+
+    it(`refuses in a ${refusedBiome} tank before looking at the balance`, async () => {
+      const { who } = await primed(h);
+      const made = await createTank(h, who, { biome: refusedBiome });
+      await setBalance(h, who, 0);
+      const rows = (await ledgerOf(h, who)).length;
+      const res = await call(h, who, 'POST', `/api/tanks/${made.json().id}/care`, {
+        type,
+        idempotencyKey: key(),
+      });
+      expect(res.statusCode).toBe(422);
+      expect(await ledgerOf(h, who)).toHaveLength(rows);
+    });
+
+    it(`422s in a ${refusedBiome} tank without charging`, async () => {
+      const { who } = await primed(h);
+      const made = await createTank(h, who, { biome: refusedBiome });
+      expect(made.statusCode).toBe(201);
+      const before = await balance(h, who);
+      const res = await call(h, who, 'POST', `/api/tanks/${made.json().id}/care`, {
+        type,
+        idempotencyKey: key(),
+      });
+      expect(res.statusCode).toBe(422);
+      expect(await balance(h, who)).toBe(before);
     });
   });
 

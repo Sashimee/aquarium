@@ -30,6 +30,8 @@ export const FishState = {
   Pose: 19,
   /** A cleaner darting to and picking at a posing client. */
   Clean: 20,
+  /** An amphibious fish out of the water: climbing onto a bank, perched on it or going back. */
+  Emerse: 21,
 } as const;
 export type FishState = (typeof FishState)[keyof typeof FishState];
 
