@@ -59,11 +59,29 @@ async function bought(who: Account, packId = PACK) {
   return ids;
 }
 
+async function syncEvent(
+  who: Account,
+  ids: { subscription: string },
+  type: 'customer.subscription.updated' | 'customer.subscription.deleted',
+  status: 'active' | 'past_due' | 'unpaid' | 'canceled',
+  cancelAtPeriodEnd = false,
+) {
+  kit.subscriptions.set(ids.subscription, { status, cancelAtPeriodEnd });
+  await deliverOk(
+    h,
+    kit,
+    buildEvent(h, type, subscriptionObject(who, ids.subscription, status, cancelAtPeriodEnd)),
+  );
+}
+
 const msToNextUtcMidnight = () => DAY_MS - (h.clock.now() % DAY_MS) + 1000;
 
-async function subscribed(who: Account, days = 30) {
-  const ids = newIds();
-  const now = h.clock.now();
+async function subscribedWith(
+  who: Account,
+  ids: ReturnType<typeof newIds>,
+  now: number,
+  days = 30,
+) {
   await deliverOk(
     h,
     kit,
@@ -73,6 +91,11 @@ async function subscribed(who: Account, days = 30) {
       invoiceObject(who, ids, { start: seconds(now), end: seconds(now + days * DAY_MS) }),
     ),
   );
+}
+
+async function subscribed(who: Account, days = 30) {
+  const ids = newIds();
+  await subscribedWith(who, ids, h.clock.now(), days);
   return ids;
 }
 
@@ -157,15 +180,53 @@ describe('pack purchases', () => {
     expect(await chargeRows(ids.session)).toHaveLength(0);
   });
 
-  it('fails loudly on a pack that is not in the price list', async () => {
+  it('credits what the checkout promised when the price list changed meanwhile', async () => {
     const who = await account(h);
+    const before = await balance(who);
     const ids = newIds();
-    const session = {
-      ...sessionObject(who, PACK, ids),
-      metadata: { ...sessionObject(who, PACK, ids).metadata, pack_id: 'pearls-1' },
-    };
-    const res = await deliver(h, kit, buildEvent(h, 'checkout.session.completed', session));
-    expect(res.statusCode).toBe(500);
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(
+        h,
+        'checkout.session.completed',
+        sessionObject(who, PACK, ids, { amount: 399, promisedCents: 399, promisedPearls: 600 }),
+      ),
+    );
+    expect(await balance(who)).toBe(before + 600);
+    expect(await chargeRows(ids.session)).toMatchObject([{ amountCents: 399, packPearls: 600 }]);
+  });
+
+  it('credits a pack that has since left the price list', async () => {
+    const who = await account(h);
+    const before = await balance(who);
+    const ids = newIds();
+    const base = sessionObject(who, PACK, ids);
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(h, 'checkout.session.completed', {
+        ...base,
+        metadata: { ...base.metadata, pack_id: 'pearls-retired' },
+      }),
+    );
+    expect(await balance(who)).toBe(before + pack.pearls);
+  });
+
+  it('ignores a session that carries no price promise', async () => {
+    const who = await account(h);
+    const before = await balance(who);
+    const ids = newIds();
+    const base = sessionObject(who, PACK, ids);
+    const rest: Record<string, string> = { ...base.metadata };
+    delete rest['price_cents'];
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(h, 'checkout.session.completed', { ...base, metadata: rest }),
+    );
+    expect(await chargeRows(ids.session)).toHaveLength(0);
+    expect(await balance(who)).toBe(before);
   });
 
   it('acknowledges and ignores sessions this app did not create or without consent', async () => {
@@ -479,74 +540,150 @@ describe('Aquarist Club', () => {
     const start = await balance(who);
     const ids = await subscribed(who);
     expect(await balance(who)).toBe(start + DAILY);
-    const t = seconds(h.clock.now());
 
-    await deliverOk(
-      h,
-      kit,
-      buildEvent(
-        h,
-        'customer.subscription.updated',
-        subscriptionObject(who, ids.subscription, 'past_due'),
-        { created: t + 10 },
-      ),
-    );
+    await syncEvent(who, ids, 'customer.subscription.updated', 'past_due');
     h.clock.advance(msToNextUtcMidnight());
     expect(await balance(who)).toBe(start + DAILY);
 
-    await deliverOk(
-      h,
-      kit,
-      buildEvent(
-        h,
-        'customer.subscription.updated',
-        subscriptionObject(who, ids.subscription, 'unpaid'),
-        { created: t + 20 },
-      ),
-    );
+    await syncEvent(who, ids, 'customer.subscription.updated', 'unpaid');
     h.clock.advance(DAY_MS);
     expect(await balance(who)).toBe(start + DAILY);
 
-    await deliverOk(
-      h,
-      kit,
-      buildEvent(
-        h,
-        'customer.subscription.updated',
-        subscriptionObject(who, ids.subscription, 'active'),
-        { created: t + 30 },
-      ),
-    );
+    await syncEvent(who, ids, 'customer.subscription.updated', 'active');
     expect(await balance(who)).toBe(start + 2 * DAILY);
   });
 
-  it('ignores a subscription event older than the one already applied', async () => {
-    const who = await account(h);
-    const start = await balance(who);
-    const ids = await subscribed(who);
-    const t = seconds(h.clock.now());
-    await deliverOk(
-      h,
-      kit,
-      buildEvent(
+  describe('events of one subscription in the same second', () => {
+    const second = () => seconds(h.clock.now());
+
+    async function expectPaidAndGranting(
+      who: Account,
+      ids: ReturnType<typeof newIds>,
+      start: number,
+    ) {
+      const state = paymentsStateSchema.parse(
+        (await call(h, who, 'GET', '/api/payments/state')).json(),
+      );
+      expect(state.subscription?.status).toBe('active');
+      expect(await balance(who)).toBe(start + DAILY);
+      const dup = await call(h, who, 'POST', '/api/payments/checkout/subscription', {
+        consent: { immediateDelivery: true, withdrawalWaiver: true },
+      });
+      expect(ids.subscription).toBeTruthy();
+      return dup;
+    }
+
+    it('keeps a paid subscription active when the incomplete one is processed last', async () => {
+      const who = await account(h);
+      const start = await balance(who);
+      const ids = newIds();
+      const t = second();
+      const now = h.clock.now();
+      kit.subscriptions.set(ids.subscription, { status: 'active', cancelAtPeriodEnd: false });
+
+      await deliverOk(
         h,
-        'customer.subscription.updated',
-        subscriptionObject(who, ids.subscription, 'past_due'),
-        { created: t + 100 },
-      ),
-    );
-    await deliverOk(
-      h,
-      kit,
-      buildEvent(
+        kit,
+        buildEvent(
+          h,
+          'invoice.paid',
+          invoiceObject(who, ids, { start: seconds(now), end: seconds(now + 30 * DAY_MS) }),
+          { created: t },
+        ),
+      );
+      await deliverOk(
         h,
-        'customer.subscription.updated',
-        subscriptionObject(who, ids.subscription, 'active'),
-        { created: t + 50 },
-      ),
-    );
-    h.clock.advance(msToNextUtcMidnight());
-    expect(await balance(who)).toBe(start);
+        kit,
+        buildEvent(
+          h,
+          'customer.subscription.updated',
+          subscriptionObject(who, ids.subscription, 'active'),
+          { created: t },
+        ),
+      );
+      await deliverOk(
+        h,
+        kit,
+        buildEvent(
+          h,
+          'customer.subscription.created',
+          subscriptionObject(who, ids.subscription, 'incomplete'),
+          { created: t },
+        ),
+      );
+
+      const second409 = await expectPaidAndGranting(who, ids, start);
+      expect(second409.statusCode).toBe(403);
+      const cancelled = await call(h, who, 'POST', '/api/payments/subscription/cancel');
+      expect(cancelled.statusCode, cancelled.body).toBe(200);
+    });
+
+    it('turns an incomplete row active when the paid invoice follows it', async () => {
+      const who = await account(h);
+      const start = await balance(who);
+      const ids = newIds();
+      const t = second();
+      kit.subscriptions.set(ids.subscription, { status: 'incomplete', cancelAtPeriodEnd: false });
+      await deliverOk(
+        h,
+        kit,
+        buildEvent(
+          h,
+          'customer.subscription.created',
+          subscriptionObject(who, ids.subscription, 'incomplete'),
+          { created: t },
+        ),
+      );
+      const now = h.clock.now();
+      await deliverOk(
+        h,
+        kit,
+        buildEvent(
+          h,
+          'invoice.paid',
+          invoiceObject(who, ids, { start: seconds(now), end: seconds(now + 30 * DAY_MS) }),
+          { created: t },
+        ),
+      );
+      expect(await balance(who)).toBe(start + DAILY);
+    });
+
+    it('stores what Stripe says now, not what the delivered payload claims', async () => {
+      const who = await account(h);
+      const ids = await subscribed(who);
+      kit.subscriptions.set(ids.subscription, { status: 'past_due', cancelAtPeriodEnd: false });
+      await deliverOk(
+        h,
+        kit,
+        buildEvent(
+          h,
+          'customer.subscription.updated',
+          subscriptionObject(who, ids.subscription, 'active'),
+          { created: second() },
+        ),
+      );
+      const state = paymentsStateSchema.parse(
+        (await call(h, who, 'GET', '/api/payments/state')).json(),
+      );
+      expect(state.subscription?.status).toBe('past_due');
+    });
+
+    it('fails the delivery when Stripe cannot be asked, so it is redelivered', async () => {
+      const who = await account(h);
+      const ids = newIds();
+      const real = kit.provider.retrieveSubscription;
+      kit.provider.retrieveSubscription = async () => {
+        throw new Error('stripe down');
+      };
+      const event = buildEvent(
+        h,
+        'customer.subscription.created',
+        subscriptionObject(who, ids.subscription, 'incomplete'),
+      );
+      expect((await deliver(h, kit, event)).statusCode).toBe(500);
+      kit.provider.retrieveSubscription = real;
+      await deliverOk(h, kit, event);
+    });
   });
 
   it('keeps granting after a cancel until the paid period ends, and stops when it is deleted', async () => {
@@ -554,17 +691,7 @@ describe('Aquarist Club', () => {
     const start = await balance(who);
     const ids = await subscribed(who);
     expect(await balance(who)).toBe(start + DAILY);
-    const t = seconds(h.clock.now());
-    await deliverOk(
-      h,
-      kit,
-      buildEvent(
-        h,
-        'customer.subscription.updated',
-        subscriptionObject(who, ids.subscription, 'active', true),
-        { created: t + 10 },
-      ),
-    );
+    await syncEvent(who, ids, 'customer.subscription.updated', 'active', true);
     const state = paymentsStateSchema.parse(
       (await call(h, who, 'GET', '/api/payments/state')).json(),
     );
@@ -572,18 +699,126 @@ describe('Aquarist Club', () => {
     h.clock.advance(msToNextUtcMidnight());
     expect(await balance(who)).toBe(start + 2 * DAILY);
 
-    await deliverOk(
-      h,
-      kit,
-      buildEvent(
-        h,
-        'customer.subscription.deleted',
-        subscriptionObject(who, ids.subscription, 'canceled', true),
-        { created: t + 20 },
-      ),
-    );
+    await syncEvent(who, ids, 'customer.subscription.deleted', 'canceled', true);
     h.clock.advance(DAY_MS);
     expect(await balance(who)).toBe(start + 2 * DAILY);
+  });
+
+  describe('a subscription nobody can claim', () => {
+    const deleteAccount = async (who: Account) => {
+      const res = await call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+      expect(res.statusCode, res.body).toBeLessThan(300);
+    };
+
+    it('is cancelled and refunded when its first invoice arrives after the account is gone', async () => {
+      const who = await account(h);
+      await deleteAccount(who);
+      const ids = newIds();
+      const now = h.clock.now();
+      await subscribedWith(who, ids, now);
+      expect(kit.effects).toContain(`cancel:${ids.subscription}`);
+      expect(kit.effects).toContain(`refund:${ids.invoice}`);
+      const [row] = await chargeRows(ids.invoice);
+      expect(row?.userId).toBeNull();
+    });
+
+    it('is retried on redelivery until the provider accepts both calls', async () => {
+      const who = await account(h);
+      await deleteAccount(who);
+      const ids = newIds();
+      const now = h.clock.now();
+      const event = buildEvent(
+        h,
+        'invoice.paid',
+        invoiceObject(who, ids, { start: seconds(now), end: seconds(now + 30 * DAY_MS) }),
+      );
+      kit.failEffects = true;
+      expect((await deliver(h, kit, event)).statusCode).toBe(500);
+      kit.failEffects = false;
+      const before = kit.effects.length;
+      await deliverOk(h, kit, event);
+      expect(kit.effects.slice(before)).toEqual([
+        `cancel:${ids.subscription}`,
+        `refund:${ids.invoice}`,
+      ]);
+    });
+
+    it('is cancelled when its subscription event arrives after the account is gone', async () => {
+      const who = await account(h);
+      await deleteAccount(who);
+      const ids = newIds();
+      kit.subscriptions.set(ids.subscription, { status: 'incomplete', cancelAtPeriodEnd: false });
+      await deliverOk(
+        h,
+        kit,
+        buildEvent(
+          h,
+          'customer.subscription.created',
+          subscriptionObject(who, ids.subscription, 'incomplete'),
+        ),
+      );
+      expect(kit.effects).toContain(`cancel:${ids.subscription}`);
+    });
+
+    it('leaves a finished subscription of a deleted account alone', async () => {
+      const who = await account(h);
+      await deleteAccount(who);
+      const ids = newIds();
+      kit.subscriptions.set(ids.subscription, { status: 'canceled', cancelAtPeriodEnd: false });
+      await deliverOk(
+        h,
+        kit,
+        buildEvent(
+          h,
+          'customer.subscription.deleted',
+          subscriptionObject(who, ids.subscription, 'canceled'),
+        ),
+      );
+      expect(kit.effects).not.toContain(`cancel:${ids.subscription}`);
+    });
+
+    it('is cancelled and refunded when it is a second paid subscription of one user', async () => {
+      const who = await account(h);
+      const start = await balance(who);
+      const first = await subscribed(who);
+      const twin = newIds();
+      const now = h.clock.now();
+      await subscribedWith(who, twin, now);
+
+      expect(kit.effects).toContain(`cancel:${twin.subscription}`);
+      expect(kit.effects).toContain(`refund:${twin.invoice}`);
+      expect(kit.effects).not.toContain(`cancel:${first.subscription}`);
+      expect(
+        h.outbox.filter((m) => m.to === who.email && m.text.includes('first month')),
+      ).toHaveLength(1);
+
+      expect(await balance(who)).toBe(start + DAILY);
+      h.clock.advance(msToNextUtcMidnight());
+      expect(await balance(who)).toBe(start + 2 * DAILY);
+
+      const [twinRow] = await h.database.db
+        .select()
+        .from(schema.clubSubscriptions)
+        .where(eq(schema.clubSubscriptions.id, twin.subscription));
+      expect(twinRow?.paidEnd).toBeNull();
+    });
+
+    it('still pays the first subscription when its own invoice is redelivered after a twin', async () => {
+      const who = await account(h);
+      const start = await balance(who);
+      const first = newIds();
+      const now = h.clock.now();
+      const event = buildEvent(
+        h,
+        'invoice.paid',
+        invoiceObject(who, first, { start: seconds(now), end: seconds(now + 30 * DAY_MS) }),
+      );
+      await deliverOk(h, kit, event);
+      await subscribedWith(who, newIds(), now);
+      await deliverOk(h, kit, event);
+      expect(kit.effects).not.toContain(`cancel:${first.subscription}`);
+      expect(await balance(who)).toBe(start + DAILY);
+    });
   });
 
   describe('refunded invoice', () => {

@@ -1,9 +1,10 @@
 import type { Economy } from '@aquarium/shared';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { schema, type Database } from '../db/index.ts';
 import { lockWallet } from '../wallet.ts';
 import { postPaymentEntry, userExists } from './ledger.ts';
+import type { PaymentProvider } from './provider.ts';
 
 type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
 type ChargeRow = typeof schema.paymentCharges.$inferSelect;
@@ -19,6 +20,7 @@ export interface Receipt {
 export interface SettleDeps {
   database: Database;
   economy: Economy;
+  provider: PaymentProvider;
   now: () => number;
   log: (message: string, context?: Record<string, string | number>) => void;
 }
@@ -38,24 +40,39 @@ const consentOf = (m: Stripe.Metadata | null | undefined): Date | null | undefin
   return Number.isNaN(at.getTime()) ? null : at;
 };
 
+// The price and Pearls promised at checkout travel in the session metadata, which only the server
+// sets, so a price list that changed while the buyer was paying cannot strand a paid purchase.
+const promiseOf = (
+  m: Stripe.Metadata | null | undefined,
+): { priceCents: number; pearls: number } | null => {
+  const priceCents = Number(meta(m, 'price_cents'));
+  const pearls = Number(meta(m, 'pearls'));
+  return Number.isInteger(priceCents) && priceCents > 0 && Number.isInteger(pearls) && pearls > 0
+    ? { priceCents, pearls }
+    : null;
+};
+
+const BILLABLE = ['active', 'trialing', 'past_due', 'unpaid'] as const;
+const NOT_YET_PAID = ['incomplete'] as const;
+
 // Events are at-least-once and unordered, so every branch is keyed on the provider's own object id
 // (Checkout Session, invoice, refund, dispute) and a replay changes nothing. An event the app did
-// not create (no user in its metadata) is acknowledged and ignored; a mismatch with the price list
-// throws, so the provider retries and the error stays visible instead of crediting a wrong amount.
+// not create (no user in its metadata) is acknowledged and ignored; a mismatch with the checkout's
+// promise throws, so the provider retries and the error stays visible instead of crediting wrongly.
 export async function settleEvent(deps: SettleDeps, event: Stripe.Event): Promise<Receipt | null> {
   switch (event.type) {
     case 'checkout.session.completed':
     case 'checkout.session.async_payment_succeeded':
       return creditPack(deps, event.data.object);
     case 'invoice.paid':
-      return recordInvoicePaid(deps, event.data.object, event.created);
+      return recordInvoicePaid(deps, event.data.object);
     case 'invoice_payment.paid':
       await linkInvoicePayment(deps, event.data.object);
       return null;
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
-      await syncSubscription(deps, event.data.object, event.created);
+      await syncSubscription(deps, event.data.object);
       return null;
     case 'refund.created':
     case 'refund.updated':
@@ -79,15 +96,19 @@ async function creditPack(
   const userId = meta(session.metadata, 'user_id');
   const packId = meta(session.metadata, 'pack_id');
   const consent = consentOf(session.metadata);
+  const promised = promiseOf(session.metadata);
   if (!userId || !packId || consent === undefined) {
     deps.log('checkout session without our metadata ignored', { session: session.id });
     return null;
   }
-  const pack = deps.economy.packs.find((p) => p.id === packId);
-  if (!pack) throw new Error(`session ${session.id} names unknown pack ${packId}`);
+  if (promised === null) {
+    deps.log('checkout session without a price promise ignored', { session: session.id });
+    return null;
+  }
+  const pack = { id: packId, ...promised };
   if (session.amount_total !== pack.priceCents || session.currency !== 'eur') {
     throw new Error(
-      `session ${session.id} paid ${session.amount_total} ${session.currency}, pack ${pack.id} costs ${pack.priceCents} eur`,
+      `session ${session.id} paid ${session.amount_total} ${session.currency}, pack ${pack.id} promised ${pack.priceCents} eur`,
     );
   }
   const nowMs = deps.now();
@@ -152,7 +173,6 @@ function paidWindow(invoice: Stripe.Invoice): { start: Date; end: Date } {
 async function recordInvoicePaid(
   deps: SettleDeps,
   invoice: Stripe.Invoice,
-  eventCreated: number,
 ): Promise<Receipt | null> {
   const details = invoice.parent?.subscription_details;
   const subscriptionId = idOf(details?.subscription);
@@ -165,11 +185,16 @@ async function recordInvoicePaid(
     return null;
   }
   if (invoice.amount_paid <= 0) return null;
+  const invoiceId = invoice.id;
+  if (!invoiceId) throw new Error('a paid invoice event arrived without an invoice id');
   const consent = consentOf(details?.metadata);
   const window = paidWindow(invoice);
   const nowMs = deps.now();
 
-  return deps.database.db.transaction(async (tx) => {
+  // A subscription nobody can claim (the account is gone, or the user already has another paid
+  // one from a second checkout) must not keep billing: it is cancelled and its payment refunded,
+  // after the transaction and on every redelivery until the provider accepted both.
+  const outcome = await deps.database.db.transaction(async (tx) => {
     const present = await userExists(tx, userId);
     if (present) await lockWallet(tx, deps.economy, userId, nowMs);
     const owner = present ? userId : null;
@@ -177,7 +202,7 @@ async function recordInvoicePaid(
     const created = await tx
       .insert(schema.paymentCharges)
       .values({
-        id: invoice.id ?? '',
+        id: invoiceId,
         kind: 'invoice',
         userId: owner,
         amountCents: invoice.amount_paid,
@@ -189,16 +214,48 @@ async function recordInvoicePaid(
       })
       .onConflictDoNothing()
       .returning({ id: schema.paymentCharges.id });
-    if (created.length === 0) return null;
-
     const existing = await lockSubscription(tx, subscriptionId);
+    if (created.length === 0) {
+      const duplicate = existing !== undefined && existing.paidEnd === null;
+      return { receipt: null, unclaimed: owner === null || duplicate };
+    }
+
+    const [rival] = owner
+      ? await tx
+          .select({ id: schema.clubSubscriptions.id })
+          .from(schema.clubSubscriptions)
+          .where(
+            and(
+              eq(schema.clubSubscriptions.userId, owner),
+              ne(schema.clubSubscriptions.id, subscriptionId),
+              inArray(schema.clubSubscriptions.status, [...BILLABLE]),
+              gt(schema.clubSubscriptions.paidEnd, new Date(nowMs)),
+              eq(schema.clubSubscriptions.paidRevoked, false),
+            ),
+          )
+          .limit(1)
+      : [];
+    if (rival) {
+      // No paid window is stored, so this subscription never earns the daily Pearls.
+      await tx
+        .insert(schema.clubSubscriptions)
+        .values({
+          id: subscriptionId,
+          userId: owner,
+          status: 'active',
+          statusEventAt: new Date(nowMs),
+        })
+        .onConflictDoNothing();
+      return { receipt: null, unclaimed: true };
+    }
+
     if (!existing) {
       await tx.insert(schema.clubSubscriptions).values({
         id: subscriptionId,
         userId: owner,
         status: 'active',
-        statusEventAt: date(eventCreated),
-        paidInvoiceId: invoice.id,
+        statusEventAt: new Date(nowMs),
+        paidInvoiceId: invoiceId,
         paidStart: window.start,
         paidEnd: window.end,
       });
@@ -206,24 +263,37 @@ async function recordInvoicePaid(
       await tx
         .update(schema.clubSubscriptions)
         .set({
-          paidInvoiceId: invoice.id,
+          paidInvoiceId: invoiceId,
           paidStart: window.start,
           paidEnd: window.end,
           paidRevoked: false,
           userId: existing.userId ?? owner,
+          ...(existing.status === 'incomplete'
+            ? { status: 'active', statusEventAt: new Date(nowMs) }
+            : {}),
         })
         .where(eq(schema.clubSubscriptions.id, subscriptionId));
     }
 
-    if (!owner || invoice.billing_reason !== 'subscription_create') return null;
-    return {
-      userId: owner,
-      description: `${deps.economy.subscription.id} subscription, first month`,
-      amountCents: invoice.amount_paid,
-      pearls: null,
-      consentAt: consent ?? null,
-    };
+    const receipt: Receipt | null =
+      owner && invoice.billing_reason === 'subscription_create'
+        ? {
+            userId: owner,
+            description: `${deps.economy.subscription.id} subscription, first month`,
+            amountCents: invoice.amount_paid,
+            pearls: null,
+            consentAt: consent ?? null,
+          }
+        : null;
+    return { receipt, unclaimed: owner === null };
   });
+
+  if (outcome.unclaimed) {
+    await deps.provider.cancelSubscriptionNow(subscriptionId);
+    await deps.provider.refundInvoice(invoiceId);
+    deps.log('unclaimed subscription cancelled and refunded', { invoice: invoiceId });
+  }
+  return outcome.receipt;
 }
 
 async function lockSubscription(tx: Tx, id: string) {
@@ -238,35 +308,47 @@ async function lockSubscription(tx: Tx, id: string) {
 async function syncSubscription(
   deps: SettleDeps,
   subscription: Stripe.Subscription,
-  eventCreated: number,
 ): Promise<void> {
   const userId = meta(subscription.metadata, 'user_id');
   if (!userId || meta(subscription.metadata, 'offer_id') !== deps.economy.subscription.id) return;
-  const at = date(eventCreated);
 
-  await deps.database.db.transaction(async (tx) => {
-    const owner = (await userExists(tx, userId)) ? userId : null;
+  // Event timestamps have one-second resolution and Stripe does not order a subscription's events,
+  // so the payload is only a trigger: the status stored is what Stripe says it is now. The moment
+  // the question was asked orders concurrent answers.
+  const askedAt = new Date(deps.now());
+  const current = await deps.provider.retrieveSubscription(subscription.id);
+
+  const owner = await deps.database.db.transaction(async (tx) => {
+    const present = (await userExists(tx, userId)) ? userId : null;
     await tx
       .insert(schema.clubSubscriptions)
       .values({
         id: subscription.id,
-        userId: owner,
+        userId: present,
         status: 'incomplete',
         statusEventAt: new Date(0),
       })
       .onConflictDoNothing();
     const row = await lockSubscription(tx, subscription.id);
-    if (!row || row.statusEventAt > at) return;
-    await tx
-      .update(schema.clubSubscriptions)
-      .set({
-        status: subscription.status,
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        statusEventAt: at,
-        userId: row.userId ?? owner,
-      })
-      .where(eq(schema.clubSubscriptions.id, subscription.id));
+    if (row && row.statusEventAt <= askedAt) {
+      await tx
+        .update(schema.clubSubscriptions)
+        .set({
+          status: current.status,
+          cancelAtPeriodEnd: current.cancelAtPeriodEnd,
+          statusEventAt: askedAt,
+          userId: row.userId ?? present,
+        })
+        .where(eq(schema.clubSubscriptions.id, subscription.id));
+    }
+    return present;
   });
+
+  const stillRunning = [...BILLABLE, ...NOT_YET_PAID] as string[];
+  if (owner === null && stillRunning.includes(current.status)) {
+    await deps.provider.cancelSubscriptionNow(subscription.id);
+    deps.log('subscription of a deleted account cancelled', { subscription: subscription.id });
+  }
 }
 
 async function findCharge(tx: Tx, paymentIntentId: string): Promise<ChargeRow | undefined> {

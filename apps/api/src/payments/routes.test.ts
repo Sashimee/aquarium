@@ -25,6 +25,7 @@ import {
   seconds,
   sign,
   DAY_MS,
+  PASSWORD,
   type PaymentsKit,
 } from './testkit.ts';
 import type { PaymentProvider } from './provider.ts';
@@ -91,12 +92,14 @@ describe('payments enabled', () => {
   let kit: PaymentsKit;
   const calls: string[] = [];
   let failCancel = false;
+  let badUrl = false;
 
   beforeAll(async () => {
     kit = paymentsKit((real): PaymentProvider => ({
       ...real,
       createPackCheckout: (input) => {
         calls.push(`pack:${input.packId}:${input.priceCents}`);
+        if (badUrl) return Promise.resolve({ url: 'http://pay.example/insecure' });
         return real.createPackCheckout(input);
       },
       cancelSubscriptionAtPeriodEnd: (id) => {
@@ -316,5 +319,118 @@ describe('payments enabled', () => {
     const done = await withPassword({ password: 'correct horse battery' });
     expect(done.statusCode, done.body).toBeLessThan(300);
     expect(calls).toContain(`cancel-now:${ids.subscription}`);
+  });
+
+  it('answers 502 when the provider hands back a URL that is not https', async () => {
+    const who = await account(h);
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    badUrl = true;
+    const res = await call(h, who, 'POST', '/api/payments/checkout/pack', {
+      packId: 'pearls-1200',
+      consent: CONSENT,
+    });
+    badUrl = false;
+    expect(res.statusCode, res.body).toBe(502);
+    expect(res.body).not.toContain('pay.example');
+  });
+
+  it('cancels an incomplete subscription too when the account is deleted', async () => {
+    const who = await account(h);
+    const ids = newIds();
+    await h.database.db.insert(schema.clubSubscriptions).values({
+      id: ids.subscription,
+      userId: who.userId,
+      status: 'incomplete',
+      statusEventAt: new Date(h.clock.now()),
+    });
+    const done = await call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+    expect(done.statusCode, done.body).toBeLessThan(300);
+    expect(calls).toContain(`cancel-now:${ids.subscription}`);
+  });
+
+  it('refuses a request from another origin on every payment mutation', async () => {
+    const who = await account(h);
+    for (const [method, url, payload] of [
+      ['PUT', '/api/payments/adult-confirmation', { confirmed: true }],
+      ['POST', '/api/payments/checkout/pack', { packId: 'pearls-1200', consent: CONSENT }],
+      ['POST', '/api/payments/checkout/subscription', { consent: CONSENT }],
+      ['POST', '/api/payments/subscription/cancel', undefined],
+    ] as const) {
+      const res = await h.app.inject({
+        method,
+        url,
+        headers: { ...jsonHeaders, origin: 'https://evil.example', cookie: who.cookie },
+        ...(payload ? { payload } : {}),
+      });
+      expect(res.statusCode, url).toBe(403);
+    }
+    const state = paymentsStateSchema.parse(
+      (await call(h, who, 'GET', '/api/payments/state')).json(),
+    );
+    expect(state.adultConfirmed).toBe(false);
+  });
+});
+
+describe('payments rate limits', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({
+      payments: paymentsKit().provider,
+      paymentsLimits: {
+        checkout: { max: 2, windowMs: 60_000 },
+        cancel: { max: 2, windowMs: 60_000 },
+        settings: { max: 100, windowMs: 60_000 },
+      },
+    });
+  });
+  afterAll(() => h.close());
+
+  it('answers 429 after the checkout allowance is used up', async () => {
+    const who = await account(h);
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    const statuses: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const res = await call(h, who, 'POST', '/api/payments/checkout/pack', {
+        packId: 'pearls-1200',
+        consent: CONSENT,
+      });
+      statuses.push(res.statusCode);
+    }
+    expect(statuses).toEqual([200, 200, 429]);
+  });
+
+  it('answers 429 after the cancel allowance is used up', async () => {
+    const who = await account(h);
+    const statuses: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      statuses.push((await call(h, who, 'POST', '/api/payments/subscription/cancel')).statusCode);
+    }
+    expect(statuses).toEqual([409, 409, 429]);
+  });
+});
+
+describe('payments disabled with a running subscription', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  it('refuses to delete the account rather than leave a subscription billing', async () => {
+    const who = await account(h);
+    await h.database.db.insert(schema.clubSubscriptions).values({
+      id: newIds().subscription,
+      userId: who.userId,
+      status: 'active',
+      statusEventAt: new Date(h.clock.now()),
+    });
+    const res = await call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+    expect(res.statusCode, res.body).toBe(503);
+    expect(apiErrorSchema.parse(res.json()).error.code).toBe('payments_disabled');
+    const [still] = await h.database.db
+      .select()
+      .from(schema.user)
+      .where(eq(schema.user.id, who.userId));
+    expect(still).toBeDefined();
   });
 });

@@ -6,7 +6,11 @@ import { expect } from 'vitest';
 import { schema } from '../db/index.ts';
 import { loadEconomy } from '../economy.ts';
 import { APP_ORIGIN, type Harness } from '../test-harness.ts';
-import { createStripeProvider, type PaymentProvider } from './provider.ts';
+import {
+  createStripeProvider,
+  type PaymentProvider,
+  type ProviderSubscription,
+} from './provider.ts';
 
 export const PASSWORD = 'correct horse battery';
 export const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -67,14 +71,20 @@ export const call = (
 
 export interface PaymentsKit {
   provider: PaymentProvider;
+  real: PaymentProvider;
   webhookSecret: string;
+  // What Stripe would answer for a subscription right now; stripe-mock is stateless.
+  subscriptions: Map<string, ProviderSubscription>;
+  // Provider-side effects the app asked for, as `cancel:<id>` and `refund:<invoice>`.
+  effects: string[];
+  failEffects: boolean;
 }
 
 // The SDK talks to the real stripe-mock container, so request shapes are validated against
 // Stripe's OpenAPI spec; the webhook secret is made per run and never leaves the process.
 export function paymentsKit(wrap?: (real: PaymentProvider) => PaymentProvider): PaymentsKit {
   const webhookSecret = `whsec_${randomBytes(16).toString('hex')}`;
-  const real = createStripeProvider({
+  const stripe = createStripeProvider({
     secretKey: `sk_test_${randomBytes(12).toString('hex')}`,
     webhookSecret,
     endpoint: {
@@ -83,7 +93,27 @@ export function paymentsKit(wrap?: (real: PaymentProvider) => PaymentProvider): 
       protocol: mockUrl.protocol === 'https:' ? 'https' : 'http',
     },
   });
-  return { provider: wrap ? wrap(real) : real, webhookSecret };
+  const kit = {
+    real: stripe,
+    webhookSecret,
+    subscriptions: new Map<string, ProviderSubscription>(),
+    effects: [] as string[],
+    failEffects: false,
+  };
+  const base: PaymentProvider = {
+    ...stripe,
+    retrieveSubscription: async (id) =>
+      kit.subscriptions.get(id) ?? { status: 'active', cancelAtPeriodEnd: false },
+    cancelSubscriptionNow: async (id) => {
+      kit.effects.push(`cancel:${id}`);
+      if (kit.failEffects) throw new Error('provider down');
+    },
+    refundInvoice: async (id) => {
+      kit.effects.push(`refund:${id}`);
+      if (kit.failEffects) throw new Error('provider down');
+    },
+  };
+  return Object.assign(kit, { provider: wrap ? wrap(base) : base });
 }
 
 const signer = new Stripe(`sk_test_${randomBytes(12).toString('hex')}`);
@@ -149,7 +179,13 @@ export function sessionObject(
   who: Account,
   packId: string,
   ids: { session: string; paymentIntent: string },
-  overrides: { paid?: boolean; amount?: number; at?: Date } = {},
+  overrides: {
+    paid?: boolean;
+    amount?: number;
+    at?: Date;
+    promisedCents?: number;
+    promisedPearls?: number;
+  } = {},
 ) {
   const pack = economy.packs.find((p) => p.id === packId);
   if (!pack) throw new Error(`no pack ${packId}`);
@@ -164,6 +200,8 @@ export function sessionObject(
     metadata: {
       user_id: who.userId,
       pack_id: packId,
+      price_cents: String(overrides.promisedCents ?? pack.priceCents),
+      pearls: String(overrides.promisedPearls ?? pack.pearls),
       consent_at: (overrides.at ?? new Date()).toISOString(),
       ...CONSENT,
     },

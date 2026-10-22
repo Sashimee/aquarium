@@ -18,6 +18,7 @@ import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
 import type { PushSender } from './push.ts';
 import type { PaymentProvider } from './payments/provider.ts';
+import type { PaymentsLimits } from './payments/routes.ts';
 import type { ReminderLimits } from './reminders.ts';
 import type { PublicLimits } from './public.ts';
 import type { GalleryLimits } from './gallery.ts';
@@ -91,6 +92,7 @@ export interface HarnessOptions {
   signInThrottle?: Limit;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  paymentsLimits?: PaymentsLimits;
   handleLimit?: Limit;
   collectionLimit?: Limit;
   publicLimits?: PublicLimits;
@@ -238,6 +240,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     ...(opts.reminderLimits ? { reminderLimits: opts.reminderLimits } : {}),
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
+    ...(opts.paymentsLimits ? { paymentsLimits: opts.paymentsLimits } : {}),
     ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),
     ...(opts.collectionLimit ? { collectionLimit: opts.collectionLimit } : {}),
     ...(opts.publicLimits ? { publicLimits: opts.publicLimits } : {}),

@@ -15,7 +15,7 @@ import { schema, type Database } from '../db/index.ts';
 import { apiError, HttpError } from '../errors.ts';
 import type { Mailer } from '../mail.ts';
 import type { Limit, RateLimiter } from '../rate-limit.ts';
-import { WebhookSignatureError, type PaymentProvider } from './provider.ts';
+import { describeProviderError, WebhookSignatureError, type PaymentProvider } from './provider.ts';
 import { settleEvent, type Receipt } from './settle.ts';
 
 export interface PaymentsLimits {
@@ -211,19 +211,20 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         );
       }
       await requireAdult(user.id);
-      const session = await checkout(() =>
-        payments.createPackCheckout({
-          userId: user.id,
-          email: user.email,
-          packId: pack.id,
-          pearls: pack.pearls,
-          priceCents: pack.priceCents,
-          consent: { at: new Date(clock.now()) },
-          successUrl,
-          cancelUrl,
-        }),
+      return checkout(async () =>
+        checkoutResponseSchema.parse(
+          await payments.createPackCheckout({
+            userId: user.id,
+            email: user.email,
+            packId: pack.id,
+            pearls: pack.pearls,
+            priceCents: pack.priceCents,
+            consent: { at: new Date(clock.now()) },
+            successUrl,
+            cancelUrl,
+          }),
+        ),
       );
-      return checkoutResponseSchema.parse(session);
     }),
   );
 
@@ -243,19 +244,20 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         );
       }
       const offer = economy.subscription;
-      const session = await checkout(() =>
-        payments.createSubscriptionCheckout({
-          userId: user.id,
-          email: user.email,
-          subscriptionId: offer.id,
-          priceCents: offer.priceCents,
-          pearlsPerDay: offer.pearlsPerDay,
-          consent: { at: new Date(clock.now()) },
-          successUrl,
-          cancelUrl,
-        }),
+      return checkout(async () =>
+        checkoutResponseSchema.parse(
+          await payments.createSubscriptionCheckout({
+            userId: user.id,
+            email: user.email,
+            subscriptionId: offer.id,
+            priceCents: offer.priceCents,
+            pearlsPerDay: offer.pearlsPerDay,
+            consent: { at: new Date(clock.now()) },
+            successUrl,
+            cancelUrl,
+          }),
+        ),
       );
-      return checkoutResponseSchema.parse(session);
     }),
   );
 
@@ -284,7 +286,7 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     try {
       return await work();
     } catch (err) {
-      app.log.error({ err }, 'payment provider call failed');
+      app.log.error(describeProviderError(err), 'payment provider call failed');
       throw new HttpError(
         502,
         apiError(
@@ -330,15 +332,25 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         }
         throw err;
       }
-      const receipt = await settleEvent(
-        {
-          database,
-          economy,
-          now: () => clock.now(),
-          log: (message, context) => app.log.warn({ ...context }, message),
-        },
-        event,
-      );
+      let receipt: Receipt | null;
+      try {
+        receipt = await settleEvent(
+          {
+            database,
+            economy,
+            provider,
+            now: () => clock.now(),
+            log: (message, context) => app.log.warn({ ...context }, message),
+          },
+          event,
+        );
+      } catch (err) {
+        app.log.error(
+          { eventId: event.id, eventType: event.type, ...describeProviderError(err) },
+          err instanceof Error ? err.message : 'payment event could not be settled',
+        );
+        throw err;
+      }
       if (receipt) await sendReceipt(receipt);
       return reply.code(200).send({ received: true });
     });

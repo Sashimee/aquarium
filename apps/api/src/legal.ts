@@ -14,7 +14,7 @@ import { storedFishSchema } from './gifts.ts';
 import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
-import type { PaymentProvider } from './payments/provider.ts';
+import { describeProviderError, type PaymentProvider } from './payments/provider.ts';
 
 export interface LegalLimits {
   export: Limit;
@@ -386,21 +386,41 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     }
 
     // A subscription left running would keep billing an account that no longer exists, so a failed
-    // cancel stops the deletion and the player can retry.
-    if (deps.payments) {
-      const running = await db
-        .select({ id: schema.clubSubscriptions.id })
-        .from(schema.clubSubscriptions)
-        .where(
-          and(
-            eq(schema.clubSubscriptions.userId, userId),
-            inArray(schema.clubSubscriptions.status, ['active', 'past_due', 'unpaid', 'trialing']),
-          ),
-        );
+    // cancel, or payments being switched off while one still runs, stops the deletion.
+    const running = await db
+      .select({ id: schema.clubSubscriptions.id })
+      .from(schema.clubSubscriptions)
+      .where(
+        and(
+          eq(schema.clubSubscriptions.userId, userId),
+          inArray(schema.clubSubscriptions.status, [
+            'active',
+            'past_due',
+            'unpaid',
+            'trialing',
+            'incomplete',
+          ]),
+        ),
+      );
+    if (running.length > 0) {
+      if (!deps.payments) {
+        app.log.error('account deletion refused: a subscription runs but payments are off');
+        return reply
+          .code(503)
+          .send(
+            apiError(
+              'payments_disabled',
+              'Your subscription cannot be cancelled while payments are unavailable, so nothing was deleted. Try again later.',
+            ),
+          );
+      }
       try {
         for (const { id } of running) await deps.payments.cancelSubscriptionNow(id);
       } catch (error) {
-        app.log.error({ err: error }, 'subscription could not be cancelled for account deletion');
+        app.log.error(
+          describeProviderError(error),
+          'subscription could not be cancelled for account deletion',
+        );
         return reply
           .code(502)
           .send(

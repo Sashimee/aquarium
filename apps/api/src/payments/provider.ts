@@ -36,6 +36,24 @@ export class WebhookSignatureError extends Error {
 
 export class ProviderError extends Error {}
 
+export interface ProviderSubscription {
+  status: Stripe.Subscription.Status;
+  cancelAtPeriodEnd: boolean;
+}
+
+// Stripe's message for a rejected parameter can echo the customer's email, so logs carry only the
+// error's classification and request id.
+export function describeProviderError(err: unknown): Record<string, string> {
+  if (err instanceof Stripe.errors.StripeError) {
+    return {
+      type: err.type,
+      ...(err.code ? { code: err.code } : {}),
+      ...(err.requestId ? { requestId: err.requestId } : {}),
+    };
+  }
+  return { type: err instanceof Error ? err.name : 'unknown' };
+}
+
 // The only place the app talks to Stripe. Everything else in apps/api sees this interface, so a
 // second provider (StoreKit) or a test double needs no change elsewhere.
 export interface PaymentProvider {
@@ -43,6 +61,8 @@ export interface PaymentProvider {
   createSubscriptionCheckout(input: SubscriptionCheckoutInput): Promise<{ url: string }>;
   cancelSubscriptionAtPeriodEnd(providerSubscriptionId: string): Promise<void>;
   cancelSubscriptionNow(providerSubscriptionId: string): Promise<void>;
+  retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscription>;
+  refundInvoice(providerInvoiceId: string): Promise<void>;
   verifyWebhook(rawBody: Buffer, signatureHeader: string | undefined): PaymentEvent;
 }
 
@@ -94,7 +114,12 @@ export function createStripeProvider(options: StripeProviderOptions): PaymentPro
             },
           },
         ],
-        metadata: { ...metadata(input.userId, input.consent), pack_id: input.packId },
+        metadata: {
+          ...metadata(input.userId, input.consent),
+          pack_id: input.packId,
+          price_cents: String(input.priceCents),
+          pearls: String(input.pearls),
+        },
         custom_text: { submit: { message: WAIVER_TEXT } },
         success_url: input.successUrl,
         cancel_url: input.cancelUrl,
@@ -146,6 +171,27 @@ export function createStripeProvider(options: StripeProviderOptions): PaymentPro
           return;
         }
         throw err;
+      }
+    },
+
+    async retrieveSubscription(id) {
+      const subscription = await stripe.subscriptions.retrieve(id);
+      return {
+        status: subscription.status,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      };
+    },
+
+    async refundInvoice(invoiceId) {
+      const payments = await stripe.invoicePayments.list({ invoice: invoiceId, status: 'paid' });
+      for (const payment of payments.data) {
+        const paymentIntent = payment.payment.payment_intent;
+        if (payment.payment.type !== 'payment_intent' || !paymentIntent) continue;
+        const id = typeof paymentIntent === 'string' ? paymentIntent : paymentIntent.id;
+        await stripe.refunds.create(
+          { payment_intent: id },
+          { idempotencyKey: `unclaimed-subscription:${invoiceId}:${id}` },
+        );
       }
     },
 
