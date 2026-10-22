@@ -6,7 +6,7 @@ import {
   type PresetLayout,
   type TankSize,
 } from '@aquarium/shared';
-import { DEFAULT_TANK, sameTank, type TankDimensions } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, type TankDimensions } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { AssetCatalog } from './assets';
 import { anemoneReach } from './anemone';
@@ -199,8 +199,9 @@ export function fitPresetToTank(
   return {
     ...preset,
     decor: preset.decor.map((item) => fitItem(item, size, dimensions, boundsOf)),
-    plantPatches: sameTank(dimensions, DEFAULT_TANK)
-      ? preset.plantPatches
-      : preset.plantPatches.map((patch) => fitPatch(patch, size, dimensions, patchReach)),
+    plantPatches:
+      size === 'standard'
+        ? preset.plantPatches
+        : preset.plantPatches.map((patch) => fitPatch(patch, size, dimensions, patchReach)),
   };
 }
