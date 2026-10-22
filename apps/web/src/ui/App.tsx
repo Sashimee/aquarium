@@ -28,6 +28,7 @@ import { LoadingScreen } from './LoadingScreen';
 import { PhotoLayer, PhotoTools } from './PhotoControls';
 import { usePanels, type OpenPanel, type Panel } from './panels';
 import { FeedPanel, FeedToast, PlayPanel, useFood } from './PlayControls';
+import { paymentReturn } from '../sync/payments';
 import { navigate } from './router';
 import { Sheet } from './Sheet';
 import { SoundButton } from './SoundSetting';
@@ -306,6 +307,11 @@ function Shell() {
   useEffect(() => {
     if (!home && photoActive) interaction.emit('photo:request', { type: 'exit' });
   }, [home, photoActive, interaction]);
+
+  const [returnedFromCheckout] = useState(() => paymentReturn(window.location.search) !== null);
+  useEffect(() => {
+    if (returnedFromCheckout && home) dispatch({ type: 'open', panel: 'shop' });
+  }, [returnedFromCheckout, home, dispatch]);
 
   const startPhoto = () => {
     dispatch({ type: 'close' });
