@@ -198,7 +198,7 @@ function graze(w: World, x: number, y: number, z: number, steps: number): Grazin
   return { first, contacts: w.contacts, fishSteps: w.count * steps };
 }
 
-describe('a leaning euphyllia on the reef preset', () => {
+describe("the reef preset's leaning torch euphyllia", () => {
   const colony = REEF.decor.find(
     (c): c is CapsuleCollider => c.id.startsWith('euphyllia-torch-') && c.kind === 'capsule',
   );
@@ -208,7 +208,11 @@ describe('a leaning euphyllia on the reef preset', () => {
   const ux = (b[0] - a[0]) / drift;
   const uz = (b[2] - a[2]) / drift;
   const SEEDS = [1, 2, 3];
-  const STEPS = STEP_HZ / 3;
+  // The plant push acts through the fish's acceleration limit, so it shows after about a second;
+  // much later the two runs' paths diverge for reasons of their own.
+  const STEPS = STEP_HZ;
+  // About two thirds of the smallest gap measured over SEEDS (0.75 mm).
+  const MIN_PUSH = 0.0005;
 
   function startAt(decor: readonly Collider[], [x, y, z]: Vec3, seed: number): World {
     const w = new World({
@@ -241,8 +245,15 @@ describe('a leaning euphyllia on the reef preset', () => {
   function along(decor: readonly Collider[], start: Vec3, seed: number): number {
     const w = startAt(decor, start, seed);
     for (let t = 0; t < STEPS; t++) w.step();
-    return ((w.position[0] ?? 0) - start[0]) * ux + ((w.position[2] ?? 0) - start[2]) * uz;
+    return ((w.position[0] ?? NaN) - start[0]) * ux + ((w.position[2] ?? NaN) - start[2]) * uz;
   }
+
+  it('leans its top sphere where the scene puts it', () => {
+    // euphylliaCollider in apps/web/src/scene/euphyllia.ts for euphyllia-torch-8 at the preset's
+    // placement, so a lean turned the wrong way fails here.
+    const scene = [0.24995, 0.18617, 0.0031];
+    b.forEach((v, k) => expect(v).toBeCloseTo(scene[k] ?? NaN, 4));
+  });
 
   it('leans by more than the margin either test point keeps', () => {
     expect(drift).toBeGreaterThan(0.02);
@@ -256,11 +267,12 @@ describe('a leaning euphyllia on the reef preset', () => {
       const w = startAt(REEF.decor, leanSide, seed);
       w.step();
       expect(w.plantContacts).toBe(1);
-      expect(along(REEF.decor, leanSide, seed)).toBeGreaterThan(along(bare, leanSide, seed));
+      const push = along(REEF.decor, leanSide, seed) - along(bare, leanSide, seed);
+      expect(push).toBeGreaterThan(MIN_PUSH);
     }
   });
 
-  it('leaves a fish on the side it leans from untouched', () => {
+  it('leaves a fish on the side it leans from untouched, with the rocks taken out', () => {
     // Rock backs the colony on this side, so only the preset's soft colliders are placed.
     const soft = REEF.decor.filter((c) => !c.hard);
     for (const seed of SEEDS) {
