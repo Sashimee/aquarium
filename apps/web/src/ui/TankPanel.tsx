@@ -156,7 +156,11 @@ function CareSections({ session, state, tank }: Ready) {
         water={water}
         salinity={salinityNotice(tank, state.species)}
       />
-      <WaterTest tank={tank} species={state.species} />
+      <WaterTest
+        tank={tank}
+        species={state.species}
+        onWaterChange={() => session.careAction({ type: 'water_change' })}
+      />
       <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
       <GiftNotice session={session} />
       <FishCards
