@@ -13,7 +13,7 @@ import {
   tankSchema,
   type Tank,
 } from '@aquarium/shared';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
@@ -216,7 +216,7 @@ const offerRow = async (h: Harness, id: string) => {
 
 async function holdingLock(
   h: Harness,
-  lock: string,
+  lock: SQL,
   then: (
     tx: Parameters<Parameters<Harness['database']['db']['transaction']>[0]>[0],
   ) => Promise<void>,
@@ -224,7 +224,7 @@ async function holdingLock(
   const held = latch<unknown>();
   const gate = latch();
   const done = h.database.db.transaction(async (tx) => {
-    await tx.execute(sql.raw(lock));
+    await tx.execute(lock);
     const pid = (await tx.execute(sql`select pg_backend_pid() as pid`)).rows[0]?.['pid'];
     held.open(pid);
     await gate.opened;
@@ -233,16 +233,19 @@ async function holdingLock(
   const pid = await held.opened;
   return {
     async whenBlocked() {
-      const deadline = Date.now() + 10_000;
-      for (;;) {
-        const blocked = await h.database.db.execute(
-          sql`select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`,
-        );
-        if (blocked.rows.length > 0) break;
-        if (Date.now() > deadline) throw new Error('the request never blocked on the held lock');
-        await new Promise((resolve) => setTimeout(resolve, 10));
+      try {
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const blocked = await h.database.db.execute(
+            sql`select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`,
+          );
+          if (blocked.rows.length > 0) break;
+          if (Date.now() > deadline) throw new Error('the request never blocked on the held lock');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      } finally {
+        gate.open();
       }
-      gate.open();
       await done;
     },
   };
@@ -943,7 +946,7 @@ describe('gifting and trading fish', () => {
 
       const counter = await holdingLock(
         h,
-        `select 1 from gift_offers where id = '${id}' for update`,
+        sql`select 1 from gift_offers where id = ${id} for update`,
         async (tx) => {
           await tx
             .update(schema.giftOffers)
@@ -967,7 +970,7 @@ describe('gifting and trading fish', () => {
       const t = await countered();
       const deletion = await holdingLock(
         h,
-        `select 1 from "user" where id = '${t.b.userId}' for update`,
+        sql`select 1 from "user" where id = ${t.b.userId} for update`,
         async (tx) => {
           await tx.delete(schema.ledger).where(eq(schema.ledger.userId, t.b.userId));
           await tx.delete(schema.user).where(eq(schema.user.id, t.b.userId));
