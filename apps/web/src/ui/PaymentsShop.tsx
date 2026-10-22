@@ -1,42 +1,42 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { PaymentsState } from '@aquarium/shared';
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { pearlText } from '../sync/economy';
 import {
+  UNCONFIRMED_NOTICE,
   awaitCredit,
-  canCancel,
   canSubscribe,
+  claimPaymentReturn,
   euros,
   goToCheckout,
   loadPayments,
+  parsePending,
   paymentErrorText,
+  paymentNotice,
   paymentReturn,
-  subscriptionSummary,
   withoutPaymentReturn,
   type PaymentReturn,
   type PaymentsView,
+  type PendingCheckout,
 } from '../sync/payments';
 import type { TankSession } from '../sync/session';
 import { useApi } from './context';
+import { Link } from './screens';
 
 const PENDING_KEY = 'aquarium.payment-pending';
 
-type Pending = { kind: 'pack'; balance: number | null } | { kind: 'subscription' };
-
-function readPending(): Pending | null {
+function readPending(): PendingCheckout | null {
   try {
-    const raw = sessionStorage.getItem(PENDING_KEY);
-    return raw ? (JSON.parse(raw) as Pending) : null;
+    return parsePending(sessionStorage.getItem(PENDING_KEY));
   } catch {
     return null;
   }
 }
 
-function writePending(pending: Pending | null): void {
+function writePending(pending: PendingCheckout | null): void {
   try {
     if (pending) sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
     else sessionStorage.removeItem(PENDING_KEY);
   } catch {
-    // Private mode: the return screen then reads the balance once without a baseline.
+    // Private mode: the return screen then cannot tell what was bought and stays neutral.
   }
 }
 
@@ -55,10 +55,11 @@ export function PaymentsShop({ session, balance }: Props) {
   const id = useId();
   const [loaded, setLoaded] = useState<Loaded>({ phase: 'loading' });
   const [returned] = useState<PaymentReturn | null>(() => paymentReturn(window.location.search));
-  const [notice, setNotice] = useState<string | null>(null);
+  const notice = useSyncExternalStore(paymentNotice.subscribe, paymentNotice.get);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [consent, setConsent] = useState(false);
+  const [delivery, setDelivery] = useState(false);
+  const [waiver, setWaiver] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -68,15 +69,21 @@ export function PaymentsShop({ session, balance }: Props) {
     }
   }, [api]);
 
-  const settled = useRef(false);
+  const live = useRef<((next: Loaded) => void) | null>(null);
+  useEffect(() => {
+    live.current = setLoaded;
+    return () => {
+      live.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     const abort = new AbortController();
     void (async () => {
       const first = await load();
       if (abort.signal.aborted) return;
       setLoaded(first);
-      if (!returned || settled.current) return;
-      settled.current = true;
+      if (!returned || !claimPaymentReturn()) return;
       window.history.replaceState(
         window.history.state,
         '',
@@ -87,30 +94,37 @@ export function PaymentsShop({ session, balance }: Props) {
       const pending = readPending();
       writePending(null);
       if (returned === 'cancelled') {
-        setNotice('Checkout was cancelled. Nothing was charged.');
+        paymentNotice.set('Checkout was cancelled. Nothing was charged.');
         return;
       }
-      setNotice('Thank you. Waiting for the payment to be confirmed.');
-      const subscription = pending?.kind === 'subscription';
+      if (!pending || (pending.kind === 'pack' && pending.balance === null)) {
+        paymentNotice.set(UNCONFIRMED_NOTICE);
+        return;
+      }
+      paymentNotice.set('Thank you. Waiting for the payment to be confirmed.');
+      const subscription = pending.kind === 'subscription';
       const read = async (): Promise<number | null> => {
-        if (subscription) {
-          const next = await load();
-          if (next.phase === 'done' && next.view.kind === 'ready') {
-            setLoaded(next);
-            return canSubscribe(next.view.state.subscription) ? 0 : 1;
+        try {
+          if (subscription) {
+            const next = await load();
+            if (next.phase === 'done' && next.view.kind === 'ready') {
+              live.current?.(next);
+              return canSubscribe(next.view.state.subscription) ? 0 : 1;
+            }
+            return null;
           }
+          await session.refreshWallet({ afterWrite: true });
+          return session.getState().balance;
+        } catch {
           return null;
         }
-        await session.refreshWallet({ afterWrite: true });
-        return session.getState().balance;
       };
       const credited = await awaitCredit({
         read,
-        before: subscription ? 0 : (pending?.balance ?? null),
-        signal: abort.signal,
+        before: pending.kind === 'pack' ? pending.balance : 0,
+        signal: new AbortController().signal,
       });
-      if (abort.signal.aborted) return;
-      setNotice(
+      paymentNotice.set(
         credited
           ? subscription
             ? 'You are now an Aquarist Club member. Your daily Pearls start today.'
@@ -120,13 +134,6 @@ export function PaymentsShop({ session, balance }: Props) {
     })();
     return () => abort.abort();
   }, [load, returned, session]);
-
-  const apply = (state: PaymentsState) =>
-    setLoaded((prev) =>
-      prev.phase === 'done' && prev.view.kind === 'ready'
-        ? { phase: 'done', view: { ...prev.view, state } }
-        : prev,
-    );
 
   const attempt = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -177,40 +184,40 @@ export function PaymentsShop({ session, balance }: Props) {
 
   const { state, packs, offer } = loaded.view;
   const subscription = state.subscription;
-  const summary = subscriptionSummary(subscription, Date.now());
-  const consentReady = state.adultConfirmed && consent;
+  const consentReady = state.adultConfirmed && delivery && waiver;
 
-  const buyPack = (packId: string) =>
-    attempt(async () => {
+  const buyPack = async (packId: string) => {
+    if (!delivery || !waiver) return;
+    await attempt(async () => {
       writePending({ kind: 'pack', balance });
       try {
         goToCheckout(
-          await api.checkoutPack(packId, { immediateDelivery: true, withdrawalWaiver: true }),
+          await api.checkoutPack(packId, { immediateDelivery: delivery, withdrawalWaiver: waiver }),
         );
       } catch (error) {
         writePending(null);
         throw error;
       }
     });
+  };
 
-  const subscribe = () =>
-    attempt(async () => {
+  const subscribe = async () => {
+    if (!delivery || !waiver) return;
+    await attempt(async () => {
       writePending({ kind: 'subscription' });
       try {
         goToCheckout(
-          await api.checkoutSubscription({ immediateDelivery: true, withdrawalWaiver: true }),
+          await api.checkoutSubscription({
+            immediateDelivery: delivery,
+            withdrawalWaiver: waiver,
+          }),
         );
       } catch (error) {
         writePending(null);
         throw error;
       }
     });
-
-  const cancel = () =>
-    attempt(async () => {
-      apply(await api.cancelSubscription());
-      setNotice('Your membership is cancelled. It keeps working until the end of the paid period.');
-    });
+  };
 
   return (
     <section aria-labelledby={`${id}-h`} className="block">
@@ -220,28 +227,29 @@ export function PaymentsShop({ session, balance }: Props) {
         Pearls are bought with real money through Stripe. You are sent to Stripe to pay, and the
         Pearls arrive once the payment is confirmed. Basic care stays free.
       </p>
+      {!state.adultConfirmed && (
+        <p className="hint">
+          An adult has to confirm purchases once in the <Link to="/settings">account settings</Link>{' '}
+          before you can buy.
+        </p>
+      )}
       <label className="row">
         <input
           type="checkbox"
-          checked={state.adultConfirmed}
+          checked={delivery}
           disabled={busy}
-          onChange={(e) =>
-            void attempt(async () => apply(await api.setAdultConfirmation(e.target.checked)))
-          }
+          onChange={(e) => setDelivery(e.target.checked)}
         />
-        <span>I am an adult and I confirm purchases on this account.</span>
+        <span>I want my Pearls delivered right away.</span>
       </label>
       <label className="row">
         <input
           type="checkbox"
-          checked={consent}
+          checked={waiver}
           disabled={busy}
-          onChange={(e) => setConsent(e.target.checked)}
+          onChange={(e) => setWaiver(e.target.checked)}
         />
-        <span>
-          Deliver my Pearls now. I understand that this ends my 14-day right of withdrawal for what
-          I buy.
-        </span>
+        <span>I understand that this ends my 14-day right of withdrawal for what I buy.</span>
       </label>
       {problem && (
         <p className="field-error" role="alert">
@@ -269,9 +277,8 @@ export function PaymentsShop({ session, balance }: Props) {
       <h4>Aquarist Club</h4>
       <p className="hint">
         {pearlText(offer.pearlsPerDay)} every day for {euros(offer.priceCents)} a month. Cancel any
-        time in one step.
+        time in one step from the account settings.
       </p>
-      {summary && <p className="hint">{summary}</p>}
       <div className="row">
         {canSubscribe(subscription) && (
           <button
@@ -283,12 +290,13 @@ export function PaymentsShop({ session, balance }: Props) {
             Join
           </button>
         )}
-        {canCancel(subscription) && (
-          <button type="button" disabled={busy} onClick={() => void cancel()}>
-            Cancel membership
-          </button>
-        )}
       </div>
+      {!canSubscribe(subscription) && (
+        <p className="hint">
+          Your membership and its cancel button are in the{' '}
+          <Link to="/settings">account settings</Link>.
+        </p>
+      )}
     </section>
   );
 }

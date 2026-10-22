@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaymentsState } from '@aquarium/shared';
+import { resetPaymentReturn } from '../sync/payments';
 import type { TankSession } from '../sync/session';
 import { ApiRequestError } from './api';
 
@@ -55,6 +56,8 @@ describe('the Pearl packs section', () => {
 
   beforeEach(() => {
     for (const fn of Object.values(api)) fn.mockReset();
+    resetPaymentReturn();
+    sessionStorage.clear();
     goToCheckout.mockReset();
     window.history.replaceState(null, '', '/');
     container = document.createElement('div');
@@ -89,8 +92,11 @@ describe('the Pearl packs section', () => {
   };
   const consent = async () => {
     const boxes = container.querySelectorAll<HTMLInputElement>('input[type=checkbox]');
+    await click(boxes[0]);
     await click(boxes[1]);
   };
+  const box = (index: number) =>
+    container.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[index] as HTMLInputElement;
   const alertText = () => container.querySelector('[role=alert]')?.textContent;
 
   it('lists the server packs with their prices', async () => {
@@ -126,6 +132,37 @@ describe('the Pearl packs section', () => {
     expect((button(/Buy 550/) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('keeps buying disabled while only one of the two consents is ticked', async () => {
+    ready();
+    await show();
+    await click(box(0));
+    expect((button(/Buy 550/) as HTMLButtonElement).disabled).toBe(true);
+    expect(box(0).checked).toBe(true);
+    await click(box(0));
+    await click(box(1));
+    expect((button(/Buy 550/) as HTMLButtonElement).disabled).toBe(true);
+    expect((button(/Join/) as HTMLButtonElement).disabled).toBe(true);
+    await click(box(0));
+    expect((button(/Buy 550/) as HTMLButtonElement).disabled).toBe(false);
+    expect((button(/Join/) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('starts with both consent boxes unticked and no adult box in the shop', async () => {
+    ready();
+    await show();
+    expect(container.querySelectorAll('input[type=checkbox]')).toHaveLength(2);
+    expect(box(0).checked).toBe(false);
+    expect(box(1).checked).toBe(false);
+  });
+
+  it('sends the user to the settings and blocks buying until an adult has confirmed', async () => {
+    ready(state({ adultConfirmed: false }));
+    await show();
+    await consent();
+    expect(container.querySelector('a[href="/settings"]')).not.toBeNull();
+    expect((button(/Buy 550/) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('sends the chosen pack with consent', async () => {
     ready();
     api.checkoutPack.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs_1' });
@@ -150,43 +187,12 @@ describe('the Pearl packs section', () => {
     expect(alertText()).toContain('adult');
   });
 
-  it('shows paid-until and cancels in one click', async () => {
+  it('leaves cancelling to the settings and does not offer a second join', async () => {
     ready(running);
-    api.cancelSubscription.mockResolvedValue({
-      ...running,
-      subscription: {
-        status: 'active',
-        paidUntil: '2026-11-20T00:00:00.000Z',
-        cancelAtPeriodEnd: true,
-      },
-    });
     await show();
-    expect(text()).toContain('Paid until 20 November 2026');
     expect(button(/Join/)).toBeUndefined();
-    await click(button(/Cancel membership/));
-    expect(api.cancelSubscription).toHaveBeenCalledOnce();
-    expect(text()).toContain('cancelled and runs until 20 November 2026');
     expect(button(/Cancel membership/)).toBeUndefined();
-  });
-
-  it('shows a 409 on cancel and reloads the real state', async () => {
-    ready(running);
-    api.cancelSubscription.mockRejectedValue(
-      new ApiRequestError(409, 'conflict', 'You have no active subscription.'),
-    );
-    await show();
-    ready(state());
-    await click(button(/Cancel membership/));
-    expect(alertText()).toBe('You have no active subscription.');
-    expect(button(/Join/)).toBeDefined();
-  });
-
-  it('shows 503 on cancel as the not-available note', async () => {
-    ready(running);
-    api.cancelSubscription.mockRejectedValue(new ApiRequestError(503, 'payments_disabled', 'off'));
-    await show();
-    await click(button(/Cancel membership/));
-    expect(alertText()).toBe('Purchases are not available yet.');
+    expect(container.querySelector('a[href="/settings"]')).not.toBeNull();
   });
 
   it('offers to join when there is no subscription', async () => {
@@ -209,5 +215,99 @@ describe('the Pearl packs section', () => {
     expect(text()).toContain('Checkout was cancelled. Nothing was charged.');
     expect(alertText()).toBeUndefined();
     expect(window.location.search).toBe('');
+  });
+
+  describe('returning from Checkout with ?payment=success', () => {
+    const back = async (wallet: () => number | null, server = state()) => {
+      ready(server);
+      window.history.replaceState(null, '', '/?payment=success');
+      vi.mocked(session.getState).mockImplementation(() => ({ balance: wallet() }) as never);
+      await show();
+      for (let i = 0; i < 10; i += 1) await act(async () => {});
+    };
+
+    it('confirms a pack only once the balance has risen above the saved baseline', async () => {
+      sessionStorage.setItem(
+        'aquarium.payment-pending',
+        JSON.stringify({ kind: 'pack', balance: 100 }),
+      );
+      await back(() => 650);
+      expect(text()).toContain('Your Pearls have arrived.');
+      expect(sessionStorage.getItem('aquarium.payment-pending')).toBeNull();
+      expect(window.location.search).toBe('');
+    });
+
+    it('does not claim success while the balance has not moved', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      try {
+        sessionStorage.setItem(
+          'aquarium.payment-pending',
+          JSON.stringify({ kind: 'pack', balance: 100 }),
+        );
+        await back(() => 100);
+        expect(text()).not.toContain('Your Pearls have arrived.');
+        expect(text()).toContain('Waiting for the payment');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stays neutral when the baseline is unknown', async () => {
+      sessionStorage.setItem(
+        'aquarium.payment-pending',
+        JSON.stringify({ kind: 'pack', balance: null }),
+      );
+      await back(() => 650);
+      expect(text()).not.toContain('have arrived');
+      expect(text()).toContain('Stripe has received your payment');
+    });
+
+    it('stays neutral when nothing was saved, for a pack or a membership alike', async () => {
+      await back(() => 650);
+      expect(text()).not.toContain('have arrived');
+      expect(text()).not.toContain('now an Aquarist Club member');
+      expect(text()).toContain('Stripe has received your payment');
+    });
+
+    it('stays neutral when the saved record is not what this code wrote', async () => {
+      sessionStorage.setItem('aquarium.payment-pending', '{"kind":"gift"}');
+      await back(() => 650);
+      expect(text()).toContain('Stripe has received your payment');
+    });
+
+    it('confirms a membership when the server now reports it as running', async () => {
+      sessionStorage.setItem('aquarium.payment-pending', JSON.stringify({ kind: 'subscription' }));
+      await back(() => 0, running);
+      expect(text()).toContain('now an Aquarist Club member');
+    });
+
+    it('keeps the confirmation when the shop is closed and opened again', async () => {
+      sessionStorage.setItem(
+        'aquarium.payment-pending',
+        JSON.stringify({ kind: 'pack', balance: 100 }),
+      );
+      await back(() => 650);
+      act(() => root.unmount());
+      root = createRoot(container);
+      ready();
+      await show();
+      expect(text()).toContain('Your Pearls have arrived.');
+    });
+
+    it('survives a wallet refresh that throws something unexpected', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      try {
+        sessionStorage.setItem(
+          'aquarium.payment-pending',
+          JSON.stringify({ kind: 'pack', balance: 100 }),
+        );
+        vi.mocked(session.refreshWallet).mockRejectedValueOnce(new TypeError('boom'));
+        await back(() => 650);
+        expect(alertText()).toBeUndefined();
+        expect(text()).not.toContain('have arrived');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

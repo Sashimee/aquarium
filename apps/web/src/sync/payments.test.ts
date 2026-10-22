@@ -6,6 +6,7 @@ import {
   canCancel,
   canSubscribe,
   loadPayments,
+  parsePending,
   paymentErrorText,
   paymentReturn,
   subscriptionSummary,
@@ -149,5 +150,23 @@ describe('awaitCredit', () => {
     const read = vi.fn();
     expect(await awaitCredit({ read, before: 1, signal: abort.signal })).toBe(false);
     expect(read).not.toHaveBeenCalled();
+  });
+});
+
+describe('parsePending', () => {
+  it('reads the two shapes this code writes', () => {
+    expect(parsePending('{"kind":"pack","balance":120}')).toEqual({ kind: 'pack', balance: 120 });
+    expect(parsePending('{"kind":"subscription"}')).toEqual({ kind: 'subscription' });
+  });
+
+  it('keeps an unknown or malformed balance as unknown', () => {
+    expect(parsePending('{"kind":"pack","balance":"7"}')).toEqual({ kind: 'pack', balance: null });
+    expect(parsePending('{"kind":"pack"}')).toEqual({ kind: 'pack', balance: null });
+  });
+
+  it('rejects anything else', () => {
+    for (const raw of [null, '', 'nope', 'null', '5', '[]', '{"kind":"gift"}']) {
+      expect(parsePending(raw)).toBeNull();
+    }
   });
 });

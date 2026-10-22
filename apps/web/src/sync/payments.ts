@@ -98,7 +98,7 @@ export function paymentErrorText(error: unknown): string {
   if (error.status === 409) return error.message;
   switch (error.code) {
     case 'adult_confirmation_required':
-      return 'An adult has to confirm purchases first. Tick the box above.';
+      return 'An adult has to confirm purchases first. Confirm it in the account settings.';
     case 'email_not_verified':
       return 'Verify your email address before buying Pearls.';
     case 'rate_limited':
@@ -145,4 +145,56 @@ export async function awaitCredit(options: {
 
 export function goToCheckout(response: CheckoutResponse): void {
   window.location.assign(response.url);
+}
+
+export type PendingCheckout = { kind: 'pack'; balance: number | null } | { kind: 'subscription' };
+
+export function parsePending(raw: string | null): PendingCheckout | null {
+  if (!raw) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (record['kind'] === 'subscription') return { kind: 'subscription' };
+  if (record['kind'] !== 'pack') return null;
+  const balance = record['balance'];
+  return {
+    kind: 'pack',
+    balance: typeof balance === 'number' && Number.isFinite(balance) ? balance : null,
+  };
+}
+
+export const UNCONFIRMED_NOTICE =
+  'Stripe has received your payment. Your Pearls or membership appear once it is confirmed, usually within a minute.';
+
+let returnClaimed = false;
+let notice: string | null = null;
+const noticeListeners = new Set<() => void>();
+
+/** The return from Checkout is handled once per page load, even if the shop is closed and reopened. */
+export function claimPaymentReturn(): boolean {
+  if (returnClaimed) return false;
+  returnClaimed = true;
+  return true;
+}
+
+export const paymentNotice = {
+  get: (): string | null => notice,
+  set(next: string | null): void {
+    notice = next;
+    for (const listener of noticeListeners) listener();
+  },
+  subscribe(listener: () => void): () => void {
+    noticeListeners.add(listener);
+    return () => noticeListeners.delete(listener);
+  },
+};
+
+export function resetPaymentReturn(): void {
+  returnClaimed = false;
+  paymentNotice.set(null);
 }

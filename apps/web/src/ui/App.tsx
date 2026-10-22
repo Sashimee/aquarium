@@ -28,11 +28,11 @@ import { LoadingScreen } from './LoadingScreen';
 import { PhotoLayer, PhotoTools } from './PhotoControls';
 import { usePanels, type OpenPanel, type Panel } from './panels';
 import { FeedPanel, FeedToast, PlayPanel, useFood } from './PlayControls';
-import { paymentReturn } from '../sync/payments';
 import { navigate } from './router';
 import { Sheet } from './Sheet';
 import { SoundButton } from './SoundSetting';
 import { useSessionState } from './session';
+import { useShopAfterCheckout } from './useShopAfterCheckout';
 import {
   CreditsScreen,
   NotFoundScreen,
@@ -308,10 +308,7 @@ function Shell() {
     if (!home && photoActive) interaction.emit('photo:request', { type: 'exit' });
   }, [home, photoActive, interaction]);
 
-  const [returnedFromCheckout] = useState(() => paymentReturn(window.location.search) !== null);
-  useEffect(() => {
-    if (returnedFromCheckout && home) dispatch({ type: 'open', panel: 'shop' });
-  }, [returnedFromCheckout, home, dispatch]);
+  useShopAfterCheckout(home, () => dispatch({ type: 'open', panel: 'shop' }));
 
   const startPhoto = () => {
     dispatch({ type: 'close' });
