@@ -176,6 +176,32 @@ describe('shop capacity', () => {
     expect(canBuy(tankFixture(), tetra, species)).toEqual({ ok: true });
   });
 
+  describe('tank length gate', () => {
+    const mono = speciesFixture({ id: 'silver-mono', commonName: 'Silver mono' });
+    const all = [mono];
+
+    it('refuses a tank shorter than the minimum', () => {
+      expect(canBuy(tankFixture({ size: 'standard' }), mono, all)).toEqual({
+        ok: false,
+        reason: 'Silver mono needs a tank at least 150 cm long.',
+      });
+    });
+
+    it('allows a tank exactly at the minimum', () => {
+      expect(canBuy(tankFixture({ size: 'long300' }), mono, all)).toEqual({ ok: true });
+    });
+
+    it('exempts quarantine tanks', () => {
+      expect(canBuy(tankFixture({ size: 'standard', quarantine: true }), mono, all)).toEqual({
+        ok: true,
+      });
+    });
+
+    it('leaves ungated species alone', () => {
+      expect(canBuy(tankFixture({ size: 'standard' }), tetra, species)).toEqual({ ok: true });
+    });
+  });
+
   it('refuses the wrong biome with a plain reason', () => {
     const verdict = canBuy(tankFixture(), clown, species);
     expect(verdict).toEqual({ ok: false, reason: 'Clownfish needs a reef tank.' });

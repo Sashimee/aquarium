@@ -229,8 +229,8 @@ describe('verdictHazard', () => {
 describe('chart resolution matches verdicts', () => {
   const readBack = (id: PadId, value: number) => describeReading(readPad(id, value) ?? undefined);
 
-  it('reads a default mangrove tank at 15 ppt', () => {
-    expect(readBack('salinity', 15)).toBe('15 ppt');
+  it('reads a default mangrove tank at 10 ppt', () => {
+    expect(readBack('salinity', 10)).toBe('10 ppt');
   });
 
   it('reads a reef at 37 ppt as 37 and the verdict agrees', () => {
