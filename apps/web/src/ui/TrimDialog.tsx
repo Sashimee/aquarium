@@ -11,7 +11,7 @@ import {
 } from '../sync/plantTrim';
 import { useBridge } from './context';
 import { Dialog } from './Dialog';
-import { useActiveTank, useSessionState, useTankSession } from './session';
+import { useActiveTank, useOptionalSession, useSessionState } from './session';
 
 export function TrimBody({
   plant,
@@ -67,7 +67,7 @@ export function TrimBody({
 
 export default function TrimDialog() {
   const { interaction } = useBridge();
-  const session = useTankSession();
+  const session = useOptionalSession();
   const state = useSessionState();
   const tank = useActiveTank();
   const [key, setKey] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export default function TrimDialog() {
   );
 
   const plant = key === null ? undefined : tank?.plants?.find((p) => p.key === key);
-  if (!plant) return null;
+  if (!session || !plant) return null;
 
   const close = () => setKey(null);
   const range = trimRange(plant);
