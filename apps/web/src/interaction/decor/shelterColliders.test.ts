@@ -20,14 +20,6 @@ const SHELTERS = ['reef-arch', 'rock-pile-cave', 'rock-pile-stack', 'neothauma-s
 const FISH_CLEARANCE = 0.9;
 const MESH_TOLERANCE_M = 0.003;
 
-/** How far in front of the piece (local z) each mouth can sit once the parts leave the opening clear. */
-const PULLED_IN_Z: Readonly<Record<(typeof SHELTERS)[number], number>> = {
-  'reef-arch': 0.042,
-  'rock-pile-cave': 0.165,
-  'rock-pile-stack': 0.14,
-  'neothauma-shell': 0.039,
-};
-
 const SWEEP_SCALES = [0.6, 1, 1.3, 1.6];
 const SWEEP_ROTATIONS = Array.from({ length: Math.ceil((Math.PI * 2) / 0.02) }, (_, i) => i * 0.02);
 
@@ -114,10 +106,10 @@ function boxFor(assetId: string, placed: DecorItem): Collider[] {
   ];
 }
 
-function mouthAt(assetId: (typeof SHELTERS)[number], placed: DecorItem, z: number) {
+function mouthAt(assetId: (typeof SHELTERS)[number], placed: DecorItem) {
   const mouth = CAVE_MOUTHS[assetId];
   if (!mouth) throw new Error(`${assetId} has no mouth`);
-  const [x, y] = mouth.position;
+  const [x, y, z] = mouth.position;
   const position = new Vector3(x, y, z).applyMatrix4(decorMatrix(placed));
   const facing = new Vector3(...mouth.facing).transformDirection(decorMatrix(placed));
   return { position, facing, radius: mouth.radius * placed.scale };
@@ -195,10 +187,18 @@ describe('the shelter meshes the parts were cut from', () => {
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(LOD2_SHA256[id]);
   });
 
-  it('a shelter placed on a slope is refused rather than given an upright collider', () => {
-    expect(() =>
-      collidersFor('p', spec('reef-arch'), item('reef-arch', 0, 0), [0.3, 0.9, 0]),
-    ).toThrow(/upright/);
+  it('a tilted shelter is warned about and skipped, not thrown on, so the rest of the tank keeps its colliders', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const tilted = collidersFor('p', spec('reef-arch'), item('reef-arch', 0, 0), [0.3, 0.9, 0]);
+      expect(tilted).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('reef-arch'));
+      expect(collidersFor('q', spec('reef-arch'), item('reef-arch', 0, 0)).length).toBeGreaterThan(
+        0,
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
@@ -209,7 +209,7 @@ describe('the cave mouth is reachable', () => {
       for (const scale of SWEEP_SCALES) {
         for (const rotationY of SWEEP_ROTATIONS) {
           const placed = item(id, 0.3, -0.1, { rotationY, scale });
-          const mouth = mouthAt(id, placed, PULLED_IN_Z[id]);
+          const mouth = mouthAt(id, placed);
           const clearance = clearanceTo(collidersFor('p', spec(id), placed));
           expect(
             clearance(mouth.position.toArray()),
@@ -223,7 +223,7 @@ describe('the cave mouth is reachable', () => {
   it.each(SHELTERS)('%s: the way in along its facing never touches a part', (id) => {
     for (const rotationY of SWEEP_ROTATIONS.filter((_, i) => i % 5 === 0)) {
       const placed = item(id, 0.3, -0.1, { rotationY, scale: 1.3 });
-      const mouth = mouthAt(id, placed, PULLED_IN_Z[id]);
+      const mouth = mouthAt(id, placed);
       const clearance = clearanceTo(collidersFor('p', spec(id), placed));
       for (let d = 0; d <= 0.3; d += 0.005) {
         const p = mouth.position.clone().addScaledVector(mouth.facing, d);
@@ -239,7 +239,7 @@ describe('the cave mouth is reachable', () => {
     '%s: the same mouth was out of reach behind the old footprint box',
     (id) => {
       const placed = item(id, 0.3, -0.1);
-      const mouth = mouthAt(id, placed, PULLED_IN_Z[id]);
+      const mouth = mouthAt(id, placed);
       expect(clearanceTo(boxFor(id, placed))(mouth.position.toArray())).toBeLessThan(
         FISH_CLEARANCE * mouth.radius,
       );
