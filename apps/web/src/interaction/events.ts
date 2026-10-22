@@ -99,6 +99,8 @@ export interface PhotoView {
 export interface InteractionEvents {
   'camera:request-mode': { mode: CameraMode };
   'camera:mode-changed': { mode: CameraMode };
+  /** The UI pins the tank's clock in minutes after midnight, or null to follow local time. */
+  'clock:request': { clock: number | null };
   /** Follow was requested but there is no fish to follow. */
   'camera:follow-unavailable': Record<string, never>;
   /** Focus the camera on the middle of these fish (server ids); the ones not on screen are skipped. */

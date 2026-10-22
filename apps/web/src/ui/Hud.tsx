@@ -5,6 +5,7 @@ import { earnedText, euroText, pearlText } from '../sync/economy';
 import type { CameraMode } from '../interaction/camera';
 import { chipState, type ChipStatus } from './chemistryChip';
 import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
+import { clockFor, initialMode, nextMode, writeMode, type DayNightMode } from './dayNight';
 import { getDip, subscribeDips } from './dipStore';
 import { BookIcon, DuskIcon, MoonIcon, PersonIcon, SunIcon, TankIcon } from './icons';
 import type { OpenPanel } from './panels';
@@ -279,6 +280,41 @@ export function RoundButton({
       onClick={onPress}
     >
       {children}
+    </button>
+  );
+}
+
+const DAY_NIGHT_ICON: Record<DayNightMode, () => React.JSX.Element> = {
+  auto: DuskIcon,
+  day: SunIcon,
+  night: MoonIcon,
+};
+
+const DAY_NIGHT_LABEL: Record<DayNightMode, string> = {
+  auto: 'automatic',
+  day: 'day',
+  night: 'night',
+};
+
+export function DayNightButton() {
+  const { interaction } = useBridge();
+  const [mode, setMode] = useState<DayNightMode>(() => initialMode(window.location.search));
+  const next = nextMode(mode);
+  const Icon = DAY_NIGHT_ICON[mode];
+  return (
+    <button
+      type="button"
+      className="round"
+      data-mode={mode}
+      aria-label={`Lighting: ${DAY_NIGHT_LABEL[mode]}. Switch to ${DAY_NIGHT_LABEL[next]}`}
+      title={`Lighting: ${DAY_NIGHT_LABEL[mode]}`}
+      onClick={() => {
+        setMode(next);
+        writeMode(next);
+        interaction.emit('clock:request', { clock: clockFor(next) });
+      }}
+    >
+      <Icon />
     </button>
   );
 }

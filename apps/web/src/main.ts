@@ -34,6 +34,7 @@ import {
   watchSwitches,
   type AssetWatch,
 } from './ui/loadSignals';
+import { savedClock } from './ui/dayNight';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { LampFeed } from './sync/lampFeed';
@@ -116,6 +117,12 @@ async function boot(): Promise<void> {
   });
   mountUi(uiRoot, { engine: events, interaction });
 
+  const parsedOptions = parseEngineOptions(window.location.search);
+  const engineOptions = {
+    ...parsedOptions,
+    clock: parsedOptions.clock ?? savedClock(window.location.search),
+  };
+  let pinnedClock = engineOptions.clock;
   let modules: Awaited<typeof tank>;
   let engine: Engine;
   let assetWatch: AssetWatch;
@@ -123,7 +130,7 @@ async function boot(): Promise<void> {
     modules = await awaitTankModules(tank, events);
     tracker.reach('code');
     engine = await modules.Engine.create(container, {
-      options: parseEngineOptions(window.location.search),
+      options: engineOptions,
       events,
     });
     tracker.reach('renderer');
@@ -185,7 +192,7 @@ async function boot(): Promise<void> {
     },
     tier: () => engine.quality.tier,
     hood: () => engine.daylight,
-    clock: parseEngineOptions(window.location.search).clock,
+    clock: () => pinnedClock,
     now: () => Date.now(),
     onFrame: (callback) => engine.onFrame(callback),
   });
@@ -250,6 +257,10 @@ async function boot(): Promise<void> {
       if (sceneDecor.system?.active) sceneDecor.system.pointerUp();
       else play?.controller.pointerLeave();
     },
+  });
+  const stopClockRequests = interaction.on('clock:request', ({ clock }) => {
+    pinnedClock = clock;
+    engine.setClock(clock);
   });
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
@@ -429,6 +440,7 @@ async function boot(): Promise<void> {
     unbindPhotoKeys();
     photo.dispose();
     stopRequests();
+    stopClockRequests();
     stopFocusFish();
     fish.stop();
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
