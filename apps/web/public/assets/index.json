@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 125421280,
+  "totalBytes": 125418199,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -22,37 +22,37 @@
       ],
       "bounds": {
         "min": [
-          -0.018154,
-          -0.034293,
-          -0.074707
+          -0.014523,
+          -0.027435,
+          -0.059766
         ],
         "max": [
-          0.018154,
-          0.028479,
-          0.048433
+          0.014523,
+          0.022783,
+          0.038747
         ]
       },
       "lods": [
         {
           "file": "fish/altolamprologus-calvus/lod0.glb",
-          "bytes": 44428,
-          "sha256": "943fa80774efe36960f9ba6bb3e60ca4001507dda2f26527a2eac3446690a50e",
+          "bytes": 44436,
+          "sha256": "9e865c7271e71ca944efd410420b181de498d2c21f0d06f4df36d4f19df27a66",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/altolamprologus-calvus/lod1.glb",
-          "bytes": 23492,
-          "sha256": "cc9b3cd0763010cde57f3cfcfae820686e3cd3230979624e8c0ff68a6ba5d995",
-          "triangles": 1728,
-          "vertices": 974
+          "bytes": 23432,
+          "sha256": "b315faec933d44fb9838fa1efd8e1dee16f2264a79fd7f7fe9fa57af64cc4de5",
+          "triangles": 1727,
+          "vertices": 971
         },
         {
           "file": "fish/altolamprologus-calvus/lod2.glb",
-          "bytes": 11764,
-          "sha256": "21b13d654b476c69f99dd4f9a468c3989e716dd18bca41e64fc43fb84c73c303",
+          "bytes": 11816,
+          "sha256": "d8e76434718e4a6ac9b5efeff19abb41b9c53623e573c33578cf22b26ffe8273",
           "triangles": 648,
-          "vertices": 383
+          "vertices": 382
         }
       ],
       "textures": [
@@ -81,28 +81,28 @@
       "files": [
         {
           "file": "fish/altolamprologus-calvus/impostor_albedo.ktx2",
-          "bytes": 129308,
-          "sha256": "82bbf372c8e8e0e1cb64d6457e66c573ce00510ab9787d8ed4d0f32e2d540aa9"
+          "bytes": 129447,
+          "sha256": "590977cb58dd5f4406a108a27fc6d24f6e1ceddf9e3950b85d985375dc515f01"
         },
         {
           "file": "fish/altolamprologus-calvus/impostor_normal.ktx2",
-          "bytes": 337975,
-          "sha256": "db6fea30eb3e59981a7cd1ed8853eebd1123cdc95fe53457cfc0b8cb0523b4ac"
+          "bytes": 337216,
+          "sha256": "50689f505e2a4e3d7d34ec110b50192e18e36730cef6295d287da5ea44efe652"
         },
         {
           "file": "fish/altolamprologus-calvus/lod0.glb",
-          "bytes": 44428,
-          "sha256": "943fa80774efe36960f9ba6bb3e60ca4001507dda2f26527a2eac3446690a50e"
+          "bytes": 44436,
+          "sha256": "9e865c7271e71ca944efd410420b181de498d2c21f0d06f4df36d4f19df27a66"
         },
         {
           "file": "fish/altolamprologus-calvus/lod1.glb",
-          "bytes": 23492,
-          "sha256": "cc9b3cd0763010cde57f3cfcfae820686e3cd3230979624e8c0ff68a6ba5d995"
+          "bytes": 23432,
+          "sha256": "b315faec933d44fb9838fa1efd8e1dee16f2264a79fd7f7fe9fa57af64cc4de5"
         },
         {
           "file": "fish/altolamprologus-calvus/lod2.glb",
-          "bytes": 11764,
-          "sha256": "21b13d654b476c69f99dd4f9a468c3989e716dd18bca41e64fc43fb84c73c303"
+          "bytes": 11816,
+          "sha256": "d8e76434718e4a6ac9b5efeff19abb41b9c53623e573c33578cf22b26ffe8273"
         },
         {
           "file": "fish/altolamprologus-calvus/textures/altolamprologus-calvus_basecolor_1k.ktx2",
@@ -116,8 +116,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.1,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.08,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -148,20 +148,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.002907,
-          -0.013137
+          -0.002326,
+          -0.01051
         ],
-        "radius": 0.066109,
+        "radius": 0.052887,
         "albedo": {
           "file": "fish/altolamprologus-calvus/impostor_albedo.ktx2",
-          "bytes": 129308,
-          "sha256": "82bbf372c8e8e0e1cb64d6457e66c573ce00510ab9787d8ed4d0f32e2d540aa9",
+          "bytes": 129447,
+          "sha256": "590977cb58dd5f4406a108a27fc6d24f6e1ceddf9e3950b85d985375dc515f01",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/altolamprologus-calvus/impostor_normal.ktx2",
-          "bytes": 337975,
-          "sha256": "db6fea30eb3e59981a7cd1ed8853eebd1123cdc95fe53457cfc0b8cb0523b4ac",
+          "bytes": 337216,
+          "sha256": "50689f505e2a4e3d7d34ec110b50192e18e36730cef6295d287da5ea44efe652",
           "codec": "uastc"
         }
       }
@@ -4243,37 +4243,37 @@
       ],
       "bounds": {
         "min": [
-          -0.021695,
-          -0.020862,
-          -0.05299
+          -0.018802,
+          -0.018081,
+          -0.045925
         ],
         "max": [
-          0.021695,
-          0.017911,
-          0.037605
+          0.018802,
+          0.015523,
+          0.032591
         ]
       },
       "lods": [
         {
           "file": "fish/labidochromis-caeruleus/lod0.glb",
-          "bytes": 44620,
-          "sha256": "e83e30b7c4260221a2dc4063f561e5e6588031ee027d877d8c9441d707574168",
+          "bytes": 44628,
+          "sha256": "3a4605c72dbb1147fc7b5fb3e262e59fec667d117e307a7d339530ba53a63901",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/labidochromis-caeruleus/lod1.glb",
-          "bytes": 23420,
-          "sha256": "c20c6bca52bb0c3ae908b407723d40981255c9117294dc414a34114bf08cf757",
+          "bytes": 23452,
+          "sha256": "53a573cfc32af067b2683d5fd38e59de6398e5d7c64edc7f180505936111a4cc",
           "triangles": 1728,
           "vertices": 972
         },
         {
           "file": "fish/labidochromis-caeruleus/lod2.glb",
-          "bytes": 11948,
-          "sha256": "4ca402c04c0031248df5daedbf6481679fcfb0f7ea52b66d5b4a4b8fe1954202",
+          "bytes": 11900,
+          "sha256": "06a6c390c6b255d00bed3fd40f5eb03f7e060228729a13dd51dfa54255017697",
           "triangles": 648,
-          "vertices": 387
+          "vertices": 386
         }
       ],
       "textures": [
@@ -4302,28 +4302,28 @@
       "files": [
         {
           "file": "fish/labidochromis-caeruleus/impostor_albedo.ktx2",
-          "bytes": 134220,
-          "sha256": "f805ecc0b9b1bd964e0f18ff27640484dac1b4f50af5891cc8c465dcc2194645"
+          "bytes": 134042,
+          "sha256": "9b4ed8ee16f6cbb8559bbfa1a01bd12437bb5a34978e78d6e9f84b6842d03f79"
         },
         {
           "file": "fish/labidochromis-caeruleus/impostor_normal.ktx2",
-          "bytes": 352239,
-          "sha256": "01f48bb74db17b0cc57e46f95dbfd1f3277cc872ffc612315bb1ef8f1f62e6a5"
+          "bytes": 352598,
+          "sha256": "f78dc84dd09dc8e1e98919d4ced86fb547d2c5509189df69e5ce3581e0b53cc8"
         },
         {
           "file": "fish/labidochromis-caeruleus/lod0.glb",
-          "bytes": 44620,
-          "sha256": "e83e30b7c4260221a2dc4063f561e5e6588031ee027d877d8c9441d707574168"
+          "bytes": 44628,
+          "sha256": "3a4605c72dbb1147fc7b5fb3e262e59fec667d117e307a7d339530ba53a63901"
         },
         {
           "file": "fish/labidochromis-caeruleus/lod1.glb",
-          "bytes": 23420,
-          "sha256": "c20c6bca52bb0c3ae908b407723d40981255c9117294dc414a34114bf08cf757"
+          "bytes": 23452,
+          "sha256": "53a573cfc32af067b2683d5fd38e59de6398e5d7c64edc7f180505936111a4cc"
         },
         {
           "file": "fish/labidochromis-caeruleus/lod2.glb",
-          "bytes": 11948,
-          "sha256": "4ca402c04c0031248df5daedbf6481679fcfb0f7ea52b66d5b4a4b8fe1954202"
+          "bytes": 11900,
+          "sha256": "06a6c390c6b255d00bed3fd40f5eb03f7e060228729a13dd51dfa54255017697"
         },
         {
           "file": "fish/labidochromis-caeruleus/textures/labidochromis-caeruleus_basecolor_1k.ktx2",
@@ -4337,8 +4337,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.075,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.065,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -4369,20 +4369,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.001476,
-          -0.007693
+          -0.001279,
+          -0.006667
         ],
-        "radius": 0.049725,
+        "radius": 0.043096,
         "albedo": {
           "file": "fish/labidochromis-caeruleus/impostor_albedo.ktx2",
-          "bytes": 134220,
-          "sha256": "f805ecc0b9b1bd964e0f18ff27640484dac1b4f50af5891cc8c465dcc2194645",
+          "bytes": 134042,
+          "sha256": "9b4ed8ee16f6cbb8559bbfa1a01bd12437bb5a34978e78d6e9f84b6842d03f79",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/labidochromis-caeruleus/impostor_normal.ktx2",
-          "bytes": 352239,
-          "sha256": "01f48bb74db17b0cc57e46f95dbfd1f3277cc872ffc612315bb1ef8f1f62e6a5",
+          "bytes": 352598,
+          "sha256": "f78dc84dd09dc8e1e98919d4ced86fb547d2c5509189df69e5ce3581e0b53cc8",
           "codec": "uastc"
         }
       }
@@ -4405,37 +4405,37 @@
       ],
       "bounds": {
         "min": [
-          -0.01462,
-          -0.018578,
-          -0.064069
+          -0.01204,
+          -0.015299,
+          -0.052763
         ],
         "max": [
-          0.01462,
-          0.017406,
-          0.040481
+          0.01204,
+          0.014334,
+          0.033337
         ]
       },
       "lods": [
         {
           "file": "fish/melanochromis-auratus-female/lod0.glb",
-          "bytes": 44088,
-          "sha256": "dc82097a5ceee3ae745caa3e97c293b4ef7ddb4de73215bac3062313de5a57e4",
+          "bytes": 44064,
+          "sha256": "eccb7ebe3306ef188acc5e11ffa7d2914e8571fb5d52a7b85ce742b88e402699",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/melanochromis-auratus-female/lod1.glb",
-          "bytes": 23212,
-          "sha256": "20fa452529e7e88191d51af75dff454aca5b4573463e0eac385176cb5bfdcfa9",
+          "bytes": 23240,
+          "sha256": "098c84ebbc9f81da55dc4245d4a65f898cdfe9eb6806e7dd320200e3d55529e1",
           "triangles": 1728,
-          "vertices": 966
+          "vertices": 964
         },
         {
           "file": "fish/melanochromis-auratus-female/lod2.glb",
-          "bytes": 11796,
-          "sha256": "1d11efbaace20291e25bed7423a7b914704a194532e05b31573d35db44230280",
-          "triangles": 647,
-          "vertices": 379
+          "bytes": 11740,
+          "sha256": "e7feb4d1835f0f1fcb6f873891d71473ca1ffa66f6aa3579057e2b466a81940d",
+          "triangles": 648,
+          "vertices": 380
         }
       ],
       "textures": [
@@ -4464,28 +4464,28 @@
       "files": [
         {
           "file": "fish/melanochromis-auratus-female/impostor_albedo.ktx2",
-          "bytes": 118983,
-          "sha256": "e26bbd67b3f062a0254a060befa8f40644a4ccd505ea41693355cfea5e801eb1"
+          "bytes": 118222,
+          "sha256": "fa4df9adc6ba5bd0413aba43af4d50aaed3bfd3c2ff0997d6cc9a172f92b8376"
         },
         {
           "file": "fish/melanochromis-auratus-female/impostor_normal.ktx2",
-          "bytes": 302767,
-          "sha256": "14f8e1e12a9d853ff5e0b991536c42a43d4c6cbd968755a1ace2a1b6e32117b6"
+          "bytes": 302872,
+          "sha256": "f6d14ea5eee7c50c2aacc78c37bcc2184ec171e7913e1697793ef0d822fcf40e"
         },
         {
           "file": "fish/melanochromis-auratus-female/lod0.glb",
-          "bytes": 44088,
-          "sha256": "dc82097a5ceee3ae745caa3e97c293b4ef7ddb4de73215bac3062313de5a57e4"
+          "bytes": 44064,
+          "sha256": "eccb7ebe3306ef188acc5e11ffa7d2914e8571fb5d52a7b85ce742b88e402699"
         },
         {
           "file": "fish/melanochromis-auratus-female/lod1.glb",
-          "bytes": 23212,
-          "sha256": "20fa452529e7e88191d51af75dff454aca5b4573463e0eac385176cb5bfdcfa9"
+          "bytes": 23240,
+          "sha256": "098c84ebbc9f81da55dc4245d4a65f898cdfe9eb6806e7dd320200e3d55529e1"
         },
         {
           "file": "fish/melanochromis-auratus-female/lod2.glb",
-          "bytes": 11796,
-          "sha256": "1d11efbaace20291e25bed7423a7b914704a194532e05b31573d35db44230280"
+          "bytes": 11740,
+          "sha256": "e7feb4d1835f0f1fcb6f873891d71473ca1ffa66f6aa3579057e2b466a81940d"
         },
         {
           "file": "fish/melanochromis-auratus-female/textures/melanochromis-auratus-female_basecolor_1k.ktx2",
@@ -4499,8 +4499,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.085,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.07,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -4530,21 +4530,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          0.00002,
-          -0.000584,
-          -0.011794
+          -0.000016,
+          -0.000483,
+          -0.009713
         ],
-        "radius": 0.05666,
+        "radius": 0.046661,
         "albedo": {
           "file": "fish/melanochromis-auratus-female/impostor_albedo.ktx2",
-          "bytes": 118983,
-          "sha256": "e26bbd67b3f062a0254a060befa8f40644a4ccd505ea41693355cfea5e801eb1",
+          "bytes": 118222,
+          "sha256": "fa4df9adc6ba5bd0413aba43af4d50aaed3bfd3c2ff0997d6cc9a172f92b8376",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/melanochromis-auratus-female/impostor_normal.ktx2",
-          "bytes": 302767,
-          "sha256": "14f8e1e12a9d853ff5e0b991536c42a43d4c6cbd968755a1ace2a1b6e32117b6",
+          "bytes": 302872,
+          "sha256": "f6d14ea5eee7c50c2aacc78c37bcc2184ec171e7913e1697793ef0d822fcf40e",
           "codec": "uastc"
         }
       }
@@ -4565,35 +4565,35 @@
       ],
       "bounds": {
         "min": [
-          -0.014547,
-          -0.018486,
-          -0.063458
+          -0.01198,
+          -0.015224,
+          -0.052259
         ],
         "max": [
-          0.014547,
-          0.01734,
-          0.041092
+          0.01198,
+          0.01428,
+          0.033841
         ]
       },
       "lods": [
         {
           "file": "fish/melanochromis-auratus-male/lod0.glb",
-          "bytes": 32996,
-          "sha256": "69c5ada5389a02f1b2953511a7c3b944429d4553ad8b5d07238b11dcc261520a",
+          "bytes": 32992,
+          "sha256": "b76b504b7b6f114a4d89f548db509b4072f36b63fd193521323cb424b06e8bfd",
           "triangles": 3144,
           "vertices": 1700
         },
         {
           "file": "fish/melanochromis-auratus-male/lod1.glb",
-          "bytes": 18092,
-          "sha256": "80a25eaa782b1746b8e64ce79338170a7823ee9ff0c700fc51056362496e9f2a",
-          "triangles": 1258,
-          "vertices": 702
+          "bytes": 18216,
+          "sha256": "6d4f3a3cfb6afef6318363e3c6608c15e00eb14781a656db0912661482f9b2ad",
+          "triangles": 1257,
+          "vertices": 703
         },
         {
           "file": "fish/melanochromis-auratus-male/lod2.glb",
-          "bytes": 9856,
-          "sha256": "f72254b2b0ed1fb953ea40e43168a4afb6adce35df1053750aece0b76818642b",
+          "bytes": 9840,
+          "sha256": "923be5561ef3c0b6c5954ef7d441f3f41672886e05a1254748650e024746ae45",
           "triangles": 472,
           "vertices": 282
         }
@@ -4624,28 +4624,28 @@
       "files": [
         {
           "file": "fish/melanochromis-auratus-male/impostor_albedo.ktx2",
-          "bytes": 104572,
-          "sha256": "20503f81a64a3b650ad7cbf24fd905ededd766110ec79f17a39a92012d973a74"
+          "bytes": 104697,
+          "sha256": "2fd076c5c87ba65697cab4b3a2410741d130a257339dbc83f99d3d1c27caf969"
         },
         {
           "file": "fish/melanochromis-auratus-male/impostor_normal.ktx2",
-          "bytes": 297780,
-          "sha256": "cd118508af9839564b7bb980a8c420e4be0f7e65a5e48ac4997795db9b94b82f"
+          "bytes": 297654,
+          "sha256": "a1889518da37fe1a8b9c62f57b599e56627324c25f3f49f61fbb5ac629a2a1f9"
         },
         {
           "file": "fish/melanochromis-auratus-male/lod0.glb",
-          "bytes": 32996,
-          "sha256": "69c5ada5389a02f1b2953511a7c3b944429d4553ad8b5d07238b11dcc261520a"
+          "bytes": 32992,
+          "sha256": "b76b504b7b6f114a4d89f548db509b4072f36b63fd193521323cb424b06e8bfd"
         },
         {
           "file": "fish/melanochromis-auratus-male/lod1.glb",
-          "bytes": 18092,
-          "sha256": "80a25eaa782b1746b8e64ce79338170a7823ee9ff0c700fc51056362496e9f2a"
+          "bytes": 18216,
+          "sha256": "6d4f3a3cfb6afef6318363e3c6608c15e00eb14781a656db0912661482f9b2ad"
         },
         {
           "file": "fish/melanochromis-auratus-male/lod2.glb",
-          "bytes": 9856,
-          "sha256": "f72254b2b0ed1fb953ea40e43168a4afb6adce35df1053750aece0b76818642b"
+          "bytes": 9840,
+          "sha256": "923be5561ef3c0b6c5954ef7d441f3f41672886e05a1254748650e024746ae45"
         },
         {
           "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_1k.ktx2",
@@ -4654,8 +4654,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.085,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.07,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -4686,20 +4686,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.000573,
-          -0.011183
+          -0.000472,
+          -0.009209
         ],
-        "radius": 0.056658,
+        "radius": 0.04666,
         "albedo": {
           "file": "fish/melanochromis-auratus-male/impostor_albedo.ktx2",
-          "bytes": 104572,
-          "sha256": "20503f81a64a3b650ad7cbf24fd905ededd766110ec79f17a39a92012d973a74",
+          "bytes": 104697,
+          "sha256": "2fd076c5c87ba65697cab4b3a2410741d130a257339dbc83f99d3d1c27caf969",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/melanochromis-auratus-male/impostor_normal.ktx2",
-          "bytes": 297780,
-          "sha256": "cd118508af9839564b7bb980a8c420e4be0f7e65a5e48ac4997795db9b94b82f",
+          "bytes": 297654,
+          "sha256": "a1889518da37fe1a8b9c62f57b599e56627324c25f3f49f61fbb5ac629a2a1f9",
           "codec": "uastc"
         }
       }
@@ -4722,37 +4722,37 @@
       ],
       "bounds": {
         "min": [
-          -0.021878,
-          -0.021163,
-          -0.055639
+          -0.017696,
+          -0.017117,
+          -0.045002
         ],
         "max": [
-          0.021878,
-          0.014492,
-          0.034801
+          0.017696,
+          0.011722,
+          0.028148
         ]
       },
       "lods": [
         {
           "file": "fish/neolamprologus-brichardi/lod0.glb",
-          "bytes": 44772,
-          "sha256": "2efc73b18544c050ee05f2a195a445aa9fdca9396db3c5e16fd638c5cfb927a6",
+          "bytes": 44832,
+          "sha256": "cd6fc0875fb409dc1042907e1f0b552af1d235781d548235c8d5e3adf6d46c84",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/neolamprologus-brichardi/lod1.glb",
-          "bytes": 23088,
-          "sha256": "fc8fa1d5848dac36f7179736fdb33acd08570793b94042c106e0dcc1d56ced68",
-          "triangles": 1728,
-          "vertices": 959
+          "bytes": 23252,
+          "sha256": "e067074d59888e3a1b43fbc03e26dc0be8e5968b625ce0af0f4d07ca14b3ea4f",
+          "triangles": 1727,
+          "vertices": 958
         },
         {
           "file": "fish/neolamprologus-brichardi/lod2.glb",
-          "bytes": 11804,
-          "sha256": "c8335dc0163c2c36666641fafc3d7f14f13942be274cd5494089c675cb6f43c6",
+          "bytes": 11816,
+          "sha256": "65a1467562076679d8d9534152ab3bd00f8409c25ec02980f99e2b20db59e123",
           "triangles": 647,
-          "vertices": 380
+          "vertices": 377
         }
       ],
       "textures": [
@@ -4781,28 +4781,28 @@
       "files": [
         {
           "file": "fish/neolamprologus-brichardi/impostor_albedo.ktx2",
-          "bytes": 136065,
-          "sha256": "c36ffe29810b48aa573fe245d421f8b7c4e257b5d1d15de985cc8c378e9b08d0"
+          "bytes": 135343,
+          "sha256": "d99586c99098fc7f08bbe465337dbed7be36146baa32d57678c126e0d7547d82"
         },
         {
           "file": "fish/neolamprologus-brichardi/impostor_normal.ktx2",
-          "bytes": 347491,
-          "sha256": "62135d7aa0780b13ad386c3f9c17be193e975b57fe552105fad72cb9a5880bdf"
+          "bytes": 347010,
+          "sha256": "f4b0ea760410b0f507e397327e93fb53f86da65e3aec3ef4340da72104bb574a"
         },
         {
           "file": "fish/neolamprologus-brichardi/lod0.glb",
-          "bytes": 44772,
-          "sha256": "2efc73b18544c050ee05f2a195a445aa9fdca9396db3c5e16fd638c5cfb927a6"
+          "bytes": 44832,
+          "sha256": "cd6fc0875fb409dc1042907e1f0b552af1d235781d548235c8d5e3adf6d46c84"
         },
         {
           "file": "fish/neolamprologus-brichardi/lod1.glb",
-          "bytes": 23088,
-          "sha256": "fc8fa1d5848dac36f7179736fdb33acd08570793b94042c106e0dcc1d56ced68"
+          "bytes": 23252,
+          "sha256": "e067074d59888e3a1b43fbc03e26dc0be8e5968b625ce0af0f4d07ca14b3ea4f"
         },
         {
           "file": "fish/neolamprologus-brichardi/lod2.glb",
-          "bytes": 11804,
-          "sha256": "c8335dc0163c2c36666641fafc3d7f14f13942be274cd5494089c675cb6f43c6"
+          "bytes": 11816,
+          "sha256": "65a1467562076679d8d9534152ab3bd00f8409c25ec02980f99e2b20db59e123"
         },
         {
           "file": "fish/neolamprologus-brichardi/textures/neolamprologus-brichardi_basecolor_1k.ktx2",
@@ -4811,8 +4811,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.068,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.055,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -4843,20 +4843,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.003335,
-          -0.010419
+          -0.002698,
+          -0.008427
         ],
-        "radius": 0.049887,
+        "radius": 0.04035,
         "albedo": {
           "file": "fish/neolamprologus-brichardi/impostor_albedo.ktx2",
-          "bytes": 136065,
-          "sha256": "c36ffe29810b48aa573fe245d421f8b7c4e257b5d1d15de985cc8c378e9b08d0",
+          "bytes": 135343,
+          "sha256": "d99586c99098fc7f08bbe465337dbed7be36146baa32d57678c126e0d7547d82",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/neolamprologus-brichardi/impostor_normal.ktx2",
-          "bytes": 347491,
-          "sha256": "62135d7aa0780b13ad386c3f9c17be193e975b57fe552105fad72cb9a5880bdf",
+          "bytes": 347010,
+          "sha256": "f4b0ea760410b0f507e397327e93fb53f86da65e3aec3ef4340da72104bb574a",
           "codec": "uastc"
         }
       }
@@ -4879,37 +4879,37 @@
       ],
       "bounds": {
         "min": [
-          -0.007582,
-          -0.010595,
-          -0.02401
+          -0.005924,
+          -0.008277,
+          -0.018758
         ],
         "max": [
-          0.007582,
-          0.007783,
-          0.01575
+          0.005924,
+          0.00608,
+          0.012305
         ]
       },
       "lods": [
         {
           "file": "fish/neolamprologus-multifasciatus/lod0.glb",
-          "bytes": 44220,
-          "sha256": "f9a56250e269f294278580eaf7e00132240efbdb4e906869bdbb2642023b1718",
+          "bytes": 44252,
+          "sha256": "949b6371b15ef9255b7d6d80b48daa5013b91fc48d80bd21d0db0a7cb4f7319f",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/neolamprologus-multifasciatus/lod1.glb",
-          "bytes": 23072,
-          "sha256": "64ea689ca9695435de1b4e39285cac25c2a642f12e8ed6d17bc814bf6652dc39",
+          "bytes": 23044,
+          "sha256": "5e677519f099a2b4ddc44abbd88db14ca0aff599646079f352836c50a6922acb",
           "triangles": 1727,
-          "vertices": 958
+          "vertices": 959
         },
         {
           "file": "fish/neolamprologus-multifasciatus/lod2.glb",
-          "bytes": 11752,
-          "sha256": "16c08ab1316df3bc149e0c756194252a1d28902022753db4421bbf28ace6350f",
-          "triangles": 647,
-          "vertices": 378
+          "bytes": 11708,
+          "sha256": "6e93f5220222a0f6f795d07f73ac8381e8f8e9bbdfc10f7d7dd0fdf73509f9dd",
+          "triangles": 648,
+          "vertices": 375
         }
       ],
       "textures": [
@@ -4938,28 +4938,28 @@
       "files": [
         {
           "file": "fish/neolamprologus-multifasciatus/impostor_albedo.ktx2",
-          "bytes": 138807,
-          "sha256": "178cdee234f7989a9a71c351b72a6b179efe456a78e6d1911ee88b2c4dcf1021"
+          "bytes": 138543,
+          "sha256": "b1ea7707f73011ac8664100dc7872219271b835d73521927d85db8af95b4d093"
         },
         {
           "file": "fish/neolamprologus-multifasciatus/impostor_normal.ktx2",
-          "bytes": 366306,
-          "sha256": "042baaefa863bde2a3edbd49db91686202fedfe2ba7eb48f6658a92c9ce139c9"
+          "bytes": 365872,
+          "sha256": "bc153eeb0a9f6c149903cd3c4be8588c83f7e840f8f25849e849443f2433d45c"
         },
         {
           "file": "fish/neolamprologus-multifasciatus/lod0.glb",
-          "bytes": 44220,
-          "sha256": "f9a56250e269f294278580eaf7e00132240efbdb4e906869bdbb2642023b1718"
+          "bytes": 44252,
+          "sha256": "949b6371b15ef9255b7d6d80b48daa5013b91fc48d80bd21d0db0a7cb4f7319f"
         },
         {
           "file": "fish/neolamprologus-multifasciatus/lod1.glb",
-          "bytes": 23072,
-          "sha256": "64ea689ca9695435de1b4e39285cac25c2a642f12e8ed6d17bc814bf6652dc39"
+          "bytes": 23044,
+          "sha256": "5e677519f099a2b4ddc44abbd88db14ca0aff599646079f352836c50a6922acb"
         },
         {
           "file": "fish/neolamprologus-multifasciatus/lod2.glb",
-          "bytes": 11752,
-          "sha256": "16c08ab1316df3bc149e0c756194252a1d28902022753db4421bbf28ace6350f"
+          "bytes": 11708,
+          "sha256": "6e93f5220222a0f6f795d07f73ac8381e8f8e9bbdfc10f7d7dd0fdf73509f9dd"
         },
         {
           "file": "fish/neolamprologus-multifasciatus/textures/neolamprologus-multifasciatus_basecolor_1k.ktx2",
@@ -4973,8 +4973,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.032,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.025,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -5005,20 +5005,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.001406,
-          -0.00413
+          -0.001098,
+          -0.003227
         ],
-        "radius": 0.021283,
+        "radius": 0.016628,
         "albedo": {
           "file": "fish/neolamprologus-multifasciatus/impostor_albedo.ktx2",
-          "bytes": 138807,
-          "sha256": "178cdee234f7989a9a71c351b72a6b179efe456a78e6d1911ee88b2c4dcf1021",
+          "bytes": 138543,
+          "sha256": "b1ea7707f73011ac8664100dc7872219271b835d73521927d85db8af95b4d093",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/neolamprologus-multifasciatus/impostor_normal.ktx2",
-          "bytes": 366306,
-          "sha256": "042baaefa863bde2a3edbd49db91686202fedfe2ba7eb48f6658a92c9ce139c9",
+          "bytes": 365872,
+          "sha256": "bc153eeb0a9f6c149903cd3c4be8588c83f7e840f8f25849e849443f2433d45c",
           "codec": "uastc"
         }
       }
@@ -5574,37 +5574,37 @@
       ],
       "bounds": {
         "min": [
-          -0.011107,
-          -0.019673,
-          -0.048732
+          -0.008886,
+          -0.015738,
+          -0.038986
         ],
         "max": [
-          0.010565,
-          0.016495,
-          0.02722
+          0.008452,
+          0.013196,
+          0.021776
         ]
       },
       "lods": [
         {
           "file": "fish/pseudotropheus-demasoni/lod0.glb",
-          "bytes": 31444,
-          "sha256": "926427089ee84f82d87a43a33399a268cb63c8a3adb757495c6beecc1c1501ae",
+          "bytes": 31392,
+          "sha256": "6af0303f4369e5848c02e30f025cb6716ebf6d5b0a19dc54781d6af168326d76",
           "triangles": 2162,
           "vertices": 1199
         },
         {
           "file": "fish/pseudotropheus-demasoni/lod1.glb",
-          "bytes": 16524,
-          "sha256": "d000a011d9aae89e2b3fbfaad78a29bfa70c6cfb27018005a45125e6cbe9d984",
+          "bytes": 16456,
+          "sha256": "3d5b74fe49c005f87236461007c71749005affe3119105f25c00c692c551935a",
           "triangles": 862,
           "vertices": 519
         },
         {
           "file": "fish/pseudotropheus-demasoni/lod2.glb",
-          "bytes": 9352,
-          "sha256": "074d810fff1763706ece531a2c803699bbe414aa02b776b682987037e7f32366",
+          "bytes": 9232,
+          "sha256": "b8b11c18055bd7d979f640d741d24a076a0617620e11c14568ecd9223a78049b",
           "triangles": 323,
-          "vertices": 210
+          "vertices": 209
         }
       ],
       "textures": [
@@ -5654,28 +5654,28 @@
       "files": [
         {
           "file": "fish/pseudotropheus-demasoni/impostor_albedo.ktx2",
-          "bytes": 139452,
-          "sha256": "c8632065870c2dfcb31b300988268976cc2f03f4b1799f04a0149054e4073362"
+          "bytes": 139318,
+          "sha256": "8c69c7ef34e2775f376106d78a90b062c58955e1d31a1143523efae86fb6662e"
         },
         {
           "file": "fish/pseudotropheus-demasoni/impostor_normal.ktx2",
-          "bytes": 404532,
-          "sha256": "348b82780556c9b88f69b3d4853b9d525fe62659be477e89f7d4d66656561f5a"
+          "bytes": 404582,
+          "sha256": "d4fcb83c0355cbc7a857e6121f2f02e76edb1aed43875c7c00aef3ae6117244f"
         },
         {
           "file": "fish/pseudotropheus-demasoni/lod0.glb",
-          "bytes": 31444,
-          "sha256": "926427089ee84f82d87a43a33399a268cb63c8a3adb757495c6beecc1c1501ae"
+          "bytes": 31392,
+          "sha256": "6af0303f4369e5848c02e30f025cb6716ebf6d5b0a19dc54781d6af168326d76"
         },
         {
           "file": "fish/pseudotropheus-demasoni/lod1.glb",
-          "bytes": 16524,
-          "sha256": "d000a011d9aae89e2b3fbfaad78a29bfa70c6cfb27018005a45125e6cbe9d984"
+          "bytes": 16456,
+          "sha256": "3d5b74fe49c005f87236461007c71749005affe3119105f25c00c692c551935a"
         },
         {
           "file": "fish/pseudotropheus-demasoni/lod2.glb",
-          "bytes": 9352,
-          "sha256": "074d810fff1763706ece531a2c803699bbe414aa02b776b682987037e7f32366"
+          "bytes": 9232,
+          "sha256": "b8b11c18055bd7d979f640d741d24a076a0617620e11c14568ecd9223a78049b"
         },
         {
           "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_basecolor_1k.ktx2",
@@ -5699,8 +5699,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.0625,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.05,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -5730,21 +5730,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          -0.000271,
-          -0.001765,
-          -0.010891
+          -0.000217,
+          -0.001412,
+          -0.008713
         ],
-        "radius": 0.041506,
+        "radius": 0.033205,
         "albedo": {
           "file": "fish/pseudotropheus-demasoni/impostor_albedo.ktx2",
-          "bytes": 139452,
-          "sha256": "c8632065870c2dfcb31b300988268976cc2f03f4b1799f04a0149054e4073362",
+          "bytes": 139318,
+          "sha256": "8c69c7ef34e2775f376106d78a90b062c58955e1d31a1143523efae86fb6662e",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/pseudotropheus-demasoni/impostor_normal.ktx2",
-          "bytes": 404532,
-          "sha256": "348b82780556c9b88f69b3d4853b9d525fe62659be477e89f7d4d66656561f5a",
+          "bytes": 404582,
+          "sha256": "d4fcb83c0355cbc7a857e6121f2f02e76edb1aed43875c7c00aef3ae6117244f",
           "codec": "uastc"
         }
       }

@@ -103,6 +103,7 @@ export const BEHAVIOUR = {
   grazeBackRoomBodyLengths: 0.5,
   grazeComfort: 0.2,
   grazeSpeedFactor: 0.25,
+  grazePathSamples: 6,
   glassStandoffThickness: 1.3,
   glassCrawlFactor: 0.15,
   glassStayMinS: 5,
@@ -341,6 +342,11 @@ function at(a: ArrayLike<number>, i: number): number {
 
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
+}
+
+/** How far out from the rock a grazer's body centre sits while it pecks. */
+function grazeStandoff(length: number): number {
+  return (BEHAVIOUR.bodyThicknessBodyLengths + BEHAVIOUR.grazeStandoffBodyLengths) * length;
 }
 
 /**
@@ -2002,7 +2008,7 @@ export class Behaviour {
         at(position, j * 3 + 1) - cy,
         at(position, j * 3 + 2) - cz,
       );
-      if (d < bestD) {
+      if (d < bestD && this.inSight(i, j)) {
         bestD = d;
         best = j;
       }
@@ -2047,7 +2053,9 @@ export class Behaviour {
     const phase = at(this.territoryPhase, i);
     if (phase === TerritoryPhase.Approach) {
       plan.seek(jx, jy, jz, Math.min(vmax, 2 * cruise), 0.5);
-      if (d < 1.5 * (li + lj)) {
+      if (!this.inSight(i, j)) {
+        this.endTerritory(i);
+      } else if (d < 1.5 * (li + lj)) {
         if (sp.flare) {
           this.territoryPhase[i] = TerritoryPhase.Flare;
           this.territoryTimer[i] = rng.range(sp.flareMinS, sp.flareMaxS);
@@ -2643,6 +2651,10 @@ export class Behaviour {
         this.grazeYaw[i] = at(this.host.yaw, i);
       } else if (left <= 0) {
         this.grazePhase[i] = GrazePhase.None;
+      } else if (d > length && !this.clearPath(px, py, pz, gx, gy, gz, grazeStandoff(length))) {
+        // Swept against the rock (by the wave maker, or a rival), the fish gives the spot up
+        // rather than grinding round to it.
+        this.grazePhase[i] = GrazePhase.None;
       } else if (ahead < 0.3 * d && !this.pickGrazeSpot(i)) {
         // Steering back onto a spot slipping past the flank would orbit it; take one ahead instead.
         this.grazePhase[i] = GrazePhase.None;
@@ -2678,7 +2690,7 @@ export class Behaviour {
     const pz = at(this.host.position, o + 2);
     const length = at(this.host.bodyLength, i);
     const thickness = BEHAVIOUR.bodyThicknessBodyLengths * length;
-    const standoff = thickness + BEHAVIOUR.grazeStandoffBodyLengths * length;
+    const standoff = grazeStandoff(length);
     const fx = at(this.host.forward, o);
     const fz = at(this.host.forward, o + 2);
     let best = Infinity;
@@ -2701,6 +2713,9 @@ export class Behaviour {
       const nz = at(n3, 2);
       // Only a face the fish is already swimming toward; grazing the far side means a U-turn.
       if (nx * fx + nz * fz > 0.3) continue;
+      // A face turned away from the fish (the underside of a log it is above) is reached only by
+      // swimming round the decor; a straight approach grinds the body along it the whole way.
+      if ((px - x) * nx + (py - y) * ny + (pz - z) * nz <= 0) continue;
       const gx = x + nx * standoff;
       const gy = y + ny * standoff;
       const gz = z + nz * standoff;
@@ -2715,6 +2730,7 @@ export class Behaviour {
         continue;
       }
       if (gy > basin.maxY - 2 * length) continue;
+      if (!this.clearPath(px, py, pz, gx, gy, gz, standoff)) continue;
       const dist = Math.hypot(gx - px, gy - py, gz - pz);
       // Doubling back to a spot behind costs a U-turn; a forager picks what lies ahead.
       if ((gx - px) * fx + (gz - pz) * fz < 0) continue;
@@ -2726,5 +2742,47 @@ export class Behaviour {
       }
     }
     return best < Infinity;
+  }
+
+  /**
+   * Whether fish `j` is in plain view of fish `i`, with no rock between them. Rock that breaks
+   * the line of sight is what keeps rock-dwelling cichlids from chasing every neighbour
+   * (Konings 2007); charging round it would only grind the body along the rock.
+   */
+  private inSight(i: number, j: number): boolean {
+    const { position, bodyLength } = this.host;
+    return this.clearPath(
+      at(position, i * 3),
+      at(position, i * 3 + 1),
+      at(position, i * 3 + 2),
+      at(position, j * 3),
+      at(position, j * 3 + 1),
+      at(position, j * 3 + 2),
+      BEHAVIOUR.bodyThicknessBodyLengths * at(bodyLength, i),
+    );
+  }
+
+  /** Whether a body `thickness` thick swims the straight line between two points clear of decor. */
+  private clearPath(
+    ax: number,
+    ay: number,
+    az: number,
+    bx: number,
+    by: number,
+    bz: number,
+    thickness: number,
+  ): boolean {
+    const { sceneSdf } = this.host;
+    for (let k = 1; k < BEHAVIOUR.grazePathSamples; k++) {
+      const t = k / BEHAVIOUR.grazePathSamples;
+      const room = sceneSdf.sample(
+        ax + (bx - ax) * t,
+        ay + (by - ay) * t,
+        az + (bz - az) * t,
+        this.n3,
+      );
+      if (room < thickness) return false;
+    }
+    return true;
   }
 }
