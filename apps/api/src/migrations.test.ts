@@ -361,3 +361,26 @@ describe('the blackwater CO2 sweep migration', () => {
     expect((await tiers())['Tier one']).toBe(0);
   });
 });
+
+describe('the migration journal', () => {
+  const { entries } = JSON.parse(readFileSync(join(DRIZZLE, 'meta/_journal.json'), 'utf8')) as {
+    entries: { idx: number; when: number; tag: string }[];
+  };
+
+  it('has strictly increasing timestamps, because drizzle skips any migration older than the last applied', () => {
+    let previous = -Infinity;
+    for (const entry of entries) {
+      expect(entry.when, entry.tag).toBeGreaterThan(previous);
+      previous = entry.when;
+    }
+  });
+
+  it('has no timestamp in the future, which would make later migrations silently skip', () => {
+    const now = Date.now();
+    for (const entry of entries) expect(entry.when, entry.tag).toBeLessThanOrEqual(now);
+  });
+
+  it('numbers entries consecutively', () => {
+    expect(entries.map((e) => e.idx)).toEqual(entries.map((_, i) => i));
+  });
+});
