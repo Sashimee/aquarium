@@ -634,6 +634,21 @@ describe('startWorld', () => {
     expect(await run(null)).toEqual([]);
   });
 
+  it('leaves the visit days untaken for a world dropped before init answered', async () => {
+    const { spec, roster } = setup();
+    const { sim, calls } = recorder();
+    const visitDays = vi.fn(() => 3);
+    await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
+      current: () => false,
+      light: () => 1,
+      stage: () => undefined,
+      visitDays,
+      begin: () => calls.push(['begin']),
+    });
+    expect(visitDays).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
   it('passes on a failed init without starting anything', async () => {
     const { spec, roster } = setup();
     const { sim, calls } = recorder();

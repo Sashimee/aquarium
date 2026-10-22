@@ -57,6 +57,7 @@ export class TankRoster {
     readonly tankId: string;
     readonly biome: Biome;
     readonly recentVisitDays: number | null;
+    visitHandedOut: boolean;
   } | null = null;
   /** Between a switch's unload and the session's `tank:loaded` or `tank:none`: show nothing. */
   private switching = false;
@@ -79,6 +80,16 @@ export class TankRoster {
   /** How many of the last days the owner opened the loaded tank; null when it is not known. */
   get recentVisitDays(): number | null {
     return this.loaded?.recentVisitDays ?? null;
+  }
+
+  /**
+   * The visit days, once per `tank:loaded`: a world rebuilt for the same visit (a resize, a
+   * replaced worker, the first fish added) gets null, or the fish would greet the owner again.
+   */
+  takeVisitDays(): number | null {
+    if (this.loaded === null || this.loaded.visitHandedOut) return null;
+    this.loaded.visitHandedOut = true;
+    return this.loaded.recentVisitDays;
   }
 
   get size(): number {
@@ -116,7 +127,12 @@ export class TankRoster {
 
   load({ tankId, biome, fish, recentVisitDays }: InteractionEvents['tank:loaded']): void {
     this.clear();
-    this.loaded = { tankId, biome, recentVisitDays: recentVisitDays ?? null };
+    this.loaded = {
+      tankId,
+      biome,
+      recentVisitDays: recentVisitDays ?? null,
+      visitHandedOut: false,
+    };
     this.switching = false;
     for (const f of fish) this.insertSaved(f, f.status === 'dead' ? 'dead' : 'swimming');
     this.revision++;

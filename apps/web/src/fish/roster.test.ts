@@ -509,6 +509,32 @@ describe('personality and visits', () => {
     roster.unload({ tankId: TANK_A, reason: 'reset' });
     expect(roster.recentVisitDays).toBeNull();
   });
+
+  it('hands the visit days out once per tank:loaded, then null until the next load', () => {
+    const roster = new TankRoster(DEMO);
+    expect(roster.takeVisitDays()).toBeNull();
+    const load = (recentVisitDays: number): void =>
+      roster.load({
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+        recentVisitDays,
+      });
+    load(0);
+    expect(roster.takeVisitDays()).toBe(0);
+    roster.add({ tankId: TANK_A, fish: fishFixture(FISH_2), acclimate: false });
+    expect(roster.takeVisitDays()).toBeNull();
+    expect(roster.recentVisitDays).toBe(0);
+    load(4);
+    expect(roster.takeVisitDays()).toBe(4);
+    expect(roster.takeVisitDays()).toBeNull();
+    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    expect(roster.takeVisitDays()).toBeNull();
+  });
 });
 
 describe('hashString', () => {

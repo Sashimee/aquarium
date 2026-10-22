@@ -1544,7 +1544,7 @@ export class FishSystem {
         current: () => !this.disposed && generation === this.generation,
         light: () => this.light,
         stage: (simId) => this.roster.get(simId)?.stage,
-        visitDays: () => this.roster.recentVisitDays,
+        visitDays: () => this.roster.takeVisitDays(),
         begin: (ready) => {
           this.simReady = true;
           this.inWorld = new Set(ready.fishIds);
