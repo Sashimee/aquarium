@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { legacyTintSeed, TANK_SIZES, type DecorItem, type TankSize } from '@aquarium/shared';
+import {
+  fitPresetItem,
+  legacyTintSeed,
+  TANK_SIZES,
+  type DecorItem,
+  type TankSize,
+} from '@aquarium/shared';
 import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import type { WebGPURenderer } from 'three/webgpu';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
@@ -27,6 +33,9 @@ const PUBLIC = join(__dirname, '../../public');
 const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 
 const MIN_DEPTH_SHARE = 0.4;
+const GLASS_NUDGE_TOLERANCE = 0.06;
+const MIN_NUDGED_SCALE_SHARE = 0.95;
+const MAX_NUDGED_ITEMS = 6;
 
 /**
  * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
@@ -88,7 +97,7 @@ describe('KNOWN_DEPTH_SHORTFALLS', () => {
 describe.each(['freshwater', 'reef'] as const)('%s preset at the standard tank', (biome) => {
   it('is only changed where it crossed the glass', () => {
     const authored = loadPreset(biome);
-    const fitted = fitPresetToCatalog(authored, TANK_DIMENSIONS.standard, catalog);
+    const fitted = fitPresetToCatalog(authored, 'standard', TANK_DIMENSIONS.standard, catalog);
     const changed = fitted.decor
       .map((item, i) => ({ item, was: authored.decor[i] }))
       .filter(
@@ -106,7 +115,7 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
     const dimensions = TANK_DIMENSIONS[size];
     const waterTop = dimensions.height - dimensions.freeboard;
     const extent = glassExtent(dimensions);
-    const fitted = () => fitPresetToCatalog(loadPreset(biome), dimensions, catalog);
+    const fitted = () => fitPresetToCatalog(loadPreset(biome), size, dimensions, catalog);
 
     it('keys the plants the way the server keys the authored preset', () => {
       const keysOf = (decor: readonly DecorItem[]) =>
@@ -124,6 +133,34 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
         );
       const authored = loadPreset(biome);
       expect(keysOf(fitted().decor)).toEqual(keysOf(authored.decor));
+    });
+
+    it('agrees with the server fit except where the glass nudged an item', () => {
+      const authored = loadPreset(biome);
+      const client = fitted().decor;
+      expect(client).toHaveLength(authored.decor.length);
+      const nudged: string[] = [];
+      authored.decor.forEach((item, i) => {
+        const server = fitPresetItem(item, size);
+        const mine = client[i];
+        if (!mine) throw new Error(`${item.assetId} is missing from the fitted preset`);
+        const drift = Math.hypot(
+          mine.position[0] - server.position[0],
+          mine.position[2] - server.position[2],
+        );
+        if (drift > 1e-9) {
+          nudged.push(item.assetId);
+          expect(drift, item.assetId).toBeLessThanOrEqual(GLASS_NUDGE_TOLERANCE);
+        }
+        expect(mine.scale, item.assetId).toBeLessThanOrEqual(server.scale + 1e-9);
+        expect(mine.scale, item.assetId).toBeGreaterThanOrEqual(
+          server.scale * MIN_NUDGED_SCALE_SHARE,
+        );
+        expect(mine.tintSeed, item.assetId).toBe(server.tintSeed);
+        expect(mine.assetId).toBe(server.assetId);
+        expect(mine.rotationY).toBe(server.rotationY);
+      });
+      expect(nudged.length).toBeLessThanOrEqual(MAX_NUDGED_ITEMS);
     });
 
     it('keeps every decor item inside the glass and under the waterline', () => {
