@@ -3,6 +3,7 @@ import {
   checkoutResponseSchema,
   healthResponseSchema,
   packsResponseSchema,
+  orderStatusResponseSchema,
   paymentsStateSchema,
   walletResponseSchema,
 } from '@aquarium/shared';
@@ -20,6 +21,8 @@ import {
   jsonHeaders,
   newIds,
   paymentsKit,
+  refundObject,
+  type Account,
   sessionObject,
   invoiceObject,
   subscriptionObject,
@@ -52,6 +55,7 @@ describe('payments disabled', () => {
       ['POST', '/api/payments/checkout/pack', { packId: 'pearls-550', consent: CONSENT }],
       ['POST', '/api/payments/checkout/subscription', { consent: CONSENT }],
       ['POST', '/api/payments/subscription/cancel', undefined],
+      ['GET', '/api/payments/orders/cs_test_abc', undefined],
     ] as const) {
       const res = await call(h, who, method, url, payload);
       expect(res.statusCode, url).toBe(503);
@@ -426,6 +430,144 @@ describe('payments enabled', () => {
   });
 });
 
+describe('order status', () => {
+  let h: Harness;
+  let kit: PaymentsKit;
+  beforeAll(async () => {
+    kit = paymentsKit();
+    h = await createHarness({ payments: kit.provider });
+  });
+  afterAll(() => h.close());
+
+  const status = async (who: Account, session: string) => {
+    const res = await call(h, who, 'GET', `/api/payments/orders/${session}`);
+    return { code: res.statusCode, body: res.json() };
+  };
+
+  it('asks for a session id in the success URL', async () => {
+    const seen: string[] = [];
+    const spy = paymentsKit((real) => ({
+      ...real,
+      createPackCheckout: (input) => {
+        seen.push(input.successUrl);
+        return real.createPackCheckout(input);
+      },
+    }));
+    const hh = await createHarness({ payments: spy.provider });
+    try {
+      const who = await account(hh);
+      await call(hh, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+      await call(hh, who, 'POST', '/api/payments/checkout/pack', {
+        packId: 'pearls-550',
+        consent: CONSENT,
+      });
+      expect(seen[0]).toMatch(/\?payment=success&session_id=\{CHECKOUT_SESSION_ID\}$/);
+    } finally {
+      await hh.close();
+    }
+  });
+
+  it('needs a session', async () => {
+    expect((await h.app.inject('/api/payments/orders/cs_test_x')).statusCode).toBe(401);
+  });
+
+  it('is pending while the provider has not completed it or the webhook has not landed', async () => {
+    const who = await account(h);
+    const ids = newIds();
+    kit.sessions.set(ids.session, { userId: who.userId, status: 'open', subscriptionId: null });
+    expect(await status(who, ids.session)).toEqual({ code: 200, body: { status: 'pending' } });
+    kit.sessions.set(ids.session, { userId: who.userId, status: 'complete', subscriptionId: null });
+    expect(await status(who, ids.session)).toEqual({ code: 200, body: { status: 'pending' } });
+  });
+
+  it('is failed once the provider expired the session', async () => {
+    const who = await account(h);
+    const ids = newIds();
+    kit.sessions.set(ids.session, { userId: who.userId, status: 'expired', subscriptionId: null });
+    expect((await status(who, ids.session)).body).toEqual({ status: 'failed' });
+  });
+
+  it('is paid once the webhook credited it, then refunded after a full refund', async () => {
+    const price = economy.packs.find((p) => p.id === 'pearls-550')?.priceCents ?? 0;
+    const who = await account(h);
+    const ids = newIds();
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(h, 'checkout.session.completed', sessionObject(who, 'pearls-550', ids)),
+    );
+    const paid = await status(who, ids.session);
+    expect(orderStatusResponseSchema.parse(paid.body)).toEqual({ status: 'paid' });
+    expect(Object.keys(paid.body as object)).toEqual(['status']);
+
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', refundObject(ids.paymentIntent, 100)));
+    expect((await status(who, ids.session)).body).toEqual({ status: 'paid' });
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(h, 'refund.created', refundObject(ids.paymentIntent, price)),
+    );
+    expect((await status(who, ids.session)).body).toEqual({ status: 'refunded' });
+  });
+
+  it('tracks a subscription checkout through its first paid invoice', async () => {
+    const who = await account(h);
+    const ids = newIds();
+    kit.sessions.set(ids.session, {
+      userId: who.userId,
+      status: 'complete',
+      subscriptionId: ids.subscription,
+    });
+    expect((await status(who, ids.session)).body).toEqual({ status: 'pending' });
+    const start = seconds(h.clock.now());
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(h, 'invoice.paid', invoiceObject(who, ids, { start, end: start + 30 * 86_400 })),
+    );
+    expect((await status(who, ids.session)).body).toEqual({ status: 'paid' });
+  });
+
+  it("answers 404 for someone else's order, paid or not, and for unknown ones", async () => {
+    const owner = await account(h);
+    const other = await account(h);
+    const paid = newIds();
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(h, 'checkout.session.completed', sessionObject(owner, 'pearls-550', paid)),
+    );
+    const open = newIds();
+    kit.sessions.set(open.session, { userId: owner.userId, status: 'open', subscriptionId: null });
+    for (const session of [paid.session, open.session, 'cs_test_unknown']) {
+      expect((await status(other, session)).code, session).toBe(404);
+    }
+    expect((await status(other, 'not-a-session')).code).toBe(404);
+  });
+
+  it('answers 429 after the allowance is used up', async () => {
+    const limited = await createHarness({
+      payments: paymentsKit().provider,
+      paymentsLimits: {
+        checkout: { max: 2, windowMs: 60_000 },
+        cancel: { max: 2, windowMs: 60_000 },
+        settings: { max: 100, windowMs: 60_000 },
+        orders: { max: 2, windowMs: 60_000 },
+      },
+    });
+    try {
+      const who = await account(limited);
+      const codes: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        codes.push((await call(limited, who, 'GET', '/api/payments/orders/cs_test_x')).statusCode);
+      }
+      expect(codes).toEqual([404, 404, 429]);
+    } finally {
+      await limited.close();
+    }
+  });
+});
+
 describe('payments rate limits', () => {
   let h: Harness;
   beforeAll(async () => {
@@ -435,6 +577,7 @@ describe('payments rate limits', () => {
         checkout: { max: 2, windowMs: 60_000 },
         cancel: { max: 2, windowMs: 60_000 },
         settings: { max: 100, windowMs: 60_000 },
+        orders: { max: 2, windowMs: 60_000 },
       },
     });
   });
@@ -500,5 +643,22 @@ describe('payments disabled with a running subscription', () => {
       .from(schema.user)
       .where(eq(schema.user.id, who.userId));
     expect(still).toBeDefined();
+  });
+
+  it('measures a stale incomplete subscription on the injected clock', async () => {
+    const who = await account(h);
+    await h.database.db.insert(schema.clubSubscriptions).values({
+      id: newIds().subscription,
+      userId: who.userId,
+      status: 'incomplete',
+      statusEventAt: new Date(h.clock.now()),
+      createdAt: new Date(h.clock.now()),
+    });
+    const fresh = await call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+    expect(fresh.statusCode, fresh.body).toBe(503);
+
+    h.clock.advance(25 * 3_600_000);
+    const stale = await call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+    expect(stale.statusCode, stale.body).toBe(204);
   });
 });

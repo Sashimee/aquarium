@@ -468,8 +468,13 @@ async function lockForAdjustment(deps: SettleDeps, tx: Tx, charge: ChargeRow): P
   return lockCharge(tx, charge.id);
 }
 
+// A refund that was recorded as succeeded can still fail later (the bank returns it), so the money
+// never left and the clawback is undone. The row stays with zero cents and Pearls as a marker: a
+// stale succeeded event that arrives after the failure, or a failure that arrives first, then
+// finds it and changes nothing.
 async function applyRefund(deps: SettleDeps, refund: Stripe.Refund): Promise<void> {
-  if (refund.status !== 'succeeded') return;
+  const failed = refund.status === 'failed' || refund.status === 'canceled';
+  if (refund.status !== 'succeeded' && !failed) return;
   const paymentIntent = idOf(refund.payment_intent);
   if (!paymentIntent) return;
 
@@ -477,6 +482,38 @@ async function applyRefund(deps: SettleDeps, refund: Stripe.Refund): Promise<voi
     const found = await findCharge(tx, paymentIntent);
     if (!found) throw unknownPayment('refund', refund.id, paymentIntent);
     const charge = await lockForAdjustment(deps, tx, found);
+
+    if (failed) {
+      const [existing] = await tx
+        .select()
+        .from(schema.paymentRefunds)
+        .where(eq(schema.paymentRefunds.refundId, refund.id));
+      if (!existing) {
+        await tx
+          .insert(schema.paymentRefunds)
+          .values({ refundId: refund.id, chargeId: charge.id, cents: 0, pearls: 0 });
+        return;
+      }
+      if (existing.cents === 0) return;
+      await tx
+        .update(schema.paymentRefunds)
+        .set({ cents: 0, pearls: 0 })
+        .where(eq(schema.paymentRefunds.refundId, refund.id));
+      if (existing.pearls > 0) {
+        await postPaymentEntry(tx, {
+          userId: charge.userId,
+          delta: existing.pearls,
+          reason: 'restore',
+          itemRef: refOf(charge),
+          key: `refund-failed:${refund.id}`,
+          nowMs: deps.now(),
+        });
+      }
+      const taken = await takenBack(tx, charge.id);
+      if (taken.cents < charge.amountCents) await setPeriodRevoked(tx, charge, false);
+      return;
+    }
+
     const recorded = await tx
       .insert(schema.paymentRefunds)
       .values({ refundId: refund.id, chargeId: charge.id, cents: refund.amount, pearls: 0 })

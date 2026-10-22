@@ -311,6 +311,47 @@ describe('refunds', () => {
     expect(await balance(who)).toBe(start);
   });
 
+  it('gives the Pearls back when a succeeded refund later fails, once', async () => {
+    const who = await account(h);
+    const start = await balance(who);
+    const ids = await bought(who);
+    const refund = refundObject(ids.paymentIntent, 499);
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', refund));
+    expect(await balance(who)).toBe(start);
+
+    const failed = { ...refund, status: 'failed' };
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', failed));
+    expect(await balance(who)).toBe(start + 550);
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', failed));
+    expect(await balance(who)).toBe(start + 550);
+
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', refund));
+    expect(await balance(who)).toBe(start + 550);
+  });
+
+  it('ignores a succeeded refund that arrives after its failure', async () => {
+    const who = await account(h);
+    const start = await balance(who);
+    const ids = await bought(who);
+    const refund = refundObject(ids.paymentIntent, 499);
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...refund, status: 'failed' }));
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', refund));
+    expect(await balance(who)).toBe(start + 550);
+  });
+
+  it('keeps the clawback of the other refunds when one fails', async () => {
+    const who = await account(h);
+    const start = await balance(who);
+    const ids = await bought(who);
+    const kept = refundObject(ids.paymentIntent, 100);
+    const lost = refundObject(ids.paymentIntent, 100);
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', kept));
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', lost));
+    expect(await balance(who)).toBe(start + 550 - 220);
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...lost, status: 'failed' }));
+    expect(await balance(who)).toBe(start + 550 - 110);
+  });
+
   it('never takes back more than the pack gave', async () => {
     const who = await account(h);
     const start = await balance(who);
