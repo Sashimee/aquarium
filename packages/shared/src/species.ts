@@ -22,9 +22,11 @@ export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage'
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
 
 // `cleaner` on a swimmer keeps a cleaning station; on a walker it is accepted but drives nothing yet.
+// `amphibious`: an air-breather that hauls out onto an emergent bank (mudskippers).
 export const traitSchema = z.enum([
   'shoal',
   'air-gulp',
+  'amphibious',
   'glass-grazer',
   'rock-grazer',
   'anemone-host',
@@ -328,6 +330,7 @@ export type Species = z.infer<typeof speciesSchema>;
 const SWIMMER_TRAITS: readonly Trait[] = [
   'shoal',
   'air-gulp',
+  'amphibious',
   'glass-grazer',
   'rock-grazer',
   'anemone-host',
