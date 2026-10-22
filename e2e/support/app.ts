@@ -1,37 +1,18 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { findVerificationLink, newIdentity, PASSWORD, signUpStatus } from './signup.ts';
+
+export { newIdentity, PASSWORD };
 
 export const APP_URL = `http://localhost:${process.env['E2E_PORT'] ?? 4317}`;
 
-export const PASSWORD = 'a long enough passphrase 9';
 export const SCENE_TIMEOUT_MS = 180_000;
-
-let counter = 0;
-
-export function newIdentity(label: string): { name: string; email: string } {
-  counter += 1;
-  const tag = `${label}${Date.now().toString(36)}${counter}`;
-  return { name: `E2E ${label}`, email: `e2e-${tag}@bas.lu` };
-}
-
-interface SinkMessage {
-  to: string;
-  subject: string;
-  text: string;
-}
-
-async function outboxFor(email: string): Promise<SinkMessage[]> {
-  const res = await fetch(`${APP_URL}/__e2e/outbox`);
-  const all = (await res.json()) as SinkMessage[];
-  return all.filter((m) => m.to.toLowerCase() === email.toLowerCase());
-}
 
 export async function verificationLinkFor(email: string): Promise<string> {
   let link = '';
   await expect
     .poll(
       async () => {
-        const mail = (await outboxFor(email)).find((m) => /verify/i.test(m.subject));
-        link = mail ? (/<(https?:\/\/[^>\s]+)>/.exec(mail.text)?.[1] ?? '') : '';
+        link = await findVerificationLink(APP_URL, email);
         return link;
       },
       { message: `a verification email for ${email} in the test outbox` },
@@ -46,11 +27,8 @@ export async function registerVerifiedUser(
   label: string,
 ): Promise<{ name: string; email: string }> {
   const identity = newIdentity(label);
-  const signUp = await page.request.post('/api/auth/sign-up/email', {
-    headers: { origin: APP_URL },
-    data: { ...identity, password: PASSWORD, callbackURL: '/verify-email' },
-  });
-  expect(signUp.ok(), 'sign-up request').toBe(true);
+  const signUp = await signUpStatus(page, APP_URL, identity);
+  expect(signUp.ok, `sign-up request (status ${signUp.status})`).toBe(true);
   const verified = await page.request.get(await verificationLinkFor(identity.email));
   expect(verified.ok(), 'verification link').toBe(true);
   return identity;
