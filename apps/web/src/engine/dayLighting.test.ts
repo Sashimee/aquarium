@@ -177,12 +177,11 @@ describe('the daytime fill', () => {
 });
 
 describe('lampGain', () => {
-  it('spans two stops under the tuned level to half a stop over, with the default at it', () => {
+  it('spans two stops under the tuned level to half a stop over', () => {
     expect(lampGain(0)).toBeCloseTo(LAMP_GAIN_MIN, 12);
     expect(lampGain(1)).toBeCloseTo(LAMP_GAIN_MAX, 12);
     expect(Math.log2(LAMP_GAIN_MIN)).toBeCloseTo(-2, 12);
     expect(Math.log2(LAMP_GAIN_MAX)).toBeCloseTo(0.5, 12);
-    expect(lampGain(DEFAULT_LAMP_SCHEDULE.intensity)).toBeCloseTo(1, 12);
   });
 
   it('leaves the default setting at exactly the tuned level', () => {
