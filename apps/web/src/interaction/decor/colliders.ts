@@ -51,9 +51,10 @@ export function collidersFor(
   if (spec.kind === 'plant') return plantCollider(colliderId, spec, item, up);
   if (hasShelterParts(spec.assetId)) {
     if (up !== UPRIGHT && (up[0] !== 0 || up[1] !== 1 || up[2] !== 0)) {
-      throw new Error(
-        `"${spec.assetId}" is a shelter and can only stand upright, got up ${up.join(',')}`,
+      console.warn(
+        `"${spec.assetId}" is a shelter and can only stand upright, got up ${up.join(',')}; leaving it out of the sim colliders`,
       );
+      return [];
     }
     return shelterColliders(colliderId, item);
   }
