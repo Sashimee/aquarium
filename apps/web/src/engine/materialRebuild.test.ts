@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   BoxGeometry,
   DataTexture,
+  DirectionalLight,
   Group,
   InstancedMesh,
   Mesh,
   MeshStandardMaterial,
   MeshStandardNodeMaterial,
+  PerspectiveCamera,
+  Scene,
   Vector3,
 } from 'three/webgpu';
 import { uniform, vec3 } from 'three/tsl';
@@ -14,6 +17,7 @@ import { FishInstanceData, INSTANCE_STRIDE } from '../fish/instances';
 import { FishMaterial } from '../fish/material';
 import { renderProfile } from '../fish/profiles';
 import { SWIM_MODES } from '../fish/swim';
+import { createInertRenderer } from './inertRenderer';
 import { MaterialRebuild } from './materialRebuild';
 
 function swimmer() {
@@ -62,10 +66,39 @@ describe('MaterialRebuild', () => {
     const counts = [released(shared), released(other)];
 
     const rebuild = new MaterialRebuild();
-    expect(rebuild.request()).toBe(true);
+    expect(rebuild.request(0)).toBe(true);
     expect(rebuild.flush(scene)).toBe(2);
     expect(counts.map((c) => c.value)).toEqual([1, 1]);
     expect(rebuild.flush(scene)).toBe(0);
+  });
+
+  it('makes three release the render objects of the scene and shadow passes', async () => {
+    const { renderer, renderObjects, nextFrame } = await createInertRenderer();
+    const scene = new Scene();
+    const light = new DirectionalLight();
+    light.castShadow = true;
+    const mesh = new Mesh(new BoxGeometry(), new MeshStandardNodeMaterial());
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(light, mesh);
+    const camera = new PerspectiveCamera();
+    camera.position.z = 5;
+    const meshPasses = () => [...renderObjects()].filter((r) => r.object === mesh);
+
+    renderer.render(scene, camera);
+    const drawn = meshPasses();
+    expect(drawn.map((r) => r.camera)).toEqual([camera, light.shadow.camera]);
+
+    const rebuild = new MaterialRebuild();
+    rebuild.request(0);
+    rebuild.flush(scene);
+    expect(meshPasses()).toEqual([]);
+
+    nextFrame();
+    renderer.render(scene, camera);
+    const redrawn = meshPasses();
+    expect(redrawn).toHaveLength(2);
+    for (const renderObject of redrawn) expect(drawn).not.toContain(renderObject);
   });
 
   it('keeps the fish on their own swim material, its textures and instance data', () => {
@@ -81,7 +114,7 @@ describe('MaterialRebuild', () => {
     const phase = instances.array.slice();
 
     const rebuild = new MaterialRebuild();
-    rebuild.request();
+    rebuild.request(0);
     rebuild.flush(scene);
 
     expect(count.value).toBe(1);
@@ -93,13 +126,34 @@ describe('MaterialRebuild', () => {
     expect(instances.array).toEqual(phase);
   });
 
+  it('holds a burst of failures to the budget, however long it lasts', () => {
+    const rebuild = new MaterialRebuild(2, 1000);
+    const root = new Group();
+    expect(rebuild.request(0)).toBe(true);
+    rebuild.flush(root);
+    expect(rebuild.request(900)).toBe(true);
+    rebuild.flush(root);
+    expect(rebuild.request(1800)).toBe(false);
+    expect(rebuild.request(2700)).toBe(false);
+  });
+
+  it('gives a failure after a quiet spell the whole budget again, with or without frames', () => {
+    const rebuild = new MaterialRebuild(1, 1000);
+    const root = new Group();
+    rebuild.request(0);
+    rebuild.flush(root);
+    expect(rebuild.request(999)).toBe(false);
+    expect(rebuild.request(1998)).toBe(false);
+    expect(rebuild.request(2998)).toBe(true);
+  });
+
   it('merges the requests made before a frame boundary into one rebuild', () => {
     const rebuild = new MaterialRebuild(2);
-    expect(rebuild.request()).toBe(true);
-    expect(rebuild.request()).toBe(true);
+    expect(rebuild.request(0)).toBe(true);
+    expect(rebuild.request(0)).toBe(true);
     rebuild.flush(new Group());
-    expect(rebuild.request()).toBe(true);
+    expect(rebuild.request(0)).toBe(true);
     rebuild.flush(new Group());
-    expect(rebuild.request()).toBe(false);
+    expect(rebuild.request(0)).toBe(false);
   });
 });

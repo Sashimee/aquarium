@@ -113,6 +113,11 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
   },
 };
 
+/** The largest shadow map any tier draws, which the hood's map is allocated at once. */
+export const MAX_SHADOW_MAP_SIZE = Math.max(
+  ...Object.values(TIER_SETTINGS).map((s) => s.shadowMapSize),
+);
+
 /**
  * Rough GPU cost of each tier relative to `high`, used to extrapolate a measured
  * frame time to the other tiers. Low's 0.35 assumed a 0.75 resolution scale; at full scale it

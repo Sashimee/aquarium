@@ -68,7 +68,7 @@ import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
-import { renderPixelRatio, type TierSettings } from './quality/tiers';
+import { MAX_SHADOW_MAP_SIZE, renderPixelRatio, type TierSettings } from './quality/tiers';
 import { TankBackground } from './tank/background';
 import {
   defaultView,
@@ -207,7 +207,7 @@ export class Engine {
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
   private readonly reflectedShadow = new ReflectedShadow();
-  private readonly hoodShadow = new TierShadow(this.hood);
+  private readonly hoodShadow = new TierShadow(this.hood, MAX_SHADOW_MAP_SIZE);
   private readonly loop: RenderLoop;
   private readonly frameCap: FrameCap;
   private displayLimits: DisplayLimits;
@@ -324,7 +324,7 @@ export class Engine {
       this.effects,
       (id) => usesMaterial(this.scene, id),
       (message, cause) => this.reportError(message, cause),
-      () => this.materialRebuild.request(),
+      () => this.materialRebuild.request(performance.now()),
     );
     cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
 
