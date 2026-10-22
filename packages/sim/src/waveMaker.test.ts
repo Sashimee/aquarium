@@ -49,6 +49,15 @@ function run(w: World, steps: number): World {
   return w;
 }
 
+/** FNV-1a over the raw bits, so the pin catches a change in the last place of any coordinate. */
+function bitDigest(values: Float64Array): string {
+  let h = 0x811c9dc5;
+  for (const word of new Uint32Array(values.buffer, values.byteOffset, values.length * 2)) {
+    h = Math.imul(h ^ word, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
 function localSpeed(w: World, i: number): number {
   const o = i * 3;
   const f = w.currents.flow;
@@ -104,6 +113,17 @@ describe('checkWaveMaker', () => {
     ['infinite period', { periodS: Number.POSITIVE_INFINITY }],
   ])('rejects %s', (_, change) => {
     expect(() => checkWaveMaker({ ...MAX, ...change })).toThrow(RangeError);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['a string speed', { speedMps: '0.1' }],
+    ['a string zero speed', { speedMps: '0' }],
+    ['a string period', { periodS: '8' }],
+    ['a string direction entry', { direction: ['1', 0] }],
+    ['a null direction entry', { direction: [null, 1] }],
+  ])('rejects %s from an untyped sender', (_, change) => {
+    const settings = JSON.parse(JSON.stringify({ ...MAX, ...change })) as WaveMakerSettings;
+    expect(() => checkWaveMaker(settings)).toThrow(RangeError);
   });
 
   it('rejects an unknown mode', () => {
@@ -225,6 +245,9 @@ describe('a wave maker in the world', { timeout: 120_000 }, () => {
     const base = run(reef(7, community), steps);
     const none = run(reef(7, community, null), steps);
     const zero = run(reef(7, community, { ...MAX, speedMps: 0 }), steps);
+    // All three take the same no-current branch, so only a pinned trajectory catches a change to
+    // that branch itself. A deliberate change to still-water behaviour updates the pin.
+    expect(bitDigest(base.position)).toBe('0855d268');
     expect(none.position).toEqual(base.position);
     expect(zero.position).toEqual(base.position);
     expect(zero.speed).toEqual(base.speed);

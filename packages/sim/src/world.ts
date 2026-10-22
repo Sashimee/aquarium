@@ -2494,7 +2494,6 @@ export class World {
     this.reverseLeft[i] = free ? 0 : left;
   }
 
-  /** Clearance of the spine sample nearest a surface, with that surface's normal in `nrm`. */
   /**
    * How far the current carries fish `i` this step, into `out`: its local flow, less any push
    * into a surface the body is about to touch, so the water slides it along glass and rock
@@ -2526,6 +2525,7 @@ export class World {
     out[2] = vz;
   }
 
+  /** Clearance of the spine sample nearest a surface, with that surface's normal in `nrm`. */
   private nearestSurface(i: number, fx: number, fy: number, fz: number, nrm: Float64Array): number {
     const o = i * 3;
     const length = this.bodyLength[i] ?? 0;
