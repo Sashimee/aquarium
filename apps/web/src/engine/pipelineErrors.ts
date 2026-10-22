@@ -1,6 +1,7 @@
 import {
   getConsoleFunction,
   Light,
+  LightShadow,
   Material,
   setConsoleFunction,
   ShadowBaseNode,
@@ -210,7 +211,9 @@ export function usesMaterial(root: Object3D, id: number): boolean {
   root.traverse((object) => {
     if (found) return;
     if (object instanceof Light) {
-      const node: unknown = object.castShadow ? object.shadow?.shadowNode : undefined;
+      const shadow: unknown = 'shadow' in object ? object.shadow : undefined;
+      const node =
+        object.castShadow && shadow instanceof LightShadow ? shadow.shadowNode : undefined;
       found = node instanceof ShadowBaseNode && materialIdOf(node.getShadowMaterial()) === id;
       return;
     }
