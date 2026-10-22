@@ -98,7 +98,7 @@ export function offerView(offer: GiftOffer, now: number, names: SpeciesNames): O
       if (incoming) {
         return {
           ...base,
-          status: `You offered ${offer.pledged ? offer.pledged.name : 'a fish'} back. Waiting for ${other} to confirm the swap. Your fish stays in your tank until then.`,
+          status: `You offered ${offer.pledged ? offer.pledged.name : 'a fish'} back. Waiting for ${other} to confirm the swap. Your fish stays in your tank until then. Declining ends the whole trade and sends ${offer.fish.name} back to ${other}.`,
           actions: ['decline'],
         };
       }
@@ -212,6 +212,8 @@ export function giftRefusalText(error: unknown, ctx: GiftRefusalContext): string
       return ctx.op === 'confirm'
         ? 'One of the two tanks is not accepting gifts. Turn on "Accept gifts" for it in Tanks, or pick another tank.'
         : 'That tank is not accepting gifts. Turn on "Accept gifts" for it in Tanks, or pick another tank.';
+    case 'offer_changed':
+      return 'The offer changed while you were confirming. The list has been refreshed.';
     case 'offer_closed':
       return 'This offer was already settled. The list has been refreshed.';
     case 'offer_expired':
@@ -281,6 +283,7 @@ export class GiftBook {
   private readonly listeners = new Set<() => void>();
   private readonly keys: IntentKeys;
   private disposed = false;
+  private refreshSeq = 0;
 
   constructor(private readonly deps: GiftBookDeps) {
     this.keys = new IntentKeys(deps.newKey);
@@ -303,11 +306,14 @@ export class GiftBook {
   }
 
   async refresh(): Promise<void> {
+    const seq = ++this.refreshSeq;
     this.patch({ loading: true });
     try {
       const offers = await this.deps.api.gifts();
+      if (seq !== this.refreshSeq) return;
       this.patch({ offers, loading: false });
     } catch (error) {
+      if (seq !== this.refreshSeq) return;
       this.patch({ loading: false, error: describeSyncError(error) });
     }
   }
@@ -399,6 +405,9 @@ export class GiftBook {
 function staleOffer(error: unknown): boolean {
   return (
     error instanceof ApiRequestError &&
-    (error.status === 404 || error.reason === 'offer_closed' || error.reason === 'offer_expired')
+    (error.status === 404 ||
+      error.reason === 'offer_closed' ||
+      error.reason === 'offer_expired' ||
+      error.reason === 'offer_changed')
   );
 }
