@@ -13,8 +13,11 @@ export const VACATION_FEEDER_ASSET_ID = 'vacation-feeder';
 
 /** The mangrove tank's procedural mud bank: part of the preset, never sold, so not in `DECOR_ASSET_IDS`. */
 export const MUD_BANK_ASSET_ID = 'mud-bank';
-/** The scale range a saved mud bank may take; the preset's is 1.3. */
-export const MUD_BANK_SCALE = { min: 0.5, max: 2.5 } as const;
+/**
+ * The scale range a saved mud bank may take. The client saves the bank at its fitted scale, which a
+ * small tank shrinks toward the 0.05 floor of the web's fit, so the minimum cannot sit above that.
+ */
+export const MUD_BANK_SCALE = { min: 0.05, max: 2.5 } as const;
 
 const ROCKS = ['boulder-01', 'coast-rocks-05'] as const;
 
