@@ -8,48 +8,132 @@ import type { WebGPURenderer } from 'three/webgpu';
 import { DEFAULT_HDRI_URL } from '../engine/environment';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { FishAssetLoader } from '../fish/assets';
-import { AssetCatalog, materialTextureUrl, ModelLibrary } from './assets';
+import { ASSET_BASE, AssetCatalog, type CatalogEntry, ModelLibrary } from './assets';
 
 const PUBLIC_ASSETS = join(__dirname, '../../public/assets');
 
-describe('materialTextureUrl', () => {
+type TextureVariants = NonNullable<CatalogEntry['textures']>[number]['variants'];
+
+function rockWith(id: string, variants: TextureVariants): CatalogEntry {
+  return {
+    id,
+    kind: 'rock',
+    lods: [{ file: `rock/${id}/lod0.glb` }],
+    textures: [{ role: 'baseColor', variants }],
+  };
+}
+
+const oneK = (id: string) => ({ file: `rock/${id}/textures/${id}_1k.ktx2`, size: 1024 });
+
+const catalog = new AssetCatalog([
+  rockWith('listed', {
+    '1k': oneK('listed'),
+    '2k': { file: 'rock/listed/textures/listed_2k.ktx2', size: 2048 },
+  }),
+  rockWith('absent', { '1k': oneK('absent') }),
+  rockWith('aliased', { '1k': oneK('aliased'), '2k': oneK('aliased') }),
+  rockWith('copied', {
+    '1k': oneK('copied'),
+    '2k': { file: 'rock/copied/textures/copied_2k.ktx2', size: 1024 },
+  }),
+]);
+
+describe('AssetCatalog texture tiers', () => {
   it('keeps 1k textures at the 1024 tier', () => {
-    expect(materialTextureUrl('/assets/rock/a/textures/a_1k.ktx2', 1024)).toBe(
-      '/assets/rock/a/textures/a_1k.ktx2',
+    expect(catalog.materialTextureUrl('/assets/rock/listed/textures/listed_1k.ktx2', 1024)).toBe(
+      '/assets/rock/listed/textures/listed_1k.ktx2',
+    );
+    expect(catalog.textureFile('listed', 'baseColor', 1024)).toBe(
+      'rock/listed/textures/listed_1k.ktx2',
+    );
+    expect(catalog.textureSizeFor('listed', 1024)).toBe(1024);
+  });
+
+  it('swaps to the listed 2k at the 2048 tier, keeping any query', () => {
+    expect(catalog.materialTextureUrl('/assets/rock/listed/textures/listed_1k.ktx2', 2048)).toBe(
+      '/assets/rock/listed/textures/listed_2k.ktx2',
+    );
+    expect(
+      catalog.materialTextureUrl('/assets/rock/listed/textures/listed_1k.ktx2?v=3', 2048),
+    ).toBe('/assets/rock/listed/textures/listed_2k.ktx2?v=3');
+    expect(catalog.textureFile('listed', 'baseColor', 2048)).toBe(
+      'rock/listed/textures/listed_2k.ktx2',
+    );
+    expect(catalog.textureSizeFor('listed', 2048)).toBe(2048);
+  });
+
+  it.each(['absent', 'aliased', 'copied'])(
+    'stays on 1k at 2048 when %s has no larger 2k listed',
+    (id) => {
+      const url = `/assets/rock/${id}/textures/${id}_1k.ktx2`;
+      expect(catalog.materialTextureUrl(url, 2048)).toBe(url);
+      expect(catalog.textureFile(id, 'baseColor', 2048)).toBe(`rock/${id}/textures/${id}_1k.ktx2`);
+      expect(catalog.textureSizeFor(id, 2048)).toBe(1024);
+    },
+  );
+
+  it('gives an asset without a larger 2k one model key for both tiers', async () => {
+    const library = new ModelLibrary(
+      createSharedKtx2({
+        isWebGPURenderer: true,
+        hasFeature: () => false,
+      } as unknown as WebGPURenderer).loader,
+      catalog,
+    );
+    expect(library.modelKey('aliased', 0, 2048)).toBe(library.modelKey('aliased', 0, 1024));
+    expect(library.modelKey('listed', 0, 2048)).not.toBe(library.modelKey('listed', 0, 1024));
+    await library.dispose();
+  });
+
+  it('never rewrites a texture the index does not list, like the room HDRI', () => {
+    expect(catalog.materialTextureUrl(DEFAULT_HDRI_URL, 2048)).toBe(DEFAULT_HDRI_URL);
+    expect(catalog.materialTextureUrl('/assets/rock/other/textures/other_1k.ktx2', 2048)).toBe(
+      '/assets/rock/other/textures/other_1k.ktx2',
+    );
+    expect(catalog.materialTextureUrl('/assets/rock/listed/lod0.glb', 2048)).toBe(
+      '/assets/rock/listed/lod0.glb',
     );
   });
 
-  it('swaps material textures to 2k at the 2048 tier, keeping any query', () => {
-    expect(materialTextureUrl('/assets/rock/a/textures/a_1k.ktx2', 2048)).toBe(
-      '/assets/rock/a/textures/a_2k.ktx2',
-    );
-    expect(materialTextureUrl('/assets/rock/a/textures/a_1k.ktx2?v=3', 2048)).toBe(
-      '/assets/rock/a/textures/a_2k.ktx2?v=3',
-    );
+  it('rejects a 2k variant without a size', () => {
+    expect(
+      () =>
+        new AssetCatalog([
+          rockWith('broken', { '1k': oneK('broken'), '2k': { file: 'rock/broken/b_2k.ktx2' } }),
+        ]),
+    ).toThrow(/2k\.size must be a positive number/);
   });
 
-  it('never rewrites the room HDRI, which has no 2k variant', () => {
-    expect(materialTextureUrl(DEFAULT_HDRI_URL, 2048)).toBe(DEFAULT_HDRI_URL);
-    expect(materialTextureUrl('/assets/hdri/x/x_1k.ktx2', 2048)).toBe('/assets/hdri/x/x_1k.ktx2');
-  });
-
-  it('leaves other urls alone', () => {
-    expect(materialTextureUrl('/assets/rock/a/a.glb', 2048)).toBe('/assets/rock/a/a.glb');
-    expect(materialTextureUrl('/assets/rock/textures/a_1k.png', 2048)).toBe(
-      '/assets/rock/textures/a_1k.png',
-    );
-  });
-
-  it('only ever points at a shipped file', () => {
+  it('only ever points at a shipped file, and at the 2k wherever the index lists a larger one', async () => {
     const files = new Set(
       readdirSync(PUBLIC_ASSETS, { recursive: true, encoding: 'utf8' }).map((f) =>
         f.split('\\').join('/'),
       ),
     );
-    const oneK = [...files].filter((f) => f.endsWith('_1k.ktx2'));
-    expect(oneK.some((f) => f.startsWith('hdri/'))).toBe(true);
-    expect(oneK.some((f) => f.includes('/textures/'))).toBe(true);
-    for (const file of oneK) expect(files).toContain(materialTextureUrl(`/${file}`, 2048).slice(1));
+    const index = JSON.parse(await readFile(join(PUBLIC_ASSETS, 'index.json'), 'utf8')) as {
+      assets: CatalogEntry[];
+    };
+    const shipped = new AssetCatalog(index.assets);
+    let sharper = 0;
+    for (const entry of index.assets) {
+      for (const { variants } of entry.textures ?? []) {
+        const small = variants['1k'];
+        if (small === undefined)
+          throw new Error(`${entry.id} lists a texture without a 1k variant`);
+        const large = variants['2k'];
+        const swapped = shipped
+          .materialTextureUrl(`${ASSET_BASE}${small.file}`, 2048)
+          .slice(ASSET_BASE.length);
+        expect(files).toContain(swapped);
+        if (large !== undefined && (large.size ?? 0) > (small.size ?? 0)) {
+          expect(swapped).toBe(large.file);
+          sharper++;
+        } else {
+          expect(swapped).toBe(small.file);
+        }
+      }
+    }
+    expect(sharper).toBeGreaterThan(0);
   });
 });
 

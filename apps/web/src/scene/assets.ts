@@ -12,6 +12,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { rewritingKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
+import { sharperTextures } from '../fish/assetIndex';
 
 export const ASSET_BASE = `${import.meta.env.BASE_URL}assets/`;
 
@@ -37,15 +38,28 @@ export interface CatalogEntry {
   };
   readonly textures?: readonly {
     readonly role: string;
-    readonly variants: Readonly<Record<string, { readonly file: string }>>;
+    readonly variants: Readonly<
+      Record<string, { readonly file: string; readonly size?: number } | undefined>
+    >;
   }[];
 }
 
 export class AssetCatalog {
   private readonly byId = new Map<string, CatalogEntry>();
+  /** Per asset, 1k map → its 2k map where the 2k really is larger; paths relative to the assets root. */
+  private readonly sharper = new Map<string, ReadonlyMap<string, string>>();
+  /** The same pairs as URLs under ASSET_BASE, for rewriting what a GLB references. */
+  private readonly sharperUrls = new Map<string, string>();
 
   constructor(entries: readonly CatalogEntry[]) {
-    for (const entry of entries) this.byId.set(entry.id, entry);
+    for (const entry of entries) {
+      this.byId.set(entry.id, entry);
+      const pairs = sharperTextures(entry.textures, `assets[${entry.id}].textures`);
+      this.sharper.set(entry.id, pairs);
+      for (const [small, large] of pairs) {
+        this.sharperUrls.set(`${ASSET_BASE}${small}`, `${ASSET_BASE}${large}`);
+      }
+    }
   }
 
   static async fetch(url = `${ASSET_BASE}index.json`, signal?: AbortSignal): Promise<AssetCatalog> {
@@ -79,13 +93,28 @@ export class AssetCatalog {
   entries(): IterableIterator<CatalogEntry> {
     return this.byId.values();
   }
-}
 
-/** Picks the 1k or 2k variant of a material texture. Only `textures/` has both; an HDRI may not. */
-export function materialTextureUrl(url: string, textureSize: 1024 | 2048): string {
-  if (textureSize === 2048)
-    return url.replace(/(\/textures\/[^/?]+)_1k\.ktx2(\?.*)?$/, '$1_2k.ktx2$2');
-  return url;
+  /** The size a load of `assetId` really gets: one with no larger 2k map is the same at 2048. */
+  textureSizeFor(assetId: string, textureSize: 1024 | 2048): 1024 | 2048 {
+    this.get(assetId);
+    return (this.sharper.get(assetId)?.size ?? 0) > 0 ? textureSize : 1024;
+  }
+
+  /** The 2k file of the `role` map at 2048 where the index lists a larger one, else the 1k file. */
+  textureFile(assetId: string, role: string, textureSize: 1024 | 2048): string | undefined {
+    const small = this.get(assetId).textures?.find((t) => t.role === role)?.variants['1k']?.file;
+    if (small === undefined || textureSize === 1024) return small;
+    return this.sharper.get(assetId)?.get(small) ?? small;
+  }
+
+  /** Swaps a GLB's 1k map URL for the 2k one at 2048, only where the index lists a larger 2k. */
+  materialTextureUrl(url: string, textureSize: 1024 | 2048): string {
+    if (textureSize === 1024) return url;
+    const query = url.indexOf('?');
+    const path = query < 0 ? url : url.slice(0, query);
+    const large = this.sharperUrls.get(path);
+    return large === undefined ? url : `${large}${query < 0 ? '' : url.slice(query)}`;
+  }
 }
 
 export interface LoadedPrimitive {
@@ -128,7 +157,9 @@ export class ModelLibrary {
     ktx2: Ktx2Textures,
     readonly catalog: AssetCatalog,
   ) {
-    this.ktx2 = rewritingKtx2Loader(ktx2, (url) => materialTextureUrl(url, this.textureSize));
+    this.ktx2 = rewritingKtx2Loader(ktx2, (url) =>
+      catalog.materialTextureUrl(url, this.textureSize),
+    );
     this.gltf.setKTX2Loader(this.ktx2);
     this.gltf.setMeshoptDecoder(MeshoptDecoder);
     this.geometryGltf.setMeshoptDecoder(MeshoptDecoder);
@@ -142,11 +173,12 @@ export class ModelLibrary {
   }
 
   modelKey(assetId: string, lod: ModelLod, textureSize: 1024 | 2048): string {
-    return `${this.lodFile(assetId, lod)}@${textureSize}`;
+    return `${this.lodFile(assetId, lod)}@${this.catalog.textureSizeFor(assetId, textureSize)}`;
   }
 
-  load(assetId: string, lod: ModelLod, textureSize: 1024 | 2048): Promise<LoadedModel> {
+  load(assetId: string, lod: ModelLod, requestedSize: 1024 | 2048): Promise<LoadedModel> {
     const file = this.lodFile(assetId, lod);
+    const textureSize = this.catalog.textureSizeFor(assetId, requestedSize);
     const key = `${file}@${textureSize}`;
     let pending = this.cache.get(key);
     if (!pending) {
@@ -216,13 +248,11 @@ export class ModelLibrary {
     textureSize: 1024 | 2048,
     anisotropy: number,
   ): Promise<Texture> {
-    const variant = this.catalog.get(assetId).textures?.find((t) => t.role === role)?.variants[
-      textureSize === 2048 ? '2k' : '1k'
-    ];
-    if (!variant) throw new Error(`Asset "${assetId}" has no ${role} texture`);
+    const file = this.catalog.textureFile(assetId, role, textureSize);
+    if (file === undefined) throw new Error(`Asset "${assetId}" has no ${role} texture`);
     await this.enter(textureSize);
     try {
-      const texture = await this.ktx2.loadAsync(`${ASSET_BASE}${variant.file}`);
+      const texture = await this.ktx2.loadAsync(`${ASSET_BASE}${file}`);
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
       texture.anisotropy = anisotropy;
