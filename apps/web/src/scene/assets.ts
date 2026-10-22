@@ -255,7 +255,10 @@ export class ModelLibrary {
           throw error;
         });
       this.cache.set(key, pending);
-      pending.catch(() => this.cache.delete(key));
+      const owned = pending;
+      owned.catch(() => {
+        if (this.cache.get(key) === owned) this.cache.delete(key);
+      });
     }
     return pending;
   }
@@ -359,7 +362,9 @@ export class ModelLibrary {
       });
       pending = owned;
       this.collision.set(assetId, pending);
-      pending.catch(() => this.collision.delete(assetId));
+      owned.catch(() => {
+        if (this.collision.get(assetId) === owned) this.collision.delete(assetId);
+      });
     }
     return pending;
   }

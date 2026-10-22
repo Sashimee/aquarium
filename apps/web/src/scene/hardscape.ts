@@ -27,7 +27,8 @@ import {
 } from 'three/tsl';
 import { legacyTintSeed, type Biome, type DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
-import { bleachedColor, clamp01, coralGlow, coralTint, heightScale } from './coralStyle';
+import { clamp01, coralGlow, coralTint, heightScale } from './coralStyle';
+import { coralBleachColor, setMaterialBleach } from '../engine/coralBleach';
 import { polypGain } from './polyps';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
@@ -142,6 +143,17 @@ export function swelledPosition(
   return position.add(normal.mul(extension.mul(POLYP_SWELL_METRES * gain)).div(scale));
 }
 
+function coralMaterial(source: MeshStandardMaterial, tint: Color | null): MeshStandardNodeMaterial {
+  const material = new MeshStandardNodeMaterial();
+  // NodeMaterial.copy skips the private-backed accessors (alphaTest), which Material.copy handles.
+  Material.prototype.copy.call(material, source);
+  material.copy(source);
+  if (tint) material.color.multiply(tint);
+  setMaterialBleach(material, 0);
+  material.colorNode = coralBleachColor;
+  return material;
+}
+
 function fluorescentMaterial(
   source: MeshStandardMaterial,
   tint: Color,
@@ -149,11 +161,7 @@ function fluorescentMaterial(
   glowNode: Node<'vec3'>,
   swell: Node<'vec3'> | null,
 ): MeshStandardNodeMaterial {
-  const material = new MeshStandardNodeMaterial();
-  // NodeMaterial.copy skips the private-backed accessors (alphaTest), which Material.copy handles.
-  Material.prototype.copy.call(material, source);
-  material.copy(source);
-  material.color.multiply(tint);
+  const material = coralMaterial(source, tint);
   material.emissive.copy(glow);
   material.emissiveIntensity = 1;
   material.emissiveNode = glowNode;
@@ -167,7 +175,6 @@ function isStandard(material: Material): material is MeshStandardMaterial {
 
 interface BleachableMaterial {
   readonly material: MeshStandardMaterial;
-  readonly color: Color;
   readonly emissive: Color;
 }
 
@@ -206,21 +213,19 @@ export class Hardscape {
             this.glowNode,
             this.swellNode(item, primitive.geometry),
           );
+        } else if (entry.kind === 'coral') {
+          material = coralMaterial(primitive.material, tint);
         } else {
           material = primitive.material.clone();
           (material as MeshStandardMaterial).color.multiply(tint);
         }
         this.tintedMaterials.push(material);
       } else if (entry.kind === 'coral') {
-        material = primitive.material.clone();
+        material = coralMaterial(primitive.material, null);
         this.tintedMaterials.push(material);
       }
       if (entry.kind === 'coral' && isStandard(material)) {
-        bleachables.push({
-          material,
-          color: material.color.clone(),
-          emissive: material.emissive.clone(),
-        });
+        bleachables.push({ material, emissive: material.emissive.clone() });
       }
       const mesh = new Mesh(primitive.geometry, material);
       meshes.push(mesh);
@@ -257,8 +262,8 @@ export class Hardscape {
   }
 
   setBleach(index: number, bleach: number): void {
-    for (const { material, color, emissive } of this.bleachables[index] ?? []) {
-      material.color.copy(bleachedColor(color, bleach));
+    for (const { material, emissive } of this.bleachables[index] ?? []) {
+      setMaterialBleach(material, bleach);
       material.emissive.copy(emissive).multiplyScalar(1 - clamp01(bleach));
     }
   }

@@ -14,21 +14,27 @@ const ROOM_AT_NIGHT = 0.15;
  */
 export const FRESHWATER_FILL_LEVEL = 0.28;
 
+const LAMP_STOPS_MIN = -2;
+const LAMP_STOPS_MAX = 0.5;
+const LAMP_STOPS_SPAN = LAMP_STOPS_MAX - LAMP_STOPS_MIN;
+// Subtracting this setting rather than adding stops to LAMP_STOPS_MIN gives an exact 0 at 0.8.
+const LAMP_TUNED_SETTING = -LAMP_STOPS_MIN / LAMP_STOPS_SPAN;
+
 /**
  * The hood's light at the lamp's lowest and highest strength setting. The scale is in stops, as a
  * dimmer is seen: two stops down still lights the tank clearly over the moonlight, and half a stop
  * up stays within what AgX at exposure 1 rolls off on white sand. The default setting, 0.8, lands
  * on exactly 1, the level the scene is tuned at.
  */
-export const LAMP_GAIN_MIN = 0.25;
-export const LAMP_GAIN_MAX = Math.SQRT2;
+export const LAMP_GAIN_MIN = 2 ** LAMP_STOPS_MIN;
+export const LAMP_GAIN_MAX = 2 ** LAMP_STOPS_MAX;
 
 /** The hood's light relative to the tuned level for a lamp strength setting, 0..1. */
 export function lampGain(intensity: number): number {
   if (!(intensity >= 0 && intensity <= 1)) {
     throw new RangeError(`lampGain: lamp intensity must be within 0..1, got ${intensity}`);
   }
-  return 2 ** (2.5 * (intensity - 0.8));
+  return 2 ** (LAMP_STOPS_SPAN * (intensity - LAMP_TUNED_SETTING));
 }
 
 /** What the photoperiod drives: uniforms and plain numbers only, so no shader is rebuilt. */
