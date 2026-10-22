@@ -58,10 +58,11 @@ import {
   type WalkerValues,
 } from './instances';
 import {
-  bakeFraming,
   drawsAsImpostor,
   IMPOSTOR_LOD,
+  inDisplay,
   meshLod,
+  modelFraming,
   mouthFade,
   rankMeshes,
   selectLod,
@@ -284,20 +285,8 @@ function youthOfFish(fish: RosterFish): number {
   return youthOf(maturityOf(fish.stage, ageDaysAt(fish.bornAtMs, Date.now()), growth));
 }
 
-const standInFramings = new WeakMap<FishAssetEntry, AtlasFraming>();
-
 function atlasFramingOf(rt: FishRuntime): AtlasFraming {
-  const impostor = rt.batch.impostor;
-  if (impostor !== null) return impostor.info;
-  const { entry } = rt.batch.model;
-  let framing = standInFramings.get(entry);
-  if (framing === undefined) {
-    const [x0, y0, z0] = entry.min;
-    const [x1, y1, z1] = entry.max;
-    framing = bakeFraming(Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2);
-    standInFramings.set(entry, framing);
-  }
-  return framing;
+  return modelFraming(rt.batch.model.entry);
 }
 
 function capacityFor(needed: number): number {
@@ -740,7 +729,8 @@ export class FishSystem {
 
   /**
    * Moves the swimming space to `tank`: the fish box and the sim's world are rebuilt around it, so
-   * nobody swims outside the new glass. Stock and the saved tank stay as they are.
+   * nobody swims outside the new glass. The demo stock is re-picked for the new size and shown if no
+   * tank is loaded; a loaded tank's stock and the saved tank stay as they are.
    */
   setTank(tank: TankDimensions): void {
     if (this.disposed || sameTank(tank, this.tank)) return;
@@ -1894,7 +1884,8 @@ export class FishSystem {
       if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
         this.drawImpostor(rt, motion, impostor, camera);
       } else {
-        this.drawMesh(rt, meshLod(rt.lod, rt.full, rt.batch.lods.length));
+        const full = rt.full || inDisplay(choice.display);
+        this.drawMesh(rt, meshLod(rt.lod, full, rt.batch.lods.length));
       }
     }
 
