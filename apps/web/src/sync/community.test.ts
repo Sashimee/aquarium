@@ -550,6 +550,38 @@ describe('applyTankToScene', () => {
     expect(of('tank:fish-died')).toHaveLength(1);
     expect(of('tank:fish-removed')).toEqual([{ tankId: first.id, fishId: FISH_2, reason: 'gone' }]);
   });
+
+  it('announces the lamp again when a later snapshot changes it', () => {
+    const { bus, of } = recordBus();
+    const first = tankFixture();
+    applyTankToScene(bus, null, first);
+    expect(of('tank:lamp')).toHaveLength(1);
+    const light = first.equipment.light;
+    const dimmer: Tank = {
+      ...first,
+      equipment: { ...first.equipment, light: { ...light, intensity: light.intensity / 2 } },
+    };
+    applyTankToScene(bus, first, dimmer);
+    expect(of('tank:lamp')).toHaveLength(2);
+    expect(of('tank:lamp')[1]).toMatchObject({ intensity: light.intensity / 2 });
+    const later: Tank = {
+      ...dimmer,
+      equipment: {
+        ...dimmer.equipment,
+        light: { ...dimmer.equipment.light, offHour: (light.offHour + 1) % 24 },
+      },
+    };
+    applyTankToScene(bus, dimmer, later);
+    expect(of('tank:lamp')).toHaveLength(3);
+  });
+
+  it('does not announce the lamp when the snapshot leaves it unchanged', () => {
+    const { bus, of } = recordBus();
+    const first = tankFixture();
+    applyTankToScene(bus, null, first);
+    applyTankToScene(bus, first, { ...first, lastTickAt: '2026-02-01T01:00:00.000Z' });
+    expect(of('tank:lamp')).toHaveLength(1);
+  });
 });
 
 describe('quota', () => {
