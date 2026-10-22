@@ -16,6 +16,7 @@ import {
   type PadReading,
   type SuitKey,
 } from '../sync/waterTest';
+import { blackwaterPhGuidance } from '../sync/blackwater';
 import { lakeWaterNotes } from '../sync/cichlid';
 import { getDip, putDip, type Dip } from './dipStore';
 
@@ -90,6 +91,31 @@ function Pad({
         </p>
       )}
     </fieldset>
+  );
+}
+
+export function PhAdvice({
+  tank,
+  species,
+  dip,
+}: {
+  tank: Tank;
+  species: readonly SpeciesSummary[];
+  dip: Dip;
+}) {
+  const reading = dip.strip.ph;
+  const known = reading !== undefined && (dip.revealed || dip.guesses.ph !== undefined);
+  if (!known) return null;
+  const guidance = blackwaterPhGuidance(
+    tank,
+    species,
+    PADS.ph.steps[reading.stepIndex]?.value ?? reading.value,
+  );
+  if (!guidance) return null;
+  return (
+    <p className="ph-advice" data-ph-standing={guidance.standing} role="status">
+      {guidance.text}
+    </p>
   );
 }
 
@@ -256,6 +282,7 @@ export default function WaterTest({
           {tank.biome === 'cichlid' && (
             <LakeWater tank={tank} species={species} dip={dip} onWaterChange={onWaterChange} />
           )}
+          <PhAdvice tank={tank} species={species} dip={dip} />
           {!dip.revealed && (
             <button type="button" onClick={() => store({ ...dip, revealed: true })}>
               Show all readings
