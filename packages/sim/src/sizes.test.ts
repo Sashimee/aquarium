@@ -219,11 +219,34 @@ const AWAITING_CONTENT: Record<
       'FishBase: 13.5 cm TL (Ref. 5598); FishBase has no length-length relationship, so TL = ' +
       '1.231 SL, the proportion of the lofted model',
   },
+  'apistogramma-hongsloi': {
+    model: 'apistogramma-hongsloi',
+    maxSlM: 0.034,
+    maxTlM: 0.034 * 1.231,
+    source:
+      'FishBase: 3.4 cm SL; FishBase has no length-length relationship for the species, so TL = ' +
+      '1.231 SL, the proportion of the lofted model',
+  },
   'aulonocara-baenschi': {
     model: 'aulonocara-baenschi',
     maxSlM: 0.13 / 1.2725,
     maxTlM: 0.13,
     source: 'FishBase: 13 cm TL (Ref. 4975); TL = 1.2725 SL',
+  },
+  'cardinal-tetra': {
+    model: 'cardinal-tetra',
+    maxSlM: 0.04 / 1.1708,
+    maxTlM: 0.04,
+    source:
+      'Common adult 4 cm TL (aquarium literature); TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
+  },
+  'dwarf-pencilfish': {
+    model: 'dwarf-pencilfish',
+    maxSlM: 0.035 / 1.2,
+    maxTlM: 0.035,
+    source:
+      'FishBase: 3.5 cm TL (Nannostomus marginatus); FishBase has no length-length relationship, ' +
+      'so TL = 1.2 SL, the proportion of the lofted model',
   },
   'labidochromis-caeruleus': {
     model: 'labidochromis-caeruleus',
@@ -253,6 +276,13 @@ const AWAITING_CONTENT: Record<
       'FishBase: 4 cm TL (Ref. 5667); FishBase has no length-length relationship, so TL = 1.25 SL ' +
       'is an assumption for cichlids',
   },
+  'rummy-nose-tetra': {
+    model: 'rummy-nose-tetra',
+    maxSlM: 0.036,
+    maxTlM: 0.036 * 1.2506,
+    source:
+      'FishBase: 3.6 cm SL (Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
+  },
   'pseudotropheus-demasoni': {
     model: 'pseudotropheus-demasoni',
     maxSlM: 0.063,
@@ -268,6 +298,8 @@ const AWAITING_CONTENT: Record<
  * (apps/web/src/fish/profiles.ts sizes them by their profile's length factor).
  */
 const MALE_MODELS: Readonly<Record<string, string>> = {
+  'apistogramma-hongsloi-male': 'apistogramma-hongsloi',
+  'dwarf-pencilfish-male': 'dwarf-pencilfish',
   'guppy-male': 'guppy',
   'melanochromis-auratus-male': 'melanochromis-auratus',
 };
