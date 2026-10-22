@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Box3, Color, DirectionalLight, Vector3 } from 'three/webgpu';
 import type { DecorItem } from '@aquarium/shared';
+import { BIOME_WATER } from '../engine/water/biomeWater';
 import { WaterMedium } from '../engine/water/medium';
 import type { Engine } from '../engine/Engine';
 import { anemoneAnchor, anemoneCollider, anemoneReach, LEAN_SECONDS } from './anemone';
@@ -101,6 +102,15 @@ describe('applyBiomeLighting', () => {
     expect(engine.interior.fillLevel).toBe(0.28);
     restore();
     expect(engine.hood.intensity).toBe(3);
+  });
+
+  it('gives a biome without its own lighting its water and restores the previous water', () => {
+    const engine = fakeEngine();
+    const restore = applyBiomeLighting(engine, 'blackwater');
+    expect(engine.medium.getQuality()).toEqual(BIOME_WATER.blackwater);
+    expect(engine.hood.intensity).toBe(3);
+    restore();
+    expect(engine.medium.getQuality()).toEqual({ cdom440: 0.05, turbidity: 0.08 });
   });
 
   it('cools and clears the reef, then restores the previous lighting exactly', () => {

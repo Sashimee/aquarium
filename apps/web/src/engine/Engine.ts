@@ -73,6 +73,7 @@ import {
 import { meanSubstrateHeight } from './tank/substrate';
 import { UNREFLECTED_LAYER } from './tank/surfaceReflection';
 import { Tank } from './tank/Tank';
+import { BIOME_WATER } from './water/biomeWater';
 import { Caustics } from './water/caustics';
 import { InteriorLight } from './water/interior';
 import { WaterMedium, type WaterQuality } from './water/medium';
@@ -89,7 +90,7 @@ export interface EngineConfig {
 }
 
 const STATS_INTERVAL_MS = 500;
-const DEFAULT_WATER: WaterQuality = { cdom440: 0.05, turbidity: 0.08 };
+const DEFAULT_WATER: WaterQuality = BIOME_WATER.freshwater;
 const MAX_DELTA_S = 0.1;
 /** A stalled effects chunk never settles; past this the tank starts plain and they attach later. */
 const EFFECTS_BOOT_WAIT_MS = 5000;
