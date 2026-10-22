@@ -152,7 +152,7 @@ export class CurrentField {
   }
 
   get waveMaker(): FlowField | null {
-    return this.waveField;
+    return this.waveField !== null && this.waveField.settings.speedMps > 0 ? this.waveField : null;
   }
 
   /**
