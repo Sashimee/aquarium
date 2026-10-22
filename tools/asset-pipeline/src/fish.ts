@@ -155,7 +155,13 @@ export function normaliseFish(input: NormaliseInput): Part[] {
       part.positions[i] = part.positions[i]! - xShift;
   }
 
-  if (input.hints?.bodyScale) scaleBody(merged.positions, merged.normals, input.hints.bodyScale);
+  if (input.hints?.bodyScale) {
+    if (attachments.length > 0)
+      throw new Error(
+        `${input.recipeId ?? 'normaliseFish'}: bodyScale does not move eyes or other attachments, so they would float off the scaled body; drop bodyScale or the attachments.`,
+      );
+    scaleBody(merged.positions, merged.normals, input.hints.bodyScale);
+  }
   const fins = classifyFins(merged.positions, merged.indices, input.hints);
   if (input.hints?.caudalScale !== undefined)
     scaleCaudal(merged.positions, merged.normals, fins, input.hints.caudalScale, input.recipeId);
