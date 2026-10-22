@@ -3,12 +3,14 @@ import {
   apiErrorSchema,
   coralSpeciesId,
   fitPresetItem,
+  legacyTintSeed,
   tankSchema,
   type TankSize,
   type Coral,
   type Equipment,
   type Tank,
 } from '@aquarium/shared';
+import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -499,6 +501,52 @@ describe('fragging a coral', () => {
         expect(c.position[0]).toBeCloseTo(roots[i]?.position[0] ?? NaN, 9);
         expect(c.position[1]).toBeCloseTo(roots[i]?.position[2] ?? NaN, 9);
       });
+    });
+
+    it('keeps grown colonies, fragments and plants across later ticks', async () => {
+      const reef = await makeTank(h, alice, { layout: null, size });
+      const first = (await wait(h, alice, reef, 1)).corals?.[0];
+      if (!first) throw new Error('preset has no coral');
+      const authored = (presets.reef?.decor ?? []).find((item) =>
+        coralTable.species.has(coralSpeciesId(item.assetId)),
+      );
+      expect(first.key).toBe(
+        `s${legacyTintSeed(authored ?? { position: [0, 0, 0], rotationY: 0 })}`,
+      );
+      const row = (await rowOf(h, reef)).corals as { key: string; size: number }[];
+      await setCorals(
+        h,
+        reef,
+        row.map((c) => (c.key === first.key ? { ...c, size: 3 } : c)),
+      );
+      const cut = tankOf(
+        await frag(h, alice, reef, { coralKey: first.key, idempotencyKey: randomUUID() }),
+      );
+      const keys = cut.corals?.map((c) => c.key) ?? [];
+      expect(keys).toContain(`${first.key}.1`);
+      const later = await wait(h, alice, reef, 1);
+      expect(later.corals?.map((c) => c.key)).toEqual(keys);
+      expect(coralOf(later, first.key).size).toBeGreaterThan(2);
+      expect(coralOf(later, `${first.key}.1`).parentKey).toBe(first.key);
+
+      const pond = await makeTank(h, alice, { layout: null, size, biome: 'freshwater' });
+      const seeded = (await wait(h, alice, pond, 1)).plants?.map((p) => p.key) ?? [];
+      const authoredPlants = (presets.freshwater?.decor ?? [])
+        .filter((item) => plantTable.species.has(item.assetId))
+        .map((item) => ({ ...item, tintSeed: legacyTintSeed(item) }));
+      expect(seeded).toEqual(layoutPlantKeys(authoredPlants));
+      expect(seeded.length).toBeGreaterThan(0);
+      const plantRows = (await rowOf(h, pond)).plants as { size: number }[];
+      await h.database.db
+        .update(schema.tanks)
+        .set({
+          plants: plantRows.map((p) => ({ ...p, size: 2 })),
+          lastTickAt: new Date(h.clock.now()),
+        })
+        .where(eq(schema.tanks.id, pond));
+      const settled = await wait(h, alice, pond, 1);
+      expect(settled.plants?.map((p) => p.key)).toEqual(seeded);
+      expect(settled.plants?.every((p) => p.size >= 1.9)).toBe(true);
     });
 
     it('cuts fragments beside the fitted colony and inside the 3 cm margin', async () => {

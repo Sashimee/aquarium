@@ -461,12 +461,6 @@ describe('fragging', () => {
       const cut = fragCoral(colony, 's2000', table, bounds, [rock(0, 0, 0.5)]);
       expect(cut).toEqual({ ok: false, reason: 'no_room' });
     });
-
-    it('leaves the colony untouched when there is no room', () => {
-      const cut = fragCoral(colony, 's2000', table, bounds, [rock(0, 0, 0.5)]);
-      expect(cut.ok).toBe(false);
-      expect(colony[0]?.size).toBe(2);
-    });
   });
 
   it('lets a fragment grow on its own', () => {

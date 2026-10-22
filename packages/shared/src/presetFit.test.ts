@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DecorItem } from './common.js';
+import { legacyTintSeed, type DecorItem } from './common.js';
 import { fitPresetItem, presetFit } from './presetFit.js';
 
 const item: DecorItem = {
@@ -12,7 +12,7 @@ const item: DecorItem = {
 describe('presetFit', () => {
   it('leaves the standard tank as authored', () => {
     expect(presetFit('standard')).toEqual({ lengthRatio: 1, depthRatio: 1, scale: 1 });
-    expect(fitPresetItem(item, 'standard')).toEqual(item);
+    expect(fitPresetItem(item, 'standard')).toEqual({ ...item, tintSeed: legacyTintSeed(item) });
   });
 
   it('shrinks the nano tank by its length and depth', () => {
@@ -33,4 +33,12 @@ describe('presetFit', () => {
     expect(fit.scale).toBeCloseTo(0.9, 9);
     expect(fitPresetItem(item, 'long300').position[0]).toBeCloseTo(0.75, 9);
   });
+
+  it.each(['nano30', 'std200', 'long300'] as const)(
+    'names an item by its authored seed on %s',
+    (size) => {
+      expect(fitPresetItem(item, size).tintSeed).toBe(legacyTintSeed(item));
+      expect(fitPresetItem({ ...item, tintSeed: 5 }, size).tintSeed).toBe(5);
+    },
+  );
 });
