@@ -13,6 +13,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "e2e": "playwright test -c e2e/playwright.config.ts",
+    "smoke": "node tools/smoke/smoke.mjs",
     "build": "pnpm -r --if-present build",
     "build:assets": "node --import ./tools/asset-pipeline/src/ts-resolve.mjs tools/asset-pipeline/src/cli.ts build",
     "assets:sync-manifest": "node --import ./tools/asset-pipeline/src/ts-resolve.mjs tools/asset-pipeline/src/cli.ts sync-manifest",
