@@ -511,12 +511,6 @@ export const SUBSTRATE_RECIPES: SubstrateRecipe[] = [
 
 export const HDRI_RECIPES: HdriRecipe[] = [
   {
-    id: 'kloofendal-48d-partly-cloudy-puresky',
-    sourceId: 'polyhaven-kloofendal_48d_partly_cloudy_puresky',
-    file: 'kloofendal_48d_partly_cloudy_puresky_2k.hdr',
-    output: 'kloofendal_48d_partly_cloudy_puresky_2k.ktx2',
-  },
-  {
     id: 'studio-small-09',
     sourceId: 'polyhaven-studio_small_09',
     file: 'studio_small_09_2k.hdr',

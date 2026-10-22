@@ -803,31 +803,6 @@
       ]
     },
     {
-      "id": "polyhaven-kloofendal_48d_partly_cloudy_puresky",
-      "kind": "hdri",
-      "title": "Kloofendal 48d Partly Cloudy (Pure Sky)",
-      "author": "Greg Zaal, Jarod Guest",
-      "author_url": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
-      "source_url": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
-      "licence": "CC0-1.0",
-      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "checked_at": "2026-10-12",
-      "sha256": "8d6397dddc187c9cd4b668a31a73e93a9bcd6bbd5d2adc982473f26cad41ba0c",
-      "polycount": null,
-      "textures": "equirect HDR",
-      "rigged": false,
-      "notes": "Neutral sunlit sky HDRI for IBL and the above-water view. 2k .hdr. Licence stated as CC0 on the asset page and https://polyhaven.com/license.",
-      "modifications": [],
-      "status": "downloaded",
-      "files": [
-        {
-          "path": "kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-          "sha256": "5244534e9cf5b606f2ff513aa00ddb161b0a4826ffd88a0d3bd03ac29247d198",
-          "bytes": 5451493
-        }
-      ]
-    },
-    {
       "id": "polyhaven-studio_small_09",
       "kind": "hdri",
       "title": "Studio Small 09",
