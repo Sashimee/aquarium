@@ -48,7 +48,7 @@ function setup(initial?: 'office' | 'living-room', clock: number | null = null) 
     },
     tier: () => 'high',
     hood: () => 1,
-    clock,
+    clock: () => clock,
     now: () => nowMs,
     onFrame: (cb) => {
       frames.add(cb);
