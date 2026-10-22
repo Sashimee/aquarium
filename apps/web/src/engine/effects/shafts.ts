@@ -35,7 +35,23 @@ const PHASE_G = 0.6;
  * surface. A fish 1 cm off a plant 50 cm away is a 2% gap; fish against the back glass are 20% or
  * more, so their texels barely bleed onto each other.
  */
-const DEPTH_TOLERANCE = 0.01;
+export const DEPTH_TOLERANCE = 0.01;
+
+/**
+ * How much a low-resolution shaft texel marched to view depth `tapDepth` counts towards a pixel at
+ * view depth `here`, given its plain bilinear weight. The gap is taken in inverse depth, which is
+ * affine across the screen on any plane: in view depth, the texel further along a surface seen at
+ * a grazing angle is further off than the nearer one the same distance away on screen, so the
+ * upscale leaned towards the nearer texel and smeared the shafts towards the camera.
+ */
+export function upscaleWeight(
+  bilinear: Node<'float'>,
+  tapDepth: Node<'float'>,
+  here: Node<'float'>,
+): Node<'float'> {
+  const gap = abs(here.div(max(tapDepth, 1e-3)).oneMinus());
+  return bilinear.div(gap.add(DEPTH_TOLERANCE));
+}
 
 /**
  * Light shafts under the surface, ray-marched through the water box behind each pixel up to the
@@ -139,8 +155,7 @@ export class WaterShafts {
       ] as const) {
         const tap = rays.sample(base.add(vec2(dx + 0.5, dy + 0.5)).div(size));
         const bilinear = (dx === 0 ? f.x.oneMinus() : f.x).mul(dy === 0 ? f.y.oneMinus() : f.y);
-        const gap = abs(tap.a.sub(here)).div(max(here, 1e-3));
-        const weight = bilinear.div(gap.add(DEPTH_TOLERANCE));
+        const weight = upscaleWeight(bilinear, tap.a, here).toVar();
         sum.addAssign(tap.rgb.mul(weight));
         total.addAssign(weight);
       }

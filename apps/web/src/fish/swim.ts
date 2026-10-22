@@ -266,9 +266,12 @@ export class SwimState {
     return PECK_JAB_BODY_LENGTHS * biteGape(this.sincePeck);
   }
 
-  /** Starts a feeding gape, picking up from the gape of a bite still under way. */
-  bite(): void {
-    this.sinceBite = openingTime(biteGape(this.sinceBite));
+  /**
+   * Starts a feeding gape, picking up from the gape of a bite still under way. `elapsed` is how
+   * long ago, within the frame just advanced, the bite actually began.
+   */
+  bite(elapsed = 0): void {
+    this.sinceBite = openingTime(biteGape(this.sinceBite)) + elapsed;
   }
 
   advance(dt: number, sample: SwimSample): void {
@@ -307,7 +310,7 @@ export class SwimState {
     this.peckDue -= dt;
     if (this.peckDue > 0) return;
     this.sincePeck = -this.peckDue;
-    this.bite();
+    this.bite(this.sincePeck);
     this.peckJitter = (this.peckJitter + GOLDEN_FRACTION) % 1;
     this.peckDue +=
       PECK_MIN_INTERVAL_S + (PECK_MAX_INTERVAL_S - PECK_MIN_INTERVAL_S) * this.peckJitter;
