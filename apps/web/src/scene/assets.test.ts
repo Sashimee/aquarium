@@ -510,7 +510,7 @@ describe('ModelLibrary shared model textures', () => {
     expect(disposed).toContain(texture);
   });
 
-  async function failFirstGltfLoad(): Promise<() => void> {
+  function failFirstGltfLoad(): () => void {
     const original = GLTFLoader.prototype.loadAsync;
     let calls = 0;
     let fail!: () => void;
@@ -527,7 +527,7 @@ describe('ModelLibrary shared model textures', () => {
   }
 
   it('keeps a newer model cache entry when an older load of the same key fails', async () => {
-    const fail = await failFirstGltfLoad();
+    const fail = failFirstGltfLoad();
     const first = library.load(MEMBER, 0, 1024);
     const firstResult = first.catch((error: unknown) => error);
     const retaining = library.retainOnly(new Set());
@@ -542,7 +542,7 @@ describe('ModelLibrary shared model textures', () => {
   });
 
   it('keeps a newer collision entry when an older load of the same asset fails', async () => {
-    const fail = await failFirstGltfLoad();
+    const fail = failFirstGltfLoad();
     const first = library.collisionGeometry(MEMBER);
     const firstResult = first.catch((error: unknown) => error);
     const retaining = library.retainOnly(new Set());
@@ -553,6 +553,21 @@ describe('ModelLibrary shared model textures', () => {
     await retaining;
 
     expect(library.collisionGeometry(MEMBER)).toBe(second);
+    await second;
+  });
+
+  it('keeps a newer model cache entry when dispose evicts an older load that then fails', async () => {
+    const fail = failFirstGltfLoad();
+    const first = library.load(MEMBER, 0, 1024);
+    const firstResult = first.catch((error: unknown) => error);
+    const disposing = library.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = library.load(MEMBER, 0, 1024);
+    fail();
+    expect(await firstResult).toBeInstanceOf(Error);
+    await disposing;
+
+    expect(library.load(MEMBER, 0, 1024)).toBe(second);
     await second;
   });
 });
