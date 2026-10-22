@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CompressedTexture, LoaderUtils, Texture } from 'three';
+import { BufferGeometry, CompressedTexture, LoaderUtils, Texture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { WebGPURenderer } from 'three/webgpu';
 import { DEFAULT_HDRI_URL } from '../engine/environment';
@@ -308,6 +308,7 @@ describe('ModelLibrary shared model textures', () => {
   let ktx2Urls: string[];
   let failing: Set<string>;
   let disposed: Set<Texture>;
+  let ktx2Gate: Promise<void> | undefined;
   let library: ModelLibrary;
 
   beforeEach(async () => {
@@ -331,6 +332,7 @@ describe('ModelLibrary shared model textures', () => {
     ktx2Urls = [];
     failing = new Set();
     disposed = new Set();
+    ktx2Gate = undefined;
     vi.spyOn(KTX2Loader.prototype, 'load').mockImplementation(function (
       this: KTX2Loader,
       url,
@@ -345,7 +347,8 @@ describe('ModelLibrary shared model textures', () => {
       }
       const texture = new CompressedTexture([], 1, 1);
       texture.addEventListener('dispose', () => disposed.add(texture));
-      onLoad(texture);
+      if (ktx2Gate) void ktx2Gate.then(() => onLoad(texture));
+      else onLoad(texture);
     });
     library = new ModelLibrary(
       createSharedKtx2({
@@ -468,6 +471,41 @@ describe('ModelLibrary shared model textures', () => {
     const model = await library.load(MEMBER, 0, 1024);
     await disposing;
 
+    expect(textures(model).size).toBeGreaterThan(0);
     for (const texture of textures(model)) expect(disposed).toContain(texture);
+  });
+
+  it('frees collision geometry requested after dispose took its snapshot', async () => {
+    const freed: BufferGeometry[] = [];
+    const original = BufferGeometry.prototype.dispose;
+    vi.spyOn(BufferGeometry.prototype, 'dispose').mockImplementation(function (
+      this: BufferGeometry,
+    ) {
+      freed.push(this);
+      original.call(this);
+    });
+    const early = library.collisionGeometry(MEMBER);
+    const disposing = library.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const late = await library.collisionGeometry(PILE);
+    await disposing;
+
+    expect(late.length).toBeGreaterThan(0);
+    for (const geometry of late) expect(freed.filter((g) => g === geometry)).toHaveLength(1);
+    for (const geometry of await early) {
+      expect(freed.filter((g) => g === geometry)).toHaveLength(1);
+    }
+  });
+
+  it('frees a texture whose load resolves after dispose', async () => {
+    let open!: () => void;
+    ktx2Gate = new Promise<void>((resolve) => (open = resolve));
+    const loading = library.loadTexture(MEMBER, 'baseColor', 1024, 4);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await library.dispose();
+    open();
+    const texture = await loading;
+
+    expect(disposed).toContain(texture);
   });
 });
