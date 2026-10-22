@@ -175,7 +175,7 @@ function fitItem(
     }
   }
   if (perch && !standsClear(item.assetId, y, scale, waterTop)) {
-    return fitItem(item, size, dimensions, boundsOf, false);
+    return fitItem({ ...item, perch: undefined }, size, dimensions, boundsOf, false);
   }
   return {
     ...stretched,
