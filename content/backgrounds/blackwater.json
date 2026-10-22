@@ -1,0 +1,37 @@
+[
+  {
+    "id": "bg-blackwater-leaf-litter",
+    "biome": "blackwater",
+    "title": "Leaf litter",
+    "file": "background/bg-blackwater-leaf-litter/high.ktx2",
+    "asset": "bg-blackwater-leaf-litter"
+  },
+  {
+    "id": "bg-blackwater-root-tangle",
+    "biome": "blackwater",
+    "title": "Root tangle",
+    "file": "background/bg-blackwater-root-tangle/high.ktx2",
+    "asset": "bg-blackwater-root-tangle"
+  },
+  {
+    "id": "bg-blackwater-driftwood-wall",
+    "biome": "blackwater",
+    "title": "Driftwood wall",
+    "file": "background/bg-blackwater-driftwood-wall/high.ktx2",
+    "asset": "bg-blackwater-driftwood-wall"
+  },
+  {
+    "id": "bg-blackwater-flooded-forest",
+    "biome": "blackwater",
+    "title": "Flooded forest",
+    "file": "background/bg-blackwater-flooded-forest/high.ktx2",
+    "asset": "bg-blackwater-flooded-forest"
+  },
+  {
+    "id": "bg-blackwater-open-tannin",
+    "biome": "blackwater",
+    "title": "Open tannin",
+    "file": "background/bg-blackwater-open-tannin/high.ktx2",
+    "asset": "bg-blackwater-open-tannin"
+  }
+]

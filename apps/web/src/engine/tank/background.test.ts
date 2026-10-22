@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { BACKGROUND_IDS, DEFAULT_BACKGROUND_ID } from '@aquarium/shared';
+import { BACKGROUND_IDS, DEFAULT_BACKGROUND_ID, type Biome } from '@aquarium/shared';
 import {
   DepthTexture,
   FloatType,
@@ -134,8 +134,13 @@ describe('pickBackgroundId', () => {
   });
 
   it('gives no picture to a biome that has none yet', () => {
-    expect(pickBackgroundId('blackwater', null)).toBeNull();
-    expect(pickBackgroundId('mangrove', STREAM)).toBeNull();
+    expect(pickBackgroundId('atlantis' as Biome, null)).toBeNull();
+    expect(pickBackgroundId('atlantis' as Biome, STREAM)).toBeNull();
+  });
+
+  it('picks the default for blackwater and mangrove', () => {
+    expect(pickBackgroundId('blackwater', null)).toBe(DEFAULT_BACKGROUND_ID.blackwater);
+    expect(pickBackgroundId('mangrove', STREAM)).toBe(DEFAULT_BACKGROUND_ID.mangrove);
   });
 });
 
@@ -326,7 +331,7 @@ describe('TankBackground', () => {
     const coral = loader.land(file(CORAL, 'high'));
     await shown;
     const coralGone = disposed(coral);
-    await background.show('blackwater', null);
+    await background.show('atlantis' as Biome, null);
     expect(background.id).toBeNull();
     expect(background.map.value).toBe(film);
     expect(coralGone()).toBe(true);
