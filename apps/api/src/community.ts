@@ -20,7 +20,7 @@ import {
   type CommunityStreamState,
   type Tank,
 } from '@aquarium/shared';
-import { applyCare } from '@aquarium/sim/lifecycle';
+import { applyCare, type LifecycleState } from '@aquarium/sim/lifecycle';
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -74,6 +74,7 @@ export const DEFAULT_COMMUNITY_CONFIG: CommunityConfig = {
 };
 
 const COMMUNITY_TANK_NAME = 'Community Tank';
+const COMMUNITY_MEMORIAL_LIMIT = 10;
 
 const SEED_AGE_MS = 7 * 86_400_000;
 const EPSILON = 1e-9;
@@ -296,14 +297,29 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
   // queue every feeder behind them.
   async function readState(): Promise<CommunityStreamState> {
     const id = await ensureTankId();
-    const resting = await database.db.transaction(async (tx) => {
-      const [row] = await tx.select().from(schema.tanks).where(eq(schema.tanks.id, id));
-      if (!row) throw new Error('the community tank row is missing');
-      const ticked = await readTicked(tx, deps, row);
-      return ticked ? streamState(tx, ticked, undefined, ticked.nowMs) : null;
-    });
+    const resting = await database.db.transaction(
+      async (tx) => {
+        const [row] = await tx.select().from(schema.tanks).where(eq(schema.tanks.id, id));
+        if (!row) throw new Error('the community tank row is missing');
+        const ticked = await readTicked(tx, deps, row);
+        return ticked ? streamState(tx, ticked, undefined, ticked.nowMs) : null;
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
     if (resting) return resting;
     return (await transact(async (_tx, ticked) => ({ value: null, ticked }))).state;
+  }
+
+  function safeForStarterStock(state: LifecycleState): boolean {
+    return COMMUNITY_STARTER_STOCK.every((stock) => {
+      const spec = species.get(stock.species);
+      if (!spec)
+        throw new Error(`community starter species "${stock.species}" is not in the catalog`);
+      return (
+        state.water.ammonia <= spec.lifecycle.ammoniaTolerance &&
+        state.chemistry.nitrite <= spec.chemistry.nitriteTolerance
+      );
+    });
   }
 
   async function keepTank(): Promise<void> {
@@ -320,7 +336,7 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
         .orderBy(desc(schema.events.at))
         .limit(1);
       const lastChangeMs = (lastChange?.at ?? tank.createdAt).getTime();
-      if (nowMs - lastChangeMs >= COMMUNITY_UPKEEP.waterChangeEveryMs) {
+      const changeWater = async () => {
         const applied = applyCare(
           state,
           { type: 'water_change' },
@@ -341,7 +357,8 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
           medicine: wireMedicine(state.medicine),
         };
         changed = true;
-      }
+      };
+      if (nowMs - lastChangeMs >= COMMUNITY_UPKEEP.waterChangeEveryMs) await changeWater();
 
       const cleared = fishRows.filter(
         (f) =>
@@ -350,6 +367,25 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
           nowMs - f.diedAt.getTime() >= COMMUNITY_UPKEEP.deadFishKeepMs,
       );
       if (cleared.length > 0) {
+        await tx.insert(schema.memorials).values(
+          cleared.map((f) => ({
+            tankId: tank.id,
+            fishName: f.name,
+            species: f.species,
+            bornAt: f.bornAt,
+            diedAt: f.diedAt ?? new Date(nowMs),
+            cause: f.cause ?? 'unknown',
+          })),
+        );
+        await tx.delete(schema.memorials).where(
+          and(
+            eq(schema.memorials.tankId, tank.id),
+            sql`${schema.memorials.id} not in (
+              select id from memorials where tank_id = ${tank.id}
+              order by died_at desc, id limit ${COMMUNITY_MEMORIAL_LIMIT}
+            )`,
+          ),
+        );
         await tx.delete(schema.fish).where(
           inArray(
             schema.fish.id,
@@ -363,25 +399,28 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
 
       const alive = fishRows.filter((f) => f.status === 'alive');
       if (alive.length < COMMUNITY_UPKEEP.restockBelowAlive) {
-        const wanted = COMMUNITY_STARTER_STOCK.map((stock) => ({
-          ...stock,
-          count: stock.count - alive.filter((f) => f.species === stock.species).length,
-          first:
-            Math.max(
-              0,
-              ...fishRows
-                .filter((f) => f.species === stock.species)
-                .map((f) => Number(f.name.slice(stock.label.length + 1)) || 0),
-            ) + 1,
-        })).filter((stock) => stock.count > 0);
-        const added = wanted.length
-          ? await tx
-              .insert(schema.fish)
-              .values(stockRows(tank.id, nowMs, wanted))
-              .returning()
-          : [];
-        fishRows = [...fishRows, ...added];
-        changed ||= added.length > 0;
+        if (!safeForStarterStock(state)) await changeWater();
+        if (safeForStarterStock(state)) {
+          const wanted = COMMUNITY_STARTER_STOCK.map((stock) => ({
+            ...stock,
+            count: stock.count - alive.filter((f) => f.species === stock.species).length,
+            first:
+              Math.max(
+                0,
+                ...fishRows
+                  .filter((f) => f.species === stock.species)
+                  .map((f) => Number(f.name.slice(stock.label.length + 1)) || 0),
+              ) + 1,
+          })).filter((stock) => stock.count > 0);
+          const added = wanted.length
+            ? await tx
+                .insert(schema.fish)
+                .values(stockRows(tank.id, nowMs, wanted))
+                .returning()
+            : [];
+          fishRows = [...fishRows, ...added];
+          changed ||= added.length > 0;
+        }
       }
 
       return { value: null, ticked: { ...ticked, tank }, fishRows, changed };
@@ -665,7 +704,17 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
   );
 
   let ticking = false;
+  let upkeepRun: Promise<void> | null = null;
   const timers: NodeJS.Timeout[] = [];
+
+  function runUpkeep(): void {
+    if (upkeepRun) return;
+    upkeepRun = keepTank()
+      .catch((err: unknown) => app.log.error({ err }, 'community upkeep failed'))
+      .finally(() => {
+        upkeepRun = null;
+      });
+  }
 
   async function tickWhileWatched(): Promise<void> {
     if (ticking || streams.size === 0) return;
@@ -685,18 +734,18 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
       if (streams.size > 0) streams.broadcast('viewers', { viewers: streams.size });
     }, config.heartbeatMs);
     const ticker = setInterval(() => void tickWhileWatched(), config.tickMs);
-    const upkeep = setInterval(() => {
-      keepTank().catch((err: unknown) => app.log.error({ err }, 'community upkeep failed'));
-    }, config.upkeepMs);
+    const upkeep = setInterval(runUpkeep, config.upkeepMs);
     upkeep.unref();
     timers.push(upkeep);
     heartbeat.unref();
     ticker.unref();
     timers.push(heartbeat, ticker);
+    runUpkeep();
   });
 
   app.addHook('preClose', async () => {
     for (const timer of timers) clearInterval(timer);
     streams.closeAll();
+    await upkeepRun;
   });
 }

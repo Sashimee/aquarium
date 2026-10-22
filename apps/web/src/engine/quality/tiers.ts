@@ -95,7 +95,9 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
   ultra: {
     resolutionScale: 1,
     maxPixelRatio: 2,
-    shadowMapSize: 4096,
+    // The hood's shadow frustum spans the tank, so 2048 texels are already under a millimetre on the
+    // longest one; 4096 cost four times the depth writes and PCF taps for no visible edge.
+    shadowMapSize: 2048,
     postChain: 'taa-bloom',
     godRays: true,
     depthOfField: true,
@@ -125,6 +127,19 @@ export const TIER_COST: Readonly<Record<Tier, number>> = {
   ultra: 1.7,
 };
 
+/**
+ * The share of the frame budget a tier's GPU time may take. Ultra is a luxury over high, so it is
+ * chosen, and kept, only while it leaves about half the GPU idle: a desktop GPU that could just
+ * hold it would otherwise run flat out (#1020). Frame intervals cannot show that headroom, so
+ * a tier with a share below 1 is reached only on GPU timing.
+ */
+export const TIER_GPU_SHARE: Readonly<Record<Tier, number>> = {
+  low: 1,
+  medium: 1,
+  high: 1,
+  ultra: 0.5,
+};
+
 export function tierIndex(tier: Tier): number {
   return TIERS.indexOf(tier);
 }
@@ -139,11 +154,29 @@ export function isTier(value: unknown): value is Tier {
   return typeof value === 'string' && (TIERS as readonly string[]).includes(value);
 }
 
-/** The renderer pixel ratio for a tier: the device ratio clamped to the tier's cap, then scaled. */
+export function lowerTier(a: Tier, b: Tier): Tier {
+  return tierIndex(a) <= tierIndex(b) ? a : b;
+}
+
+/** The highest tier up to `maxTier` that frame intervals alone may choose. */
+export function frameTimedMaxTier(maxTier: Tier): Tier {
+  let tier = tierAt(0);
+  for (const candidate of TIERS.slice(0, tierIndex(maxTier) + 1)) {
+    if (TIER_GPU_SHARE[candidate] >= 1) tier = candidate;
+  }
+  return tier;
+}
+
+/**
+ * The renderer pixel ratio for a tier: the device ratio clamped to the tier's cap and to the
+ * device class's `ceiling`, then scaled.
+ */
 export function renderPixelRatio(
   devicePixelRatio: number,
   settings: Pick<TierSettings, 'maxPixelRatio' | 'resolutionScale'>,
+  ceiling = Number.POSITIVE_INFINITY,
 ): number {
   const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
-  return Math.min(dpr, settings.maxPixelRatio) * settings.resolutionScale;
+  const cap = ceiling >= 1 ? ceiling : 1;
+  return Math.min(dpr, settings.maxPixelRatio, cap) * settings.resolutionScale;
 }

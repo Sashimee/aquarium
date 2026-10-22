@@ -1,4 +1,4 @@
-import type { Fish, GiftOffer, Tank } from '@aquarium/shared';
+import { GIFT_OFFER_TTL_HOURS, type Fish, type GiftOffer, type Tank } from '@aquarium/shared';
 import { useEffect, useId, useMemo, useState, useSyncExternalStore, type FormEvent } from 'react';
 import {
   ACCEPTS_GIFTS_HINT,
@@ -143,8 +143,8 @@ export function GiftFishButton({
             Ask for a fish in return
           </label>
           <p className="hint">
-            {fish.name} leaves your tank now and waits for the other player for 72 hours. You can
-            cancel until they answer.
+            {fish.name} leaves your tank now and waits for the other player for{' '}
+            {GIFT_OFFER_TTL_HOURS} hours. You can cancel until they answer.
           </p>
           <button type="submit" className="primary" disabled={bookState.busy !== null}>
             {mine ? 'Sending' : `Send ${fish.name}`}
@@ -262,7 +262,7 @@ function OfferItem({
       case 'confirm':
         return `Confirm the swap for ${offer.pledged?.name ?? 'the new fish'}`;
       case 'decline':
-        return offer.status === 'countered' ? 'Withdraw my offer' : 'Decline';
+        return offer.status === 'countered' ? 'Decline the whole trade' : 'Decline';
       case 'cancel':
         return 'Cancel offer';
     }
@@ -371,6 +371,12 @@ function OfferGroup({
   );
 }
 
+export function GiftNotice({ session }: { session: TankSession }) {
+  const book = useGiftBook(session);
+  const bookState = useSyncExternalStore(book.subscribe, book.getState);
+  return <div role="status">{bookState.notice}</div>;
+}
+
 export function GiftOffers({ session, state }: { session: TankSession; state: SessionState }) {
   const book = useGiftBook(session);
   const bookState = useSyncExternalStore(book.subscribe, book.getState);
@@ -386,8 +392,8 @@ export function GiftOffers({ session, state }: { session: TankSession; state: Se
     <section aria-labelledby={heading} className="block">
       <h3 id={heading}>Offers{waiting > 0 ? ` (${waiting} waiting for you)` : ''}</h3>
       <p className="hint">
-        Fish sent to you or by you. Players are named by handle only, and an offer runs out after 72
-        hours.
+        Fish sent to you or by you. Players are named by handle only, and an offer runs out after{' '}
+        {GIFT_OFFER_TTL_HOURS} hours.
       </p>
       <div className="row">
         <button type="button" disabled={bookState.loading} onClick={() => void book.refresh()}>

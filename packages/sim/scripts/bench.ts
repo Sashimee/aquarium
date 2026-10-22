@@ -7,6 +7,7 @@ import {
   walkerBenchmarkConfig,
 } from '../src/fixtures.ts';
 import { World } from '../src/world.ts';
+import { at, fastestMeanMs, frenzy, reference, swimming, type Scenario } from './benchScenarios.ts';
 
 const WARMUP_STEPS = 300;
 const MEASURED_STEPS = 3000;
@@ -16,6 +17,10 @@ const RUNS = 5;
 const THROTTLE = 4;
 const DESKTOP_BUDGET_MS = 2;
 const THROTTLED_BUDGET_MS = 4;
+// Worst of 10 runs on the budget desktop at load average 3-8 (Ryzen 5 7600X, Node 24, 2026-10-22):
+// swimming 1.137-1.163, walking 1.743-1.783, feeding 2.247-2.358, times 1.15. A clean process
+// keeps the ratio far steadier than under vitest, so a 1.2x slowdown of the sim fails here.
+const REFERENCE_RATIO_LIMITS = { swimming: 1.34, walking: 2.05, feeding: 2.71 } as const;
 
 function percentile(sorted: readonly number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? NaN;
@@ -140,6 +145,17 @@ for (let i = 0; i < toySteps; i++) {
 }
 const toyMean = toyMs / toySteps;
 
+function ratioToReference(make: () => readonly [Scenario, Scenario]): number {
+  const { meanMs } = fastestMeanMs(make);
+  return at(meanMs, 0) / at(meanMs, 1);
+}
+
+const ratios = {
+  swimming: ratioToReference(() => [swimming(1), reference()]),
+  walking: ratioToReference(() => [swimming(4, walkerBenchmarkConfig(4)), reference()]),
+  feeding: ratioToReference(() => [frenzy(), reference()]),
+};
+
 // Node queues gc entries to the observer only once the event loop turns.
 await new Promise((resolve) => setTimeout(resolve, 0));
 gc.disconnect();
@@ -171,6 +187,9 @@ console.log(
     feedingP99Ms: Number(percentile(feedSamples, 0.99).toFixed(4)),
     withToysMeanMsPerStep: Number(toyMean.toFixed(4)),
     withToysP99Ms: Number(percentile(toySamples, 0.99).toFixed(4)),
+    swimmingToReference: Number(ratios.swimming.toFixed(4)),
+    walkingToReference: Number(ratios.walking.toFixed(4)),
+    feedingToReference: Number(ratios.feeding.toFixed(4)),
     gcPauses: gcPauses.length,
     gcPauseMs: Number(gcMs.toFixed(4)),
   }),
@@ -190,6 +209,13 @@ for (const [name, ms] of gates) {
   if (THROTTLE * ms > THROTTLED_BUDGET_MS) {
     over.push(
       `${name} ${(THROTTLE * ms).toFixed(3)} ms at ${THROTTLE}x throttle is over the ${THROTTLED_BUDGET_MS} ms budget`,
+    );
+  }
+}
+for (const name of ['swimming', 'walking', 'feeding'] as const) {
+  if (ratios[name] > REFERENCE_RATIO_LIMITS[name]) {
+    over.push(
+      `${name} step ${ratios[name].toFixed(3)}x the reference workload is over the ${REFERENCE_RATIO_LIMITS[name]}x limit`,
     );
   }
 }

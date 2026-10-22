@@ -12,7 +12,16 @@ describe('qualityProfile', () => {
       probeTier: 'high',
       maxTier: 'ultra',
       gpuTiming: true,
+      frameCapFps: 60,
+      pixelRatioCeiling: 1.5,
+      maxTextureSize: 2048,
+      textureBudgetMiB: { low: 44, medium: 44, high: 112, ultra: 112 },
     });
+  });
+
+  it('leaves phones uncapped in frame rate and pixel ratio ceiling', () => {
+    expect(MOBILE_PROFILE.frameCapFps).toBeNull();
+    expect(MOBILE_PROFILE.pixelRatioCeiling).toBe(Number.POSITIVE_INFINITY);
   });
 
   it('probes touch devices at medium and lets them climb to high but not ultra', () => {
@@ -20,6 +29,10 @@ describe('qualityProfile', () => {
     expect(mobile).toBe(MOBILE_PROFILE);
     expect(mobile.probeTier).toBe('medium');
     expect(mobile.maxTier).toBe('high');
+  });
+
+  it('keeps touch devices on 1k textures whatever the tier', () => {
+    expect(MOBILE_PROFILE.maxTextureSize).toBe(1024);
   });
 
   it('adapts touch devices on frame time only', () => {
@@ -59,6 +72,35 @@ describe('renderPixelRatio', () => {
     expect(renderPixelRatio(1, TIER_SETTINGS.high)).toBe(1);
     expect(renderPixelRatio(2, TIER_SETTINGS.ultra)).toBe(2);
     expect(renderPixelRatio(1.25, TIER_SETTINGS.medium)).toBe(1.25);
+  });
+
+  it('holds a high-density desktop at 1.5 on every tier unless the player opts out', () => {
+    for (const tier of TIERS) {
+      const capped = renderPixelRatio(2, TIER_SETTINGS[tier], DESKTOP_PROFILE.pixelRatioCeiling);
+      expect(capped).toBeLessThanOrEqual(1.5);
+    }
+    expect(renderPixelRatio(2, TIER_SETTINGS.ultra, DESKTOP_PROFILE.pixelRatioCeiling)).toBe(1.5);
+    expect(renderPixelRatio(2, TIER_SETTINGS.ultra, Number.POSITIVE_INFINITY)).toBe(2);
+    expect(renderPixelRatio(3, TIER_SETTINGS.ultra, Number.POSITIVE_INFINITY)).toBe(2);
+  });
+
+  it('leaves desktop displays at or under the ceiling as they were', () => {
+    const ceiling = DESKTOP_PROFILE.pixelRatioCeiling;
+    expect(renderPixelRatio(1, TIER_SETTINGS.ultra, ceiling)).toBe(1);
+    expect(renderPixelRatio(1.25, TIER_SETTINGS.high, ceiling)).toBe(1.25);
+    expect(renderPixelRatio(1.5, TIER_SETTINGS.ultra, ceiling)).toBe(1.5);
+    expect(renderPixelRatio(2, TIER_SETTINGS.low, ceiling)).toBe(1);
+  });
+
+  it('keeps phones at their tier caps, with no device class ceiling', () => {
+    const ceiling = MOBILE_PROFILE.pixelRatioCeiling;
+    expect(renderPixelRatio(3, TIER_SETTINGS.high, ceiling)).toBe(2);
+    expect(renderPixelRatio(3, TIER_SETTINGS.medium, ceiling)).toBe(1.5);
+  });
+
+  it('never lets a ceiling push the ratio under one pixel per CSS pixel', () => {
+    expect(renderPixelRatio(2, TIER_SETTINGS.high, 0.5)).toBe(1);
+    expect(renderPixelRatio(2, TIER_SETTINGS.high, Number.NaN)).toBe(1);
   });
 
   it('treats a missing or invalid device ratio as 1', () => {

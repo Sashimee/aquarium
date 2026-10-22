@@ -27,12 +27,18 @@ import {
   type DeviceLossWatch,
   type DeviceLostInfo,
   type LossSource,
-  recoveryFor,
+  respondToDeviceLoss,
   sessionBackend,
   watchDeviceLoss,
-  webglFallbackUrl,
 } from './deviceLoss';
 import { showDeviceNotice } from './deviceNotice';
+import {
+  displayLimits,
+  displayPreference,
+  type DisplayChoice,
+  type DisplayLimits,
+  type DisplayPreference,
+} from './displayPreference';
 import { EffectsSlot } from './effectsSlot';
 import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
@@ -43,12 +49,13 @@ import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
 import { deviceTextureLimit } from './photo/capture';
 import { PhotoMode } from './photo/PhotoMode';
+import { FrameCap } from './framePacing';
 import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
-import { renderPixelRatio } from './quality/tiers';
+import { renderPixelRatio, type TierSettings } from './quality/tiers';
 import { TankBackground } from './tank/background';
 import {
   defaultView,
@@ -69,6 +76,8 @@ export type FrameCallback = (deltaS: number, nowMs: number) => void;
 export interface EngineConfig {
   options: EngineOptions;
   events?: EngineEventBus;
+  /** The player's frame rate and resolution opt-ins; the page-wide one by default. */
+  display?: DisplayPreference;
   water?: WaterQuality;
   hdriUrl?: string;
 }
@@ -174,6 +183,8 @@ export class Engine {
   private warmedUp = false;
   private readonly reflectedShadow = new ReflectedShadow();
   private readonly loop: RenderLoop;
+  private readonly frameCap: FrameCap;
+  private displayLimits: DisplayLimits;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -257,6 +268,20 @@ export class Engine {
     this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
     const profile = qualityProfile(hasCoarsePointer());
+    const display = config.display ?? displayPreference;
+    const chosenDisplay = (): DisplayChoice => ({
+      frameRate: config.options.frameRate ?? display.snapshot().frameRate,
+      pixelRatio: config.options.pixelRatio ?? display.snapshot().pixelRatio,
+    });
+    this.displayLimits = displayLimits(profile, chosenDisplay());
+    this.frameCap = new FrameCap(this.displayLimits.frameCapFps);
+    cleanup.add(
+      display.subscribe(() => {
+        this.displayLimits = displayLimits(profile, chosenDisplay());
+        this.frameCap.setFps(this.displayLimits.frameCapFps);
+        this.applyPixelRatio();
+      }),
+    );
     this.quality = new QualityManager(events, {
       gpuTiming: this.gpuTiming && profile.gpuTiming,
       pinned: config.options.tier,
@@ -265,6 +290,7 @@ export class Engine {
       refreshMs: profile.refreshMs,
       probeTier: profile.probeTier,
       maxTier: profile.maxTier,
+      maxTextureSize: profile.maxTextureSize,
       awaitContent: true,
     });
     const pipelineFailures = new PipelineFailureHandler(
@@ -359,6 +385,10 @@ export class Engine {
 
     this.registerQualityFeatures();
     cleanup.add(this.daylightFeed.watch(document));
+    const followVisibility = (): void => this.loop.setHidden(document.hidden);
+    followVisibility();
+    document.addEventListener('visibilitychange', followVisibility);
+    cleanup.add(() => document.removeEventListener('visibilitychange', followVisibility));
 
     const resizeObserver = new ResizeObserver(() => this.resize());
     cleanup.add(() => resizeObserver.disconnect());
@@ -508,24 +538,15 @@ export class Engine {
    */
   private deviceLost(info: DeviceLostInfo, preference: EngineOptions['backend']): void {
     if (this.disposed) return;
-    this.loop.halt();
-    const recovery = recoveryFor(info.api, preference);
-    this.events.emit('engine:device-lost', { api: info.api, message: info.message, recovery });
-    this.reportError(`The ${info.api} device was lost: ${info.message}`, info);
-    if (recovery === 'webgl') {
-      const here = window.location.href;
-      const next = webglFallbackUrl(here, browserSessionStore());
-      if (next === here) window.location.reload();
-      else window.location.replace(next);
-      return;
-    }
-    this.cleanup.add(
-      showDeviceNotice(
-        document.body,
-        'The graphics device stopped responding, so the tank cannot be drawn. Reload to try again.',
-        { label: 'Reload', run: () => window.location.reload() },
-      ),
-    );
+    const removeNotice = respondToDeviceLoss(info, preference, {
+      halt: () => this.loop.halt(),
+      announce: (event) => this.events.emit('engine:device-lost', event),
+      report: (message, cause) => this.reportError(message, cause),
+      location: window.location,
+      store: browserSessionStore(),
+      notify: (message, action) => showDeviceNotice(document.body, message, action),
+    });
+    if (removeNotice !== null) this.cleanup.add(removeNotice);
   }
 
   private setupHood(): void {
@@ -570,9 +591,7 @@ export class Engine {
   }
 
   private registerQualityFeatures(): void {
-    this.quality.register('pixel-ratio', (s) => {
-      this.renderer.setPixelRatio(renderPixelRatio(window.devicePixelRatio, s));
-    });
+    this.quality.register('pixel-ratio', (s) => this.applyPixelRatio(s));
     this.quality.register('shadows', (s) => {
       this.hood.castShadow = s.shadowMapSize > 0;
       if (s.shadowMapSize > 0) this.hood.shadow.mapSize.set(s.shadowMapSize, s.shadowMapSize);
@@ -602,6 +621,11 @@ export class Engine {
           this.reportError('The surface reflection could not be prepared', cause),
         );
     });
+  }
+
+  private applyPixelRatio(settings: Readonly<TierSettings> = this.quality.settings): void {
+    const ceiling = this.displayLimits.pixelRatioCeiling;
+    this.renderer.setPixelRatio(renderPixelRatio(window.devicePixelRatio, settings, ceiling));
   }
 
   private async warmUp(): Promise<void> {
@@ -665,6 +689,8 @@ export class Engine {
   }
 
   private frame(nowMs: number): void {
+    const pacedMs = this.frameCap.tick(nowMs);
+    if (pacedMs === null) return;
     const frameMs = this.lastFrameAt === null ? 0 : nowMs - this.lastFrameAt;
     this.lastFrameAt = nowMs;
     const deltaS = Math.min(frameMs / 1000, MAX_DELTA_S);
@@ -685,7 +711,7 @@ export class Engine {
 
     if (frameMs > 0) {
       if (this.skipFrameSample) this.skipFrameSample = false;
-      else this.quality.sample(frameMs, this.gpuMs, nowMs);
+      else this.quality.sample(pacedMs, this.gpuMs, nowMs);
       this.gpuMs = null;
       this.stats.frames++;
       this.stats.frameMsSum += frameMs;

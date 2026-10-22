@@ -36,6 +36,30 @@ describe('QualityManager', () => {
     expect(applied).toEqual(['high']);
   });
 
+  it('keeps 2k textures on high and ultra when nothing caps them', () => {
+    const { quality } = setup();
+    expect(quality.settings).toBe(TIER_SETTINGS.high);
+    quality.setTier('ultra', 0);
+    expect(quality.settings.textureSize).toBe(2048);
+  });
+
+  it('caps the texture size of every tier, a manual pick included, and nothing else', () => {
+    const { quality } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    const seen: number[] = [];
+    quality.register('textures', (s) => seen.push(s.textureSize));
+    for (const tier of ['low', 'high', 'ultra'] as const) {
+      quality.setTier(tier, 0);
+      expect(quality.settings).toEqual({ ...TIER_SETTINGS[tier], textureSize: 1024 });
+    }
+    expect(seen).toEqual([1024, 1024, 1024, 1024]);
+  });
+
+  it('caps a pinned tier too', () => {
+    const { quality } = setup({ pinned: 'ultra', maxTextureSize: 1024 });
+    expect(quality.settings.textureSize).toBe(1024);
+    expect(quality.settings.shadowMapSize).toBe(TIER_SETTINGS.ultra.shadowMapSize);
+  });
+
   it('rejects duplicate feature names and allows unregistering', () => {
     const { quality } = setup();
     expect(() => quality.register('recorder', () => undefined)).toThrow(/already registered/);
@@ -95,8 +119,26 @@ describe('QualityManager', () => {
     const { quality } = setup();
     quality.start(0);
     feed(quality, 200, 200, 0, 299);
-    feed(quality, TARGET, 4, 300, 2400);
+    feed(quality, TARGET, 3, 300, 2400);
     expect(quality.tier).toBe('ultra');
+  });
+
+  it('keeps a desktop on high when its gpu would run ultra over half the frame', () => {
+    const { quality } = setup();
+    quality.start(0);
+    feed(quality, TARGET, 6, 0, 2400);
+    expect(quality.tier).toBe('high');
+    feed(quality, TARGET, 6, 2400, 120_000);
+    expect(quality.tier).toBe('high');
+  });
+
+  it('never climbs to ultra on frame intervals alone, however well they keep up', () => {
+    const { quality, announced } = setup({ gpuTiming: false });
+    quality.start(0);
+    feed(quality, TARGET, null, 0, 120_000);
+    expect(quality.timingSignal).toBe('frame');
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
   });
 
   it('falls back to frame intervals when the gpu cannot be timed', () => {
@@ -287,7 +329,7 @@ describe('QualityManager', () => {
     const t = feed(quality, TARGET, 2, 0, 2400);
     expect(quality.tier).toBe('high');
     quality.contentReady(t);
-    feed(quality, TARGET, 4, t, t + 2400);
+    feed(quality, TARGET, 3, t, t + 2400);
     expect(quality.tier).toBe('ultra');
     expect(announced.at(-1)).toEqual({ from: 'high', to: 'ultra', reason: 'probe' });
   });
@@ -361,7 +403,7 @@ describe('QualityManager', () => {
   it('ignores content readiness after the probes have finished', () => {
     const { quality, announced } = setup({ awaitContent: true, contentTimeoutMs: 1000 });
     quality.start(0);
-    const t = feed(quality, TARGET, 4, 0, 6000);
+    const t = feed(quality, TARGET, 3, 0, 6000);
     expect(quality.probing).toBe(false);
     quality.contentReady(t);
     expect(quality.probing).toBe(false);

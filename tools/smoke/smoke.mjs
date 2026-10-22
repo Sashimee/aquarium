@@ -1,9 +1,18 @@
 import { chromium } from '@playwright/test';
+import { findVerificationLink, newIdentity, signUpStatus } from '../../e2e/support/signup.ts';
 
 const origin = `http://localhost:${process.env.E2E_PORT ?? 4317}`;
-const password = 'a long enough passphrase 9';
 const sceneTimeoutMs = 120_000;
-const settleMs = 5_000;
+const settleMs = 2_500;
+
+const timings = [];
+const startedAt = Date.now();
+let stageStartedAt = startedAt;
+function endStage(name) {
+  const now = Date.now();
+  timings.push(`${name} ${((now - stageStartedAt) / 1000).toFixed(1)}s`);
+  stageStartedAt = now;
+}
 
 const problems = [];
 const record = (kind, detail) => problems.push(`${kind}: ${detail}`);
@@ -28,10 +37,12 @@ function watch(page) {
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
     // Chromium logs the expected 401 from /api/me while signed out; nothing else is exempt.
+    const at = msg.location().url ? new URL(msg.location().url) : null;
     const signedOutMe =
       stage === 'signed out' &&
       /status of 401/.test(msg.text()) &&
-      new URL(msg.location().url || origin).pathname === '/api/me';
+      at?.origin === origin &&
+      at.pathname === '/api/me';
     if (signedOutMe) return;
     record('console.error', `[${stage}] ${msg.text()}`);
   });
@@ -51,18 +62,12 @@ async function sceneReady(page) {
 }
 
 async function verifiedSignUp(page) {
-  const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const email = `smoke-${tag}@bas.lu`;
-  const signUp = await page.request.post('/api/auth/sign-up/email', {
-    headers: { origin },
-    data: { name: 'Smoke', email, password, callbackURL: '/verify-email' },
-  });
-  if (!signUp.ok()) throw new Error(`sign-up failed with ${signUp.status()}`);
+  const identity = newIdentity('smoke');
+  const signUp = await signUpStatus(page, origin, identity);
+  if (!signUp.ok) throw new Error(`sign-up failed with ${signUp.status}`);
   let link = '';
   for (let attempt = 0; attempt < 40 && !link; attempt += 1) {
-    const outbox = await (await fetch(`${origin}/__e2e/outbox`)).json();
-    const mail = outbox.find((m) => m.to.toLowerCase() === email && /verify/i.test(m.subject));
-    link = mail ? (/<(https?:\/\/[^>\s]+)>/.exec(mail.text)?.[1] ?? '') : '';
+    link = await findVerificationLink(origin, identity.email);
     if (!link) await new Promise((resolve) => setTimeout(resolve, 250));
   }
   if (!link) throw new Error('no verification mail reached the test outbox');
@@ -77,27 +82,35 @@ try {
   stage = 'signed out';
   await page.goto('/?tier=low&backend=webgl');
   await sceneReady(page);
+  endStage('signed out');
 
   stage = 'sign up';
   await verifiedSignUp(page);
+  endStage('sign up');
 
   stage = 'tank';
-  await page.close();
-  const tankPage = await context.newPage();
-  watch(tankPage);
-  await tankPage.goto('/?tier=low&backend=webgl');
-  await sceneReady(tankPage);
-  await tankPage.getByRole('button', { name: 'My tank' }).click();
-  await tankPage.getByRole('button', { name: 'Create tank' }).click();
-  await tankPage.getByRole('heading', { name: 'Tanks' }).waitFor({ timeout: 30_000 });
-  await tankPage.waitForTimeout(settleMs);
+  await page.reload();
+  await sceneReady(page);
+  await page.getByRole('button', { name: 'My tank' }).click();
+  await page.getByRole('button', { name: 'Create tank' }).click();
+  await page.getByRole('heading', { name: 'Tanks' }).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(settleMs);
+  endStage('tank');
 } catch (error) {
   record(
     'script',
     `[${stage}] ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
   );
-} finally {
+}
+
+console.log(
+  `smoke stages: ${timings.join(', ')}; total ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
+);
+
+try {
   await browser.close();
+} catch (error) {
+  record('browser.close', error instanceof Error ? error.message : String(error));
 }
 
 if (problems.length > 0) {

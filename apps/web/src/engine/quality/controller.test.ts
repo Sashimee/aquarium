@@ -96,10 +96,30 @@ describe('TierController', () => {
 
   it('predicts the next tier cost from the gpu signal before stepping up', () => {
     const c = controller('high');
-    // ultra costs 1.7 x high: 8 ms -> 13.6 ms > 0.8 x 16.7 ms, so no room.
-    expect(run(c, 8, 0, 30_000).changes).toEqual([]);
-    // 7 ms -> 11.9 ms fits.
-    expect(run(c, 7, 30_000, 30_000).changes[0]).toMatchObject({ to: 'ultra' });
+    // ultra costs 1.7 x high and may take half of 0.8 x 16.7 ms: 4 ms -> 6.8 ms, so no room.
+    expect(run(c, 4, 0, 30_000).changes).toEqual([]);
+    // 3.5 ms -> 5.95 ms fits.
+    expect(run(c, 3.5, 30_000, 30_000).changes[0]).toMatchObject({ to: 'ultra' });
+  });
+
+  it('leaves ultra once it takes more than its share of the gpu, and keeps it below that', () => {
+    const c = controller('ultra');
+    // Ultra's share is half the budget: it steps down above 0.5 x 1.2 x 16.7 = 10 ms.
+    expect(run(c, 9.5, 0, 30_000).changes).toEqual([]);
+    expect(run(c, 10.5, 30_000, 5000).changes[0]).toMatchObject({ from: 'ultra', to: 'high' });
+  });
+
+  it('holds high where ultra just fitted the frame, rather than climbing back', () => {
+    const c = controller('ultra');
+    const { end } = run(c, 11, 0, 5000);
+    expect(c.tier).toBe('high');
+    // 11 ms on ultra is about 6.5 ms on high, which predicts ultra over its share again.
+    expect(run(c, 6.5, end, 60_000).changes).toEqual([]);
+  });
+
+  it('keeps the whole budget for ultra on the frame signal, which never climbs into it alone', () => {
+    const c = controller('ultra', { signal: 'frame' });
+    expect(run(c, 15, 0, 30_000).changes).toEqual([]);
   });
 
   it('climbs off full-resolution low only when medium would fit', () => {
