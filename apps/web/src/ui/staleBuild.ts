@@ -1,6 +1,8 @@
 const KEY = 'aquarium:stale-chunk-reload';
 const WINDOW_MS = 60_000;
 
+const RELOAD_GRACE_MS = 5_000;
+
 export interface ReloadDeps {
   storage: () => Pick<Storage, 'getItem' | 'setItem'>;
   now: () => number;
@@ -41,4 +43,14 @@ export function watchStalePreloads(deps: ReloadDeps = browser): () => void {
   };
   window.addEventListener('vite:preloadError', onError);
   return () => window.removeEventListener('vite:preloadError', onError);
+}
+
+/** True in the moments after a reload was started, while the page is still going away. */
+export function isReloadingForNewBuild(deps: ReloadDeps = browser): boolean {
+  try {
+    const last = Number(deps.storage().getItem(KEY));
+    return Number.isFinite(last) && last > 0 && deps.now() - last < RELOAD_GRACE_MS;
+  } catch {
+    return false;
+  }
 }

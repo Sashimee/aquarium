@@ -22,6 +22,7 @@ import {
   TankTypeSwitch,
 } from './Hud';
 import { BirthStatus, LifeStatus } from './LifeStatus';
+import { panelLoaders } from './panelLoaders';
 import { LoadingScreen } from './LoadingScreen';
 import { PhotoLayer, PhotoTools } from './PhotoControls';
 import { usePanels, type OpenPanel, type Panel } from './panels';
@@ -104,7 +105,7 @@ const GalleryScreen = lazy(() => import('./Gallery').then((m) => ({ default: m.G
 const PublicTankView = lazy(() =>
   import('./PublicTank').then((m) => ({ default: m.PublicTankView })),
 );
-const DecorBody = lazy(() => import('./DecorPanel'));
+const DecorBody = lazy(() => panelLoaders.decor());
 const TankReportBody = lazy(() => import('./TankReport'));
 const TanksPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TanksPanel })));
 const ShopPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.ShopPanel })));
@@ -206,7 +207,9 @@ function PublicShell({ view }: { view: ReactNode }) {
       >
         Skip to the tank
       </a>
-      <Suspense fallback={null}>{view}</Suspense>
+      <ErrorBoundary what="this page" scope="app">
+        <Suspense fallback={null}>{view}</Suspense>
+      </ErrorBoundary>
       <LoadingScreen />
     </div>
   );
@@ -342,14 +345,18 @@ function Shell() {
           </Sheet>
         )}
         {bookOpen && (
-          <Suspense fallback={null}>
-            <CollectionBook onClose={() => setBookOpen(false)} />
-          </Suspense>
+          <ErrorBoundary what="the collection book" scope="app">
+            <Suspense fallback={null}>
+              <CollectionBook onClose={() => setBookOpen(false)} />
+            </Suspense>
+          </ErrorBoundary>
         )}
         <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-        <Suspense fallback={null}>
-          <TrimDialog />
-        </Suspense>
+        <ErrorBoundary what="the trim tool" scope="app">
+          <Suspense fallback={null}>
+            <TrimDialog />
+          </Suspense>
+        </ErrorBoundary>
         <div className={home ? 'stage' : 'stage modal'}>
           <Screen />
         </div>

@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { isChunkLoadError, reloadForNewBuild } from './staleBuild';
+import { isChunkLoadError, isReloadingForNewBuild, reloadForNewBuild } from './staleBuild';
 
 interface State {
   failed: boolean;
@@ -27,7 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     if (!this.state.failed) return this.props.children;
     const { what, scope } = this.props;
-    if (this.state.updating) {
+    if (this.state.updating || isReloadingForNewBuild()) {
       return (
         <p role="status" className="hint">
           A new version is available. Reloading.
