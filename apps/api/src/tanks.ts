@@ -1133,7 +1133,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
             ...(body.acceptsGifts !== undefined ? { acceptsGifts: body.acceptsGifts } : {}),
-            ...(equipment !== undefined && body.light !== undefined
+            ...(equipment !== undefined
               ? {
                   equipment: { ...equipment, light: { tier: equipment.light.tier, ...body.light } },
                 }

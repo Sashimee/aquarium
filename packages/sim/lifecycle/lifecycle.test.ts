@@ -7,6 +7,7 @@ import {
   newTankChemistry,
   speciesContentSummarySchema,
   TANK_SIZES,
+  type Biome,
   type Chemistry,
   type Equipment,
   type SpeciesChemistry,
@@ -281,13 +282,20 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 
-  // Invertebrates are more ammonia-sensitive than any fish, and the old cap of 12 was a fish cap.
+  // Invertebrates are more ammonia-sensitive than any fish, and the tolerance bound below is a fish bound.
   const LEAST_TOLERANT_FISH_AMMONIA = 0.1;
   const belowFishTolerance = (s: (typeof parsedSpecies)[number]) =>
     s.lifecycle.ammoniaTolerance < LEAST_TOLERANT_FISH_AMMONIA;
   const walks = (s: (typeof parsedSpecies)[number]) =>
     typeof s.locomotion === 'object' && s.locomotion !== null && 'walking' in s.locomotion;
   const nanoCapSpecies = parsedSpecies.filter((s) => !belowFishTolerance(s));
+
+  it('sets the least-tolerant fish ammonia to the real minimum across non-walking species', () => {
+    const fishTolerances = parsedSpecies
+      .filter((s) => !walks(s))
+      .map((s) => s.lifecycle.ammoniaTolerance);
+    expect(Math.min(...fishTolerances)).toBe(LEAST_TOLERANT_FISH_AMMONIA);
+  });
 
   it('excludes only walking invertebrates, the shrimp among them, from the nano cap run', () => {
     const excluded = parsedSpecies.filter(belowFishTolerance);
@@ -299,7 +307,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
   });
 
   it.each(nanoCapSpecies.map((s) => [s.id, s.biome] as const))(
-    'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
+    'a nano stocked to the standard bioload capacity, at most 60 animals, keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
       if (!spec) throw new Error(`no species ${id}`);
@@ -922,6 +930,22 @@ describe('pH, KH, temperature and salinity', () => {
     expect(t).toBeCloseTo(27, 1);
   });
 
+  it.each(Object.entries(chemistryParams.temperature.target))(
+    'the default tier 1 heater warms an empty %s tank from room temperature to its target',
+    (biome, target) => {
+      const state = {
+        ...tank([]),
+        chemistry: {
+          ...newTankChemistry('freshwater'),
+          temperatureC: chemistryParams.temperature.roomC,
+        },
+      };
+      const t = run(state, 3 * DAY, { env: { biome: biome as Biome } }).state.chemistry
+        .temperatureC;
+      expect(t).toBeCloseTo(target, 1);
+    },
+  );
+
   it('a water change pulls KH towards the biome source water, not one global value', () => {
     const reef = {
       ...tank([fishOf('a', 'ocellaris-clownfish')]),
@@ -1128,7 +1152,7 @@ describe('water volume', () => {
     };
     const fullCount = Math.floor(nanoCap / neon.bioload + 1e-9);
 
-    it('keeps waste flat however far the stock is over the cap of a nano', () => {
+    it('keeps waste flat up to four times the cap of a nano', () => {
       const atCap = nitrogenOf(fullCount, nanoLitres, nanoCap);
       expect(atCap).toBeGreaterThan(0);
       expect(nitrogenOf(fullCount * 2, nanoLitres, nanoCap)).toBeCloseTo(atCap, 6);
