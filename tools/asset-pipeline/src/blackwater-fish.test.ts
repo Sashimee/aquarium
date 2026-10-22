@@ -92,6 +92,13 @@ describe('blackwater lofts', () => {
       expect(texture.crop.width).toBeGreaterThan(0);
       expect(texture.crop.height).toBeGreaterThan(0);
       expect(texture.tailPixel[0]).toBeGreaterThan(texture.snoutPixel[0]);
+      const { left, top, width, height } = texture.crop;
+      for (const [x, y] of [texture.snoutPixel, texture.tailPixel]) {
+        expect(x).toBeGreaterThanOrEqual(left);
+        expect(x).toBeLessThan(left + width);
+        expect(y).toBeGreaterThanOrEqual(top);
+        expect(y).toBeLessThan(top + height);
+      }
     },
   );
 });
