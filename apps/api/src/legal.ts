@@ -379,6 +379,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           .code(403)
           .send(apiError('forbidden', 'Password confirmation is required and must be correct.'));
       }
+      // Wall clock on purpose: better-auth stamps the session with the real time, not the injected one.
     } else if (Date.now() - current.session.createdAt.getTime() > FRESH_SESSION_MS) {
       return reply
         .code(403)

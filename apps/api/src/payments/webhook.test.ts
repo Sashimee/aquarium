@@ -352,6 +352,73 @@ describe('refunds', () => {
     expect(await balance(who)).toBe(start + 550 - 110);
   });
 
+  it('moves the clawback onto a refund that took nothing when an earlier one fails', async () => {
+    const who = await account(h);
+    const start = await balance(who);
+    const ids = await bought(who);
+    const first = refundObject(ids.paymentIntent, 499);
+    const second = refundObject(ids.paymentIntent, 499);
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', first));
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', second));
+    expect(await balance(who)).toBe(start);
+
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...first, status: 'failed' }));
+    expect(await balance(who)).toBe(start);
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...first, status: 'failed' }));
+    expect(await balance(who)).toBe(start);
+
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...second, status: 'failed' }));
+    expect(await balance(who)).toBe(start + 550);
+  });
+
+  it('moves the clawback onto a lost dispute that took nothing when a refund fails', async () => {
+    const who = await account(h);
+    const start = await balance(who);
+    const ids = await bought(who);
+    const refund = refundObject(ids.paymentIntent, 499);
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', refund));
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(h, 'charge.dispute.closed', disputeObject(ids.paymentIntent, 499, 'lost')),
+    );
+    expect(await balance(who)).toBe(start);
+
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...refund, status: 'failed' }));
+    expect(await balance(who)).toBe(start);
+  });
+
+  it('gives back only the difference when a partial refund fails beside one that stays', async () => {
+    const who = await account(h);
+    const start = await balance(who);
+    const ids = await bought(who);
+    const first = refundObject(ids.paymentIntent, 300);
+    const second = refundObject(ids.paymentIntent, 300);
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', first));
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', second));
+    expect(await balance(who)).toBe(start);
+
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...first, status: 'failed' }));
+    expect(await balance(who)).toBe(start + 550 - 330);
+  });
+
+  it('keeps the refund clawback when a lost dispute that absorbed it is won', async () => {
+    const who = await account(h);
+    const start = await balance(who);
+    const ids = await bought(who);
+    const dispute = disputeObject(ids.paymentIntent, 499, 'lost');
+    await deliverOk(h, kit, buildEvent(h, 'charge.dispute.closed', dispute));
+    const refund = refundObject(ids.paymentIntent, 499);
+    await deliverOk(h, kit, buildEvent(h, 'refund.created', refund));
+    expect(await balance(who)).toBe(start);
+
+    await deliverOk(h, kit, buildEvent(h, 'charge.dispute.closed', { ...dispute, status: 'won' }));
+    expect(await balance(who)).toBe(start);
+
+    await deliverOk(h, kit, buildEvent(h, 'refund.updated', { ...refund, status: 'failed' }));
+    expect(await balance(who)).toBe(start + 550);
+  });
+
   it('never takes back more than the pack gave', async () => {
     const who = await account(h);
     const start = await balance(who);

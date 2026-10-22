@@ -487,6 +487,18 @@ describe('order status', () => {
     expect((await status(who, ids.session)).body).toEqual({ status: 'failed' });
   });
 
+  it('is failed when a complete session stays unpaid (async payment failed)', async () => {
+    const who = await account(h);
+    const ids = newIds();
+    kit.sessions.set(ids.session, {
+      userId: who.userId,
+      status: 'complete',
+      paymentStatus: 'unpaid',
+      subscriptionId: null,
+    });
+    expect((await status(who, ids.session)).body).toEqual({ status: 'failed' });
+  });
+
   it('is paid once the webhook credited it, then refunded after a full refund', async () => {
     const price = economy.packs.find((p) => p.id === 'pearls-550')?.priceCents ?? 0;
     const who = await account(h);

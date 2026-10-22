@@ -19,7 +19,7 @@ import { apiError, HttpError } from '../errors.ts';
 import type { Mailer } from '../mail.ts';
 import type { Limit, RateLimiter } from '../rate-limit.ts';
 import { describeProviderError, WebhookSignatureError, type PaymentProvider } from './provider.ts';
-import { settleEvent, type Receipt } from './settle.ts';
+import { settleEvent, takenBack, type Receipt } from './settle.ts';
 
 export interface PaymentsLimits {
   checkout: Limit;
@@ -174,21 +174,8 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
   const notFound = () => new HttpError(404, apiError('not_found', 'No such order.'));
 
   async function chargeStatus(chargeId: string, amountCents: number): Promise<OrderStatus> {
-    const [refunds] = await db
-      .select({ cents: sql<number>`coalesce(sum(${schema.paymentRefunds.cents}), 0)::int` })
-      .from(schema.paymentRefunds)
-      .where(eq(schema.paymentRefunds.chargeId, chargeId));
-    const [lost] = await db
-      .select({ cents: sql<number>`coalesce(sum(${schema.paymentDisputes.cents}), 0)::int` })
-      .from(schema.paymentDisputes)
-      .where(
-        and(
-          eq(schema.paymentDisputes.chargeId, chargeId),
-          eq(schema.paymentDisputes.state, 'lost'),
-        ),
-      );
-    const taken = (refunds?.cents ?? 0) + (lost?.cents ?? 0);
-    return amountCents > 0 && taken >= amountCents ? 'refunded' : 'paid';
+    const taken = await db.transaction((tx) => takenBack(tx, chargeId));
+    return amountCents > 0 && taken.cents >= amountCents ? 'refunded' : 'paid';
   }
 
   app.get(
@@ -215,9 +202,15 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         });
       }
 
-      const session = await checkout(() => payments.retrieveCheckoutSession(sessionId));
+      const session = await checkout(
+        () => payments.retrieveCheckoutSession(sessionId),
+        'The payment provider did not answer. Try again in a moment.',
+      );
       if (!session || session.userId !== user.id) throw notFound();
-      if (session.status === 'expired')
+      if (
+        session.status === 'expired' ||
+        (session.status === 'complete' && session.paymentStatus === 'unpaid')
+      )
         return orderStatusResponseSchema.parse({ status: 'failed' });
       if (session.subscriptionId) {
         const [row] = await db
@@ -359,18 +352,15 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     }),
   );
 
-  async function checkout<T>(work: () => Promise<T>): Promise<T> {
+  async function checkout<T>(
+    work: () => Promise<T>,
+    message = 'The payment provider did not answer. Nothing was charged; try again.',
+  ): Promise<T> {
     try {
       return await work();
     } catch (err) {
       app.log.error(describeProviderError(err), 'payment provider call failed');
-      throw new HttpError(
-        502,
-        apiError(
-          'internal',
-          'The payment provider did not answer. Nothing was charged; try again.',
-        ),
-      );
+      throw new HttpError(502, apiError('internal', message));
     }
   }
 

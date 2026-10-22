@@ -44,6 +44,7 @@ export interface ProviderSubscription {
 export interface ProviderCheckoutSession {
   userId: string | null;
   status: 'open' | 'complete' | 'expired';
+  paymentStatus?: 'paid' | 'unpaid';
   subscriptionId: string | null;
 }
 
@@ -201,6 +202,7 @@ export function createStripeProvider(options: StripeProviderOptions): PaymentPro
               : session.status === 'expired'
                 ? 'expired'
                 : 'open',
+          paymentStatus: session.payment_status === 'unpaid' ? 'unpaid' : 'paid',
           subscriptionId:
             typeof subscription === 'string' ? subscription : (subscription?.id ?? null),
         };

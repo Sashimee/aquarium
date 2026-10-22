@@ -1,5 +1,5 @@
 import type { Economy } from '@aquarium/shared';
-import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, ne, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { schema, type Database } from '../db/index.ts';
 import { lockWallet } from '../wallet.ts';
@@ -399,7 +399,10 @@ async function pearlsAtStake(tx: Tx, charge: ChargeRow): Promise<number> {
   return row?.total ?? 0;
 }
 
-async function takenBack(tx: Tx, chargeId: string): Promise<{ cents: number; pearls: number }> {
+export async function takenBack(
+  tx: Tx,
+  chargeId: string,
+): Promise<{ cents: number; pearls: number }> {
   const [refunds] = await tx
     .select({
       cents: sql<number>`coalesce(sum(${schema.paymentRefunds.cents}), 0)::int`,
@@ -468,6 +471,65 @@ async function lockForAdjustment(deps: SettleDeps, tx: Tx, charge: ChargeRow): P
   return lockCharge(tx, charge.id);
 }
 
+// Releasing a refund or lost dispute (it failed, or the dispute was won) hands its Pearls back, but
+// the clawback is cumulative and capped, so rows that stay may now owe what the released one had
+// absorbed. The wallet gets the net difference and the still-owed Pearls move onto a remaining row.
+async function releaseAdjustment(
+  deps: SettleDeps,
+  tx: Tx,
+  charge: ChargeRow,
+  released: number,
+  key: string,
+): Promise<void> {
+  const owed = await clawbackOwed(tx, charge);
+  if (owed.pearls > 0) {
+    const [refund] = await tx
+      .select({ id: schema.paymentRefunds.refundId })
+      .from(schema.paymentRefunds)
+      .where(
+        and(eq(schema.paymentRefunds.chargeId, charge.id), sql`${schema.paymentRefunds.cents} > 0`),
+      )
+      .orderBy(desc(schema.paymentRefunds.createdAt))
+      .limit(1);
+    if (refund) {
+      await tx
+        .update(schema.paymentRefunds)
+        .set({ pearls: sql`${schema.paymentRefunds.pearls} + ${owed.pearls}` })
+        .where(eq(schema.paymentRefunds.refundId, refund.id));
+    } else {
+      const [dispute] = await tx
+        .select({ id: schema.paymentDisputes.disputeId })
+        .from(schema.paymentDisputes)
+        .where(
+          and(
+            eq(schema.paymentDisputes.chargeId, charge.id),
+            eq(schema.paymentDisputes.state, 'lost'),
+          ),
+        )
+        .limit(1);
+      if (dispute) {
+        await tx
+          .update(schema.paymentDisputes)
+          .set({ pearls: sql`${schema.paymentDisputes.pearls} + ${owed.pearls}` })
+          .where(eq(schema.paymentDisputes.disputeId, dispute.id));
+      }
+    }
+  }
+  const delta = released - owed.pearls;
+  if (delta !== 0) {
+    await postPaymentEntry(tx, {
+      userId: charge.userId,
+      delta,
+      reason: delta > 0 ? 'restore' : 'clawback',
+      itemRef: refOf(charge),
+      key,
+      nowMs: deps.now(),
+    });
+  }
+  const taken = await takenBack(tx, charge.id);
+  if (taken.cents < charge.amountCents) await setPeriodRevoked(tx, charge, false);
+}
+
 // A refund that was recorded as succeeded can still fail later (the bank returns it), so the money
 // never left and the clawback is undone. The row stays with zero cents and Pearls as a marker: a
 // stale succeeded event that arrives after the failure, or a failure that arrives first, then
@@ -499,18 +561,7 @@ async function applyRefund(deps: SettleDeps, refund: Stripe.Refund): Promise<voi
         .update(schema.paymentRefunds)
         .set({ cents: 0, pearls: 0 })
         .where(eq(schema.paymentRefunds.refundId, refund.id));
-      if (existing.pearls > 0) {
-        await postPaymentEntry(tx, {
-          userId: charge.userId,
-          delta: existing.pearls,
-          reason: 'restore',
-          itemRef: refOf(charge),
-          key: `refund-failed:${refund.id}`,
-          nowMs: deps.now(),
-        });
-      }
-      const taken = await takenBack(tx, charge.id);
-      if (taken.cents < charge.amountCents) await setPeriodRevoked(tx, charge, false);
+      await releaseAdjustment(deps, tx, charge, existing.pearls, `refund-failed:${refund.id}`);
       return;
     }
 
@@ -600,17 +651,6 @@ async function applyDispute(deps: SettleDeps, dispute: Stripe.Dispute): Promise<
       .update(schema.paymentDisputes)
       .set({ state: 'won', updatedAt: new Date(deps.now()) })
       .where(eq(schema.paymentDisputes.disputeId, dispute.id));
-    if (existing.pearls > 0) {
-      await postPaymentEntry(tx, {
-        userId: charge.userId,
-        delta: existing.pearls,
-        reason: 'restore',
-        itemRef: refOf(charge),
-        key: `dispute-won:${dispute.id}`,
-        nowMs: deps.now(),
-      });
-    }
-    const taken = await takenBack(tx, charge.id);
-    if (taken.cents < charge.amountCents) await setPeriodRevoked(tx, charge, false);
+    await releaseAdjustment(deps, tx, charge, existing.pearls, `dispute-won:${dispute.id}`);
   });
 }
