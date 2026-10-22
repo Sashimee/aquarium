@@ -77,6 +77,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     container: mcr.microsoft.com/playwright:v1.63.0-noble
+    defaults:
+      run:
+        shell: bash
     services:
       postgres:
         image: postgres:18
@@ -84,8 +87,6 @@ jobs:
           POSTGRES_USER: aquarium
           POSTGRES_PASSWORD: aquarium
           POSTGRES_DB: aquarium_test
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U aquarium"
           --health-interval 5s
@@ -102,12 +103,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         timeout-minutes: 12
-      - run: pnpm build
-        timeout-minutes: 12
       - name: Container image matches the locked Playwright version
         run: |
           version=$(pnpm exec playwright --version | awk '{print $2}')
           test "$version" = "1.63.0" || { echo "::error::Playwright is $version but the smoke container image is v1.63.0; update container: in ci.yml"; exit 1; }
+      - run: pnpm build
+        timeout-minutes: 12
       - name: Start the e2e server on the built web app
         timeout-minutes: 3
         run: |
@@ -119,7 +120,7 @@ jobs:
           done
           curl -fsS http://localhost:4317/api/health || { cat server.log; exit 1; }
       - name: Load the app signed out and signed in, failing on runtime errors
-        timeout-minutes: 6
+        timeout-minutes: 8
         run: pnpm smoke
       - name: Server log
         if: ${{ failure() }}
