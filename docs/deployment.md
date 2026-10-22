@@ -45,6 +45,20 @@ migration aborts start.
 
 The `HEALTHCHECK` hits `/api/health`.
 
+### Old chunks survive a deploy
+
+`/assets/*` is served `immutable`, so tabs opened before a deploy still request the previous build's
+hashed chunks. The image keeps its own `assets/` at `/app/assets-current`, and `docker/entrypoint.sh` copies
+it into `/app/web/assets` at every start, then deletes files not refreshed within `ASSET_RETENTION_DAYS`
+(default 7). On the Aquarium Dev app, `/app/web/assets` is a Dokploy volume mount (`aquarium-dev-assets`),
+so earlier builds' files are still there. Without the mount (prod, local, CI) the same script runs against
+the in-image directory and nothing is retained.
+
+Create the mount only once the entrypoint is on the deployed branch: a mount over an image without the
+copy step hides every asset. Dokploy API: `POST /api/mounts.create` with `type: "volume"`,
+`volumeName: "aquarium-dev-assets"`, `mountPath: "/app/web/assets"`, `serviceId`/`applicationId` of the Dev app,
+`serviceType: "application"`, then redeploy. Never add it to Aquarium Prod without Alex's go.
+
 ## Indexing
 
 When `SITE_INDEXABLE` is not exactly `true`, every response carries `X-Robots-Tag: noindex, nofollow` and

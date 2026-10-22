@@ -9,7 +9,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 COPY . .
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --offline
 RUN pnpm build && pnpm --filter @aquarium/api compress:web
-RUN mkdir -p apps/web/dist
+RUN mkdir -p apps/web/dist/assets /out/assets-current && mv apps/web/dist/assets/* /out/assets-current/
 RUN pnpm --filter @aquarium/api --prod deploy /out/api
 
 FROM node:24-slim AS runtime
@@ -17,8 +17,11 @@ ENV NODE_ENV=production PORT=3000 WEB_DIST=/app/web
 WORKDIR /app/api
 COPY --from=build --chown=node:node /out/api /app/api
 COPY --from=build --chown=node:node /repo/apps/web/dist /app/web
+COPY --from=build --chown=node:node /out/assets-current /app/assets-current
+COPY --chmod=755 docker/entrypoint.sh /app/entrypoint.sh
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["node", "--enable-source-maps", "dist/server.js"]
