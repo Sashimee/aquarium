@@ -33,8 +33,10 @@ const DISPLAY_MS = 1000 / 60;
  * 56% of the pixels, and TRAA or SMAA hides the difference at viewing distance.
  *
  * Low and medium load the phone's 1k set, so their budget is the phone's 44 MiB carried over to
- * BC7: a tank holding every freshwater species takes 43.6 MiB as ETC on a phone and 59.5 MiB as
+ * BC7: a tank holding every freshwater species took 43.6 MiB as ETC on a phone and 59.5 MiB as
  * BC7, the same maps, so 60 (#1338). A desktop has no iOS tab limit of its own to set it lower.
+ * With the 128 px-frame impostor normal atlases uploaded a level down (`droppedNormalLevels`)
+ * it takes 38.6 and 54.5 MiB, which leaves room for the next species (#1367).
  */
 export const DESKTOP_PROFILE: Readonly<QualityProfile> = {
   targetMs: DISPLAY_MS,
