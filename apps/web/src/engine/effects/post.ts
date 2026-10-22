@@ -247,7 +247,7 @@ export class PostPipeline {
         depthBuffer: false,
       });
       this.owned.push(rays);
-      colour = vec4(max(colour.rgb.add(rays.rgb), 0), colour.a);
+      colour = vec4(max(colour.rgb.add(shafts.upscale(rays, depth)), 0), colour.a);
     }
     if (chain === 'smaa-bloom' || chain === 'taa-bloom') {
       const glow = this.nodes.get('bloom')(colour, BLOOM.strength, BLOOM.radius, BLOOM.threshold);
