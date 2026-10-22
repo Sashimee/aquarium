@@ -529,21 +529,26 @@ describe('ModelLibrary shared model textures', () => {
   it('keeps a newer model cache entry when an older load finishes after dispose', async () => {
     const original = GLTFLoader.prototype.loadAsync;
     const releases: (() => void)[] = [];
+    let gating = true;
     vi.spyOn(GLTFLoader.prototype, 'loadAsync').mockImplementation(function (
       this: GLTFLoader,
       url,
       onProgress,
     ) {
       const result = original.call(this, url, onProgress);
+      if (!gating) return result;
       return new Promise<Awaited<typeof result>>((resolve, reject) => {
         releases.push(() => result.then(resolve, reject));
       });
     });
+    const loads: Promise<unknown>[] = [];
     try {
       const first = library.load(MEMBER, 0, 1024);
       const disposing = library.dispose();
+      loads.push(first, disposing);
       await new Promise((resolve) => setTimeout(resolve, 0));
       const second = library.load(MEMBER, 0, 1024);
+      loads.push(second);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(releases).toHaveLength(2);
       releases[0]?.();
@@ -554,7 +559,9 @@ describe('ModelLibrary shared model textures', () => {
       releases.forEach((release) => release());
       await second;
     } finally {
+      gating = false;
       releases.forEach((release) => release());
+      await Promise.allSettled(loads);
     }
   });
 
