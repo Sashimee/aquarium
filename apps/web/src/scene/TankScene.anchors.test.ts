@@ -32,16 +32,7 @@ async function builtScene() {
     const bytes = await readFile(join(PUBLIC, new URL(url, 'http://x').pathname));
     return new Response(new Uint8Array(bytes));
   });
-  const h = fakeEngine();
-  const quality = h.engine.quality as unknown as {
-    register: (name: string, apply: (settings: unknown, tier: unknown) => void) => () => void;
-    settings: unknown;
-    tier: unknown;
-  };
-  quality.register = (_name, apply) => {
-    apply(quality.settings, quality.tier);
-    return () => undefined;
-  };
+  const h = fakeEngine({ applyOnRegister: true });
   const building = TankScene.create(
     h.engine as Engine,
     { ...preset, substrate: { assetId: 'reef-sand', tint: [1, 1, 1], tileMeters: 0.4 } },

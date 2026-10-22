@@ -4,7 +4,7 @@ import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { PresetLayout, TankSize } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
-import { TIER_SETTINGS } from '../engine/quality/tiers';
+import { TIER_SETTINGS, type Tier, type TierSettings } from '../engine/quality/tiers';
 
 export class GatedKtx2 extends KTX2Loader {
   readonly pending: (() => void)[] = [];
@@ -37,7 +37,7 @@ export const sandEntry = {
   })),
 };
 
-export function fakeEngine() {
+export function fakeEngine(options: { applyOnRegister?: boolean } = {}) {
   const ktx2 = new GatedKtx2();
   const placeholder = new MeshBasicMaterial();
   const hood = new DirectionalLight(0xffffff, 3);
@@ -60,7 +60,8 @@ export function fakeEngine() {
     quality: {
       tier: 'medium',
       settings: TIER_SETTINGS.medium,
-      register: (name: string) => {
+      register: (name: string, apply?: (settings: Readonly<TierSettings>, tier: Tier) => void) => {
+        if (options.applyOnRegister) apply?.(TIER_SETTINGS.medium, 'medium');
         registered.push(name);
         return () => registered.splice(registered.indexOf(name), 1);
       },
