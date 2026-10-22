@@ -188,6 +188,12 @@ export function stepWater(
       (cp.temperature.heaterWarmingPerHourPerTier * heater) / cp.temperature.driftPerHour,
   );
 
+  const temperatureGoal = heater > 0 ? heatedTo : cp.temperature.roomC;
+  const warmingUp = chemistry.temperatureC < temperatureGoal;
+  const temperatureRate = warmingUp
+    ? Math.max(cp.temperature.driftPerHour, cp.temperature.heaterWarmupRatePerHourPerTier * heater)
+    : cp.temperature.driftPerHour;
+
   return {
     water: {
       ...water,
@@ -204,12 +210,7 @@ export function stepWater(
       nitrite,
       ph: Math.min(14, Math.max(0, towards(chemistry.ph, phTarget, cp.ph.driftPerHour, dtHours))),
       kh,
-      temperatureC: towards(
-        chemistry.temperatureC,
-        heater > 0 ? heatedTo : cp.temperature.roomC,
-        cp.temperature.driftPerHour,
-        dtHours,
-      ),
+      temperatureC: towards(chemistry.temperatureC, temperatureGoal, temperatureRate, dtHours),
       salinity: towards(
         chemistry.salinity,
         cp.salinity.target[ctx.biome],

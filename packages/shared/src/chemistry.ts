@@ -97,6 +97,9 @@ export const chemistryParametersSchema = z.strictObject({
     roomC: z.number().min(0).max(45),
     driftPerHour: rate.describe('fraction of the gap to the room temperature closed per hour'),
     heaterWarmingPerHourPerTier: rate,
+    heaterWarmupRatePerHourPerTier: rate.describe(
+      'fraction of the gap to the setpoint a heater closes per hour per tier while warming up',
+    ),
   }),
   stress: z.strictObject({
     healthLossFraction: unitSchema.describe(
