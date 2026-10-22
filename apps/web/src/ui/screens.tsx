@@ -12,6 +12,7 @@ import {
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
 import { HapticsSetting } from './HapticsSetting';
+import { DisplaySetting } from './DisplaySetting';
 import { RoomSetting } from './RoomSetting';
 import { SoundSetting } from './SoundSetting';
 import { RemindersSetting } from './RemindersSetting';
@@ -776,6 +777,7 @@ export function SettingsScreen() {
       <SoundSetting />
       <HapticsSetting />
       <RoomSetting />
+      <DisplaySetting />
       <section aria-labelledby="export-title">
         <h2 id="export-title">Your data</h2>
         <p>Download everything we store about you as a JSON file.</p>
