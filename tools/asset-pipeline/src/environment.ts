@@ -23,6 +23,7 @@ import {
   type MaterialDef,
   type MaterialOptions,
   type Part,
+  type TextureSource,
 } from './parts.ts';
 import { RAW_ROOT, bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 import {
@@ -247,6 +248,21 @@ export function cropForRecipe(
     ? (recipe.longestM * longestEdge(kept)) / uncropped
     : recipe.longestM;
   return { parts: kept, longestM };
+}
+
+export function sceneBaseColor(
+  material: MaterialDef | undefined,
+  partMaterial: string,
+  owner: string,
+): TextureSource | undefined {
+  if (!material)
+    throw new Error(`${owner}: part material "${partMaterial}" is not in the loaded materials`);
+  if (!material.baseColor) {
+    console.warn(
+      `${owner}: material "${partMaterial}" has no base colour texture; rendering it mid-grey times its factor`,
+    );
+  }
+  return material.baseColor;
 }
 
 export async function loadEnvironment(
