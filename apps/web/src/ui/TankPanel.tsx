@@ -24,6 +24,7 @@ import { checkTankName, suggestTankName } from '../sync/naming';
 import { salinityNotice, type SalinityNotice } from '../sync/salinityCare';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth, useBridge } from './context';
+import { Co2Control } from './Co2Control';
 import { CoralSection } from './Corals';
 import { FishCards } from './FishCard';
 import { AcceptsGiftsToggle, GiftFishButton, GiftNotice, GiftOffers } from './Gifts';
@@ -141,11 +142,11 @@ export function ShopPanel() {
   );
 }
 
-export function CarePanel() {
-  return <Gate noTank={needTank}>{(ready) => <CareSections {...ready} />}</Gate>;
+export function CarePanel({ onShop }: { onShop(): void }) {
+  return <Gate noTank={needTank}>{(ready) => <CareSections {...ready} onShop={onShop} />}</Gate>;
 }
 
-function CareSections({ session, state, tank }: Ready) {
+function CareSections({ session, state, tank, onShop }: Ready & { onShop(): void }) {
   const { interaction } = useBridge();
   const names = useSpeciesNames();
   const water = waterReport(tank.water, tank, state.species);
@@ -162,7 +163,9 @@ function CareSections({ session, state, tank }: Ready) {
         tank={tank}
         species={state.species}
         onWaterChange={() => session.careAction({ type: 'water_change' })}
+        onCo2Off={() => session.setCo2(0)}
       />
+      <Co2Control session={session} state={state} tank={tank} onShop={onShop} />
       <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
       <GiftNotice session={session} />
       <FishCards

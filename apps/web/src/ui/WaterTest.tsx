@@ -197,13 +197,21 @@ function LakeWater({
   species,
   dip,
   onWaterChange,
+  onCo2Off,
 }: {
   tank: Tank;
   species: readonly SpeciesSummary[];
   dip: Dip;
   onWaterChange: (() => unknown) | undefined;
+  onCo2Off: (() => unknown) | undefined;
 }) {
   const [pending, setPending] = useState(false);
+  const [co2Pending, setCo2Pending] = useState(false);
+  const co2Off = () => {
+    if (!onCo2Off) return;
+    setCo2Pending(true);
+    void Promise.resolve(onCo2Off()).finally(() => setCo2Pending(false));
+  };
   const change = () => {
     if (!onWaterChange) return;
     setPending(true);
@@ -243,6 +251,19 @@ function LakeWater({
                   </button>
                 </>
               )}
+              {onCo2Off && n.metric === 'ph' && n.fix === 'no-fix' && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    data-action="co2-off"
+                    disabled={co2Pending}
+                    onClick={co2Off}
+                  >
+                    Turn the CO₂ off
+                  </button>
+                </>
+              )}
             </li>
           ))}
         </ul>
@@ -260,10 +281,12 @@ export default function WaterTest({
   tank,
   species,
   onWaterChange,
+  onCo2Off,
 }: {
   tank: Tank;
   species: readonly SpeciesSummary[];
   onWaterChange?: () => unknown;
+  onCo2Off?: () => unknown;
 }) {
   const id = useId();
   const [dip, setDip] = useState<Dip | null>(() => getDip(tank.id));
@@ -311,7 +334,13 @@ export default function WaterTest({
         <>
           <Readings tank={tank} species={species} dip={dip} now={now} />
           {tank.biome === 'cichlid' && (
-            <LakeWater tank={tank} species={species} dip={dip} onWaterChange={onWaterChange} />
+            <LakeWater
+              tank={tank}
+              species={species}
+              dip={dip}
+              onWaterChange={onWaterChange}
+              onCo2Off={onCo2Off}
+            />
           )}
           <PhAdvice tank={tank} species={species} dip={dip} />
           {!dip.revealed && (

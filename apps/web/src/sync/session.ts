@@ -691,6 +691,18 @@ export class TankSession {
     });
   }
 
+  async setCo2(tier: number): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    const gen = this.loadId;
+    return this.perform(async () => {
+      const next = await this.deps.api.setCo2(tank.id, tier);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({ notice: tier === 0 ? 'The CO₂ is off.' : `The CO₂ runs at tier ${tier}.` });
+    });
+  }
+
   /** Asks to net a dead fish; nothing happens to the tank until `confirmNet`. */
   requestNet(fishId: string): void {
     const fish = this.activeTank?.fish.find((f) => f.id === fishId);

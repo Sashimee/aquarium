@@ -880,6 +880,15 @@ describe('api client Pearls contract', () => {
     });
   });
 
+  it('sets the CO2 tier with a PATCH carrying only co2, and accepts 0 for off', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture()));
+    await createApiClient(fetcher).setCo2(TANK_A, 0);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ co2: { tier: 0 } });
+  });
+
   it('refuses a lamp schedule whose on and off hours are equal', async () => {
     const fetcher = vi.fn();
     const error = await createApiClient(fetcher)

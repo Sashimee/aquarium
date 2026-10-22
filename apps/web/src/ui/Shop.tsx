@@ -230,6 +230,11 @@ function DeviceRow({
                     downgrades.
                   </p>
                 )}
+                {t.state === 'owned' && (
+                  <p id={note} className="hint">
+                    You already own this tier. Pick it in Care, for free.
+                  </p>
+                )}
                 {t.skipped > 0 && (
                   <p id={note} className="hint">
                     This skips {t.skipped === 1 ? 'a tier' : `${t.skipped} tiers`}; you pay this
@@ -245,7 +250,9 @@ function DeviceRow({
                     ? `Buy ${offer.label} tier ${t.tier} for ${t.price} Pearls, about ${euroText(t.price, economy)}`
                     : t.state === 'installed'
                       ? `${offer.label} tier ${t.tier} is installed`
-                      : `${offer.label} tier ${t.tier} is not sold`
+                      : t.state === 'owned'
+                        ? `${offer.label} tier ${t.tier} is already owned`
+                        : `${offer.label} tier ${t.tier} is not sold`
                 }
                 aria-describedby={t.state === 'available' && t.skipped === 0 ? undefined : note}
                 onClick={() => onBuy(t.tier)}
@@ -254,7 +261,9 @@ function DeviceRow({
                   ? 'Installed'
                   : t.state === 'available'
                     ? 'Buy'
-                    : 'Not sold'}
+                    : t.state === 'owned'
+                      ? 'Owned'
+                      : 'Not sold'}
               </button>
             </li>
           );
