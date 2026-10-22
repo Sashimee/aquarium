@@ -92,6 +92,14 @@ describe('offsetEntries', () => {
     expect(entry?.scale).toBeCloseTo(0.4, 6);
   });
 
+  it('carries the state plant key, so an entry keeps it when an earlier offset goes', () => {
+    const other = plant('s1.0', { parentKey: 's1', position: [0.1, 0.1] });
+    const both = offsetEntries([ref(1)], context([plant('s1'), other, offset]));
+    expect(both.get('water-plant')?.map((e) => e.key)).toEqual(['s1.0', 's1.1']);
+    const without = offsetEntries([ref(1)], context([plant('s1'), offset]));
+    expect(without.get('water-plant')?.map((e) => e.key)).toEqual(['s1.1']);
+  });
+
   it('follows an offset of an offset back to the layout plant', () => {
     const grandchild = plant('s1.1.1', { parentKey: 's1.1', position: [0.3, 0] });
     const list = offsetEntries([ref(1)], context([plant('s1'), offset, grandchild]));
