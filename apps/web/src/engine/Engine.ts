@@ -17,6 +17,11 @@ import {
   lampGain,
 } from './dayLighting';
 import {
+  ClockPin,
+  assertClockSetting,
+  hoodMinute,
+  roomMinute,
+  type ClockSetting,
   DaylightFeed,
   DEFAULT_LAMP_SCHEDULE,
   daylightAt,
@@ -171,7 +176,7 @@ export class Engine {
   readonly photo: PhotoMode;
 
   private size: TankSize;
-  private readonly clock: number | null;
+  private readonly clockPin: ClockPin;
   private readonly showStats: boolean;
   private readonly daylightFeed: DaylightFeed;
   private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_SCHEDULE);
@@ -286,7 +291,7 @@ export class Engine {
     cleanup.add(() => this.effectsRecovery.dispose());
     this.size = config.options.tankSize;
     const dimensions = TANK_DIMENSIONS[this.size];
-    this.clock = config.options.clock;
+    this.clockPin = new ClockPin(config.options.clock);
     this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
     const profile = qualityProfile(isTouchFirstDevice());
@@ -471,6 +476,16 @@ export class Engine {
     return this.daylightFeed.level;
   }
 
+  /**
+   * Pins the tank to minutes after midnight, read like `?clock=`, to the middle of the lamp's on
+   * (`'day'`) or off (`'night'`) period, or to `null` for local time again. The light fades to
+   * the new level rather than cutting.
+   */
+  setClock(setting: ClockSetting): void {
+    assertClockSetting(setting);
+    if (this.clockPin.set(setting, performance.now())) this.daylightFeed.recheck();
+  }
+
   /** Runs the visible hood on the tank's lamp schedule and strength, `equipment.light`. */
   setLampSchedule(schedule: LampSchedule): void {
     this.photoperiod = lampPhotoperiod(schedule);
@@ -611,8 +626,18 @@ export class Engine {
 
   /** The hood level now; the room light behind the tank follows on the same read. */
   private readDaylight(): number {
-    this.dayRig.roomDaylight = roomDaylightAt(this.clock ?? minuteOfDay(new Date()));
-    return daylightAt(this.clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod);
+    const setting = this.clockPin.clock;
+    const hoodAt = hoodMinute(setting, this.photoperiod);
+    const roomAt = roomMinute(setting);
+    const { hood, room } = this.clockPin.blend(
+      {
+        hood: daylightAt(hoodAt ?? localMinuteOfDay(Date.now(), 0), this.photoperiod),
+        room: roomDaylightAt(roomAt ?? minuteOfDay(new Date())),
+      },
+      performance.now(),
+    );
+    this.dayRig.roomDaylight = room;
+    return hood;
   }
 
   private registerQualityFeatures(): void {
@@ -731,6 +756,7 @@ export class Engine {
     this.photo.apply();
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.photo.apply();
+    if (this.clockPin.easing) this.daylightFeed.recheck();
     this.daylightFeed.frame(nowMs, frameMs);
     applyDayLighting(this.dayRig, this.daylightFeed.level);
     if (this.materialRebuild.flush(this.scene) > 0) this.cullPrewarm.invalidate();

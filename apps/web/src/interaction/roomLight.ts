@@ -18,7 +18,7 @@ export interface RoomLightBinding {
   tier(): Tier;
   hood(): number;
   /** Pinned `?clock=` in minutes after midnight, or null for the wall clock. */
-  clock: number | null;
+  clock(): number | null;
   now(): number;
   onFrame(callback: () => void): () => void;
 }
@@ -66,7 +66,7 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
     const nowMs = binding.now();
     light.update({
       nowMs,
-      minute: binding.clock ?? minuteOfDay(new Date(nowMs)),
+      minute: binding.clock() ?? minuteOfDay(new Date(nowMs)),
       hood: binding.hood(),
     });
   });

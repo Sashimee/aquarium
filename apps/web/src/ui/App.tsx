@@ -18,6 +18,7 @@ import {
   PearlBalance,
   CollectionButton,
   StatusCard,
+  DayNightButton,
   TankButton,
   TankTypeSwitch,
 } from './Hud';
@@ -351,6 +352,7 @@ function Shell() {
               {user && <CollectionButton onPress={() => setBookOpen(true)} />}
               <PearlBalance open={panel === 'shop'} onPress={() => toggle('shop')} />
               <SoundButton />
+              <DayNightButton />
               <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
               <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
             </div>
