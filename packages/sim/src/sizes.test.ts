@@ -244,6 +244,34 @@ const AWAITING_CONTENT: Record<
     maxTlM: 0.13,
     source: 'FishBase: 13 cm TL (Ref. 4975); TL = 1.2725 SL',
   },
+  'banded-archerfish': {
+    model: 'banded-archerfish',
+    maxSlM: 0.3 * 0.8595,
+    maxTlM: 0.3,
+    source: 'FishBase (Toxotes jaculatrix): 30 cm TL (Ref. 4833); SL = 0.8595 TL',
+  },
+  'barred-mudskipper': {
+    model: 'barred-mudskipper',
+    maxSlM: 0.19 * 0.8241,
+    maxTlM: 0.19,
+    source: 'FishBase (Periophthalmus argentilineatus): 19 cm TL (Ref. 4756); SL = 0.8241 TL',
+  },
+  'blue-spotted-mudskipper': {
+    model: 'blue-spotted-mudskipper',
+    maxSlM: 0.22 / 1.1773,
+    maxTlM: 0.22,
+    source:
+      'FishBase (Boleophthalmus pectinirostris): female 22 cm, male 17.5 cm TL (Ref. 125930); the ' +
+      'female length type is blank, so it is read as TL like the male; TL = 1.1773 SL',
+  },
+  'bumblebee-goby': {
+    model: 'bumblebee-goby',
+    maxSlM: 0.042 / 1.2338,
+    maxTlM: 0.042,
+    source:
+      'FishBase (Brachygobius doriae, the species of the reference photos): 4.2 cm TL (Ref. 7050); ' +
+      'TL = 1.2338 SL',
+  },
   'cardinal-tetra': {
     model: 'cardinal-tetra',
     maxSlM: 0.04 / 1.1708,
@@ -260,6 +288,15 @@ const AWAITING_CONTENT: Record<
     source:
       'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
       'so TL = 1.2 SL, the proportion of the lofted model',
+  },
+  'figure-8-puffer': {
+    model: 'figure-8-puffer',
+    maxSlM: 0.08 / 1.21,
+    maxTlM: 0.08,
+    source:
+      'FishBase (as Dichotomyctere ocellatus, of which Tetraodon biocellatus is a junior synonym): ' +
+      '8 cm TL (Ref. 12693); FishBase has no length-length relationship, so TL = 1.21 SL, the ' +
+      'proportion of the lofted model',
   },
   'labidochromis-caeruleus': {
     model: 'labidochromis-caeruleus',
@@ -289,6 +326,12 @@ const AWAITING_CONTENT: Record<
       'FishBase: 4 cm TL (Ref. 5667); FishBase has no length-length relationship, so TL = 1.25 SL ' +
       'is an assumption for cichlids',
   },
+  'orange-chromide': {
+    model: 'orange-chromide',
+    maxSlM: 0.095 / 1.2321,
+    maxTlM: 0.095,
+    source: 'FishBase (as Pseudetroplus maculatus): 9.5 cm TL (Ref. 115177); TL = 1.2321 SL',
+  },
   'pseudotropheus-demasoni': {
     model: 'pseudotropheus-demasoni',
     maxSlM: 0.063,
@@ -303,6 +346,14 @@ const AWAITING_CONTENT: Record<
     maxTlM: 0.036 * 1.2506,
     source:
       'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
+  },
+  'silver-mono': {
+    model: 'silver-mono',
+    maxSlM: 0.27,
+    maxTlM: 0.27 * 1.3455,
+    source:
+      'FishBase (Monodactylus argenteus): 27 cm SL (Ref. 44894); TL = 1.3455 SL, from two fish of ' +
+      '9.1 to 11.8 cm TL (FishBase also lists an older photo estimate, SL = 0.8131 TL)',
   },
 };
 
