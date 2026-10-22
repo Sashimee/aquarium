@@ -85,6 +85,7 @@ export function reachCurrent(current: CurrentParameters, biome: Biome): CurrentP
  */
 export function limitLean(shear: number, linear: number, room: number): number {
   const over = Math.max(shear - linear, 0);
+  if (over === 0) return Math.min(shear, linear);
   return Math.min(shear, linear) + (over * room) / (room + over);
 }
 
