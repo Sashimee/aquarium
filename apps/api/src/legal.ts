@@ -261,31 +261,41 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         handles.set(u.id, u.handle);
       }
     }
-    const giftOffers = offerRows.map((o) => {
+    const giftOffers = offerRows.flatMap((o) => {
       const sent = o.fromUserId === userId;
       const other = sent ? o.toUserId : o.fromUserId;
-      const stored = storedFishSchema.parse(o.fish);
-      return {
-        id: o.id,
-        status: o.status,
-        wantsReturn: o.wantsReturn,
-        pledgedFishId: o.pledgedFishId,
-        createdAt: o.createdAt,
-        expiresAt: o.expiresAt,
-        settledAt: o.settledAt,
-        role: sent ? 'sender' : 'recipient',
-        counterpart: other === null ? null : (handles.get(other) ?? null),
-        fish: sent
-          ? stored
-          : {
-              id: stored.id,
-              species: stored.species,
-              name: containsBlockedWord(stored.name) ? stored.species : stored.name,
-              sex: stored.sex,
-              stage: stored.stage,
-              size: stored.size,
-            },
-      };
+      const parsed = storedFishSchema.safeParse(o.fish);
+      if (!parsed.success) {
+        app.log.error(
+          { offerId: o.id },
+          'gift offer left out of an export, its fish is unreadable',
+        );
+        return [];
+      }
+      const stored = parsed.data;
+      return [
+        {
+          id: o.id,
+          status: o.status,
+          wantsReturn: o.wantsReturn,
+          pledgedFishId: o.pledgedFishId,
+          createdAt: o.createdAt,
+          expiresAt: o.expiresAt,
+          settledAt: o.settledAt,
+          role: sent ? 'sender' : 'recipient',
+          counterpart: other === null ? null : (handles.get(other) ?? null),
+          fish: sent
+            ? stored
+            : {
+                id: stored.id,
+                species: stored.species,
+                name: containsBlockedWord(stored.name) ? stored.species : stored.name,
+                sex: stored.sex,
+                stage: stored.stage,
+                size: stored.size,
+              },
+        },
+      ];
     });
 
     const body = dataExportSchema.parse(
@@ -373,7 +383,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         );
     }
 
-    await db.transaction(async (tx) => {
+    const orphaned = await db.transaction(async (tx) => {
       await tx
         .delete(schema.verification)
         .where(
@@ -404,13 +414,23 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       await tx
         .delete(schema.ledger)
         .where(and(eq(schema.ledger.userId, userId), eq(schema.ledger.source, 'game')));
+      const received = await tx
+        .select({ id: schema.giftOffers.id })
+        .from(schema.giftOffers)
+        .where(
+          and(
+            eq(schema.giftOffers.toUserId, userId),
+            inArray(schema.giftOffers.status, ['open', 'countered']),
+          ),
+        );
       await tx.delete(schema.user).where(eq(schema.user.id, userId));
+      return received.map((o) => o.id);
     });
 
     // The deleted user's open gift offers lost their recipient; settle them now as declined so the
     // fish are back with their senders. The sweeper retries anything this misses.
     try {
-      await app.settleDueGifts();
+      await app.settleGiftOffers(orphaned);
     } catch (error) {
       app.log.error({ err: error }, 'gift offers of a deleted account were not settled');
     }
