@@ -3,18 +3,29 @@ import {
   playableBiomeSchema,
   sampleFloor,
   speciesSchema,
+  TANK_SIZES,
+  tankLengthRefusal,
+  tankSizeSchema,
   tankWaterBounds,
   tankWaterTop,
   type PlayableBiome,
 } from '@aquarium/shared';
 import { BEHAVIOUR, World } from '@aquarium/sim';
 import shippedIndex from '../../public/assets/index.json';
-import { DEFAULT_TANK, waterBounds } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import { anemoneAnchor, type SceneAnchor } from '../scene/anemone';
 import type { CatalogEntry } from '../scene/assets';
 import { loadPreset } from '../scene/preset';
-import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock';
+import {
+  DEMO_STOCKS,
+  demoStock,
+  demoStockFor,
+  demoTank,
+  NANO_DEMO_STOCKS,
+  sceneAnchorsToSim,
+} from './demoStock';
+import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import bettaContent from '../../../../content/species/betta.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
@@ -156,6 +167,65 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
 
   it('builds a world the sim accepts', () => {
     expect(() => new World(demoTank(DEFAULT_TANK, 3, biome).config)).not.toThrow();
+  });
+});
+
+describe.each(tankSizeSchema.options)('the demo in a %s tank', (size) => {
+  const tank = TANK_DIMENSIONS[size];
+  const files = import.meta.glob('../../../../content/species/*.json', {
+    eager: true,
+    import: 'default',
+  });
+  const content = (id: string) =>
+    speciesSchema.partial({ render: true }).parse(files[`../../../../content/species/${id}.json`]);
+
+  it.each(BIOMES)('keeps %s within the size animal cap', (biome) => {
+    const { fish } = demoTank(tank, 1, biome).config;
+    expect(fish.length).toBeGreaterThan(0);
+    expect(fish.length).toBeLessThanOrEqual(TANK_SIZES[size].maxAnimals);
+  });
+
+  it.each(BIOMES)('stocks %s only with species the shop sells for the size', (biome) => {
+    for (const species of demoTank(tank, 1, biome).config.species) {
+      const refusal = tankLengthRefusal(
+        BUNDLED_ECONOMY,
+        species.id,
+        { size, quarantine: false },
+        species.id,
+      );
+      expect(refusal, species.id).toBeUndefined();
+    }
+  });
+
+  it.each(BIOMES)('keeps every %s shoal at its minGroup in a world the sim accepts', (biome) => {
+    const { fish, species } = demoTank(tank, 1, biome).config;
+    for (const { id } of species) {
+      const count = fish.filter((f) => f.species === id).length;
+      expect(count, id).toBeGreaterThanOrEqual(content(id).behaviour.schooling?.minGroup ?? 1);
+    }
+    expect(() => new World(demoTank(tank, 3, biome).config)).not.toThrow();
+  });
+
+  if (size === 'nano30') {
+    it.each(BIOMES)('stocks %s with no adult over a quarter of the 40 cm glass', (biome) => {
+      for (const { id } of demoTank(tank, 1, biome).config.species) {
+        expect(content(id).lifecycle.maxSizeM, id).toBeLessThanOrEqual(tank.length / 4);
+      }
+    });
+  }
+});
+
+describe('the nano demo', () => {
+  it('shows no angelfish in 30 l, and at most 12 fish', () => {
+    const { fish } = demoTank(TANK_DIMENSIONS.nano30, 1, 'freshwater').config;
+    expect(fish.map((f) => f.species)).not.toContain('angelfish');
+    expect(fish.length).toBeLessThanOrEqual(12);
+    expect(demoStockFor('freshwater', 'nano30')).toBe(NANO_DEMO_STOCKS.freshwater);
+    expect(demoStockFor('freshwater', 'standard')).toBe(DEMO_STOCKS.freshwater);
+  });
+
+  it('refuses a tank that is none of the shared sizes', () => {
+    expect(() => demoTank({ ...DEFAULT_TANK, length: 0.9 }, 1, 'reef')).toThrow(/TANK_DIMENSIONS/);
   });
 });
 

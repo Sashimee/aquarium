@@ -15,7 +15,7 @@ describe('qualityProfile', () => {
       frameCapFps: 60,
       pixelRatioCeiling: 1.5,
       maxTextureSize: 2048,
-      textureBudgetMiB: { low: 58, medium: 58, high: 156, ultra: 156 },
+      textureBudgetMiB: { low: 60, medium: 60, high: 156, ultra: 156 },
     });
   });
 

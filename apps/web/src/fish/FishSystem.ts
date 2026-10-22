@@ -58,7 +58,10 @@ import {
   type WalkerValues,
 } from './instances';
 import {
+  bakeFraming,
   drawsAsImpostor,
+  IMPOSTOR_LOD,
+  meshLod,
   mouthFade,
   rankMeshes,
   selectLod,
@@ -252,6 +255,15 @@ interface FishRuntime {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
+
+/**
+ * A tier that caps its meshes draws the fish outside the cap at lod2 rather than drop their shadow
+ * (`drawsAsImpostor`), so lod2 casts there too.
+ */
+function castsAtLevel(settings: Readonly<TierSettings> | null, level: number): boolean {
+  if (settings === null || settings.shadowMapSize <= 0) return false;
+  return level < (settings.fishImpostors === null ? SHADOW_LODS : IMPOSTOR_LOD + 1);
+}
 /** The away replay's fast-forward, per PLAN §9.2. */
 const MAX_TIME_SCALE = 20;
 const MAX_OWED_STEPS = 60;
@@ -272,12 +284,20 @@ function youthOfFish(fish: RosterFish): number {
   return youthOf(maturityOf(fish.stage, ageDaysAt(fish.bornAtMs, Date.now()), growth));
 }
 
+const standInFramings = new WeakMap<FishAssetEntry, AtlasFraming>();
+
 function atlasFramingOf(rt: FishRuntime): AtlasFraming {
   const impostor = rt.batch.impostor;
-  if (impostor === null) {
-    throw new Error(`fish: ${rt.batch.input.id} ranked for a mesh slot without an impostor atlas`);
+  if (impostor !== null) return impostor.info;
+  const { entry } = rt.batch.model;
+  let framing = standInFramings.get(entry);
+  if (framing === undefined) {
+    const [x0, y0, z0] = entry.min;
+    const [x1, y1, z1] = entry.max;
+    framing = bakeFraming(Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2);
+    standInFramings.set(entry, framing);
   }
-  return impostor.info;
+  return framing;
 }
 
 function capacityFor(needed: number): number {
@@ -1615,9 +1635,8 @@ export class FishSystem {
   }
 
   private applyShadows(batch: SpeciesBatch): void {
-    const cast = (this.shadows?.shadowMapSize ?? 0) > 0;
     batch.lods.forEach((lod, level) => {
-      const castShadow = cast && level < SHADOW_LODS;
+      const castShadow = castsAtLevel(this.shadows, level);
       for (const mesh of lod.meshes) {
         if (mesh.castShadow !== castShadow) lod.warmed = false;
         mesh.castShadow = castShadow;
@@ -1847,12 +1866,11 @@ export class FishSystem {
       const distance = this.position.distanceTo(camera);
       rt.cameraDistance = distance;
       rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, rt.batch.lods.length);
-      if (rt.batch.impostor !== null) ranked.push(rt);
-      else rt.full = true;
+      ranked.push(rt);
     }
     this.bags.end();
     if (impostors !== null) rankMeshes(ranked, atlasFramingOf, impostors.fullMeshes);
-    const castsShadow = (this.shadows?.shadowMapSize ?? 0) > 0;
+    else for (const rt of ranked) rt.full = true;
 
     for (const rt of this.runtimes.values()) {
       if (!rt.shown) continue;
@@ -1871,12 +1889,12 @@ export class FishSystem {
       choice.available = impostor !== null && motion instanceof SwimState;
       choice.lod = rt.lod;
       choice.full = rt.full;
-      choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
+      choice.castsShadow = castsAtLevel(this.shadows, rt.lod);
       choice.display = rt.batch.displays ? Math.max(rt.display, rt.gillFlare) : 0;
       if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
         this.drawImpostor(rt, motion, impostor, camera);
       } else {
-        this.drawMesh(rt);
+        this.drawMesh(rt, meshLod(rt.lod, rt.full, rt.batch.lods.length));
       }
     }
 
@@ -1917,9 +1935,9 @@ export class FishSystem {
     );
   }
 
-  /** Draws the runtime placed in `position`/`quaternion` with its LOD's mesh. */
-  private drawMesh(rt: FishRuntime): void {
-    const lod = rt.batch.lods[rt.lod];
+  /** Draws the runtime placed in `position`/`quaternion` with its mesh at `level`. */
+  private drawMesh(rt: FishRuntime, level: number): void {
+    const lod = rt.batch.lods[level];
     if (lod === undefined) return;
     const slot = this.placeInstance(lod, rt);
     const { motion, liveliness } = rt;

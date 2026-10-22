@@ -95,7 +95,7 @@ export interface MeshCandidate extends MeshRank {
 }
 
 /**
- * Ranks fish with an impostor for the tier's `limit` full meshes by `atlasDistance`, not by
+ * Ranks fish for the tier's `limit` full meshes by `atlasDistance`, not by
  * size-adjusted distance: a large fish with a coarse atlas can look worse as an impostor than a
  * nearer small one.
  */
@@ -137,8 +137,8 @@ const DISPLAY_SHOWN = 0.01;
 /**
  * Whether a fish draws as an impostor instead of its LOD mesh. Past lod2 it does. Nearer, a
  * fish outside the nearest few swaps too, unless its mesh casts a shadow: the impostor casts none,
- * and a shadow vanishing as a fish drops a rank pops, while a tier with fish shadows already pays
- * for that mesh in its shadow pass.
+ * and a shadow vanishing as a fish drops a rank pops. That one draws its lod2 mesh instead
+ * (`meshLod`), which casts on a tier that caps its meshes.
  *
  * A fish in display keeps its mesh at any distance. The atlas is baked with the fins at rest, and a
  * second, flared atlas per displaying species would cost more than the few such fish (a betta at a
@@ -149,6 +149,34 @@ export function drawsAsImpostor(c: Readonly<ImpostorChoice>): boolean {
   if (!c.tierImpostors || !c.available || c.display > DISPLAY_SHOWN) return false;
   if (c.lod >= IMPOSTOR_LOD) return true;
   return !c.full && !c.castsShadow;
+}
+
+/**
+ * The mesh a fish draws when it draws one: its distance level among the tier's nearest few, and
+ * at least lod2 outside them, so the cap holds for a species without an impostor and for a shadow
+ * caster that keeps its mesh.
+ */
+export function meshLod(lod: number, full: boolean, levels: number): number {
+  if (!(levels >= 1)) throw new RangeError(`lod: need at least one level, got ${levels}`);
+  return full ? lod : Math.max(lod, Math.min(IMPOSTOR_LOD, levels - 1));
+}
+
+/** The impostor bake's frame sizes and texels per metre (tools/asset-pipeline/src/impostor.ts). */
+const SMALL_FRAME_SIZE = 64;
+const LARGE_FRAME_SIZE = 128;
+const IMPOSTOR_TEXELS_PER_METRE = 700;
+
+/**
+ * The framing the impostor bake would give a model of this bounding radius, which ranks an animal
+ * without an atlas, a walker or a fish whose atlas is still loading, against those with one.
+ */
+export function bakeFraming(radius: number): AtlasFraming {
+  if (!(radius > 0)) throw new RangeError(`lod: bounding radius must be > 0, got ${radius}`);
+  const frameSize =
+    2 * radius * IMPOSTOR_TEXELS_PER_METRE <= SMALL_FRAME_SIZE
+      ? SMALL_FRAME_SIZE
+      : LARGE_FRAME_SIZE;
+  return { frameSize, radius };
 }
 
 /** LOD levels whose meshes keep enough jaw vertices to move the mouth. */

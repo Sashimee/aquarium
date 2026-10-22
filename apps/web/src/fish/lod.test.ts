@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   atlasDistance,
+  bakeFraming,
   drawsAsImpostor,
   effectiveDistance,
   IMPOSTOR_LOD,
   markNearest,
+  meshLod,
   MOUTH_LODS,
   mouthFade,
   rankMeshes,
@@ -225,6 +227,40 @@ describe('drawsAsImpostor', () => {
   it('never swaps on a tier without impostors', () => {
     expect(choose({ tierImpostors: false, lod: IMPOSTOR_LOD })).toBe(false);
     expect(choose({ tierImpostors: false, lod: 0, full: false })).toBe(false);
+  });
+});
+
+describe('meshLod', () => {
+  it('keeps the distance level for one of the nearest few', () => {
+    expect(meshLod(0, true, 3)).toBe(0);
+    expect(meshLod(1, true, 3)).toBe(1);
+  });
+
+  it('draws one outside them at lod2 at the nearest, and further levels as they are', () => {
+    expect(meshLod(0, false, 3)).toBe(IMPOSTOR_LOD);
+    expect(meshLod(1, false, 3)).toBe(IMPOSTOR_LOD);
+    expect(meshLod(2, false, 3)).toBe(IMPOSTOR_LOD);
+  });
+
+  it('falls back to the coarsest level a model with fewer levels has', () => {
+    expect(meshLod(0, false, 2)).toBe(1);
+    expect(meshLod(0, false, 1)).toBe(0);
+  });
+
+  it('rejects a model without levels', () => {
+    expect(() => meshLod(0, false, 0)).toThrow(RangeError);
+  });
+});
+
+describe('bakeFraming', () => {
+  it('frames a small animal in 64 px and a larger one in 128 px, as the bake does', () => {
+    expect(bakeFraming(0.0144)).toEqual({ frameSize: 64, radius: 0.0144 });
+    expect(bakeFraming(64 / 700 / 2).frameSize).toBe(64);
+    expect(bakeFraming(0.05).frameSize).toBe(128);
+  });
+
+  it('rejects a model without extent', () => {
+    expect(() => bakeFraming(0)).toThrow(RangeError);
   });
 });
 

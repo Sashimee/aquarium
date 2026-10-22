@@ -1106,7 +1106,9 @@ describe('FishSystem toys and display', () => {
     const { engine, frames } = fakeEngine();
     if (tier !== null) {
       engine.quality.register = (name, apply) => {
-        if (name === 'fish-lod') apply({ ...TIER_SETTINGS.low, ...tier }, 'low');
+        if (name === 'fish-lod' || name === 'fish-shadows') {
+          apply({ ...TIER_SETTINGS.low, ...tier }, 'low');
+        }
         return () => undefined;
       };
     }
@@ -1470,6 +1472,50 @@ describe('FishSystem toys and display', () => {
       snapshot(0.8, 0.6);
       expect(impostorWrites.mock.calls.length > 0).toBe(far);
       expect(meshWrites.mock.calls.length > 0).toBe(!far);
+      fish.dispose();
+    },
+  );
+
+  it.each([
+    ['without shadows', 0],
+    ['with shadows', 1024],
+  ])(
+    'draws a near fish with no atlas outside the mesh cap at lod2, %s',
+    async (_, shadowMapSize) => {
+      const lod2Geometry = new BoxGeometry(0.012, 0.026, 0.065);
+      const lodGeometries = [
+        new BoxGeometry(0.012, 0.026, 0.073),
+        new BoxGeometry(0.012, 0.026, 0.07),
+        lod2Geometry,
+      ];
+      const model: FishModel = {
+        ...bettaModel(),
+        lods: lodGeometries.map((geometry) => [
+          { geometry, source: new MeshStandardMaterial(), legPivots: [], mouth: false },
+        ]),
+      };
+      vi.mocked(FishAssetLoader.prototype.load).mockResolvedValue(model);
+      const tier = {
+        fishLod: { midDistance: 100, impostorDistance: 200 },
+        fishImpostors: { fullMeshes: 0 },
+        shadowMapSize,
+      };
+      const { fish, engine, load, nextWorld, snapshot } = await bettaTank(
+        BETTA,
+        'freshwater',
+        tier,
+      );
+      load();
+      await nextWorld();
+      for (let i = 0; i < 3; i++) snapshot(0, 0);
+      const drawn = new Map<BoxGeometry, InstancedMesh>();
+      engine.scene.traverse((object) => {
+        if (object instanceof InstancedMesh && object.geometry instanceof BoxGeometry) {
+          if (object.count > 0) drawn.set(object.geometry, object);
+        }
+      });
+      expect([...drawn.keys()]).toEqual([lod2Geometry]);
+      expect(drawn.get(lod2Geometry)?.castShadow).toBe(shadowMapSize > 0);
       fish.dispose();
     },
   );
