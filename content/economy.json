@@ -20,7 +20,13 @@
     "cherry-shrimp": { "juvenile": 20, "adult": 50 },
     "cleaner-shrimp": { "juvenile": 150, "adult": 375 },
     "nerite-snail": { "juvenile": 15, "adult": 38 },
-    "hermit-crab": { "juvenile": 40, "adult": 100 }
+    "hermit-crab": { "juvenile": 40, "adult": 100 },
+    "pseudotropheus-demasoni": { "juvenile": 60, "adult": 150 },
+    "labidochromis-caeruleus": { "juvenile": 50, "adult": 125 },
+    "melanochromis-auratus": { "juvenile": 50, "adult": 125 },
+    "neolamprologus-brichardi": { "juvenile": 50, "adult": 125 },
+    "neolamprologus-multifasciatus": { "juvenile": 40, "adult": 100 },
+    "altolamprologus-calvus": { "juvenile": 160, "adult": 400 }
   },
   "items": {
     "plant": {
