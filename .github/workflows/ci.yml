@@ -33,8 +33,13 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      stripe-mock:
+        image: stripe/stripe-mock:v0.206.0
+        ports:
+          - 12111:12111
     env:
       DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+      STRIPE_MOCK_URL: http://localhost:12111
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -92,8 +97,11 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      stripe-mock:
+        image: stripe/stripe-mock:v0.206.0
     env:
       DATABASE_URL: postgres://aquarium:aquarium@postgres:5432/aquarium_test
+      STRIPE_MOCK_URL: http://stripe-mock:12111
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -200,8 +208,13 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      stripe-mock:
+        image: stripe/stripe-mock:v0.206.0
+        ports:
+          - 12111:12111
     env:
       DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+      STRIPE_MOCK_URL: http://localhost:12111
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
