@@ -212,6 +212,15 @@ describe('walking invertebrates', () => {
     expect(issuePaths(noWalking(['biofilm-grazer', 'shoal']))).toEqual(['behaviour.traits']);
   });
 
+  it('requires amphibious to come with air-gulp', () => {
+    const withTraits = (traits: string[]): unknown => ({
+      ...tetra,
+      behaviour: { ...tetra.behaviour, traits },
+    });
+    expect(issuePaths(withTraits(['amphibious']))).toEqual(['behaviour.traits']);
+    expect(issuePaths(withTraits(['amphibious', 'air-gulp']))).toEqual([]);
+  });
+
   it('lets a swimmer be a cleaner', () => {
     const wrasse = { ...tetra, behaviour: { ...tetra.behaviour, traits: ['cleaner'] } };
     expect(issuePaths(wrasse)).toEqual([]);

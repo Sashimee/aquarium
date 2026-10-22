@@ -349,6 +349,9 @@ export function checkSpeciesRules(
   const issue = (message: string, path: (string | number)[]): void =>
     ctx.addIssue({ code: 'custom', message, path });
   if (locomotion.walking === undefined) {
+    if (behaviour.traits.includes('amphibious') && !behaviour.traits.includes('air-gulp')) {
+      issue('trait "amphibious" requires trait "air-gulp"', ['behaviour', 'traits']);
+    }
     for (const t of WALKER_TRAITS) {
       if (behaviour.traits.includes(t)) {
         issue(`trait "${t}" requires locomotion.walking`, ['behaviour', 'traits']);
