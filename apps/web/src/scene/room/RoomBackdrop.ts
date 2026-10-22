@@ -3,7 +3,6 @@ import {
   BufferGeometry,
   Color,
   CylinderGeometry,
-  DynamicDrawUsage,
   Group,
   InstancedMesh,
   Material,
@@ -77,7 +76,7 @@ export interface RoomConfig {
 
 /**
  * The room behind and around the tank, in tank space. Hard parts of one material share one
- * instanced draw, so a full room costs about a dozen draws and the low tier four. Walls face
+ * instanced draw, so a full room costs about a dozen draws and the low tier five. Walls face
  * into the room only: an orbit camera that leaves it sees the tank and not the back of a wall.
  */
 export class RoomBackdrop {
@@ -271,19 +270,19 @@ export class RoomBackdrop {
       if (list) list.push(box);
       else groups.set(key, [box]);
     }
-    const geometries = {
-      box: this.own(new BoxGeometry(1, 1, 1)),
-      cylinder: this.own(new CylinderGeometry(0.5, 0.5, 1, 16)),
-    };
+    const geometryFor = (shape: RoomBox['shape']): BufferGeometry =>
+      shape === 'box' ? new BoxGeometry(1, 1, 1) : new CylinderGeometry(0.5, 0.5, 1, 16);
     const matrix = new Matrix4();
     const identity = new Quaternion();
     for (const [key, list] of groups) {
       const first = list[0];
       if (!first) continue;
-      const mesh = new InstancedMesh(
-        geometries[first.shape],
-        materialFor(first.material),
-        list.length,
+      const mesh = this.own(
+        new InstancedMesh(
+          this.own(geometryFor(first.shape)),
+          materialFor(first.material),
+          list.length,
+        ),
       );
       mesh.name = `room-${key}`;
       list.forEach((box, i) => {
@@ -298,7 +297,9 @@ export class RoomBackdrop {
   private buildBooks(books: RoomLayout['books']): void {
     const material = this.own(new MeshStandardNodeMaterial({ roughness: 0.8, metalness: 0 }));
     material.name = 'room-books';
-    const mesh = new InstancedMesh(this.own(new BoxGeometry(1, 1, 1)), material, books.length);
+    const mesh = this.own(
+      new InstancedMesh(this.own(new BoxGeometry(1, 1, 1)), material, books.length),
+    );
     mesh.name = 'room-books';
     const matrix = new Matrix4();
     const identity = new Quaternion();
@@ -308,7 +309,6 @@ export class RoomBackdrop {
       mesh.setMatrixAt(i, matrix);
       mesh.setColorAt(i, colour.setHSL(book.hue, 0.45, book.lightness));
     });
-    mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     mesh.instanceMatrix.needsUpdate = true;
     this.group.add(mesh);
   }

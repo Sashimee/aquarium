@@ -4,6 +4,11 @@ export const ROOM_STORAGE_KEY = 'aquarium.room';
 
 export type RoomStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
+export interface StorageEventSource {
+  addEventListener(type: 'storage', listener: (event: StorageEvent) => void): void;
+  removeEventListener(type: 'storage', listener: (event: StorageEvent) => void): void;
+}
+
 /**
  * The player's room choice, kept in local storage. `subscribe` and `snapshot` have the shape
  * React's `useSyncExternalStore` takes, so the settings screen can bind to them directly.
@@ -12,8 +17,18 @@ export class RoomPreference {
   private current: RoomChoice;
   private readonly listeners = new Set<() => void>();
 
-  constructor(private readonly storage: RoomStorage | null) {
+  constructor(
+    private readonly storage: RoomStorage | null,
+    private readonly events: StorageEventSource | null = browserStorageEvents(),
+  ) {
     this.current = this.read();
+    this.events?.addEventListener('storage', this.onStorage);
+  }
+
+  /** Stops following other tabs. */
+  dispose(): void {
+    this.events?.removeEventListener('storage', this.onStorage);
+    this.listeners.clear();
   }
 
   readonly snapshot = (): RoomChoice => this.current;
@@ -35,6 +50,15 @@ export class RoomPreference {
     for (const listener of [...this.listeners]) listener();
   }
 
+  private readonly onStorage = (event: StorageEvent): void => {
+    // A null key means the whole store was cleared.
+    if (event.key !== null && event.key !== ROOM_STORAGE_KEY) return;
+    const next = this.read();
+    if (next === this.current) return;
+    this.current = next;
+    for (const listener of [...this.listeners]) listener();
+  };
+
   private read(): RoomChoice {
     try {
       const stored = this.storage?.getItem(ROOM_STORAGE_KEY);
@@ -51,4 +75,8 @@ export function browserRoomStorage(): RoomStorage | null {
   } catch {
     return null;
   }
+}
+
+export function browserStorageEvents(): StorageEventSource | null {
+  return typeof window === 'undefined' ? null : window;
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RoomPreference, ROOM_STORAGE_KEY, type RoomStorage } from './preference';
+import {
+  RoomPreference,
+  ROOM_STORAGE_KEY,
+  type RoomStorage,
+  type StorageEventSource,
+} from './preference';
 
 function memory(initial?: string): RoomStorage & { value: string | null } {
   const store = { value: initial ?? null } as RoomStorage & { value: string | null };
@@ -12,7 +17,7 @@ function memory(initial?: string): RoomStorage & { value: string | null } {
 
 describe('RoomPreference', () => {
   it('starts with no room when nothing is stored', () => {
-    expect(new RoomPreference(memory()).snapshot()).toBe('none');
+    expect(new RoomPreference(memory(), null).snapshot()).toBe('none');
     expect(new RoomPreference(null).snapshot()).toBe('none');
   });
 
@@ -66,5 +71,56 @@ describe('RoomPreference', () => {
     off();
     preference.set('office');
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('RoomPreference across tabs', () => {
+  function source() {
+    const target = new EventTarget();
+    const events: StorageEventSource = {
+      addEventListener: (type, listener) =>
+        target.addEventListener(type, listener as EventListener),
+      removeEventListener: (type, listener) =>
+        target.removeEventListener(type, listener as EventListener),
+    };
+    const fire = (key: string | null) =>
+      target.dispatchEvent(Object.assign(new Event('storage'), { key }));
+    return { events, fire };
+  }
+
+  it('picks up a choice another tab stored and tells subscribers', () => {
+    const storage = memory();
+    const { events, fire } = source();
+    const preference = new RoomPreference(storage, events);
+    const listener = vi.fn();
+    preference.subscribe(listener);
+    storage.value = 'office';
+    fire(ROOM_STORAGE_KEY);
+    expect(preference.snapshot()).toBe('office');
+    expect(listener).toHaveBeenCalledOnce();
+    fire(ROOM_STORAGE_KEY);
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('follows a cleared store back to the default and ignores other keys', () => {
+    const storage = memory('office');
+    const { events, fire } = source();
+    const preference = new RoomPreference(storage, events);
+    storage.value = 'living-room';
+    fire('something.else');
+    expect(preference.snapshot()).toBe('office');
+    storage.value = null;
+    fire(null);
+    expect(preference.snapshot()).toBe('none');
+  });
+
+  it('stops listening once disposed', () => {
+    const storage = memory();
+    const { events, fire } = source();
+    const preference = new RoomPreference(storage, events);
+    preference.dispose();
+    storage.value = 'office';
+    fire(ROOM_STORAGE_KEY);
+    expect(preference.snapshot()).toBe('none');
   });
 });

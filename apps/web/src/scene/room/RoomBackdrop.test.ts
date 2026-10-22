@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { InstancedMesh, type BufferGeometry, type Material, type Mesh } from 'three/webgpu';
+import {
+  InstancedMesh,
+  Raycaster,
+  Vector3,
+  type BufferGeometry,
+  type Material,
+  type Mesh,
+} from 'three/webgpu';
 import { TANK_DIMENSIONS } from '../../engine/tank/dimensions';
 import { RoomBackdrop } from './RoomBackdrop';
 
@@ -57,6 +64,14 @@ describe('RoomBackdrop', () => {
     expect(meshes(backdrop).length).toBeLessThan(20);
   });
 
+  it('gives every instanced mesh its own geometry', () => {
+    const backdrop = new RoomBackdrop();
+    backdrop.update({ choice: 'office', tank, tier: 'ultra' });
+    const instanced = meshes(backdrop).filter((m) => m instanceof InstancedMesh);
+    expect(instanced.length).toBeGreaterThan(1);
+    expect(new Set(instanced.map((m) => m.geometry)).size).toBe(instanced.length);
+  });
+
   it('does not rebuild for an unchanged config and rebuilds for a new size', () => {
     const backdrop = new RoomBackdrop();
     backdrop.update({ choice: 'office', tank, tier: 'high' });
@@ -77,11 +92,16 @@ describe('RoomBackdrop', () => {
       geometries.add(mesh.geometry);
       materials.add(mesh.material as Material);
     }
+    const instanced = meshes(backdrop).filter((m) => m instanceof InstancedMesh);
     const freed: unknown[] = [];
-    for (const r of [...geometries, ...materials])
-      r.addEventListener('dispose', () => freed.push(r));
+    const watch = (r: BufferGeometry | Material | InstancedMesh) =>
+      (r as { addEventListener(t: 'dispose', l: () => void): void }).addEventListener(
+        'dispose',
+        () => freed.push(r),
+      );
+    for (const r of [...geometries, ...materials, ...instanced]) watch(r);
     backdrop.update({ choice: 'none', tank, tier: 'high' });
-    expect(freed).toHaveLength(geometries.size + materials.size);
+    expect(freed).toHaveLength(geometries.size + materials.size + instanced.length);
     backdrop.dispose();
     expect(backdrop.group.children).toHaveLength(0);
   });
@@ -89,8 +109,15 @@ describe('RoomBackdrop', () => {
   it('cuts the window opening in the back wall', () => {
     const backdrop = new RoomBackdrop();
     backdrop.update({ choice: 'living-room', tank, tier: 'low' });
+    const slot = backdrop.layout?.window;
+    if (!slot) throw new Error('no layout');
     const wall = meshes(backdrop).find((m) => m.name === 'room-wall-back');
-    const full = 6 * 3;
-    expect(wall?.geometry.index?.count).toBeGreaterThan(full);
+    if (!wall) throw new Error('no back wall');
+    wall.updateMatrixWorld(true);
+    const cast = (x: number, y: number) =>
+      new Raycaster(new Vector3(x, y, 5), new Vector3(0, 0, -1)).intersectObject(wall);
+    expect(cast(slot.centre[0], slot.centre[1])).toHaveLength(0);
+    const beside = slot.centre[0] + slot.size[0] / 2 + 0.2;
+    expect(cast(beside, slot.centre[1])).toHaveLength(1);
   });
 });

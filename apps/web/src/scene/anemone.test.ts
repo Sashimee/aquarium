@@ -46,6 +46,15 @@ describe('anemone hosting data', () => {
     expect(anemoneReach(entry, item, calm)).toBeGreaterThan(0.15 * item.scale);
   });
 
+  it('adds the sideways meander to the ambient lean', () => {
+    const tall: CatalogEntry = { ...entry, bounds: { min: [-0.1, 0, -0.1], max: [0.1, 10, 0.1] } };
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    const gusty = { ...still, speed: 0.05, gustDepth: 0.5 };
+    const flowOnly = gusty.speed * (1 + gusty.gustDepth) * 0.35;
+    const extra = anemoneReach(tall, item, gusty) - anemoneReach(tall, item, still);
+    expect(extra).toBeGreaterThan(flowOnly + 1e-6);
+  });
+
   it('stays finite at scale 0 with no pump and no gust', () => {
     const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
     expect(anemoneReach(entry, { ...item, scale: 0 }, still)).toBe(0);
