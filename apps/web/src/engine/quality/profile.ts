@@ -16,10 +16,11 @@ export interface QualityProfile {
   /** Caps every tier's `textureSize`, a pinned or manual tier included: memory is not frame time. */
   maxTextureSize: 1024 | 2048;
   /**
-   * Decoded GPU bytes, in MiB, that the textures of a demo tank may take at each tier: model,
+   * Decoded GPU bytes, in MiB, that the textures of a tank may take at each tier: model,
    * substrate, fish and impostor maps plus the backdrop, mips included, once KTX2 is transcoded to
    * the device class's worst block-compressed format: ETC2 on a phone, BC7 on a desktop, where
-   * ETC1S takes twice the bytes. `textureBudget.test.ts` holds every preset to it.
+   * ETC1S takes twice the bytes. `textureBudget.test.ts` holds every preset to it, stocked with its
+   * demo and with every species of its biome.
    */
   textureBudgetMiB: Readonly<Record<Tier, number>>;
 }
@@ -30,6 +31,10 @@ const DISPLAY_MS = 1000 / 60;
  * A tank needs no more than 60 fps, and on a 120-165 Hz monitor drawing every display frame ran a
  * desktop GPU two to three times as hard for nothing (#1020). At a device ratio of 2, 1.5 shades
  * 56% of the pixels, and TRAA or SMAA hides the difference at viewing distance.
+ *
+ * Low and medium load the phone's 1k set, so their budget is the phone's 44 MiB carried over to
+ * BC7: a tank holding every freshwater species takes 43.6 MiB as ETC on a phone and 59.5 MiB as
+ * BC7, the same maps, so 60 (#1338). A desktop has no iOS tab limit of its own to set it lower.
  */
 export const DESKTOP_PROFILE: Readonly<QualityProfile> = {
   targetMs: DISPLAY_MS,
@@ -40,7 +45,7 @@ export const DESKTOP_PROFILE: Readonly<QualityProfile> = {
   frameCapFps: 60,
   pixelRatioCeiling: 1.5,
   maxTextureSize: 2048,
-  textureBudgetMiB: { low: 58, medium: 58, high: 156, ultra: 156 },
+  textureBudgetMiB: { low: 60, medium: 60, high: 156, ultra: 156 },
 };
 
 /**
