@@ -230,9 +230,15 @@ async function holdingLock(
     await gate.opened;
     await then(tx);
   });
-  const pid = await held.opened;
+  const pid = await Promise.race([
+    held.opened,
+    done.then(() => {
+      throw new Error('the lock transaction ended before the lock was held');
+    }),
+  ]);
   return {
     async whenBlocked() {
+      let waitError: unknown;
       try {
         const deadline = Date.now() + 10_000;
         for (;;) {
@@ -243,10 +249,16 @@ async function holdingLock(
           if (Date.now() > deadline) throw new Error('the request never blocked on the held lock');
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
-      } finally {
-        gate.open();
+      } catch (error) {
+        waitError = error;
       }
-      await done;
+      gate.open();
+      if (waitError === undefined) {
+        await done;
+        return;
+      }
+      await done.catch(() => undefined);
+      throw waitError;
     },
   };
 }
