@@ -17,21 +17,6 @@ describe('trailingCall', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  it('flush runs a pending call immediately and only once', () => {
-    const run = vi.fn();
-    const call = trailingCall(run, 100);
-    call.schedule();
-    call.flush();
-    vi.advanceTimersByTime(500);
-    expect(run).toHaveBeenCalledTimes(1);
-  });
-
-  it('flush does nothing when nothing is pending', () => {
-    const run = vi.fn();
-    trailingCall(run, 100).flush();
-    expect(run).not.toHaveBeenCalled();
-  });
-
   it('cancel drops a pending call', () => {
     const run = vi.fn();
     const call = trailingCall(run, 100);

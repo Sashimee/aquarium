@@ -88,9 +88,14 @@ describe('placeFragments', () => {
   const root = coral('s5', { size: 1.6 });
   const frag = coral('s5.1', { parentKey: 's5', position: [0.1, 0.05], size: 0.3 });
 
-  it('keeps a fragment visible when the cap against the glass is zero', () => {
+  it('floors a fragment at a quarter of the root scale when the cap is zero', () => {
     const [placed] = placeFragments([slot(item(5, 0, 0.8))], [root, frag], flat, () => 0);
-    expect(placed?.item.scale).toBeGreaterThan(0);
+    expect(placed?.item.scale).toBeCloseTo(0.2);
+  });
+
+  it('lets a positive cap win over the floor', () => {
+    const [placed] = placeFragments([slot(item(5, 0, 0.8))], [root, frag], flat, () => 0.05);
+    expect(placed?.item.scale).toBeCloseTo(0.05);
   });
 
   it('places nothing when there are no fragments or no state', () => {

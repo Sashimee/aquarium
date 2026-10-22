@@ -147,6 +147,31 @@ describe('the default reef at full growth', () => {
   });
 });
 
+describe('a fragment beside the glass', () => {
+  it('stays inside it for a scale-1 root at the server edge margin', () => {
+    const [template] = reefCorals().filter((i) => i.assetId === 'acropora-cytherea');
+    if (!template) throw new Error('no cytherea');
+    const root: DecorItem = { ...template, scale: 1, rotationY: 0, tintSeed: 1 };
+    const colony = coralAt(root, 1);
+    const frag: Coral = {
+      ...colony,
+      key: 's1.1',
+      parentKey: 's1',
+      position: [0, halfD - 0.03],
+      size: 0.3,
+    };
+    const [placed] = placeFragments(
+      [{ assetId: root.assetId, item: root }],
+      [colony, frag],
+      () => 0.05,
+      cap,
+    );
+    if (!placed) throw new Error('fragment not placed');
+    expect(placed.item.scale).toBeGreaterThan(0);
+    expect(Math.abs(placed.item.position[2]) + extentOf(placed.item).z).toBeLessThanOrEqual(halfD);
+  });
+});
+
 describe('maxScaleAt', () => {
   it('is unbounded for an item with no model', () => {
     const [item] = reefCorals();

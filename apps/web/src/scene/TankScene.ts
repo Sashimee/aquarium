@@ -668,17 +668,24 @@ export class TankScene {
 
   private readonly refitSoon = trailingCall(() => this.refitCorals(), COLLIDER_REFIT_DEBOUNCE_MS);
 
+  private matchedCorals(): {
+    slots: CoralSlot[];
+    origins: CoralOrigin[];
+    matched: Map<number, Coral>;
+  } {
+    const { slots, origins } = this.coralLayout(this.hardItems);
+    return { slots, origins, matched: matchLayoutCorals(slots, this.coralState) };
+  }
+
   private refitCorals(): void {
     if (this.disposed) return;
-    const { slots, origins } = this.coralLayout(this.hardItems);
-    const matched = matchLayoutCorals(slots, this.coralState);
+    const { slots, origins, matched } = this.matchedCorals();
     this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
   }
 
   private syncCorals(deferRefit = false): void {
     if (this.disposed) return;
-    const { slots, origins } = this.coralLayout(this.hardItems);
-    const matched = matchLayoutCorals(slots, this.coralState);
+    const { slots, origins, matched } = this.matchedCorals();
     slots.forEach((slot, s) => {
       const origin = origins[s];
       const coral = matched.get(s);

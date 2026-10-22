@@ -1,6 +1,5 @@
 export interface TrailingCall {
   schedule(): void;
-  flush(): void;
   cancel(): void;
 }
 
@@ -18,11 +17,6 @@ export function trailingCall(run: () => void, waitMs: number): TrailingCall {
         timer = null;
         run();
       }, waitMs);
-    },
-    flush() {
-      if (timer === null) return;
-      cancel();
-      run();
     },
     cancel,
   };
