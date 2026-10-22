@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BufferGeometry, CompressedTexture, LoaderUtils, Texture } from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { WebGPURenderer } from 'three/webgpu';
 import { DEFAULT_HDRI_URL } from '../engine/environment';
@@ -507,5 +508,51 @@ describe('ModelLibrary shared model textures', () => {
     const texture = await loading;
 
     expect(disposed).toContain(texture);
+  });
+
+  async function failFirstGltfLoad(): Promise<() => void> {
+    const original = GLTFLoader.prototype.loadAsync;
+    let calls = 0;
+    let fail!: () => void;
+    const gate = new Promise<void>((resolve) => (fail = resolve));
+    vi.spyOn(GLTFLoader.prototype, 'loadAsync').mockImplementation(function (
+      this: GLTFLoader,
+      url,
+      onProgress,
+    ) {
+      if (calls++ === 0) return gate.then(() => Promise.reject(new Error(`${url}: 404`)));
+      return original.call(this, url, onProgress);
+    });
+    return fail;
+  }
+
+  it('keeps a newer model cache entry when an older load of the same key fails', async () => {
+    const fail = await failFirstGltfLoad();
+    const first = library.load(MEMBER, 0, 1024);
+    const firstResult = first.catch((error: unknown) => error);
+    const retaining = library.retainOnly(new Set());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = library.load(MEMBER, 0, 1024);
+    fail();
+    expect(await firstResult).toBeInstanceOf(Error);
+    await retaining;
+
+    expect(library.load(MEMBER, 0, 1024)).toBe(second);
+    await second;
+  });
+
+  it('keeps a newer collision entry when an older load of the same asset fails', async () => {
+    const fail = await failFirstGltfLoad();
+    const first = library.collisionGeometry(MEMBER);
+    const firstResult = first.catch((error: unknown) => error);
+    const retaining = library.retainOnly(new Set());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = library.collisionGeometry(MEMBER);
+    fail();
+    expect(await firstResult).toBeInstanceOf(Error);
+    await retaining;
+
+    expect(library.collisionGeometry(MEMBER)).toBe(second);
+    await second;
   });
 });
