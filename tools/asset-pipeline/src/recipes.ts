@@ -1,5 +1,6 @@
 import type { EnvironmentRecipe, HdriRecipe, SubstrateRecipe } from './environment.ts';
 import type { FishRecipe } from './fish.ts';
+import { paintBlackPhantom } from './scan-paint.ts';
 import type { RockPileRecipe } from './rock-pile.ts';
 
 export const FISH_RECIPES: FishRecipe[] = [
@@ -146,6 +147,22 @@ export const FISH_RECIPES: FishRecipe[] = [
     dropMeshes: /^Cube_helper/,
     keepMaterial: /^Pseudotropheus$/,
     fallbackLengthM: 0.0625,
+  },
+  {
+    id: 'black-phantom-tetra',
+    species: 'black-phantom-tetra',
+    sourceId: 'sketchfab-92b5b5bb',
+    axes: { forward: '-z', up: '+x' },
+    dropMeshes: /^Cube\.00[13]$/,
+    keepMaterial: /./,
+    hints: { resolution: 200, openingRadius: 2 },
+    fallbackLengthM: 0.04,
+    paint: { paint: paintBlackPhantom, width: 1024, height: 512, roughness: 0.4 },
+    lodPlan: { ratios: [1, 0.4, 0.15], minTriangles: 150, sloppyFallback: true },
+    modifications: [
+      'source is flat-coloured: UVs projected from the side and the colour map painted from the species pattern (black humeral blotch, black dorsal, reddish pelvic and anal fins)',
+      'dropped two detached fragments (a floating chin sliver and a stray tail-base shard)',
+    ],
   },
 ];
 

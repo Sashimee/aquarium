@@ -42,6 +42,7 @@ import { spotImage, tintImage, type SpotSpec, type TintSpec } from './finish.ts'
 import { renderSheet } from './raster.ts';
 import { bleedIslandEdges } from './island-bleed.ts';
 import { worldSpotImage, type WorldSpotSpec } from './world-spots.ts';
+import { paintScanTexture, type ScanPaintSpec } from './scan-paint.ts';
 import { bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 
 export const FISH_LOD_PLAN: LodPlan = { ratios: [1, 0.4, 0.15], minTriangles: 150 };
@@ -68,6 +69,8 @@ export interface FishRecipe {
   /** Covers the eye beads fused into the body mesh with smooth, dark, glossy spheres on a material of their own. */
   glossyEyes?: GlossyEyeSpec;
   roughness?: number;
+  /** For flat-coloured sources: projects UVs from the side and paints the colour map from the species pattern, fins by id. */
+  paint?: ScanPaintSpec;
   /** Recolours the source's base colour by luminance, then paints spots on it. */
   recolour?: {
     tint: TintSpec;
@@ -355,13 +358,22 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     recipeId: recipe.id,
   });
 
+  let finalParts = normalised;
+  let finalMaterials = materialDefs;
+  if (recipe.paint) {
+    const merged = mergeParts(normalised, normalised[0]!.material);
+    const base = materialDefs.find((m) => m.name === merged.material)!;
+    finalMaterials = [paintScanTexture([merged], base, recipe.paint)];
+    finalParts = [weldPart(merged)];
+  }
+
   const debugRender = await writeDebugRender(
     ctx.repoRoot,
     recipe.id,
-    normalised.filter((p) => !p.lods || p.lods.includes(0)),
-    materials,
+    finalParts.filter((p) => !p.lods || p.lods.includes(0)),
+    finalMaterials,
   );
-  const built = buildDocument(recipe.id, normalised, materialDefs);
+  const built = buildDocument(recipe.id, finalParts, finalMaterials);
   return emitAsset({
     outRoot: ctx.outRoot,
     kind: 'fish',
