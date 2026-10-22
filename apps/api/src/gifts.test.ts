@@ -976,6 +976,7 @@ describe('gifting and trading fish', () => {
       try {
         await counter.whenBlocked();
       } catch (err) {
+        // Only prevents an unhandled rejection; the real error is rethrown below.
         void pending.catch(() => undefined);
         throw err;
       } finally {
@@ -1005,6 +1006,7 @@ describe('gifting and trading fish', () => {
       try {
         await deletion.whenBlocked();
       } catch (err) {
+        // Only prevents an unhandled rejection; the real error is rethrown below.
         void pending.catch(() => undefined);
         throw err;
       } finally {
