@@ -39,6 +39,97 @@ export function daylightAt(minuteOfDay: number, period: Photoperiod = DEFAULT_PH
 }
 
 /**
+ * How long a switch between a pinned and the live clock takes to fade the lights. Any faster and
+ * the fish's eye cannot adapt (`NIGHT.lightAdaptTauS`), so every press would startle them.
+ */
+export const CLOCK_EASE_MS = 20_000;
+
+/**
+ * What the tank's clock is pinned to: minutes after midnight, the middle of the lamp's on period
+ * (`'day'`) or of its off period (`'night'`), or `null` to follow local time.
+ */
+export type ClockSetting = number | 'day' | 'night' | null;
+
+export function assertClockSetting(setting: ClockSetting): void {
+  if (setting === null || setting === 'day' || setting === 'night') return;
+  if (!(Number.isFinite(setting) && setting >= 0 && setting < MINUTES_PER_DAY)) {
+    throw new RangeError(
+      `clock must be null, 'day', 'night' or a minute in [0, ${MINUTES_PER_DAY}), got ${String(setting)}`,
+    );
+  }
+}
+
+/** The minute the hood is scored at, or null for the live clock. */
+export function hoodMinute(setting: ClockSetting, period: Photoperiod): number | null {
+  if (setting === 'day' || setting === 'night') {
+    const length = wrapMinutes(period.offAt - period.onAt);
+    const start = setting === 'day' ? period.onAt : period.offAt;
+    const span = setting === 'day' ? length : MINUTES_PER_DAY - length;
+    return wrapMinutes(start + span / 2);
+  }
+  return setting;
+}
+
+/** The minute the room's sun is read at, which ignores the lamp: noon-ish or midnight. */
+export function roomMinute(setting: ClockSetting): number | null {
+  if (setting === 'day') return 13 * 60;
+  if (setting === 'night') return 0;
+  return setting;
+}
+
+/** The hood and room light levels, 0 = night .. 1 = midday. */
+export interface LightLevels {
+  readonly hood: number;
+  readonly room: number;
+}
+
+/**
+ * The clock the tank is pinned to, `null` following local time. Changing it fades the light from
+ * what was last shown to what the new clock gives, rather than cutting.
+ */
+export class ClockPin {
+  private from: LightLevels | null = null;
+  private startedAt = 0;
+  private shown: LightLevels = { hood: 1, room: 1 };
+
+  constructor(private pinned: ClockSetting) {}
+
+  get clock(): ClockSetting {
+    return this.pinned;
+  }
+
+  /** Whether a fade is still running, so the level wants reading every frame. */
+  get easing(): boolean {
+    return this.from !== null;
+  }
+
+  /** Returns whether the clock changed. */
+  set(clock: ClockSetting, nowMs: number): boolean {
+    if (clock === this.pinned) return false;
+    this.pinned = clock;
+    this.from = this.shown;
+    this.startedAt = nowMs;
+    return true;
+  }
+
+  blend(target: LightLevels, nowMs: number): LightLevels {
+    const from = this.from;
+    const t = (nowMs - this.startedAt) / CLOCK_EASE_MS;
+    if (from === null || !(t < 1)) {
+      this.from = null;
+      this.shown = target;
+    } else {
+      const k = smoothstep(t);
+      this.shown = {
+        hood: from.hood + (target.hood - from.hood) * k,
+        room: from.room + (target.room - from.room) * k,
+      };
+    }
+    return this.shown;
+  }
+}
+
+/**
  * Reads `?clock=HH:MM`, `?clock=day` or `?clock=night` into minutes after midnight, so a page can
  * be pinned to a time of day.
  */
