@@ -11,6 +11,7 @@ import type {
   TankSize,
   Water,
 } from '@aquarium/shared';
+import type { ClockSetting } from '../engine/daylight';
 import type { PhotoFilter } from '../engine/photo/grade';
 import type { PhotoState } from '../engine/photo/PhotoMode';
 import type { PlantPick } from '../scene/plantGrowth';
@@ -99,8 +100,8 @@ export interface PhotoView {
 export interface InteractionEvents {
   'camera:request-mode': { mode: CameraMode };
   'camera:mode-changed': { mode: CameraMode };
-  /** The UI pins the tank's clock in minutes after midnight, or null to follow local time. */
-  'clock:request': { clock: number | null };
+  /** The UI pins the tank's clock, or null to follow local time; see `Engine.setClock`. */
+  'clock:request': { clock: ClockSetting };
   /** Follow was requested but there is no fish to follow. */
   'camera:follow-unavailable': Record<string, never>;
   /** Focus the camera on the middle of these fish (server ids); the ones not on screen are skipped. */

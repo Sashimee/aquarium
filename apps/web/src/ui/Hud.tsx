@@ -7,7 +7,15 @@ import { chipState, type ChipStatus } from './chemistryChip';
 import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
 import { clockFor, initialMode, nextMode, writeMode, type DayNightMode } from './dayNight';
 import { getDip, subscribeDips } from './dipStore';
-import { BookIcon, DuskIcon, MoonIcon, PersonIcon, SunIcon, TankIcon } from './icons';
+import {
+  AutoLightIcon,
+  BookIcon,
+  DuskIcon,
+  MoonIcon,
+  PersonIcon,
+  SunIcon,
+  TankIcon,
+} from './icons';
 import type { OpenPanel } from './panels';
 import { Link } from './screens';
 import { useActiveTank, useOptionalSession, useSessionState } from './session';
@@ -285,7 +293,7 @@ export function RoundButton({
 }
 
 const DAY_NIGHT_ICON: Record<DayNightMode, () => React.JSX.Element> = {
-  auto: DuskIcon,
+  auto: AutoLightIcon,
   day: SunIcon,
   night: MoonIcon,
 };
@@ -299,23 +307,30 @@ const DAY_NIGHT_LABEL: Record<DayNightMode, string> = {
 export function DayNightButton() {
   const { interaction } = useBridge();
   const [mode, setMode] = useState<DayNightMode>(() => initialMode(window.location.search));
+  const [announced, setAnnounced] = useState('');
   const next = nextMode(mode);
   const Icon = DAY_NIGHT_ICON[mode];
   return (
-    <button
-      type="button"
-      className="round"
-      data-mode={mode}
-      aria-label={`Lighting: ${DAY_NIGHT_LABEL[mode]}. Switch to ${DAY_NIGHT_LABEL[next]}`}
-      title={`Lighting: ${DAY_NIGHT_LABEL[mode]}`}
-      onClick={() => {
-        setMode(next);
-        writeMode(next);
-        interaction.emit('clock:request', { clock: clockFor(next) });
-      }}
-    >
-      <Icon />
-    </button>
+    <>
+      <button
+        type="button"
+        className="round"
+        data-mode={mode}
+        aria-label={`Lighting: ${DAY_NIGHT_LABEL[mode]}. Switch to ${DAY_NIGHT_LABEL[next]}`}
+        title={`Lighting: ${DAY_NIGHT_LABEL[mode]}`}
+        onClick={() => {
+          setMode(next);
+          setAnnounced(`Lighting set to ${DAY_NIGHT_LABEL[next]}`);
+          writeMode(next);
+          interaction.emit('clock:request', { clock: clockFor(next) });
+        }}
+      >
+        <Icon />
+      </button>
+      <span role="status" className="sr-only">
+        {announced}
+      </span>
+    </>
   );
 }
 

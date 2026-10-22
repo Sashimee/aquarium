@@ -5,7 +5,7 @@ import {
   initialMode,
   nextMode,
   readMode,
-  savedClock,
+  engineOptionsFor,
   writeMode,
   type DayNightMode,
 } from './dayNight';
@@ -47,10 +47,10 @@ describe('nextMode', () => {
 });
 
 describe('clockFor', () => {
-  it('follows local time for auto and pins a daytime and a night minute otherwise', () => {
+  it('follows local time for auto and leaves day and night to the lamp schedule', () => {
     expect(clockFor('auto')).toBeNull();
-    expect(clockFor('day')).toBe(13 * 60);
-    expect(clockFor('night')).toBe(0);
+    expect(clockFor('day')).toBe('day');
+    expect(clockFor('night')).toBe('night');
   });
 });
 
@@ -82,8 +82,8 @@ describe('?clock= precedence', () => {
 
   it('uses the saved mode without the param', () => {
     expect(initialMode('', saved)).toBe('night');
-    expect(savedClock('', saved)).toBe(0);
-    expect(savedClock('', () => memoryStorage())).toBeNull();
+    expect(engineOptionsFor('', saved).clock).toBe('night');
+    expect(engineOptionsFor('', () => memoryStorage()).clock).toBeNull();
   });
 
   it('lets the param beat the saved mode', () => {
@@ -92,11 +92,11 @@ describe('?clock= precedence', () => {
     expect(initialMode('?clock=night', () => memoryStorage({ [DAY_NIGHT_KEY]: 'day' }))).toBe(
       'night',
     );
-    expect(savedClock('?clock=day', saved)).toBeNull();
+    expect(engineOptionsFor('?clock=day', saved).clock).toBe(13 * 60);
   });
 
-  it('falls back to the saved mode for an invalid param', () => {
+  it('keeps the button usable on a bad param, while the engine options reject it', () => {
     expect(initialMode('?clock=soon', saved)).toBe('night');
-    expect(savedClock('?clock=soon', saved)).toBe(0);
+    expect(() => engineOptionsFor('?clock=soon', saved)).toThrow(/clock/i);
   });
 });

@@ -1,4 +1,6 @@
-import { daylightAt, parseClock } from '../engine/daylight';
+import { parseClock, type ClockSetting } from '../engine/daylight';
+import { parseEngineOptions, type EngineOptions } from '../engine/options';
+import { roomDaylightAt } from '../engine/room/timeOfDay';
 
 export type DayNightMode = 'auto' | 'day' | 'night';
 
@@ -10,10 +12,9 @@ export function nextMode(mode: DayNightMode): DayNightMode {
   return ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length] ?? 'auto';
 }
 
-/** The pinned clock `Engine.setClock` takes: null follows local time. */
-export function clockFor(mode: DayNightMode): number | null {
-  if (mode === 'auto') return null;
-  return parseClock(mode);
+/** What `Engine.setClock` takes: null follows local time, and day and night follow the lamp. */
+export function clockFor(mode: DayNightMode): ClockSetting {
+  return mode === 'auto' ? null : mode;
 }
 
 function isMode(value: unknown): value is DayNightMode {
@@ -69,13 +70,14 @@ export function initialMode(
 ): DayNightMode {
   const pinned = urlClock(search);
   if (pinned === null) return readMode(store);
-  return daylightAt(pinned) >= 0.5 ? 'day' : 'night';
+  return roomDaylightAt(pinned) >= 0.5 ? 'day' : 'night';
 }
 
-/** The clock to start the engine on when the URL has no usable `?clock=`. */
-export function savedClock(
+/** The engine options for this URL: its own `?clock=` if it has one, else the saved mode. Throws on a bad param. */
+export function engineOptionsFor(
   search: string,
   store: () => Storage | null = browserStorage,
-): number | null {
-  return urlClock(search) === null ? clockFor(readMode(store)) : null;
+): EngineOptions {
+  const options = parseEngineOptions(search);
+  return { ...options, clock: options.clock ?? clockFor(readMode(store)) };
 }

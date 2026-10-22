@@ -1,10 +1,14 @@
 import { DEFAULT_EQUIPMENT } from '@aquarium/shared';
+import { NIGHT } from '@aquarium/sim';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
 import { EventBus, type EngineEvents } from './events';
 import {
   CLOCK_EASE_MS,
   ClockPin,
+  assertClockSetting,
+  hoodMinute,
+  roomMinute,
   DAYLIGHT_INTERVAL_MS,
   DAYLIGHT_UNSEEN_GAP_MS,
   DaylightAnnouncer,
@@ -372,5 +376,80 @@ describe('ClockPin', () => {
     pin.blend(night, 0);
     expect(pin.set(0, 10)).toBe(false);
     expect(pin.easing).toBe(false);
+  });
+});
+
+describe('ClockPin against the fish eye', () => {
+  it('fades day to night slowly enough that no fish is startled', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.set('night', 0);
+    const dt = 1 / 30;
+    let adapted = 1;
+    let widest = 0;
+    for (let t = 0; t <= (CLOCK_EASE_MS / 1000) * 1.2; t += dt) {
+      const { hood } = pin.blend({ hood: 0, room: 0 }, t * 1000);
+      widest = Math.max(widest, Math.abs(hood - adapted));
+      adapted += (hood - adapted) * (1 - Math.exp(-dt / NIGHT.lightAdaptTauS));
+    }
+    expect(widest).toBeLessThan(NIGHT.lightStartleThreshold);
+  });
+
+  it('would startle at the old 3 s fade, so the guard test means something', () => {
+    const dt = 1 / 30;
+    let adapted = 1;
+    let widest = 0;
+    for (let t = 0; t <= 4; t += dt) {
+      const x = Math.min(1, t / 3);
+      const hood = 1 - x * x * (3 - 2 * x);
+      widest = Math.max(widest, Math.abs(hood - adapted));
+      adapted += (hood - adapted) * (1 - Math.exp(-dt / NIGHT.lightAdaptTauS));
+    }
+    expect(widest).toBeGreaterThan(NIGHT.lightStartleThreshold);
+  });
+});
+
+describe('clock settings', () => {
+  it('accepts null, day, night and minutes in a day', () => {
+    for (const ok of [null, 'day', 'night', 0, 779.5, 1439] as const) {
+      expect(() => assertClockSetting(ok)).not.toThrow();
+    }
+  });
+
+  it('rejects minutes that are not finite or outside [0, 1440)', () => {
+    for (const bad of [NaN, Infinity, -1, 1440, 2000]) {
+      expect(() => assertClockSetting(bad)).toThrow(RangeError);
+    }
+  });
+
+  it.each([
+    [8, 21],
+    [14, 22],
+    [20, 6],
+  ])('puts day in the light and night in the dark for a lamp %i to %i', (onHour, offHour) => {
+    const period = lampPhotoperiod({ onHour, offHour });
+    const day = hoodMinute('day', period);
+    const night = hoodMinute('night', period);
+    expect(day).not.toBeNull();
+    expect(night).not.toBeNull();
+    expect(daylightAt(day ?? 0, period)).toBeCloseTo(1);
+    expect(daylightAt(night ?? 0, period)).toBe(0);
+  });
+
+  it('centres day on the on period, across midnight too', () => {
+    expect(hoodMinute('day', lampPhotoperiod({ onHour: 8, offHour: 21 }))).toBe(14.5 * 60);
+    expect(hoodMinute('night', lampPhotoperiod({ onHour: 8, offHour: 21 }))).toBe(2.5 * 60);
+    expect(hoodMinute('day', lampPhotoperiod({ onHour: 20, offHour: 6 }))).toBe(60);
+    expect(hoodMinute('night', lampPhotoperiod({ onHour: 20, offHour: 6 }))).toBe(13 * 60);
+  });
+
+  it('passes minutes and the live clock through', () => {
+    const period = lampPhotoperiod({ onHour: 8, offHour: 21 });
+    expect(hoodMinute(300, period)).toBe(300);
+    expect(hoodMinute(null, period)).toBeNull();
+    expect(roomMinute('day')).toBe(13 * 60);
+    expect(roomMinute('night')).toBe(0);
+    expect(roomMinute(null)).toBeNull();
+    expect(roomMinute(90)).toBe(90);
   });
 });

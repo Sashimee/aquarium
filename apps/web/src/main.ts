@@ -2,7 +2,7 @@ import { broodTarget, followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
-import { parseEngineOptions } from './engine/options';
+import { roomMinute, type ClockSetting } from './engine/daylight';
 import type { Biome, Collider } from '@aquarium/shared';
 import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
@@ -34,7 +34,7 @@ import {
   watchSwitches,
   type AssetWatch,
 } from './ui/loadSignals';
-import { savedClock } from './ui/dayNight';
+import { engineOptionsFor } from './ui/dayNight';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { LampFeed } from './sync/lampFeed';
@@ -117,22 +117,25 @@ async function boot(): Promise<void> {
   });
   mountUi(uiRoot, { engine: events, interaction });
 
-  const parsedOptions = parseEngineOptions(window.location.search);
-  const engineOptions = {
-    ...parsedOptions,
-    clock: parsedOptions.clock ?? savedClock(window.location.search),
-  };
-  let pinnedClock = engineOptions.clock;
+  let pinnedClock: ClockSetting = null;
+  let clockPressed = false;
+  let liveEngine: Engine | null = null;
+  const stopClockRequests = interaction.on('clock:request', ({ clock }) => {
+    pinnedClock = clock;
+    clockPressed = true;
+    liveEngine?.setClock(clock);
+  });
   let modules: Awaited<typeof tank>;
   let engine: Engine;
   let assetWatch: AssetWatch;
   try {
     modules = await awaitTankModules(tank, events);
     tracker.reach('code');
-    engine = await modules.Engine.create(container, {
-      options: engineOptions,
-      events,
-    });
+    const engineOptions = engineOptionsFor(window.location.search);
+    if (!clockPressed) pinnedClock = engineOptions.clock;
+    engine = await modules.Engine.create(container, { options: engineOptions, events });
+    liveEngine = engine;
+    engine.setClock(pinnedClock);
     tracker.reach('renderer');
     const { DefaultLoadingManager } = await import('three');
     assetWatch = watchAssets(
@@ -142,6 +145,7 @@ async function boot(): Promise<void> {
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     tracker.fail(message);
+    stopClockRequests();
     switches.stop();
     waveMaker.stop();
     lamp.stop();
@@ -192,7 +196,7 @@ async function boot(): Promise<void> {
     },
     tier: () => engine.quality.tier,
     hood: () => engine.daylight,
-    clock: () => pinnedClock,
+    clock: () => roomMinute(pinnedClock),
     now: () => Date.now(),
     onFrame: (callback) => engine.onFrame(callback),
   });
@@ -257,10 +261,6 @@ async function boot(): Promise<void> {
       if (sceneDecor.system?.active) sceneDecor.system.pointerUp();
       else play?.controller.pointerLeave();
     },
-  });
-  const stopClockRequests = interaction.on('clock:request', ({ clock }) => {
-    pinnedClock = clock;
-    engine.setClock(clock);
   });
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
