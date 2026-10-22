@@ -148,9 +148,14 @@ describe('paintBlackPhantom', () => {
   const luminance = (c: [number, number, number]) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
 
   it('puts a black humeral blotch behind a paler bar', () => {
-    expect(luminance(paintBlackPhantom(0.3, 0.58, 0))).toBeLessThan(0.05);
+    expect(luminance(paintBlackPhantom(0.3, 0.46, 0))).toBeLessThan(0.05);
     expect(luminance(paintBlackPhantom(0.2, 0.5, 0))).toBeGreaterThan(0.6);
     expect(luminance(paintBlackPhantom(0.5, 0.5, 0))).toBeGreaterThan(0.3);
+  });
+
+  it('keeps the blotch off the back so a side projection does not wrap it over the top', () => {
+    expect(luminance(paintBlackPhantom(0.3, 0.8, 0))).toBeGreaterThan(0.1);
+    expect(luminance(paintBlackPhantom(0.3, 0.95, 0))).toBeGreaterThan(0.1);
   });
 
   it('shades the back darker than the belly', () => {

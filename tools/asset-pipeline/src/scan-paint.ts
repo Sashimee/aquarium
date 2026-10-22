@@ -222,8 +222,9 @@ export function paintBlackPhantom(tn: number, h: number, fin: number): Rgb {
     0.7 * pale * smooth(0.15, 0.3, h) * (1 - smooth(0.78, 0.92, h)),
   );
 
-  const blotch = ellipse(tn, h, 0.3, 0.58, 0.055, 0.23);
-  colour = mix(colour, [0.015, 0.015, 0.02], 1 - smooth(0.7, 1, blotch));
+  const blotch = ellipse(tn, h, 0.3, 0.46, 0.055, 0.2);
+  const flank = 1 - smooth(0.56, 0.66, h);
+  colour = mix(colour, [0.015, 0.015, 0.02], (1 - smooth(0.7, 1, blotch)) * flank);
 
   const eye = Math.hypot(tn - 0.085, (h - 0.6) * 0.45);
   if (eye < 0.04) colour = mix([0.82, 0.74, 0.5], [0.95, 0.95, 0.9], smooth(0.025, 0.04, eye));

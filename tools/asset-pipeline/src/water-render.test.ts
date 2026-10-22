@@ -92,18 +92,9 @@ describe('water scene renders', () => {
     const library = fixtureLibrary();
     const bare: Library = {
       ...library,
-      models: {
-        scanA: [],
-        scanB: [],
-        twigs: [],
-        trunk02: [],
-        quiver: [],
-        propRoots: [],
-        stump: [],
-        propagule: [],
-        rock: [],
-        rootScan: [],
-      },
+      models: Object.fromEntries(
+        Object.keys(library.models).map((key): [string, SceneMesh[]] => [key, []]),
+      ) as Library['models'],
     };
     for (const id of WATER_BACKGROUND_IDS) {
       const withModels = renderWaterScene(id, library, 48, 64);
