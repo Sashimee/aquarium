@@ -55,6 +55,49 @@ function anchorsOf(spec: SimWorldSpec, roster: TankRoster): unknown {
   return spec.config(roster.swimming())?.anchors;
 }
 
+describe('SimWorldSpec banks', () => {
+  const top = DEMO.config.space.height - DEMO.config.space.freeboard;
+  const bank: SceneAnchor = {
+    id: 'bank-1',
+    kind: 'bank',
+    position: [0.1, top + 0.08, 0.02],
+    radius: 0.007,
+  };
+  const banksOf = (spec: SimWorldSpec, roster: TankRoster): unknown[] =>
+    (spec.config(roster.swimming())?.anchors ?? []).filter((a) => a.kind === 'bank');
+
+  it('reaches a world started after the scene loaded', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([ANEMONE, bank]);
+    expect(banksOf(spec, roster)).toEqual([
+      { id: 'bank-1', kind: 'bank', position: [0.1, top + 0.08, 0.02], radius: 0.007 },
+    ]);
+  });
+
+  it('follows the decor when it moves', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([bank]);
+    const moved: SceneAnchor = { ...bank, position: [-0.2, top + 0.08, 0.1] };
+    const sent = spec.setAnchors([moved]);
+    expect(sent.map((a) => a.position)).toEqual([[-0.2, top + 0.08, 0.1]]);
+    expect(banksOf(spec, roster)).toHaveLength(1);
+  });
+
+  it('is gone with its decor', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([ANEMONE, bank]);
+    const sent = spec.setAnchors([ANEMONE]);
+    expect(sent.some((a) => a.kind === 'bank')).toBe(false);
+    expect(banksOf(spec, roster)).toEqual([]);
+  });
+
+  it('sends none for a scene without a bank', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([ANEMONE]);
+    expect(banksOf(spec, roster)).toEqual([]);
+  });
+});
+
 describe('SimWorldSpec', () => {
   it('starts a world without homes until the scene sends them', () => {
     const { spec, roster } = setup();

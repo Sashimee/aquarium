@@ -7,8 +7,7 @@ import { MUD_BANK_FLAT, MUD_BANK_ID, MUD_BANK_TOP } from './mudBank';
 /**
  * A place above the water an amphibious fish can cling to or haul out on. The scanned stump offers
  * only a spike tip about 1.2 x 1.4 cm across, while the mud bank is a level patch whose radius is
- * the half-width of the flat that fits inside it. Not a `SceneAnchor`, since the sim rejects kinds
- * other than anemone and cave, so these travel on their own list.
+ * the half-width of the flat that fits inside it.
  */
 export interface SceneBank {
   readonly id: string;

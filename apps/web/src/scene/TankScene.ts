@@ -908,7 +908,7 @@ export class TankScene {
     ];
   }
 
-  /** Dry perches above the water for amphibious fish, kept apart from `anchors` until the sim reads them. */
+  /** Dry perches above the water for amphibious fish, sent to the sim alongside `anchors`, so a bank follows the decor that makes it. */
   get banks(): readonly SceneBank[] {
     const d = this.engine.tank.dimensions;
     return bankAnchors(

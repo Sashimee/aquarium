@@ -297,6 +297,18 @@ describe('sceneAnchorsToSim', () => {
     ]);
   });
 
+  it('keeps a bank above the water where the scene put it', () => {
+    const bank: SceneAnchor = {
+      id: 'bank-1',
+      kind: 'bank',
+      position: [0.1, top + 0.08, 0.02],
+      radius: 0.007,
+    };
+    expect(sceneAnchorsToSim([bank], demo)).toEqual([
+      { id: 'bank-1', kind: 'bank', position: [0.1, top + 0.08, 0.02], radius: 0.007 },
+    ]);
+  });
+
   it('carries a cave mouth facing through to the sim', () => {
     const cave: SceneAnchor = {
       id: 'c',

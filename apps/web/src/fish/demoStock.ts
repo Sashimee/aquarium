@@ -204,13 +204,14 @@ export function demoTank(tank: TankDimensions, seed: number, biome: Biome): Demo
 /**
  * Scene anchors are already in the sim's frame. The radius is capped to a quarter of the water
  * column under the anchor, and the centre kept that far off the sand and the surface, because the
- * sim rejects an anchor outside the water.
+ * sim rejects an anchor outside the water. A bank stays as the scene placed it, above the water.
  */
 export function sceneAnchorsToSim(anchors: readonly SceneAnchor[], demo: DemoTank): Anchor[] {
   const { space } = demo.config;
   const top = tankWaterTop(space);
   return anchors.map((a) => {
     const [x, y, z] = a.position;
+    if (a.kind === 'bank') return { id: a.id, kind: a.kind, position: [x, y, z], radius: a.radius };
     const ground = sampleFloor(space, x, z);
     const radius = Math.min(a.radius, (top - ground) / 4);
     return {

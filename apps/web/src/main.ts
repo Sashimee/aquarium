@@ -348,8 +348,10 @@ async function boot(): Promise<void> {
       sceneBiome = scene.biome;
       showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
-      fish.setAnchors(scene.anchors);
-      detachAnchors = scene.onAnchorsChanged((anchors) => fish.setAnchors(anchors));
+      fish.setAnchors([...scene.anchors, ...scene.banks]);
+      detachAnchors = scene.onAnchorsChanged((anchors) =>
+        fish.setAnchors([...anchors, ...scene.banks]),
+      );
       scene.polyps.bind(fish.polyps);
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
