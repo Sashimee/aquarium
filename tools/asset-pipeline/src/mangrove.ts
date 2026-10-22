@@ -13,6 +13,7 @@ export const MANGROVE_FISH_RECIPES: FishRecipe[] = [
     keepMaterial: /^ISG111/,
     lodPlan: { ratios: [0.065, 0.025, 0.01], minTriangles: 150 },
     fallbackLengthM: 0.09,
+    hints: { peduncleFromSnout: 0.8241 },
     modifications: [
       "scan slate ('Material.001', 12 triangles) dropped; 217k triangles decimated to about 14k at LOD0, 4096 px colour map downscaled to the 1k and 2k tiers",
     ],
@@ -25,6 +26,7 @@ export const MANGROVE_FISH_RECIPES: FishRecipe[] = [
     keepMaterial: /^Q11533/,
     lodPlan: { ratios: [0.036, 0.014, 0.0055], minTriangles: 150 },
     fallbackLengthM: 0.11,
+    hints: { peduncleFromSnout: 0.8494 },
     modifications: [
       "scan slate ('Material.001', 12 triangles) dropped; 392k triangles decimated to about 14k at LOD0, 4096 px colour map downscaled to the 1k and 2k tiers",
     ],

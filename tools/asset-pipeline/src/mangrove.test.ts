@@ -99,6 +99,14 @@ describe('mangrove recipes', () => {
     }
   });
 
+  it('pins the mudskipper peduncle at the FishBase SL/TL, since the opened core ends at the tail tip', () => {
+    const peduncle = Object.fromEntries(
+      MANGROVE_FISH_RECIPES.map((r) => [r.id, r.hints?.peduncleFromSnout]),
+    );
+    expect(peduncle['barred-mudskipper']).toBeCloseTo(0.8241, 3);
+    expect(peduncle['blue-spotted-mudskipper']).toBeCloseTo(1 / 1.1773, 3);
+  });
+
   it('gives every fish a standard length in the sourced range', () => {
     for (const recipe of [...MANGROVE_FISH_RECIPES, ...MANGROVE_LOFT_RECIPES]) {
       expect(recipe.fallbackLengthM).toBeGreaterThan(0.02);
