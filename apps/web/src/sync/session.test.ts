@@ -2360,6 +2360,16 @@ describe('reef corals', () => {
     expect(session.getState().tanks[0]?.corals?.[0]?.size).toBe(1.2);
   });
 
+  it('refreshes the tank after a 404 so the picker drops a colony that is gone', async () => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral.mockRejectedValue(refuse(404, 'not_found'));
+    api.tank.mockResolvedValue(reef({ corals: [], lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.fragCoral('s3');
+    expect(api.tank).toHaveBeenCalledTimes(1);
+    expect(session.getState().tanks[0]?.corals).toEqual([]);
+  });
+
   it('keeps the key after a lost reply and drops it after a refusal', async () => {
     const { api, session } = setup([reef()]);
     await session.setUser(verified);

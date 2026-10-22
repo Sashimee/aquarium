@@ -9,6 +9,8 @@ import { FeederLayer } from './feederLayer';
 import { flat, item, must } from './fixtures';
 import { DecorWorld, type DecorScenePort } from './world';
 
+const CURRENT = { direction: [1, 0] as const, speed: 0.04, gustPeriodS: 9, gustDepth: 0.4 };
+
 const preset: DecorItem[] = [
   item('boulder-01', -0.3, 0),
   item('acropora-cytherea', 0.1, 0, { tintSeed: 7 }),
@@ -47,7 +49,11 @@ function setup(withEnv = true) {
     bus,
     new FeederLayer(),
     withEnv
-      ? { dimensions: () => TANK_DIMENSIONS.standard, proceduralBounds: () => null }
+      ? {
+          dimensions: () => TANK_DIMENSIONS.standard,
+          proceduralBounds: () => null,
+          current: () => CURRENT,
+        }
       : undefined,
   );
   return { world, emitted };

@@ -4,6 +4,7 @@ import { ApiRequestError } from '../ui/api';
 import { BUNDLED_CORALS } from './bundledCorals';
 import {
   bleachLevel,
+  coralLabel,
   describeBleach,
   fragChoices,
   fragRefusalText,
@@ -78,6 +79,25 @@ describe('fragging eligibility', () => {
 
   it('matches the limit the server reads from content', () => {
     expect(BUNDLED_CORALS.params.fragMaxBleach).toBe(0.3);
+  });
+});
+
+describe('coralLabel', () => {
+  it('names a euphyllia by kind, not by its seed', () => {
+    expect(coralLabel('euphyllia-hammer-3')).toBe('euphyllia hammer');
+    expect(coralLabel('euphyllia-torch-12')).toBe('euphyllia torch');
+  });
+
+  it('spaces a catalog id and falls back for an empty one', () => {
+    expect(coralLabel('acropora-cytherea')).toBe('acropora cytherea');
+    expect(coralLabel('')).toBe('coral');
+  });
+});
+
+describe('bundled coral content', () => {
+  it('keeps the thresholds and drops the citations', () => {
+    expect(BUNDLED_CORALS.params.fragMaxBleach).toBeGreaterThan(0);
+    expect(BUNDLED_CORALS.params.sources).toEqual({});
   });
 });
 

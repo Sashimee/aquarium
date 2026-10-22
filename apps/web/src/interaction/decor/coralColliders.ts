@@ -7,7 +7,8 @@ import {
   type CoralSlot,
   type ScaleCap,
 } from '../../scene/coralGrowth';
-import { euphylliaCollider, parseEuphylliaId } from '../../scene/euphyllia';
+import type { CurrentParameters } from '../../scene/current';
+import { euphylliaCollider, euphylliaReach, parseEuphylliaId } from '../../scene/euphyllia';
 import { maxScaleAt } from '../../scene/presetFit';
 import { collidersFor } from './colliders';
 import type { Piece } from './layout';
@@ -22,6 +23,8 @@ export interface CoralColliderInput {
   readonly specs: ReadonlyMap<string, DecorSpec>;
   readonly corals: readonly Coral[];
   readonly dimensions: TankDimensions;
+  /** The current the scene sways the euphyllia in, so growth is capped by their reach. */
+  readonly current: CurrentParameters;
   readonly ground: (x: number, z: number) => number;
   /** Model-space bounds of a coral asset at scale 1, or null when unknown. */
   readonly boundsOf: (assetId: string) => CoralBounds | null;
@@ -48,7 +51,7 @@ function softCapsule(id: string, item: DecorItem, bounds: CoralBounds): Collider
  * surface limit the scene draws it with.
  */
 export function growCorals(input: CoralColliderInput): GrownCorals {
-  const { pieces, fixed, specs, corals, dimensions, ground, boundsOf } = input;
+  const { pieces, fixed, specs, corals, dimensions, current, ground, boundsOf } = input;
   if (corals.length === 0) return { pieces, extra: [] };
 
   const slots: CoralSlot[] = [];
@@ -66,7 +69,12 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
 
   const cap: ScaleCap = (item) => {
     const bounds = boundsOf(item.assetId);
-    return maxScaleAt(item, dimensions, bounds && { bounds, swayReach: null });
+    if (!bounds) return maxScaleAt(item, dimensions, null);
+    const swaying = parseEuphylliaId(item.assetId) !== null;
+    return maxScaleAt(item, dimensions, {
+      bounds,
+      swayReach: swaying ? (grown) => euphylliaReach(bounds, grown, current) : null,
+    });
   };
   const matched = matchLayoutCorals(slots, corals);
   const grownPieces = [...pieces];
