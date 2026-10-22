@@ -203,6 +203,46 @@ describe('the coral section', () => {
     expect(status()?.textContent).toBe('Selected the acropora cytherea 2.');
   });
 
+  it('announces only the last of two taps within the re-announce delay', async () => {
+    await mount(tankFixture({ biome: 'reef', corals: [coral(), coral({ key: 's2' })] }));
+    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+    await act(async () => vi.advanceTimersByTime(20));
+    await act(async () => interaction.emit('coral:picked', { key: 's2' }));
+    await act(async () => vi.advanceTimersByTime(40));
+    expect(status()?.textContent).toBe('');
+    await act(async () => vi.advanceTimersByTime(20));
+    expect(status()?.textContent).toBe('Selected the acropora cytherea 2.');
+  });
+
+  it('announces nothing and leaves no timer when unmounted before the delay', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const own = document.createElement('div');
+    document.body.append(own);
+    const ownRoot = createRoot(own);
+    try {
+      await act(async () => {
+        ownRoot.render(
+          <CoralSection
+            interaction={interaction}
+            session={{ fragCoral } as unknown as TankSession}
+            state={INITIAL_STATE}
+            tank={tankFixture({ biome: 'reef', corals: [coral()] })}
+          />,
+        );
+      });
+      await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+      expect(vi.getTimerCount()).toBe(1);
+      await act(async () => ownRoot.unmount());
+      expect(vi.getTimerCount()).toBe(0);
+      await act(async () => vi.advanceTimersByTime(100));
+      expect(own.textContent).toBe('');
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      own.remove();
+    }
+  });
+
   it('moves the mark with each tap and clears it when the tap hits no coral', async () => {
     await mount(
       tankFixture({

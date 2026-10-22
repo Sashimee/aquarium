@@ -614,7 +614,7 @@ export class TankScene {
 
   private coralCapCache: ScaleCap | null = null;
 
-  private get coralCap(): ScaleCap {
+  get coralCap(): ScaleCap {
     this.coralCapCache ??= coralScaleCap(
       this.library.catalog,
       this.engine.tank.dimensions,

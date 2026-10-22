@@ -86,8 +86,8 @@ describe('PlantFeed', () => {
 
   it('stops talking to a detached or stopped scene', () => {
     const { bus, feed, sink, seen, loaded } = setup();
-    feed.attach(sink);
-    feed.detach();
+    const detach = feed.attach(sink);
+    detach();
     loaded('a');
     bus.emit('tank:plants', { tankId: 'a', plants: [fern] });
     expect(seen).toEqual([undefined]);

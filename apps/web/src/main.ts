@@ -89,7 +89,15 @@ async function boot(): Promise<void> {
       Promise.all([import('./interaction/decor/system'), tank]).then(
         ([{ createDecorSystem }, { FeederLayer }]) =>
           (scene, initial) =>
-            createDecorSystem(engine, scene, interaction, initial, new FeederLayer(), coralFeed),
+            createDecorSystem(
+              engine,
+              scene,
+              interaction,
+              initial,
+              new FeederLayer(),
+              coralFeed,
+              plantFeed,
+            ),
       ),
     (message, cause) => console.error(message, cause),
   );
@@ -326,6 +334,7 @@ async function boot(): Promise<void> {
   let sceneBiome: Biome | null = null;
   let unbindPump = (): void => undefined;
   let detachCorals = (): void => undefined;
+  let detachPlants = (): void => undefined;
   const showBackground = (state: InteractionEvents['background:state'] | undefined): void => {
     if (!state || state.biome !== sceneBiome) return;
     container.dataset['backgroundId'] = state.backgroundId ?? '';
@@ -342,7 +351,7 @@ async function boot(): Promise<void> {
       scene.polyps.bind(fish.polyps);
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
-      plantFeed.attach(scene);
+      detachPlants = plantFeed.attach(scene);
       detachCorals = coralFeed.attach(scene);
       fish.setSceneColliders(scene.colliderList);
       unbindPump = bindPump(waveMaker, engine, scene, modules.pumpFieldFor, () => fish.simTimeS());
@@ -355,7 +364,8 @@ async function boot(): Promise<void> {
     },
     unmounting(scene) {
       scene.polyps.dispose();
-      plantFeed.detach();
+      detachPlants();
+      detachPlants = () => undefined;
       detachCorals();
       detachCorals = () => undefined;
       delete container.dataset['sceneBiome'];

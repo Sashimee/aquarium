@@ -7,9 +7,8 @@ import type { DecorMode } from './mode';
 import type { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
 import type { CoralFeed } from '../../sync/coralFeed';
-import { reachCurrent, type CurrentParameters } from '../../scene/current';
-import { DEFAULT_CURRENT } from '../../scene/TankScene';
-import { loadPreset } from '../../scene/preset';
+import type { PlantFeed } from '../../sync/plantFeed';
+import type { ScaleCap } from '../../scene/coralGrowth';
 import { generateEuphyllia, parseEuphylliaId } from '../../scene/euphyllia';
 
 export interface DecorSystem {
@@ -25,11 +24,12 @@ export interface DecorSystem {
 /** The saved layouts are shown from the start; the editor itself is fetched when decorating is first asked for. */
 export function createDecorSystem(
   engine: Engine,
-  scene: DecorScenePort,
+  scene: DecorScenePort & { readonly coralCap: ScaleCap },
   interaction: EventBus<InteractionEvents>,
   initial: SavedTank | null,
   feeders: FeederLayer,
   corals?: CoralFeed,
+  plants?: PlantFeed,
 ): DecorSystem {
   const saved = new SavedDecor(
     interaction,
@@ -37,14 +37,9 @@ export function createDecorSystem(
     initial,
   );
   let disposed = false;
-  let reach: CurrentParameters | null = null;
   const euphylliaBounds = new Map<string, ReturnType<typeof generateEuphyllia>['bounds']>();
   const world = new DecorWorld(scene, interaction, feeders, {
-    dimensions: () => engine.tank.dimensions,
-    current: () => {
-      reach ??= reachCurrent(loadPreset(scene.biome).current ?? DEFAULT_CURRENT, scene.biome);
-      return reach;
-    },
+    cap: () => scene.coralCap,
     proceduralBounds(assetId) {
       const held = euphylliaBounds.get(assetId);
       if (held) return held;
@@ -61,6 +56,8 @@ export function createDecorSystem(
     interaction.emit('coral:picked', { key: world.coralAt(ray)?.key ?? null });
   });
   const detachCorals = corals?.attach({ setCorals: (state) => world.setCorals(state) });
+
+  const detachPlants = plants?.attach({ setPlants: (state) => world.setPlants(state) });
 
   let reduced = false;
   const stopMotion = watchReducedMotion((value) => {
@@ -111,6 +108,7 @@ export function createDecorSystem(
       stopRequests();
       stopTaps();
       detachCorals?.();
+      detachPlants?.();
       stopMotion();
       mode?.dispose();
       saved.dispose();
