@@ -33,6 +33,7 @@ export const conflictReasonSchema = z
     'coral_not_grown',
     'coral_bleached',
     'coral_limit',
+    'coral_no_room',
     'offer_closed',
     'offer_expired',
     'too_many_offers',

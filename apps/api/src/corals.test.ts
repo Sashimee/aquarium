@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import {
   apiErrorSchema,
   coralSpeciesId,
+  fitPresetItem,
   tankSchema,
+  type TankSize,
   type Coral,
   type Equipment,
   type Tank,
@@ -11,6 +13,8 @@ import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadCoralTable } from './corals.ts';
+import { loadPlantTable, substrateBounds } from './plants.ts';
+import { loadPresets } from './presets.ts';
 import { schema } from './db/index.ts';
 import { APP_ORIGIN, createHarness, topUp, type Harness } from './test-harness.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
@@ -19,6 +23,8 @@ const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
 const DAY_MS = 86_400_000;
 const coralTable = loadCoralTable();
+const plantTable = loadPlantTable();
+const presets = loadPresets();
 const { fragStartSize, maxFragsPerTank } = coralTable.params;
 let counter = 0;
 
@@ -99,6 +105,7 @@ async function makeTank(
     layout?: object[] | null;
     equipment?: Equipment;
     biome?: 'reef' | 'freshwater';
+    size?: TankSize;
   } = {},
 ): Promise<string> {
   await topUp(h);
@@ -106,6 +113,7 @@ async function makeTank(
   const res = await call(h, who, 'POST', '/api/tanks', {
     name: 'Reef',
     biome: opts.biome ?? 'reef',
+    size: opts.size ?? 'standard',
     idempotencyKey: randomUUID(),
   });
   expect(res.statusCode).toBe(201);
@@ -430,6 +438,97 @@ describe('fragging a coral', () => {
       's31.2',
       's31.3',
     ]);
+  });
+
+  describe('around rock', () => {
+    const boulder = (scale: number) => ({
+      assetId: 'boulder-01',
+      position: [0.05, 0.1, 0],
+      rotationY: 0,
+      scale,
+      tintSeed: 77,
+    });
+    const footprint = plantTable.hardscape.get('boulder-01');
+    if (!footprint) throw new Error('no boulder footprint');
+
+    it('keeps every fragment out of the rock', async () => {
+      const tankId = await makeTank(h, alice, {
+        layout: [layoutItem('acropora-cytherea', 31, -0.17), boulder(1)],
+      });
+      await setCorals(h, tankId, [stored('s31', 2.5)]);
+      let tank: Tank | null = null;
+      for (let i = 0; i < 3; i++) {
+        tank = tankOf(
+          await frag(h, alice, tankId, { coralKey: 's31', idempotencyKey: randomUUID() }),
+        );
+      }
+      const frags = tank?.corals?.filter((c) => c.parentKey !== null) ?? [];
+      expect(frags).toHaveLength(3);
+      for (const { position } of frags) {
+        const [x, z] = position ?? [0, 0];
+        const inside = Math.abs(x - 0.05) <= footprint.halfX && Math.abs(z) <= footprint.halfZ;
+        expect(inside).toBe(false);
+      }
+    });
+
+    it('refuses when rock fills the whole tank', async () => {
+      const tankId = await makeTank(h, alice, {
+        layout: [layoutItem('acropora-cytherea', 31, 0), boulder(10)],
+      });
+      await setCorals(h, tankId, [stored('s31', 2)]);
+      const res = await frag(h, alice, tankId, { coralKey: 's31', idempotencyKey: randomUUID() });
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res).reason).toBe('coral_no_room');
+      expect((await rowOf(h, tankId)).corals).toEqual([stored('s31', 2)]);
+    });
+  });
+
+  describe.each(['nano30', 'long300'] as const)('on a %s tank with the default layout', (size) => {
+    const roots = (presets.reef?.decor ?? [])
+      .map((item) => fitPresetItem(item, size))
+      .filter((item) => coralTable.species.has(coralSpeciesId(item.assetId)));
+
+    it('keeps colonies where the client draws them', async () => {
+      const tankId = await makeTank(h, alice, { layout: null, size });
+      const tank = await wait(h, alice, tankId, 1);
+      expect(tank.corals).toHaveLength(roots.length);
+      const keys = tank.corals?.map((c) => c.key) ?? [];
+      const row = (await rowOf(h, tankId)).corals as { key: string; position: [number, number] }[];
+      expect(row.map((c) => c.key)).toEqual(keys);
+      row.forEach((c, i) => {
+        expect(c.position[0]).toBeCloseTo(roots[i]?.position[0] ?? NaN, 9);
+        expect(c.position[1]).toBeCloseTo(roots[i]?.position[2] ?? NaN, 9);
+      });
+    });
+
+    it('cuts fragments beside the fitted colony and inside the 3 cm margin', async () => {
+      const tankId = await makeTank(h, alice, { layout: null, size });
+      const first = (await wait(h, alice, tankId, 1)).corals?.[0];
+      const root = roots[0];
+      if (!first || !root) throw new Error('preset has no coral');
+      const row = (await rowOf(h, tankId)).corals as { key: string; size: number }[];
+      await setCorals(
+        h,
+        tankId,
+        row.map((c) => (c.key === first.key ? { ...c, size: 3 } : c)),
+      );
+      const bounds = substrateBounds(size);
+      const { edgeMarginM, fragRadiusM } = coralTable.params;
+      for (let i = 0; i < 6; i++) {
+        const tank = tankOf(
+          await frag(h, alice, tankId, { coralKey: first.key, idempotencyKey: randomUUID() }),
+        );
+        const [x, z] = tank.corals?.findLast((c) => c.parentKey === first.key)?.position ?? [
+          Infinity,
+          Infinity,
+        ];
+        expect(Math.abs(x)).toBeLessThanOrEqual(bounds.halfX - edgeMarginM + 1e-9);
+        expect(Math.abs(z)).toBeLessThanOrEqual(bounds.halfZ - edgeMarginM + 1e-9);
+        expect(Math.hypot(x - root.position[0], z - root.position[2])).toBeLessThanOrEqual(
+          fragRadiusM + edgeMarginM,
+        );
+      }
+    });
   });
 
   it('remembers only the last 16 keys', async () => {
