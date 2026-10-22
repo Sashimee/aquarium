@@ -107,15 +107,15 @@ export function applyCare(
       if (mix <= 0) {
         return { ok: false, reason: `Salt cannot be dosed in a ${biome} tank.` };
       }
+      if (chemistry.salinity >= mix) {
+        return { ok: false, reason: 'The water is already as salty as a salt dose can make it.' };
+      }
       return accept(
         state,
         {},
         {
           ...chemistry,
-          salinity: Math.max(
-            chemistry.salinity,
-            moveToward(chemistry.salinity, mix, params.salinity.saltDoseFraction),
-          ),
+          salinity: moveToward(chemistry.salinity, mix, params.salinity.saltDoseFraction),
         },
       );
     }
