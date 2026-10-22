@@ -382,7 +382,7 @@ function sizeExtra(size: TankSize): string {
 
 const QUALITY_LABEL = { good: 'Good', fair: 'Fair', poor: 'Poor' } as const;
 
-function Care({
+export function Care({
   session,
   state,
   tank,
