@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TANK_DIMENSIONS } from '../../engine/tank/dimensions';
 import catalog from '../../../public/assets/index.json';
 import { AssetCatalog } from '../../scene/assets';
-import { coralScaleCap, grownCoralItem } from '../../scene/coralGrowth';
+import { coralScaleCap, grownCoralItem, placeFragments } from '../../scene/coralGrowth';
 import { reachCurrent, type CurrentParameters } from '../../scene/current';
 import { euphylliaCollider, generateEuphyllia } from '../../scene/euphyllia';
 import { loadPreset } from '../../scene/preset';
@@ -230,5 +230,32 @@ describe('growCorals', () => {
     collider.b.forEach((v, k) => expect(v).toBeCloseTo(must(scene.b[k])));
     expect(Math.hypot(scene.b[0] - scene.a[0], scene.b[2] - scene.a[2])).toBeGreaterThan(0);
     expect(grownCoralItem(nearGlass, colony, cap).scale).toBeLessThan(2.5);
+  });
+
+  it('stands a soft capsule on a euphyllia fragment, as the scene sizes it', () => {
+    const colony = item(EUPHYLLIA, -0.3, 0, { tintSeed: 4 });
+    const base = { assetId: EUPHYLLIA, tintSeed: 4 };
+    const colonyCoral = coral({ ...base, key: 's4', size: 1.5 });
+    const fragment = coral({
+      ...base,
+      key: 's4.1',
+      parentKey: 's4',
+      position: [0.2, 0.1],
+      size: 0.8,
+    });
+    const corals = [colonyCoral, fragment];
+    const cap = capIn(CALM);
+    const { extra } = growCorals(input({ pieces: [], fixed: [colony], corals, cap }));
+    const collider = must(extra.find((c) => c.id === 'decor:coral:s4.1'));
+    if (collider.kind !== 'capsule') throw new Error('expected a capsule');
+    expect(collider.hard).toBe(false);
+    const placed = must(
+      placeFragments([{ assetId: EUPHYLLIA, item: colony }], corals, flat, cap)[0],
+    );
+    const scene = euphylliaCollider(euphylliaBounds, placed.item);
+    expect(collider.radius).toBe(scene.radius);
+    collider.a.forEach((v, k) => expect(v).toBeCloseTo(must(scene.a[k])));
+    collider.b.forEach((v, k) => expect(v).toBeCloseTo(must(scene.b[k])));
+    expect(collider.a[0]).toBeGreaterThan(0);
   });
 });
