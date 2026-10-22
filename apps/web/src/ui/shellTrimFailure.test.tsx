@@ -134,6 +134,5 @@ describe('a trim tool chunk that fails to load', () => {
     expect(container.textContent).toContain('trim tool did not load');
     await act(async () => ui.interaction.emit('plant:picked', { pick: null }));
     expect(container.textContent).not.toContain('trim tool did not load');
-    vi.useRealTimers();
   });
 });
