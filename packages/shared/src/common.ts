@@ -8,7 +8,7 @@ export const biomeSchema = z.enum(['freshwater', 'reef', 'cichlid', 'blackwater'
 export type Biome = z.infer<typeof biomeSchema>;
 
 // Biomes a player can start a tank in. A biome joins when its preset, species and backgrounds ship.
-export const playableBiomeSchema = z.enum(['freshwater', 'reef']);
+export const playableBiomeSchema = z.enum(['freshwater', 'reef', 'cichlid']);
 export type PlayableBiome = z.infer<typeof playableBiomeSchema>;
 
 export const isPlayableBiome = (biome: Biome): biome is PlayableBiome =>
