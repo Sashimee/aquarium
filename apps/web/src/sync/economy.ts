@@ -1,3 +1,4 @@
+import { territoryWarning } from './cichlid';
 import type {
   Economy,
   Pack,
@@ -121,4 +122,17 @@ export function heaterWarning(
 ): string | null {
   if (!species.warmWater || tank.equipment.heater.tier > 0) return null;
   return `This tank has no heater, so the water cools to room temperature, about ${roomC} °C. ${species.commonName} likes warmer water and can get stressed and sick. You can still add it, or buy a heater first.`;
+}
+
+export function purchaseWarning(
+  tank: Tank,
+  candidate: SpeciesSummary,
+  all: readonly SpeciesSummary[],
+  roomC: number,
+): string | null {
+  const warnings = [
+    heaterWarning(tank, candidate, roomC),
+    territoryWarning(tank, candidate, all),
+  ].filter((w) => w !== null);
+  return warnings.length === 0 ? null : warnings.join(' ');
 }
