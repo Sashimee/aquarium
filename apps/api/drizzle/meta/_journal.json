@@ -180,8 +180,15 @@
     {
       "idx": 25,
       "version": "7",
-      "when": 1792626267243,
-      "tag": "0025_gift_offers",
+      "when": 1792626010804,
+      "tag": "0025_community_tank",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792644234067,
+      "tag": "0026_gift_offers",
       "breakpoints": true
     }
   ]

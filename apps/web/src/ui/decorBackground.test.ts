@@ -27,7 +27,7 @@ describe('backgroundOptions', () => {
   });
 
   it('is empty for a biome without backgrounds', () => {
-    expect(backgroundOptions('cichlid')).toEqual([]);
+    expect(backgroundOptions('blackwater')).toEqual([]);
   });
 });
 
@@ -37,7 +37,7 @@ describe('BackgroundChooser', () => {
   });
 
   it('renders nothing for a biome without backgrounds', () => {
-    expect(render({ tankId: null, biome: 'cichlid', backgroundId: null })).toBe('');
+    expect(render({ tankId: null, biome: 'blackwater', backgroundId: null })).toBe('');
   });
 
   it('offers every background as a button and marks the shown one pressed', () => {

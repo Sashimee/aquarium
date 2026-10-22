@@ -17,6 +17,7 @@ export async function pruneExpired({ db }: Database, clock: Clock): Promise<{ se
   await db.delete(schema.verification).where(lt(schema.verification.expiresAt, new Date(now)));
   await db.delete(schema.mailLimitHits).where(lt(schema.mailLimitHits.at, ago(DAY_MS)));
   await db.delete(schema.ateBatches).where(lt(schema.ateBatches.createdAt, ago(DAY_MS)));
+  await db.delete(schema.communityFeeds).where(lt(schema.communityFeeds.fedAt, ago(7 * DAY_MS)));
   await db.delete(schema.auditLog).where(lt(schema.auditLog.at, ago(180 * DAY_MS)));
   const oldestVisitDay = ago((VISIT_WINDOW_DAYS - 1) * DAY_MS)
     .toISOString()

@@ -13,6 +13,7 @@ export const errorCodeSchema = z.enum([
   'email_not_verified',
   'insufficient_pearls',
   'feeding_rejected',
+  'quota_exceeded',
   'payload_too_large',
   'unsupported_media_type',
   'internal',

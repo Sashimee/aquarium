@@ -104,6 +104,8 @@ export interface InteractionEvents {
   'camera:focus-fish': { fishIds: readonly string[] };
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
+  /** A tank the player may not feed locally (the shared tank): taps never drop food while locked. */
+  'play:feed-lock': { locked: boolean };
   /** Which toys are in the tank; the play panel offers to remove them. */
   'toys:changed': { mirror: boolean; ball: boolean };
   'toys:remove': { toy: Toy };
@@ -115,7 +117,8 @@ export interface InteractionEvents {
   'feed:select': { food: FoodType };
   /** The tank scene is built and the play tools work. */
   'play:ready': Record<string, never>;
-  'feed:request': { food: FoodType; portion: number };
+  /** `keepSelection` drops food for someone else's feed without changing the food the player picked. */
+  'feed:request': { food: FoodType; portion: number; keepSelection?: boolean };
   /** Food went into the water; the persistence layer posts the feed action. */
   'feed:dropped': { food: FoodType; portion: number; particles: number };
   'feed:rejected': { reason: 'rate-limited' | 'tank-full' | 'unreachable'; retryAfterMs: number };

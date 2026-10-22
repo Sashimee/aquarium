@@ -33,7 +33,7 @@ const TRIM: { tool: PlayTool; label: string; hint: string } = {
 
 const MAX_TRIM_SHORTCUTS = 12;
 
-const FOOD_LABEL: Record<FoodType, string> = {
+export const FOOD_LABEL: Record<FoodType, string> = {
   flakes: 'Flakes',
   pellets: 'Pellets',
   bloodworms: 'Bloodworms',

@@ -188,7 +188,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     const pledgedIds = rows.flatMap((r) =>
       r.status === 'countered' && r.pledgedFishId ? [r.pledgedFishId] : [],
     );
-    const pledged = new Map<string, FishRow & { ownerId: string }>();
+    const pledged = new Map<string, FishRow & { ownerId: string | null }>();
     if (pledgedIds.length > 0) {
       for (const p of await tx
         .select({ fish: schema.fish, ownerId: schema.tanks.ownerId })

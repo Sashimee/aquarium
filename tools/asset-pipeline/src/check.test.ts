@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BUDGET_BYTES, checkAssets, loadCheckInput, type CheckInput } from './check.ts';
+import {
+  BUDGET_BYTES,
+  checkAssets,
+  duplicateTextureProblems,
+  loadCheckInput,
+  type CheckInput,
+} from './check.ts';
 import { packGlb, sha256 } from './glb.ts';
 import {
   FIN_ID_ATTRIBUTE,
@@ -897,6 +903,47 @@ describe('checkAssets', () => {
     const input = inputFor([fishAsset()]);
     const problems = checkAssets({ ...input, index: { ...input.index, totalBytes: 1 } });
     expect(problems.join('\n')).toContain('totalBytes');
+  });
+});
+
+describe('duplicateTextureProblems', () => {
+  function asset(id: string, files: [string, string][]): OutputAsset {
+    return {
+      id,
+      kind: 'rock',
+      files: files.map(([file, sha]) => ({ file, bytes: 1, sha256: sha })),
+    } as unknown as OutputAsset;
+  }
+
+  it('flags a texture byte-identical to another asset texture', () => {
+    const problems = duplicateTextureProblems([
+      asset('rock-a', [['rock/rock-a/textures/a_basecolor_1k.ktx2', 'x'.repeat(64)]]),
+      asset('pile', [['rock/pile/textures/a_basecolor_1k.ktx2', 'x'.repeat(64)]]),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/pile/textures/a_basecolor_1k.ktx2');
+    expect(problems[0]).toContain('rock/rock-a/textures/a_basecolor_1k.ktx2');
+  });
+
+  it('accepts distinct textures and repeats inside one asset', () => {
+    expect(
+      duplicateTextureProblems([
+        asset('rock-a', [
+          ['rock/rock-a/textures/a_1k.ktx2', 'a'.repeat(64)],
+          ['rock/rock-a/textures/b_1k.ktx2', 'a'.repeat(64)],
+        ]),
+        asset('rock-b', [['rock/rock-b/textures/c_1k.ktx2', 'b'.repeat(64)]]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('ignores non-texture files', () => {
+    expect(
+      duplicateTextureProblems([
+        asset('a', [['rock/a/lod0.glb', 'c'.repeat(64)]]),
+        asset('b', [['rock/b/lod0.glb', 'c'.repeat(64)]]),
+      ]),
+    ).toEqual([]);
   });
 });
 

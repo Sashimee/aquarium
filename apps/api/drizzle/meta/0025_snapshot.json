@@ -1,5 +1,5 @@
 {
-  "id": "cc80526a-dab1-4050-9a3c-7de13d37dbf8",
+  "id": "c7898f9c-9554-4692-8c37-43a2b477e3c8",
   "prevId": "b582c8a1-ab42-493a-a192-c3cc87a091f3",
   "version": "7",
   "dialect": "postgresql",
@@ -381,6 +381,150 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.community_feeds": {
+      "name": "community_feeds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "food": {
+          "name": "food",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "portion": {
+          "name": "portion",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fed_at": {
+          "name": "fed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "community_feeds_user_key_idx": {
+          "name": "community_feeds_user_key_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "community_feeds_fed_at_idx": {
+          "name": "community_feeds_fed_at_idx",
+          "columns": [
+            {
+              "expression": "fed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "community_feeds_user_id_user_id_fk": {
+          "name": "community_feeds_user_id_user_id_fk",
+          "tableFrom": "community_feeds",
+          "tableTo": "user",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.community_tank": {
+      "name": "community_tank",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "tank_id": {
+          "name": "tank_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "community_tank_tank_id_tanks_id_fk": {
+          "name": "community_tank_tank_id_tanks_id_fk",
+          "tableFrom": "community_tank",
+          "tableTo": "tanks",
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "community_tank_tank_id_unique": {
+          "name": "community_tank_tank_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["tank_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "community_tank_singleton": {
+          "name": "community_tank_singleton",
+          "value": "\"community_tank\".\"id\" = 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.events": {
       "name": "events",
       "schema": "",
@@ -612,221 +756,6 @@
           "tableFrom": "fish",
           "tableTo": "tanks",
           "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.gift_offers": {
-      "name": "gift_offers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "from_user_id": {
-          "name": "from_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "to_user_id": {
-          "name": "to_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "from_tank_id": {
-          "name": "from_tank_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "gift_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'open'"
-        },
-        "fish": {
-          "name": "fish",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "wants_return": {
-          "name": "wants_return",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "recipient_tank_id": {
-          "name": "recipient_tank_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pledged_fish_id": {
-          "name": "pledged_fish_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "creation_key": {
-          "name": "creation_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "accept_key": {
-          "name": "accept_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "confirm_key": {
-          "name": "confirm_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "settled_at": {
-          "name": "settled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "gift_offers_creation_key_idx": {
-          "name": "gift_offers_creation_key_idx",
-          "columns": [
-            {
-              "expression": "from_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "creation_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "gift_offers_from_user_idx": {
-          "name": "gift_offers_from_user_idx",
-          "columns": [
-            {
-              "expression": "from_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "gift_offers_to_user_idx": {
-          "name": "gift_offers_to_user_idx",
-          "columns": [
-            {
-              "expression": "to_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "gift_offers_from_tank_idx": {
-          "name": "gift_offers_from_tank_idx",
-          "columns": [
-            {
-              "expression": "from_tank_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "gift_offers_from_user_id_user_id_fk": {
-          "name": "gift_offers_from_user_id_user_id_fk",
-          "tableFrom": "gift_offers",
-          "tableTo": "user",
-          "columnsFrom": ["from_user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "gift_offers_to_user_id_user_id_fk": {
-          "name": "gift_offers_to_user_id_user_id_fk",
-          "tableFrom": "gift_offers",
-          "tableTo": "user",
-          "columnsFrom": ["to_user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "gift_offers_from_tank_id_tanks_id_fk": {
-          "name": "gift_offers_from_tank_id_tanks_id_fk",
-          "tableFrom": "gift_offers",
-          "tableTo": "tanks",
-          "columnsFrom": ["from_tank_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -1800,7 +1729,7 @@
           "name": "owner_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "biome": {
           "name": "biome",
@@ -1832,13 +1761,6 @@
         },
         "in_gallery": {
           "name": "in_gallery",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "accepts_gifts": {
-          "name": "accepts_gifts",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -2244,11 +2166,6 @@
       "name": "fish_status",
       "schema": "public",
       "values": ["alive", "dead"]
-    },
-    "public.gift_status": {
-      "name": "gift_status",
-      "schema": "public",
-      "values": ["open", "countered", "accepted", "declined", "cancelled", "expired"]
     },
     "public.ledger_reason": {
       "name": "ledger_reason",

@@ -33,7 +33,7 @@ import {
   flipVertical,
   halve,
 } from './rgbe.ts';
-import { decodeImage, encodeHdrKtx2, type Rgba } from './textures.ts';
+import { decodeImage, encodeHdrKtx2, resizeImage, type Rgba } from './textures.ts';
 
 export interface EnvironmentRecipe {
   id: string;
@@ -48,6 +48,8 @@ export interface EnvironmentRecipe {
   longestM: number;
   /** Triangle budget for LOD0; the source is simplified to it when heavier. */
   maxTriangles: number;
+  /** LOD1 triangle count as a fraction of LOD0, default 0.35; LOD2 is 0.3 of LOD1 when set, else 0.12 of LOD0. */
+  lod1Fraction?: number;
   /** Removes triangles whose centroid lies in the lowest fraction of the height (a museum plinth, a scan base). */
   clipBelowFraction?: number;
   /** With `clipBelowFraction`, scales so `longestM` refers to the uncropped scan, keeping the metric scale the full scan would have had. */
@@ -59,6 +61,8 @@ export interface EnvironmentRecipe {
   tint?: TintSpec;
   /** Adds procedural pores to the normal and colour maps; both are upscaled to 2048 px first. */
   pores?: PoreSpec;
+  /** Caps the colour map at this size and the normal map at half of it, so the 2k tier carries no more detail than the 1k tier. */
+  maxTexturePx?: number;
   modifications: string[];
 }
 
@@ -200,7 +204,20 @@ function assertTexcoordZero(doc: Document, source: Material, recipe: string): vo
   }
 }
 
+async function capTextures(def: MaterialDef, maxPx: number): Promise<MaterialDef> {
+  return {
+    ...def,
+    ...(def.baseColor
+      ? { baseColor: { ...def.baseColor, image: await resizeImage(def.baseColor.image, maxPx) } }
+      : {}),
+    ...(def.normal
+      ? { normal: { ...def.normal, image: await resizeImage(def.normal.image, maxPx / 2) } }
+      : {}),
+  };
+}
+
 async function finishMaterial(def: MaterialDef, recipe: EnvironmentRecipe): Promise<MaterialDef> {
+  if (recipe.maxTexturePx) def = await capTextures(def, recipe.maxTexturePx);
   if (!recipe.tint && !recipe.pores) return def;
   if (!def.baseColor) throw new Error(`${recipe.id}: tint and pores need a base colour texture`);
   let image = recipe.pores ? await upscaleTo(def.baseColor.image, 2048) : def.baseColor.image;
@@ -232,10 +249,10 @@ export function cropForRecipe(
   return { parts: kept, longestM };
 }
 
-export async function buildEnvironment(
+export async function loadEnvironment(
   recipe: EnvironmentRecipe,
-  ctx: FishContext,
-): Promise<OutputAsset> {
+  ctx: Pick<FishContext, 'verifySource'>,
+): Promise<{ parts: Part[]; materials: MaterialDef[] }> {
   ctx.verifySource(recipe.sourceId);
   const doc = await readGltf(recipe.sourceId, recipe.gltf ?? 'gltf/scene.gltf');
   const dropMesh = recipe.dropMeshes;
@@ -270,9 +287,19 @@ export async function buildEnvironment(
   }
   if (materials.length === 0) throw new Error(`${recipe.id}: no material survived`);
 
+  return { parts, materials };
+}
+
+export async function buildEnvironment(
+  recipe: EnvironmentRecipe,
+  ctx: FishContext,
+): Promise<OutputAsset> {
+  const { parts, materials } = await loadEnvironment(recipe, ctx);
   const triangles = parts.reduce((s, p) => s + p.indices.length / 3, 0);
   const lod0 = Math.min(1, recipe.maxTriangles / triangles);
-  const plan: LodPlan = { ratios: [lod0, lod0 * 0.35, lod0 * 0.12], minTriangles: 200 };
+  const lod1 = recipe.lod1Fraction ?? 0.35;
+  const lod2 = recipe.lod1Fraction === undefined ? 0.12 : lod1 * 0.3;
+  const plan: LodPlan = { ratios: [lod0, lod0 * lod1, lod0 * lod2], minTriangles: 200 };
 
   const built = buildDocument(recipe.id, parts, materials);
   return emitAsset({
@@ -289,9 +316,11 @@ export async function buildEnvironment(
         'merged meshes, dropped unused attributes, skeleton and animation',
         `origin at the centre of the base, scaled so the longest edge is ${recipe.longestM} m${recipe.keepUncroppedScale ? ' before cropping' : ''}`,
         `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
-        recipe.pores
-          ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
-          : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+        recipe.maxTexturePx
+          ? `textures capped at ${recipe.maxTexturePx} px (normal ${recipe.maxTexturePx / 2} px) and re-encoded to KTX2`
+          : recipe.pores
+            ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
+            : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
         ...recipe.modifications,
       ],
     },

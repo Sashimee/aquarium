@@ -936,6 +936,42 @@ describe('gifting and trading fish', () => {
     });
   });
 
+  describe('the community tank', () => {
+    it('can neither send from nor receive into the ownerless community tank', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      const tankB = await makeTank(h, b);
+      const [community] = await h.database.db
+        .insert(schema.tanks)
+        .values({ ownerId: null, name: 'Community', biome: 'freshwater', acceptsGifts: true })
+        .returning();
+      if (!community) throw new Error('community tank insert failed');
+      const communityFish = await addFish(h, community.id);
+      const mine = await addFish(h, tankA);
+
+      const from = await offer(h, a, { fromTankId: community.id, fishId: communityFish, to: b });
+      expect(from.statusCode).toBe(404);
+      expect(await fishRows(h, communityFish)).toHaveLength(1);
+
+      const id = offerId(await offer(h, a, { fromTankId: tankA, fishId: mine, to: b }));
+      const into = await accept(h, b, id, { toTankId: community.id });
+      expect(into.statusCode).toBe(404);
+      expect((await offerRow(h, id)).status).toBe('open');
+
+      const tradeFish = await addFish(h, tankA);
+      const trade = offerId(
+        await offer(h, a, { fromTankId: tankA, fishId: tradeFish, to: b, wantsReturn: true }),
+      );
+      const pledge = await accept(h, b, trade, {
+        toTankId: tankB,
+        returnFishId: communityFish,
+      });
+      expect(pledge.statusCode).toBe(404);
+      expect(await fishRows(h, communityFish)).toHaveLength(1);
+    });
+  });
+
   describe('names, recipients and the sweep', () => {
     it('shows another player a blocked fish name as the species, and the owner the real one', async () => {
       const a = await account(h);

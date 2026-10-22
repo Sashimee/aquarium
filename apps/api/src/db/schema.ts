@@ -144,9 +144,8 @@ export const tanks = pgTable(
   'tanks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    ownerId: text('owner_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    // null: owned by the system (the community tank), never by an account.
+    ownerId: text('owner_id').references(() => user.id, { onDelete: 'cascade' }),
     biome: biomeEnum('biome').notNull(),
     size: tankSizeEnum('size').notNull().default('standard'),
     quarantine: boolean('quarantine').notNull().default(false),
@@ -510,5 +509,38 @@ export const giftOffers = pgTable(
     index('gift_offers_from_user_idx').on(t.fromUserId, t.status),
     index('gift_offers_to_user_idx').on(t.toUserId, t.status),
     index('gift_offers_from_tank_idx').on(t.fromTankId),
+  ],
+);
+
+// At most one row: the id check pins it. The tank itself is an ordinary tanks row with no owner.
+export const communityTank = pgTable(
+  'community_tank',
+  {
+    id: integer('id').primaryKey().default(1),
+    tankId: uuid('tank_id')
+      .notNull()
+      .unique()
+      .references(() => tanks.id, { onDelete: 'restrict' }),
+  },
+  (t) => [check('community_tank_singleton', sql`${t.id} = 1`)],
+);
+
+// One row per accepted community feed. Cascades with the account, so the quota history is personal
+// data that leaves with it.
+export const communityFeeds = pgTable(
+  'community_feeds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    food: text('food').notNull(),
+    portion: doublePrecision('portion').notNull(),
+    fedAt: timestamptz('fed_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('community_feeds_user_key_idx').on(t.userId, t.idempotencyKey),
+    index('community_feeds_fed_at_idx').on(t.fedAt),
   ],
 );
