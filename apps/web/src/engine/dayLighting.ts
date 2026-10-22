@@ -27,6 +27,7 @@ const LAMP_TUNED_SETTING = -LAMP_STOPS_MIN / LAMP_STOPS_SPAN;
  * on exactly 1, the level the scene is tuned at.
  */
 export const LAMP_GAIN_MIN = 2 ** LAMP_STOPS_MIN;
+/** The hood's light at the lamp's highest strength setting, half a stop over the tuned level. */
 export const LAMP_GAIN_MAX = 2 ** LAMP_STOPS_MAX;
 
 /** The hood's light relative to the tuned level for a lamp strength setting, 0..1. */
