@@ -15,6 +15,24 @@ import {
   replayResponseSchema,
   createTankRequestSchema,
   moveFishRequestSchema,
+  acceptGiftRequestSchema,
+  acceptGiftResponseSchema,
+  cancelGiftResponseSchema,
+  confirmGiftRequestSchema,
+  confirmGiftResponseSchema,
+  createGiftRequestSchema,
+  createGiftResponseSchema,
+  declineGiftResponseSchema,
+  giftListResponseSchema,
+  type AcceptGiftRequest,
+  type AcceptGiftResponse,
+  type CancelGiftResponse,
+  type ConfirmGiftRequest,
+  type ConfirmGiftResponse,
+  type CreateGiftRequest,
+  type CreateGiftResponse,
+  type DeclineGiftResponse,
+  type GiftListResponse,
   moveFishResponseSchema,
   errorCodeSchema,
   speciesListSchema,
@@ -257,6 +275,7 @@ export interface ApiClient {
   tank(tankId: string): Promise<Tank>;
   createTank(input: CreateTankInput): Promise<Tank>;
   renameTank(tankId: string, name: string): Promise<Tank>;
+  setAcceptsGifts(tankId: string, acceptsGifts: boolean): Promise<Tank>;
   saveDecorLayout(tankId: string, layout: DecorLayout): Promise<Tank>;
   saveBackground(tankId: string, backgroundId: BackgroundId): Promise<Tank>;
   addFish(tankId: string, input: AddFishInput): Promise<Tank>;
@@ -295,6 +314,12 @@ export interface ApiClient {
   communityFeed(request: CommunityFeedRequest): Promise<CommunityFeedResponse>;
   communityAte(reports: readonly AteReport[], batchId?: string): Promise<CommunityState>;
   myHandle(): Promise<string | null>;
+  gifts(): Promise<GiftListResponse>;
+  createGift(request: CreateGiftRequest): Promise<CreateGiftResponse>;
+  acceptGift(offerId: string, request: AcceptGiftRequest): Promise<AcceptGiftResponse>;
+  confirmGift(offerId: string, request: ConfirmGiftRequest): Promise<ConfirmGiftResponse>;
+  declineGift(offerId: string): Promise<DeclineGiftResponse>;
+  cancelGift(offerId: string): Promise<CancelGiftResponse>;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -717,6 +742,10 @@ export function createApiClient(
       const body = validate(updateTankRequestSchema, { name });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
     },
+    async setAcceptsGifts(tankId, acceptsGifts) {
+      const body = validate(updateTankRequestSchema, { acceptsGifts });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
     async saveDecorLayout(tankId, layout) {
       const body = validate(updateTankRequestSchema, { decorLayout: layout });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
@@ -876,6 +905,41 @@ export function createApiClient(
     async communityAte(reports, batchId) {
       const body = validate(ateBatchRequestSchema, { reports, ...(batchId ? { batchId } : {}) });
       return parsed(await post('/api/community/ate', body), communityStateSchema);
+    },
+    async gifts() {
+      const res = await send('/api/gifts');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, giftListResponseSchema);
+    },
+    async createGift(request) {
+      const body = validate(createGiftRequestSchema, request);
+      return parsed(await post('/api/gifts', body), createGiftResponseSchema);
+    },
+    async acceptGift(offerId, request) {
+      const body = validate(acceptGiftRequestSchema, request);
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/accept`, body),
+        acceptGiftResponseSchema,
+      );
+    },
+    async confirmGift(offerId, request) {
+      const body = validate(confirmGiftRequestSchema, request);
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/confirm`, body),
+        confirmGiftResponseSchema,
+      );
+    },
+    async declineGift(offerId) {
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/decline`, {}),
+        declineGiftResponseSchema,
+      );
+    },
+    async cancelGift(offerId) {
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/cancel`, {}),
+        cancelGiftResponseSchema,
+      );
     },
     async publicTank(token) {
       const res = await send(`/api/public/${encodeURIComponent(token)}`);

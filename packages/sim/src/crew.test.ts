@@ -25,6 +25,7 @@ import {
   spawnMany,
   yellowTang,
 } from './fixtures.ts';
+import { FishState } from './snapshot.ts';
 import { toSimSpecies, type SimSpecies, type SpeciesInput } from './species.ts';
 import { STEP_DT, World, type FishSpawn } from './world.ts';
 
@@ -291,6 +292,54 @@ describe('crew in a running world', { timeout: LONG }, () => {
       expect(perHour, species.id).toBeGreaterThan(0.5 * offline);
       expect(perHour, species.id).toBeLessThan(2 * offline);
     }
+  });
+
+  it('rests a diurnal glass grazer on the glass in the dark, grazing nothing as offline', () => {
+    const w = new World({
+      seed: 3,
+      tank: SHOW_TANK,
+      species: [...ARCHETYPES, cherryShrimp],
+      fish: spawnMany(otocinclus.id, 4),
+      light: 0,
+    });
+    w.settleLight();
+    w.setAlgae(1);
+    run(w, 30 * 60);
+    w.takeCrewTally();
+    const n = new Float64Array(3);
+    const length = sim(otocinclus).bodyLength;
+    let grazing = 0;
+    let attached = 0;
+    let moved = 0;
+    const before = Array.from(w.position);
+    const steps = 30 * 120;
+    for (let t = 0; t < steps; t++) {
+      run(w, 1);
+      for (let i = 0; i < w.count; i++) {
+        if (w.state[i] === FishState.Graze) grazing++;
+        const [x, y, z] = [
+          w.position[i * 3] ?? 0,
+          w.position[i * 3 + 1] ?? 0,
+          w.position[i * 3 + 2] ?? 0,
+        ];
+        if (w.substrateSdf.sample(x, y, z, n) < 0.5 * length) attached++;
+      }
+    }
+    for (let k = 0; k < before.length; k++)
+      moved = Math.max(moved, Math.abs((w.position[k] ?? 0) - (before[k] ?? 0)));
+    expect(grazing).toBe(0);
+    expect(w.takeCrewTally()).toEqual([]);
+    expect(crewCleanup(input({ crew: crew(otocinclus, 4), litFraction: 0 })).algaeGrazed).toBe(0);
+    expect(attached).toBeGreaterThan(0.9 * steps * w.count);
+    expect(moved).toBeLessThan(2 * length);
+    w.setLight(1);
+    let woke = 0;
+    for (let t = 0; t < 30 * 300; t++) {
+      run(w, 1);
+      for (let i = 0; i < w.count; i++) if (w.state[i] === FishState.Graze) woke++;
+    }
+    expect(woke).toBeGreaterThan(0);
+    expect(sum(w.takeCrewTally().map((e) => e.algaeM2))).toBeGreaterThan(0);
   });
 
   it('never grazes with a fish that has no grazing habit', () => {

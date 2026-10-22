@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 124517336,
+  "totalBytes": 128053030,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -12289,6 +12289,361 @@
       }
     },
     {
+      "id": "bg-blackwater-driftwood-wall",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-blackwater-driftwood-wall"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from a driftwood scan (jasonwebb, CC-BY-4.0) with CC0 twig and leaf-litter assets with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-blackwater-driftwood-wall/high.ktx2",
+          "bytes": 283919,
+          "sha256": "7ca0f6a1e5fc10bea260116747343c10d40fc53fecf1de40626fd7582284a8a2"
+        },
+        {
+          "file": "background/bg-blackwater-driftwood-wall/medium.ktx2",
+          "bytes": 88645,
+          "sha256": "0393e6de21f27e5b11413ad2d2dec6154be55481fcfea380289e0619d8695a23"
+        },
+        {
+          "file": "background/bg-blackwater-driftwood-wall/low.ktx2",
+          "bytes": 33082,
+          "sha256": "cfee0674b7322efee545f2fa59bcaf0c50dabefe2be07c31023213eb7f9b4f7f"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-blackwater-driftwood-wall/high.ktx2",
+            "bytes": 283919,
+            "sha256": "7ca0f6a1e5fc10bea260116747343c10d40fc53fecf1de40626fd7582284a8a2",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-blackwater-driftwood-wall/high.ktx2",
+            "bytes": 283919,
+            "sha256": "7ca0f6a1e5fc10bea260116747343c10d40fc53fecf1de40626fd7582284a8a2",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-blackwater-driftwood-wall/medium.ktx2",
+            "bytes": 88645,
+            "sha256": "0393e6de21f27e5b11413ad2d2dec6154be55481fcfea380289e0619d8695a23",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-blackwater-driftwood-wall/low.ktx2",
+            "bytes": 33082,
+            "sha256": "cfee0674b7322efee545f2fa59bcaf0c50dabefe2be07c31023213eb7f9b4f7f",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-blackwater-flooded-forest",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-blackwater-flooded-forest"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 twigs, trunks and leaf-litter textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-blackwater-flooded-forest/high.ktx2",
+          "bytes": 233508,
+          "sha256": "504b25902d9f2bf75b66cafc70cba8940b440bf5864ce0f03143f2f04b04b4f5"
+        },
+        {
+          "file": "background/bg-blackwater-flooded-forest/medium.ktx2",
+          "bytes": 73234,
+          "sha256": "4a0f699ae13f17dbfe5b5d32cde1b81f5d797653c89c8815635cd8ef998f660d"
+        },
+        {
+          "file": "background/bg-blackwater-flooded-forest/low.ktx2",
+          "bytes": 26083,
+          "sha256": "5db7a8a4a5515e9015cabc0b19d897383ce5e7a5e2e82f25b0cf7bab91704051"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-blackwater-flooded-forest/high.ktx2",
+            "bytes": 233508,
+            "sha256": "504b25902d9f2bf75b66cafc70cba8940b440bf5864ce0f03143f2f04b04b4f5",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-blackwater-flooded-forest/high.ktx2",
+            "bytes": 233508,
+            "sha256": "504b25902d9f2bf75b66cafc70cba8940b440bf5864ce0f03143f2f04b04b4f5",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-blackwater-flooded-forest/medium.ktx2",
+            "bytes": 73234,
+            "sha256": "4a0f699ae13f17dbfe5b5d32cde1b81f5d797653c89c8815635cd8ef998f660d",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-blackwater-flooded-forest/low.ktx2",
+            "bytes": 26083,
+            "sha256": "5db7a8a4a5515e9015cabc0b19d897383ce5e7a5e2e82f25b0cf7bab91704051",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-blackwater-leaf-litter",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-blackwater-leaf-litter"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 twigs, trunks and leaf-litter textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-blackwater-leaf-litter/high.ktx2",
+          "bytes": 305943,
+          "sha256": "aa1661b57ba1d102419b35cb932b95cf49b02961678f67d5ef4a9ee39c7d832f"
+        },
+        {
+          "file": "background/bg-blackwater-leaf-litter/medium.ktx2",
+          "bytes": 93751,
+          "sha256": "42d78132c2acd8e8cc7d6829054f404fc28c2dd77b7788f4e8314e3c09cdf879"
+        },
+        {
+          "file": "background/bg-blackwater-leaf-litter/low.ktx2",
+          "bytes": 34323,
+          "sha256": "a8fa3871d6c628070e4731b04545efc18130705c428a612e33752b05d6e3997f"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-blackwater-leaf-litter/high.ktx2",
+            "bytes": 305943,
+            "sha256": "aa1661b57ba1d102419b35cb932b95cf49b02961678f67d5ef4a9ee39c7d832f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-blackwater-leaf-litter/high.ktx2",
+            "bytes": 305943,
+            "sha256": "aa1661b57ba1d102419b35cb932b95cf49b02961678f67d5ef4a9ee39c7d832f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-blackwater-leaf-litter/medium.ktx2",
+            "bytes": 93751,
+            "sha256": "42d78132c2acd8e8cc7d6829054f404fc28c2dd77b7788f4e8314e3c09cdf879",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-blackwater-leaf-litter/low.ktx2",
+            "bytes": 34323,
+            "sha256": "a8fa3871d6c628070e4731b04545efc18130705c428a612e33752b05d6e3997f",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-blackwater-open-tannin",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-blackwater-open-tannin"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 twigs, trunks and leaf-litter textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-blackwater-open-tannin/high.ktx2",
+          "bytes": 180546,
+          "sha256": "e846b59149f3e1cb0269cd2fda18f4b2e1a7332b7b8c2c9d3ddf064e404bcd4d"
+        },
+        {
+          "file": "background/bg-blackwater-open-tannin/medium.ktx2",
+          "bytes": 49653,
+          "sha256": "a9306a555184fb4ae012a8138db34fb50d7c0c159a15942291d8d21b46722a94"
+        },
+        {
+          "file": "background/bg-blackwater-open-tannin/low.ktx2",
+          "bytes": 17248,
+          "sha256": "b427f1214c6ae62d680978c145634763d702500f441512b38e9da7c88c9ae956"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-blackwater-open-tannin/high.ktx2",
+            "bytes": 180546,
+            "sha256": "e846b59149f3e1cb0269cd2fda18f4b2e1a7332b7b8c2c9d3ddf064e404bcd4d",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-blackwater-open-tannin/high.ktx2",
+            "bytes": 180546,
+            "sha256": "e846b59149f3e1cb0269cd2fda18f4b2e1a7332b7b8c2c9d3ddf064e404bcd4d",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-blackwater-open-tannin/medium.ktx2",
+            "bytes": 49653,
+            "sha256": "a9306a555184fb4ae012a8138db34fb50d7c0c159a15942291d8d21b46722a94",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-blackwater-open-tannin/low.ktx2",
+            "bytes": 17248,
+            "sha256": "b427f1214c6ae62d680978c145634763d702500f441512b38e9da7c88c9ae956",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-blackwater-root-tangle",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-blackwater-root-tangle"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from a driftwood root scan (HeartOfLines, CC-BY-4.0) with CC0 trunk, twig and leaf-litter assets with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-blackwater-root-tangle/high.ktx2",
+          "bytes": 254049,
+          "sha256": "d021bc7e8143cff724868abb41421ea210969ff9a2344ca74b05d07f1e97f8ee"
+        },
+        {
+          "file": "background/bg-blackwater-root-tangle/medium.ktx2",
+          "bytes": 79710,
+          "sha256": "14e71a418a7c6052252283d7af0db1047748346d1f909ff6d6aa6bd4bb9e5576"
+        },
+        {
+          "file": "background/bg-blackwater-root-tangle/low.ktx2",
+          "bytes": 29062,
+          "sha256": "bf78f8fd0448cd9ddedf4b3d0abe88b0ecd0cc1e7f2ce4ec1df4c8dbd6780610"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-blackwater-root-tangle/high.ktx2",
+            "bytes": 254049,
+            "sha256": "d021bc7e8143cff724868abb41421ea210969ff9a2344ca74b05d07f1e97f8ee",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-blackwater-root-tangle/high.ktx2",
+            "bytes": 254049,
+            "sha256": "d021bc7e8143cff724868abb41421ea210969ff9a2344ca74b05d07f1e97f8ee",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-blackwater-root-tangle/medium.ktx2",
+            "bytes": 79710,
+            "sha256": "14e71a418a7c6052252283d7af0db1047748346d1f909ff6d6aa6bd4bb9e5576",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-blackwater-root-tangle/low.ktx2",
+            "bytes": 29062,
+            "sha256": "bf78f8fd0448cd9ddedf4b3d0abe88b0ecd0cc1e7f2ce4ec1df4c8dbd6780610",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
       "id": "bg-cichlid-malawi-rock-pile",
       "kind": "background",
       "origin": "render",
@@ -13011,6 +13366,361 @@
             "file": "background/bg-fw-root-tangle/low.ktx2",
             "bytes": 48932,
             "sha256": "cd1e7aa7ec1054df3f0f6a98f3b456b0ee7d607ba28f31bc49e4d69eb40a272e",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-mangrove-open-water",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-mangrove-open-water"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-mangrove-open-water/high.ktx2",
+          "bytes": 187437,
+          "sha256": "2bed28af5b0d7378ca8a397e5b3aaf44d413356b8dbb1a9ee991614a5beb93dd"
+        },
+        {
+          "file": "background/bg-mangrove-open-water/medium.ktx2",
+          "bytes": 52774,
+          "sha256": "644cc11794d0e0832454e9b2428be00d82d3f4535cee0737b821b4ca0d036f78"
+        },
+        {
+          "file": "background/bg-mangrove-open-water/low.ktx2",
+          "bytes": 18595,
+          "sha256": "c2285fa44b74f49a104fa74e0b3ded8d99f0faeb0d46c9f1874c6259761ee296"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-mangrove-open-water/high.ktx2",
+            "bytes": 187437,
+            "sha256": "2bed28af5b0d7378ca8a397e5b3aaf44d413356b8dbb1a9ee991614a5beb93dd",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-mangrove-open-water/high.ktx2",
+            "bytes": 187437,
+            "sha256": "2bed28af5b0d7378ca8a397e5b3aaf44d413356b8dbb1a9ee991614a5beb93dd",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-mangrove-open-water/medium.ktx2",
+            "bytes": 52774,
+            "sha256": "644cc11794d0e0832454e9b2428be00d82d3f4535cee0737b821b4ca0d036f78",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-mangrove-open-water/low.ktx2",
+            "bytes": 18595,
+            "sha256": "c2285fa44b74f49a104fa74e0b3ded8d99f0faeb0d46c9f1874c6259761ee296",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-mangrove-petrified-stump",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-mangrove-petrified-stump"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from a petrified mangrove stump scan (JFN / db4, CC-BY-4.0) and mangrove prop roots (lucq22, CC-BY-4.0) with CC0 rocks and a CC0 mud texture with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-mangrove-petrified-stump/high.ktx2",
+          "bytes": 234099,
+          "sha256": "e3eb238390af5a938681b79b8392c6ccf5bc019250016dc972de56c546723f34"
+        },
+        {
+          "file": "background/bg-mangrove-petrified-stump/medium.ktx2",
+          "bytes": 72874,
+          "sha256": "aded13a07ae9da146e4506bfcf5f643917c9d7814e73daf5c16eca021794fd1d"
+        },
+        {
+          "file": "background/bg-mangrove-petrified-stump/low.ktx2",
+          "bytes": 26158,
+          "sha256": "4a6bc06e47f37c746f34196829bfa2ba9c8aaf3b42323d7fb0d83ee219fafea3"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-mangrove-petrified-stump/high.ktx2",
+            "bytes": 234099,
+            "sha256": "e3eb238390af5a938681b79b8392c6ccf5bc019250016dc972de56c546723f34",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-mangrove-petrified-stump/high.ktx2",
+            "bytes": 234099,
+            "sha256": "e3eb238390af5a938681b79b8392c6ccf5bc019250016dc972de56c546723f34",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-mangrove-petrified-stump/medium.ktx2",
+            "bytes": 72874,
+            "sha256": "aded13a07ae9da146e4506bfcf5f643917c9d7814e73daf5c16eca021794fd1d",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-mangrove-petrified-stump/low.ktx2",
+            "bytes": 26158,
+            "sha256": "4a6bc06e47f37c746f34196829bfa2ba9c8aaf3b42323d7fb0d83ee219fafea3",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-mangrove-prop-root-thicket",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-mangrove-prop-root-thicket"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from mangrove prop roots (lucq22, CC-BY-4.0) with a CC0 red mangrove scan and a CC0 mud texture with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-mangrove-prop-root-thicket/high.ktx2",
+          "bytes": 283341,
+          "sha256": "1f9cf091660ba625db77fc06d878c2eff386dd934a375fa4a4ba416abed9f730"
+        },
+        {
+          "file": "background/bg-mangrove-prop-root-thicket/medium.ktx2",
+          "bytes": 88025,
+          "sha256": "d8e2a148172b55eb7d693f532193e12432dbac219cf33355540ec68a822dbdcb"
+        },
+        {
+          "file": "background/bg-mangrove-prop-root-thicket/low.ktx2",
+          "bytes": 32339,
+          "sha256": "b4cd4b6fe465a9b99dd864942d2f62566870154647b59854f8c0216361b83f92"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-mangrove-prop-root-thicket/high.ktx2",
+            "bytes": 283341,
+            "sha256": "1f9cf091660ba625db77fc06d878c2eff386dd934a375fa4a4ba416abed9f730",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-mangrove-prop-root-thicket/high.ktx2",
+            "bytes": 283341,
+            "sha256": "1f9cf091660ba625db77fc06d878c2eff386dd934a375fa4a4ba416abed9f730",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-mangrove-prop-root-thicket/medium.ktx2",
+            "bytes": 88025,
+            "sha256": "d8e2a148172b55eb7d693f532193e12432dbac219cf33355540ec68a822dbdcb",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-mangrove-prop-root-thicket/low.ktx2",
+            "bytes": 32339,
+            "sha256": "b4cd4b6fe465a9b99dd864942d2f62566870154647b59854f8c0216361b83f92",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-mangrove-red-roots",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-mangrove-red-roots"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-mangrove-red-roots/high.ktx2",
+          "bytes": 267483,
+          "sha256": "056815d9634b7ef617063330d9844fe3b9396c876a72249a07b22bec55b2b76d"
+        },
+        {
+          "file": "background/bg-mangrove-red-roots/medium.ktx2",
+          "bytes": 83987,
+          "sha256": "a75e5a8c5646f4b9c07899ab80a9094d18a5be0bcae943181d870dd2405edbce"
+        },
+        {
+          "file": "background/bg-mangrove-red-roots/low.ktx2",
+          "bytes": 31230,
+          "sha256": "661e14418db30140543331bd75eb7cd332ba89aad14329b1f9f34f335f78d0c5"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-mangrove-red-roots/high.ktx2",
+            "bytes": 267483,
+            "sha256": "056815d9634b7ef617063330d9844fe3b9396c876a72249a07b22bec55b2b76d",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-mangrove-red-roots/high.ktx2",
+            "bytes": 267483,
+            "sha256": "056815d9634b7ef617063330d9844fe3b9396c876a72249a07b22bec55b2b76d",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-mangrove-red-roots/medium.ktx2",
+            "bytes": 83987,
+            "sha256": "a75e5a8c5646f4b9c07899ab80a9094d18a5be0bcae943181d870dd2405edbce",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-mangrove-red-roots/low.ktx2",
+            "bytes": 31230,
+            "sha256": "661e14418db30140543331bd75eb7cd332ba89aad14329b1f9f34f335f78d0c5",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-mangrove-tidal-flat",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-mangrove-tidal-flat"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-mangrove-tidal-flat/high.ktx2",
+          "bytes": 263483,
+          "sha256": "93eb1e80160cc1ebb8f285741a4655b27c52b6201bebab26696598c4eb84dd6f"
+        },
+        {
+          "file": "background/bg-mangrove-tidal-flat/medium.ktx2",
+          "bytes": 80759,
+          "sha256": "6766860eb96d42bbcaaa8e76961e7388e0b67c53bdd06626dd0f09776914536d"
+        },
+        {
+          "file": "background/bg-mangrove-tidal-flat/low.ktx2",
+          "bytes": 30354,
+          "sha256": "8fee5c7a4c7884eb6035f3c132026a0a59ee6294e70e075f8e8d6a6417608b98"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-mangrove-tidal-flat/high.ktx2",
+            "bytes": 263483,
+            "sha256": "93eb1e80160cc1ebb8f285741a4655b27c52b6201bebab26696598c4eb84dd6f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-mangrove-tidal-flat/high.ktx2",
+            "bytes": 263483,
+            "sha256": "93eb1e80160cc1ebb8f285741a4655b27c52b6201bebab26696598c4eb84dd6f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-mangrove-tidal-flat/medium.ktx2",
+            "bytes": 80759,
+            "sha256": "6766860eb96d42bbcaaa8e76961e7388e0b67c53bdd06626dd0f09776914536d",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-mangrove-tidal-flat/low.ktx2",
+            "bytes": 30354,
+            "sha256": "8fee5c7a4c7884eb6035f3c132026a0a59ee6294e70e075f8e8d6a6417608b98",
             "width": 512,
             "height": 256,
             "qualityLevel": 192
