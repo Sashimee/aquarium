@@ -398,6 +398,10 @@ describe('blackwater and mangrove composition', () => {
       return true;
     };
     const cards = loadPreset('blackwater').decor.filter((d) => d.assetId === 'oak-leaf-card');
+    for (const card of cards) {
+      const ground = substrateHeight(DEFAULT_TANK, card.position[0], card.position[2]);
+      expect(card.position[1], 'leaf card centre must sit above the sand').toBeGreaterThan(ground);
+    }
     for (const [i, a] of cards.entries()) {
       for (const b of cards.slice(i + 1)) {
         if (!overlap(a, b)) continue;
