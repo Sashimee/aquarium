@@ -1,5 +1,6 @@
+import type { Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { BEHAVIOUR, type Anchor } from './behaviour.ts';
+import { BEHAVIOUR, grazeSpotFor, lineClear, type Anchor, type GrazeProbe } from './behaviour.ts';
 import {
   ARCHETYPES,
   angelfish,
@@ -18,6 +19,7 @@ import {
   yellowTang,
 } from './fixtures.ts';
 import { FishState } from './snapshot.ts';
+import { TankSdf, type Sdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
 import { STEP_DT, World, type FishSpawn } from './world.ts';
 
@@ -240,6 +242,74 @@ describe('territoriality', { timeout: LONG }, () => {
     expect(Array.from(w.behaviour.startledAt)).toEqual([-1, -1]);
     expect(fastest).toBeLessThanOrEqual(cap * 1.05);
     expect(median(gaps)).toBeGreaterThan(0.5 * sp.bodyLength);
+  });
+
+  /** A betta that cruises instead of keeping a station, so its territory centres on itself. */
+  const rover: SpeciesInput = { ...betta, locomotion: { ...betta.locomotion, gait: 'cruise' } };
+  const half = 0.4 * BEHAVIOUR.territoryBodyLengths * toSimSpecies(rover).bodyLength;
+
+  function rivals(decor: readonly Collider[]): World {
+    return new World({
+      seed: 3,
+      tank: SHOW_TANK,
+      species: [rover],
+      decor,
+      fish: spawnMany(rover.id, 2),
+    });
+  }
+
+  /**
+   * Holds two rovers 0.8 territory radii apart at height `y` and depth `z` for up to
+   * 3 s (six territory checks) and returns the step either first takes the other up, or -1.
+   */
+  function contest(w: World, y: number, z = 0): number {
+    for (let t = 0; t < 90; t++) {
+      w.position.set([-half, y, z, half, y, z]);
+      w.step();
+      if (w.behaviour.territoryTarget.some((j) => j >= 0)) return t;
+    }
+    return -1;
+  }
+
+  const rock = (x: number, z = 0): Collider => ({
+    id: 'rock',
+    hard: true,
+    kind: 'sphere',
+    center: [x, 0.25, z],
+    radius: 0.03,
+  });
+
+  it('ignores a rival with rock between them, and takes it up once the rock is out of line', () => {
+    expect(toSimSpecies(rover).home).toBe('none');
+    expect(contest(rivals([rock(0)]), 0.25)).toBe(-1);
+    expect(contest(rivals([rock(0, 0.15)]), 0.25)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('breaks off an approach when the rival slips behind rock', () => {
+    for (const [z, hidden] of [
+      [0.2, true],
+      [-0.2, false],
+    ] as const) {
+      const w = rivals([rock(0, 0.1)]);
+      expect(contest(w, 0.25)).toBeGreaterThanOrEqual(0);
+      let held = 0;
+      for (let t = 0; t < 15; t++) {
+        w.position.set([-half, 0.25, 0, half, 0.25, z]);
+        w.step();
+        if (w.behaviour.territoryTarget.some((j) => j >= 0)) held++;
+      }
+      if (hidden) expect(held, 'behind the rock').toBe(0);
+      else expect(held, 'in the open').toBe(15);
+    }
+  });
+
+  it('sees a rival along the sand: glass, sand and surface hide nothing', () => {
+    const skim = 0.5 * BEHAVIOUR.bodyThicknessBodyLengths * toSimSpecies(rover).bodyLength;
+    expect(contest(rivals([rock(0.4)]), skim)).toBeGreaterThanOrEqual(0);
+    expect(contest(rivals([rock(0.4)]), SHOW_TANK.height - skim)).toBeGreaterThanOrEqual(0);
+    expect(contest(rivals([rock(0.4)]), 0.25, SHOW_TANK.depth / 2 - skim)).toBeGreaterThanOrEqual(
+      0,
+    );
   });
 });
 
@@ -1030,4 +1100,101 @@ describe('per-trait parameters', () => {
       expect(run()).toEqual(gulps);
     },
   );
+});
+
+/** A sphere of rock, exact distance and outward normal. */
+class Ball implements Sdf {
+  constructor(
+    private readonly c: readonly [number, number, number],
+    private readonly r: number,
+  ) {}
+
+  sample(x: number, y: number, z: number, normal: Float64Array): number {
+    const dx = x - this.c[0];
+    const dy = y - this.c[1];
+    const dz = z - this.c[2];
+    const len = Math.hypot(dx, dy, dz) || 1;
+    normal[0] = dx / len;
+    normal[1] = dy / len;
+    normal[2] = dz / len;
+    return len - this.r;
+  }
+}
+
+/** The nearest of several fields, with its normal. */
+class Nearest implements Sdf {
+  private readonly scratch = new Float64Array(3);
+  constructor(private readonly parts: readonly Sdf[]) {}
+
+  sample(x: number, y: number, z: number, normal: Float64Array): number {
+    let best = Infinity;
+    for (const part of this.parts) {
+      const d = part.sample(x, y, z, this.scratch);
+      if (d < best) {
+        best = d;
+        normal.set(this.scratch);
+      }
+    }
+    return best;
+  }
+}
+
+describe('lineClear', () => {
+  const ball = new Ball([0, 0.25, 0], 0.03);
+
+  it('is blocked by a body passing within its thickness and clear beside it', () => {
+    expect(lineClear(ball, -0.1, 0.25, 0, 0.1, 0.25, 0, 0.005, n3)).toBe(false);
+    expect(lineClear(ball, -0.1, 0.25, 0.04, 0.1, 0.25, 0.04, 0.005, n3)).toBe(true);
+    expect(lineClear(ball, -0.1, 0.25, 0.034, 0.1, 0.25, 0.034, 0.005, n3)).toBe(false);
+  });
+});
+
+describe('grazeSpotFor', () => {
+  const length = 0.1;
+  const tank = new TankSdf(SHOW_TANK);
+  const out = new Float64Array(3);
+  // A boulder floating mid-water, so only it and the probe decide what is rejected.
+  const R = 0.05;
+  const boulder = new Ball([0, 0.25, 0], R);
+  const probe = (
+    field: Sdf,
+    scene: Sdf,
+    pose: Pick<GrazeProbe, 'x' | 'y' | 'z' | 'fx' | 'fz'>,
+  ): GrazeProbe => ({ field, scene, maxY: SHOW_TANK.height, length, ...pose });
+  const standoff =
+    (BEHAVIOUR.bodyThicknessBodyLengths + BEHAVIOUR.grazeStandoffBodyLengths) * length;
+
+  it('takes the stand-off spot off the face the fish swims toward', () => {
+    const scene = new Nearest([tank, boulder]);
+    const p = probe(boulder, scene, { x: 0.3, y: 0.25, z: 0, fx: -1, fz: 0 });
+    expect(grazeSpotFor(p, R + 0.02, 0.25, 0, out, n3)).toBe(true);
+    expect(out[0]).toBeCloseTo(R + standoff, 6);
+    expect(out[1]).toBeCloseTo(0.25, 6);
+    expect(out[2]).toBeCloseTo(0, 6);
+  });
+
+  it('rejects a spot with a second rock across the straight path to it', () => {
+    const across = new Ball([R + 0.2, 0.25, 0], 0.03);
+    const rocks = new Nearest([boulder, across]);
+    const scene = new Nearest([tank, rocks]);
+    const pose = { x: 0.4, y: 0.25, z: 0, fx: -1, fz: 0 };
+    expect(grazeSpotFor(probe(rocks, scene, pose), R + 0.02, 0.25, 0, out, n3)).toBe(false);
+    const aside = new Ball([R + 0.2, 0.25, 0.15], 0.03);
+    const clear = new Nearest([boulder, aside]);
+    expect(
+      grazeSpotFor(probe(clear, new Nearest([tank, clear]), pose), R + 0.02, 0.25, 0, out, n3),
+    ).toBe(true);
+  });
+
+  it('rejects the underside of a rock the fish is above, though the path to it is clear', () => {
+    const scene = new Nearest([tank, boulder]);
+    const below = 0.25 - R - 0.02;
+    const spotY = 0.25 - R - standoff;
+    const beside = { x: 0.3, y: 0.25 - R + 0.005, z: 0, fx: -1, fz: 0 };
+    expect(lineClear(scene, beside.x, beside.y, 0, 0, spotY, 0, standoff, n3)).toBe(true);
+    expect(grazeSpotFor(probe(boulder, scene, beside), 0, below, 0, out, n3)).toBe(false);
+    const under = { ...beside, y: spotY - 0.01 };
+    expect(grazeSpotFor(probe(boulder, scene, under), 0, below, 0, out, n3)).toBe(true);
+    expect(out[1]).toBeCloseTo(spotY, 6);
+  });
 });
