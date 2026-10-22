@@ -10,13 +10,13 @@ import { Material, type Object3D } from 'three/webgpu';
  * a fish keeps its swim deformation and instance data.
  *
  * The rebuilds a burst of failures may ask for are capped at `maxAttempts`, so a failure the
- * rebuild brings back each time gives up. A burst ends once `quietMs` pass without a failure, and
- * the next one, which has another cause, gets the whole budget again.
+ * rebuild brings back each time gives up. A burst ends once `quietMs` of wall-clock time pass
+ * between two failures, frames or not, and the next one, which has another cause, gets the whole
+ * budget again.
  */
 export class MaterialRebuild {
   private pending = false;
   private attempts = 0;
-  private failed = false;
   private lastFailureMs = Number.NEGATIVE_INFINITY;
 
   constructor(
@@ -24,9 +24,13 @@ export class MaterialRebuild {
     private readonly quietMs = 10_000,
   ) {}
 
-  /** Queues a rebuild for the next frame boundary; false once this burst's attempts are used up. */
-  request(): boolean {
-    this.failed = true;
+  /**
+   * Queues a rebuild for the next frame boundary for a failure seen at `nowMs`; false once this
+   * burst's attempts are used up.
+   */
+  request(nowMs: number): boolean {
+    if (nowMs - this.lastFailureMs >= this.quietMs) this.attempts = 0;
+    this.lastFailureMs = nowMs;
     if (this.pending) return true;
     if (this.attempts >= this.maxAttempts) return false;
     this.pending = true;
@@ -35,13 +39,7 @@ export class MaterialRebuild {
   }
 
   /** Call between frames: releases three's render objects for every material under `root`. */
-  flush(root: Object3D, nowMs: number): number {
-    if (this.failed) {
-      this.failed = false;
-      this.lastFailureMs = nowMs;
-    } else if (nowMs - this.lastFailureMs >= this.quietMs) {
-      this.attempts = 0;
-    }
+  flush(root: Object3D): number {
     if (!this.pending) return 0;
     this.pending = false;
     const materials = new Set<Material>();

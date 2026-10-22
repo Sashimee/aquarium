@@ -7,6 +7,7 @@ import {
   WebGPUCoordinateSystem,
   type Camera,
   type CoordinateSystem,
+  type Material,
   type Object3D,
   type RenderTarget,
 } from 'three/webgpu';
@@ -60,6 +61,8 @@ const CANVAS = {
 export interface InertRenderObject {
   readonly object: Object3D;
   readonly camera: Camera;
+  /** What the pass draws with, which three labels the pipeline with: an override, if any. */
+  readonly material: Material;
 }
 
 export interface InertRenderer {

@@ -319,7 +319,7 @@ export class Engine {
       this.effects,
       (id) => usesMaterial(this.scene, id),
       (message, cause) => this.reportError(message, cause),
-      () => this.materialRebuild.request(),
+      () => this.materialRebuild.request(performance.now()),
     );
     cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
 
@@ -733,7 +733,7 @@ export class Engine {
     this.photo.apply();
     this.daylightFeed.frame(nowMs, frameMs);
     applyDayLighting(this.dayRig, this.daylightFeed.level);
-    if (this.materialRebuild.flush(this.scene, nowMs) > 0) this.cullPrewarm.invalidate();
+    if (this.materialRebuild.flush(this.scene) > 0) this.cullPrewarm.invalidate();
     if (this.cullPrewarm.begin(nowMs) > 0) {
       this.sceneRevisionValue++;
       // Unculled first draws build pipelines, so this frame's timing is a compile stall.

@@ -1,4 +1,11 @@
-import { getConsoleFunction, Material, setConsoleFunction, type Object3D } from 'three/webgpu';
+import {
+  getConsoleFunction,
+  Light,
+  Material,
+  setConsoleFunction,
+  ShadowBaseNode,
+  type Object3D,
+} from 'three/webgpu';
 import { isTransientFailure } from './effectsSlot';
 
 /**
@@ -193,11 +200,21 @@ export function materialIdOf(material: Material): number | null {
   return 'id' in material && typeof material.id === 'number' ? material.id : null;
 }
 
-/** Whether any object under `root`, hidden ones included, draws with material `id`. */
+/**
+ * Whether anything under `root`, hidden ones included, draws with material `id`. A light's shadow
+ * passes draw its casters with the light's shadow material, so three labels their pipelines with
+ * that; it counts for a light that casts through a shadow node set on its shadow (TierShadow).
+ */
 export function usesMaterial(root: Object3D, id: number): boolean {
   let found = false;
   root.traverse((object) => {
-    if (found || !('material' in object)) return;
+    if (found) return;
+    if (object instanceof Light) {
+      const node: unknown = object.castShadow ? object.shadow?.shadowNode : undefined;
+      found = node instanceof ShadowBaseNode && materialIdOf(node.getShadowMaterial()) === id;
+      return;
+    }
+    if (!('material' in object)) return;
     const material: unknown = object.material;
     const materials: unknown[] = Array.isArray(material) ? material : [material];
     found = materials.some((m) => m instanceof Material && materialIdOf(m) === id);
@@ -218,8 +235,8 @@ export interface FailureContext {
 
 /**
  * Whether a failure is the effects' to answer for, by dropping them for the plain render. Their
- * post passes draw materials that are not in the scene; so do shadow maps, which this cannot tell
- * apart, but the plain render is the safe answer to those too. Under a temporal resolve a scene
+ * post passes draw materials that are not in the scene, and so may another offscreen pass, which
+ * this cannot tell apart, but the plain render is the safe answer to those too. Under a temporal resolve a scene
  * material may fail only for the velocity output, so the plain render is tried for it as well. An
  * unnamed failure is put on the effects only once: the next one may be a scene material.
  */
@@ -252,7 +269,8 @@ export type RebuildMaterials = () => boolean;
  * transient failure (a submit that bound a freed resource, reported by whichever async compile had
  * its error scope open) says nothing about the material, so for a scene material, or one it cannot
  * name, it rebuilds the scene's materials instead, which three would otherwise skip for the
- * session. A transient failure outside the scene is answered like any other.
+ * session; a shadow pass counts as the scene's (`usesMaterial`), since its render objects go with
+ * their casters' materials. A transient failure outside the scene is answered like any other.
  *
  * The engine rebuilds dropped effects only after a transient failure, so under a temporal resolve
  * (ultra) one broken scene material costs the post effects for the session: only the plain render
@@ -294,7 +312,7 @@ export class PipelineFailureHandler {
   private rebuildsFor(failure: PipelineFailure, cause: Error): boolean {
     if (failure.kind !== 'render' || !isTransientFailure(cause)) return false;
     const id = failure.materialId;
-    // Rebuilding releases only the scene's materials, so it cannot reach one outside it.
+    // Rebuilding releases only the scene's render objects, so it cannot reach a pass outside it.
     if (id !== null && (this.effects.ownsMaterial(id) || !this.inScene(id))) return false;
     return this.rebuild();
   }

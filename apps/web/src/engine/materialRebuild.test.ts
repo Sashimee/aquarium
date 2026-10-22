@@ -51,7 +51,7 @@ describe('MaterialRebuild', () => {
     const material = new MeshStandardNodeMaterial();
     scene.add(new Mesh(new BoxGeometry(), material));
     const count = released(material);
-    expect(new MaterialRebuild().flush(scene, 0)).toBe(0);
+    expect(new MaterialRebuild().flush(scene)).toBe(0);
     expect(count.value).toBe(0);
   });
 
@@ -66,10 +66,10 @@ describe('MaterialRebuild', () => {
     const counts = [released(shared), released(other)];
 
     const rebuild = new MaterialRebuild();
-    expect(rebuild.request()).toBe(true);
-    expect(rebuild.flush(scene, 0)).toBe(2);
+    expect(rebuild.request(0)).toBe(true);
+    expect(rebuild.flush(scene)).toBe(2);
     expect(counts.map((c) => c.value)).toEqual([1, 1]);
-    expect(rebuild.flush(scene, 0)).toBe(0);
+    expect(rebuild.flush(scene)).toBe(0);
   });
 
   it('makes three release the render objects of the scene and shadow passes', async () => {
@@ -90,8 +90,8 @@ describe('MaterialRebuild', () => {
     expect(drawn.map((r) => r.camera)).toEqual([camera, light.shadow.camera]);
 
     const rebuild = new MaterialRebuild();
-    rebuild.request();
-    rebuild.flush(scene, 0);
+    rebuild.request(0);
+    rebuild.flush(scene);
     expect(meshPasses()).toEqual([]);
 
     nextFrame();
@@ -114,8 +114,8 @@ describe('MaterialRebuild', () => {
     const phase = instances.array.slice();
 
     const rebuild = new MaterialRebuild();
-    rebuild.request();
-    rebuild.flush(scene, 0);
+    rebuild.request(0);
+    rebuild.flush(scene);
 
     expect(count.value).toBe(1);
     expect(mesh.material).toBe(material);
@@ -126,41 +126,34 @@ describe('MaterialRebuild', () => {
     expect(instances.array).toEqual(phase);
   });
 
-  it('holds a burst of failures to the budget, however many frames it spans', () => {
+  it('holds a burst of failures to the budget, however long it lasts', () => {
     const rebuild = new MaterialRebuild(2, 1000);
     const root = new Group();
-    expect(rebuild.request()).toBe(true);
-    rebuild.flush(root, 0);
-    rebuild.flush(root, 500);
-    expect(rebuild.request()).toBe(true);
-    rebuild.flush(root, 900);
-    rebuild.flush(root, 1800);
-    expect(rebuild.request()).toBe(false);
-    rebuild.flush(root, 2700);
-    expect(rebuild.request()).toBe(false);
+    expect(rebuild.request(0)).toBe(true);
+    rebuild.flush(root);
+    expect(rebuild.request(900)).toBe(true);
+    rebuild.flush(root);
+    expect(rebuild.request(1800)).toBe(false);
+    expect(rebuild.request(2700)).toBe(false);
   });
 
-  it('gives a burst after a quiet spell the whole budget again', () => {
+  it('gives a failure after a quiet spell the whole budget again, with or without frames', () => {
     const rebuild = new MaterialRebuild(1, 1000);
     const root = new Group();
-    rebuild.request();
-    rebuild.flush(root, 0);
-    expect(rebuild.request()).toBe(false);
-    rebuild.flush(root, 100);
-    rebuild.flush(root, 1099);
-    expect(rebuild.request()).toBe(false);
-    rebuild.flush(root, 1100);
-    rebuild.flush(root, 2100);
-    expect(rebuild.request()).toBe(true);
+    rebuild.request(0);
+    rebuild.flush(root);
+    expect(rebuild.request(999)).toBe(false);
+    expect(rebuild.request(1998)).toBe(false);
+    expect(rebuild.request(2998)).toBe(true);
   });
 
   it('merges the requests made before a frame boundary into one rebuild', () => {
     const rebuild = new MaterialRebuild(2);
-    expect(rebuild.request()).toBe(true);
-    expect(rebuild.request()).toBe(true);
-    rebuild.flush(new Group(), 0);
-    expect(rebuild.request()).toBe(true);
-    rebuild.flush(new Group(), 0);
-    expect(rebuild.request()).toBe(false);
+    expect(rebuild.request(0)).toBe(true);
+    expect(rebuild.request(0)).toBe(true);
+    rebuild.flush(new Group());
+    expect(rebuild.request(0)).toBe(true);
+    rebuild.flush(new Group());
+    expect(rebuild.request(0)).toBe(false);
   });
 });
