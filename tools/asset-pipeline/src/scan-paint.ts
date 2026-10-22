@@ -20,6 +20,7 @@ interface Frame {
   bottomY: number;
   topY: number;
   bodyBottomY: number;
+  bodySnoutZ: number;
   bodyLength: number;
   bodyHeight: number;
 }
@@ -54,6 +55,7 @@ export function sideProjection(parts: Part[]): Frame {
     bottomY: all.lo[0],
     topY: all.hi[0],
     bodyBottomY: rigid.lo[0],
+    bodySnoutZ: rigid.hi[1],
     bodyLength: rigid.hi[1] - rigid.lo[1],
     bodyHeight: rigid.hi[0] - rigid.lo[0],
   };
@@ -171,7 +173,7 @@ export function paintScanTexture(
     for (let x = 0; x < width; x++) {
       const z = frame.snoutZ - ((x + 0.5) / width) * length;
       const worldY = frame.topY - ((y + 0.5) / height) * totalHeight;
-      const tn = (frame.snoutZ - z) / frame.bodyLength;
+      const tn = (frame.bodySnoutZ - z) / frame.bodyLength;
       const h = (worldY - frame.bodyBottomY) / frame.bodyHeight;
       const fin = Math.max(0, layer[y * width + x]!);
       const [r, g, b] = spec.paint(tn, h, fin);

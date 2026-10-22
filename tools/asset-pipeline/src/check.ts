@@ -557,6 +557,42 @@ export function duplicateTextureProblems(assets: readonly OutputAsset[]): string
   return problems;
 }
 
+export function borrowedTextureProblems(assets: readonly OutputAsset[]): string[] {
+  const owner = new Map<string, OutputAsset>();
+  for (const asset of assets) for (const file of asset.files) owner.set(file.file, asset);
+  const problems: string[] = [];
+  for (const asset of assets) {
+    const own = new Set(asset.files.map((f) => f.file));
+    const reported = new Set<string>();
+    for (const texture of asset.textures)
+      for (const variant of [texture.variants['1k'], texture.variants['2k']]) {
+        const from = owner.get(variant.file);
+        if (own.has(variant.file) || from === undefined || from === asset) continue;
+        const missing = from.sources.filter((source) => !asset.sources.includes(source));
+        const key = `${variant.file}`;
+        if (missing.length === 0 || reported.has(key)) continue;
+        reported.add(key);
+        problems.push(
+          `${asset.kind}/${asset.id}: borrows ${variant.file} from ${from.kind}/${from.id} but does not list its source ${missing.join(', ')} (the borrower inherits the owner's licence and credit)`,
+        );
+      }
+  }
+  return problems;
+}
+
+export function intraAssetDuplicateTextureProblems(assets: readonly OutputAsset[]): string[] {
+  const problems: string[] = [];
+  for (const asset of assets)
+    for (const texture of asset.textures) {
+      const { '1k': small, '2k': large } = texture.variants;
+      if (small.file !== large.file && small.sha256 === large.sha256)
+        problems.push(
+          `${asset.kind}/${asset.id}: ${large.file} is byte-identical to ${small.file}; point the 2k variant at the 1k file instead of shipping a copy`,
+        );
+    }
+  return problems;
+}
+
 export function checkAssets(input: CheckInput): string[] {
   const { manifest, credits, index, assetsDir, repoRoot } = input;
   const problems = validateManifest(manifest, credits);
@@ -568,6 +604,8 @@ export function checkAssets(input: CheckInput): string[] {
     index.assets.flatMap((a) => a.files.map((f) => [f.file, f.sha256] as const)),
   );
   problems.push(...duplicateTextureProblems(index.assets));
+  problems.push(...intraAssetDuplicateTextureProblems(index.assets));
+  problems.push(...borrowedTextureProblems(index.assets));
   let audioBytes = 0;
   const seenAssets = new Set<string>();
   for (const asset of index.assets) {

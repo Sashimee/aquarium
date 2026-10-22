@@ -55,6 +55,14 @@ describe('sideProjection', () => {
     expect(frame.tailZ).toBeCloseTo(0);
   });
 
+  it('measures tn from the rigid snout even when a fin reaches past it', () => {
+    const part = fish();
+    part.positions[17] = 1.3;
+    const frame = sideProjection([part]);
+    expect(frame.snoutZ).toBeCloseTo(1.3);
+    expect(frame.bodySnoutZ).toBeCloseTo(1);
+  });
+
   it('refuses a mesh whose fin attributes are not baked yet', () => {
     const part = fish();
     part.extra = { [FIN_MASK_ATTRIBUTE]: part.extra[FIN_MASK_ATTRIBUTE]! };

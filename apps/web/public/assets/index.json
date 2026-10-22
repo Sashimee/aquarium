@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 128604560,
+  "totalBytes": 125471889,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -391,9 +391,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_2k.ktx2",
-              "bytes": 102233,
-              "sha256": "13bfec648f8f64c94f4bcfcf0c9fa3a207eb9ea4db58de8b366a98d3d9e8c780",
+              "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_1k.ktx2",
+              "bytes": 58939,
+              "sha256": "26c5f89c1b69c4aa9779b8df83dd601728377e23e5c81e655826a29002e2fa6a",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -430,11 +430,6 @@
           "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_1k.ktx2",
           "bytes": 58939,
           "sha256": "26c5f89c1b69c4aa9779b8df83dd601728377e23e5c81e655826a29002e2fa6a"
-        },
-        {
-          "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_2k.ktx2",
-          "bytes": 102233,
-          "sha256": "13bfec648f8f64c94f4bcfcf0c9fa3a207eb9ea4db58de8b366a98d3d9e8c780"
         }
       ],
       "fish": {
@@ -715,9 +710,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/aulonocara-baenschi/textures/aulonocara-baenschi_basecolor_2k.ktx2",
-              "bytes": 185946,
-              "sha256": "1af04befd974b7029a5b9847e3236927ca23373faf353a69c010d26fc42c538d",
+              "file": "fish/aulonocara-baenschi/textures/aulonocara-baenschi_basecolor_1k.ktx2",
+              "bytes": 103825,
+              "sha256": "0964c3e696e9c06fae5cb42df9eb01d846740ced36cb4593233a895df77ae94d",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -754,11 +749,6 @@
           "file": "fish/aulonocara-baenschi/textures/aulonocara-baenschi_basecolor_1k.ktx2",
           "bytes": 103825,
           "sha256": "0964c3e696e9c06fae5cb42df9eb01d846740ced36cb4593233a895df77ae94d"
-        },
-        {
-          "file": "fish/aulonocara-baenschi/textures/aulonocara-baenschi_basecolor_2k.ktx2",
-          "bytes": 185946,
-          "sha256": "1af04befd974b7029a5b9847e3236927ca23373faf353a69c010d26fc42c538d"
         }
       ],
       "fish": {
@@ -875,7 +865,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_2k.ktx2",
+              "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_1k.ktx2",
               "bytes": 37571,
               "sha256": "53b82e05d3997b4cd0fa261a5e80089bda39948517d9ac194de8d8f1f9e31562",
               "size": 1024,
@@ -912,11 +902,6 @@
         },
         {
           "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_1k.ktx2",
-          "bytes": 37571,
-          "sha256": "53b82e05d3997b4cd0fa261a5e80089bda39948517d9ac194de8d8f1f9e31562"
-        },
-        {
-          "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_2k.ktx2",
           "bytes": 37571,
           "sha256": "53b82e05d3997b4cd0fa261a5e80089bda39948517d9ac194de8d8f1f9e31562"
         }
@@ -1037,9 +1022,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_2k.ktx2",
-              "bytes": 158028,
-              "sha256": "ee9231b03a62121966eaa804c6458d38a91b22e03fce92964c1851158216dded",
+              "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",
+              "bytes": 87528,
+              "sha256": "afe0e856b4af7aef7c78973a8ccb8e01d4e3bec369a078af0234c9834bc95078",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -1076,11 +1061,6 @@
           "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",
           "bytes": 87528,
           "sha256": "afe0e856b4af7aef7c78973a8ccb8e01d4e3bec369a078af0234c9834bc95078"
-        },
-        {
-          "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_2k.ktx2",
-          "bytes": 158028,
-          "sha256": "ee9231b03a62121966eaa804c6458d38a91b22e03fce92964c1851158216dded"
         }
       ],
       "fish": {
@@ -1501,43 +1481,44 @@
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
         "baked fin mask, fin id and mouth mask vertex attributes",
-        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "painted colour map encoded to KTX2",
         "source is flat-coloured: UVs projected from the side and the colour map painted from the species pattern (black humeral blotch, black dorsal, reddish pelvic and anal fins)",
-        "dropped two detached fragments (a floating chin sliver and a stray tail-base shard)"
+        "dropped two detached fragments (a floating chin sliver and a stray tail-base shard)",
+        "source drawn upside down and about twice as deep as the species: flipped, and body scaled to 60% width and 45% depth before the fins are classified"
       ],
       "bounds": {
         "min": [
-          -0.007678,
-          -0.039437,
-          -0.022895
+          -0.005345,
+          -0.020808,
+          -0.0301
         ],
         "max": [
-          0.007678,
-          0.043401,
-          0.017933
+          0.005345,
+          0.022441,
+          0.017269
         ]
       },
       "lods": [
         {
           "file": "fish/black-phantom-tetra/lod0.glb",
-          "bytes": 25392,
-          "sha256": "ef661b02efaacbaab3bf55f2889a7a96f0b0cdaccdcfb5ed5baf9a400ea74d9a",
+          "bytes": 27076,
+          "sha256": "730ff9ca58a4ff6312fe0372c83428030892f6bd090de5f0870dc418653c4126",
           "triangles": 504,
           "vertices": 1036
         },
         {
           "file": "fish/black-phantom-tetra/lod1.glb",
-          "bytes": 12432,
-          "sha256": "3695bbd2914031088ff96dd7c2e8048a946d0767a21066c193fc8ef89c56c8a1",
+          "bytes": 13040,
+          "sha256": "04a5c26a4987abc97f2c5aa815b834be78c1500434f6e05a5808dd3c8df87a75",
           "triangles": 202,
-          "vertices": 386
+          "vertices": 384
         },
         {
           "file": "fish/black-phantom-tetra/lod2.glb",
-          "bytes": 10244,
-          "sha256": "7f2f7c1a88dee66451dcad99199a4acc6c9b33347ddb1f07070c1b35db2c5c32",
+          "bytes": 10888,
+          "sha256": "53cf701ab799e40fa5bf4d0ae5ddd25885c67776c3b9bd97ba5930a7a1fd84b5",
           "triangles": 150,
-          "vertices": 281
+          "vertices": 282
         }
       ],
       "textures": [
@@ -1548,15 +1529,15 @@
           "variants": {
             "1k": {
               "file": "fish/black-phantom-tetra/textures/black-phantom-tetra_basecolor_1k.ktx2",
-              "bytes": 17307,
-              "sha256": "c5a2947822fb20b371a039d14facc8a70f454e0a84283bdc4c96ac5d532426da",
+              "bytes": 21169,
+              "sha256": "b7e36de7218902f90a20591149054ceeb6997f0c4d34b37bf650ea6efae62dec",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/black-phantom-tetra/textures/black-phantom-tetra_basecolor_2k.ktx2",
-              "bytes": 17307,
-              "sha256": "c5a2947822fb20b371a039d14facc8a70f454e0a84283bdc4c96ac5d532426da",
+              "file": "fish/black-phantom-tetra/textures/black-phantom-tetra_basecolor_1k.ktx2",
+              "bytes": 21169,
+              "sha256": "b7e36de7218902f90a20591149054ceeb6997f0c4d34b37bf650ea6efae62dec",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -1566,42 +1547,37 @@
       "files": [
         {
           "file": "fish/black-phantom-tetra/impostor_albedo.ktx2",
-          "bytes": 115565,
-          "sha256": "ee5c30ba97461d9b37c726d0c57bdd00d5b0beb4a62df034d468a0f713fd8056"
+          "bytes": 135991,
+          "sha256": "b5a7374454e3c8fb36ec9b1cdf5e6c81338e2d9c4f30089b6824eae6f1dd4c5c"
         },
         {
           "file": "fish/black-phantom-tetra/impostor_normal.ktx2",
-          "bytes": 353283,
-          "sha256": "e4e8342705b8dc54d97a852fa5371942cb37faf944ba87896c2e444239438d5e"
+          "bytes": 443766,
+          "sha256": "2f68259b61b8824cded6f4ae69a4f4d3cf1e946e42d00798bd4f1756043a203a"
         },
         {
           "file": "fish/black-phantom-tetra/lod0.glb",
-          "bytes": 25392,
-          "sha256": "ef661b02efaacbaab3bf55f2889a7a96f0b0cdaccdcfb5ed5baf9a400ea74d9a"
+          "bytes": 27076,
+          "sha256": "730ff9ca58a4ff6312fe0372c83428030892f6bd090de5f0870dc418653c4126"
         },
         {
           "file": "fish/black-phantom-tetra/lod1.glb",
-          "bytes": 12432,
-          "sha256": "3695bbd2914031088ff96dd7c2e8048a946d0767a21066c193fc8ef89c56c8a1"
+          "bytes": 13040,
+          "sha256": "04a5c26a4987abc97f2c5aa815b834be78c1500434f6e05a5808dd3c8df87a75"
         },
         {
           "file": "fish/black-phantom-tetra/lod2.glb",
-          "bytes": 10244,
-          "sha256": "7f2f7c1a88dee66451dcad99199a4acc6c9b33347ddb1f07070c1b35db2c5c32"
+          "bytes": 10888,
+          "sha256": "53cf701ab799e40fa5bf4d0ae5ddd25885c67776c3b9bd97ba5930a7a1fd84b5"
         },
         {
           "file": "fish/black-phantom-tetra/textures/black-phantom-tetra_basecolor_1k.ktx2",
-          "bytes": 17307,
-          "sha256": "c5a2947822fb20b371a039d14facc8a70f454e0a84283bdc4c96ac5d532426da"
-        },
-        {
-          "file": "fish/black-phantom-tetra/textures/black-phantom-tetra_basecolor_2k.ktx2",
-          "bytes": 17307,
-          "sha256": "c5a2947822fb20b371a039d14facc8a70f454e0a84283bdc4c96ac5d532426da"
+          "bytes": 21169,
+          "sha256": "b7e36de7218902f90a20591149054ceeb6997f0c4d34b37bf650ea6efae62dec"
         }
       ],
       "fish": {
-        "standardLengthM": 0.04,
+        "standardLengthM": 0.036,
         "lengthSource": "recipe",
         "axes": {
           "forward": "+z",
@@ -1633,20 +1609,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          0.000791,
-          -0.002481
+          0.000817,
+          -0.006416
         ],
-        "radius": 0.043257,
+        "radius": 0.027391,
         "albedo": {
           "file": "fish/black-phantom-tetra/impostor_albedo.ktx2",
-          "bytes": 115565,
-          "sha256": "ee5c30ba97461d9b37c726d0c57bdd00d5b0beb4a62df034d468a0f713fd8056",
+          "bytes": 135991,
+          "sha256": "b5a7374454e3c8fb36ec9b1cdf5e6c81338e2d9c4f30089b6824eae6f1dd4c5c",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/black-phantom-tetra/impostor_normal.ktx2",
-          "bytes": 353283,
-          "sha256": "e4e8342705b8dc54d97a852fa5371942cb37faf944ba87896c2e444239438d5e",
+          "bytes": 443766,
+          "sha256": "2f68259b61b8824cded6f4ae69a4f4d3cf1e946e42d00798bd4f1756043a203a",
           "codec": "uastc"
         }
       }
@@ -2116,7 +2092,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_eye_basecolor_2k.ktx2",
+              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_eye_basecolor_1k.ktx2",
               "bytes": 869,
               "sha256": "b57dd1ab37af8ad15708b7ddb365157ee1d022c12fee5a0cb68172820e581bc0",
               "size": 128,
@@ -2173,11 +2149,6 @@
         },
         {
           "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_eye_basecolor_1k.ktx2",
-          "bytes": 869,
-          "sha256": "b57dd1ab37af8ad15708b7ddb365157ee1d022c12fee5a0cb68172820e581bc0"
-        },
-        {
-          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_eye_basecolor_2k.ktx2",
           "bytes": 869,
           "sha256": "b57dd1ab37af8ad15708b7ddb365157ee1d022c12fee5a0cb68172820e581bc0"
         }
@@ -2298,7 +2269,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_2k.ktx2",
+              "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
               "bytes": 31953,
               "sha256": "ca575a0c5de7de3411a94c49f655600cfaa90dfcfdf3bd6e11a99432bcdf31b1",
               "size": 512,
@@ -2335,11 +2306,6 @@
         },
         {
           "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
-          "bytes": 31953,
-          "sha256": "ca575a0c5de7de3411a94c49f655600cfaa90dfcfdf3bd6e11a99432bcdf31b1"
-        },
-        {
-          "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_2k.ktx2",
           "bytes": 31953,
           "sha256": "ca575a0c5de7de3411a94c49f655600cfaa90dfcfdf3bd6e11a99432bcdf31b1"
         }
@@ -2458,7 +2424,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_2k.ktx2",
+              "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_1k.ktx2",
               "bytes": 7292,
               "sha256": "c479f2b8fb27e0fb953009b3f1780fed7697e706a8c224502b32319560c571ab",
               "size": 512,
@@ -2495,11 +2461,6 @@
         },
         {
           "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_1k.ktx2",
-          "bytes": 7292,
-          "sha256": "c479f2b8fb27e0fb953009b3f1780fed7697e706a8c224502b32319560c571ab"
-        },
-        {
-          "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_2k.ktx2",
           "bytes": 7292,
           "sha256": "c479f2b8fb27e0fb953009b3f1780fed7697e706a8c224502b32319560c571ab"
         }
@@ -2618,9 +2579,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_2k.ktx2",
-              "bytes": 78102,
-              "sha256": "559c7d8954ab76b48d13fbaca9f2d858a16125e45dfaa570359cec2b18f1507b",
+              "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_1k.ktx2",
+              "bytes": 48424,
+              "sha256": "b2aacb980ab46650de83ba7d23324d52a137822f52e3992ee98244f88c94536d",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -2657,11 +2618,6 @@
           "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_1k.ktx2",
           "bytes": 48424,
           "sha256": "b2aacb980ab46650de83ba7d23324d52a137822f52e3992ee98244f88c94536d"
-        },
-        {
-          "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_2k.ktx2",
-          "bytes": 78102,
-          "sha256": "559c7d8954ab76b48d13fbaca9f2d858a16125e45dfaa570359cec2b18f1507b"
         }
       ],
       "fish": {
@@ -2778,9 +2734,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/cleaner-wrasse/textures/cleaner-wrasse_basecolor_2k.ktx2",
-              "bytes": 16433,
-              "sha256": "c3537eb80b2ddec037a2f84ea63926e3801f025b16288caa8da890ea1e7bcc2f",
+              "file": "fish/cleaner-wrasse/textures/cleaner-wrasse_basecolor_1k.ktx2",
+              "bytes": 10684,
+              "sha256": "bdecadc2e9956be77cb64813c3aa15eab99f3ce4ac7d51922682dfeaef54ce29",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -2817,11 +2773,6 @@
           "file": "fish/cleaner-wrasse/textures/cleaner-wrasse_basecolor_1k.ktx2",
           "bytes": 10684,
           "sha256": "bdecadc2e9956be77cb64813c3aa15eab99f3ce4ac7d51922682dfeaef54ce29"
-        },
-        {
-          "file": "fish/cleaner-wrasse/textures/cleaner-wrasse_basecolor_2k.ktx2",
-          "bytes": 16433,
-          "sha256": "c3537eb80b2ddec037a2f84ea63926e3801f025b16288caa8da890ea1e7bcc2f"
         }
       ],
       "fish": {
@@ -3165,9 +3116,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_2k.ktx2",
-              "bytes": 202797,
-              "sha256": "f30e7bf86d87fd35f67af7e6df61502247a94998b64573f1fb013d4c016e0b60",
+              "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_1k.ktx2",
+              "bytes": 108491,
+              "sha256": "8d9bed5d6d4515329dde431285118fe8aaef6cd8265572bb9a31c29f845aab7c",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -3204,11 +3155,6 @@
           "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_1k.ktx2",
           "bytes": 108491,
           "sha256": "8d9bed5d6d4515329dde431285118fe8aaef6cd8265572bb9a31c29f845aab7c"
-        },
-        {
-          "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_2k.ktx2",
-          "bytes": 202797,
-          "sha256": "f30e7bf86d87fd35f67af7e6df61502247a94998b64573f1fb013d4c016e0b60"
         }
       ],
       "fish": {
@@ -3487,7 +3433,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_2k.ktx2",
+              "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_1k.ktx2",
               "bytes": 34231,
               "sha256": "8bf10a84fdbd2320fe996b7e4ae0168d99cde946a53beba7102c083e3c793fb8",
               "size": 1024,
@@ -3524,11 +3470,6 @@
         },
         {
           "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_1k.ktx2",
-          "bytes": 34231,
-          "sha256": "8bf10a84fdbd2320fe996b7e4ae0168d99cde946a53beba7102c083e3c793fb8"
-        },
-        {
-          "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_2k.ktx2",
           "bytes": 34231,
           "sha256": "8bf10a84fdbd2320fe996b7e4ae0168d99cde946a53beba7102c083e3c793fb8"
         }
@@ -3649,7 +3590,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/firefish/textures/firefish_basecolor_2k.ktx2",
+              "file": "fish/firefish/textures/firefish_basecolor_1k.ktx2",
               "bytes": 65687,
               "sha256": "6156f4c1fcba18c27c2413cd9a1f9cbd472c4d1aefae052c8ff138c1027199b0",
               "size": 512,
@@ -3686,11 +3627,6 @@
         },
         {
           "file": "fish/firefish/textures/firefish_basecolor_1k.ktx2",
-          "bytes": 65687,
-          "sha256": "6156f4c1fcba18c27c2413cd9a1f9cbd472c4d1aefae052c8ff138c1027199b0"
-        },
-        {
-          "file": "fish/firefish/textures/firefish_basecolor_2k.ktx2",
           "bytes": 65687,
           "sha256": "6156f4c1fcba18c27c2413cd9a1f9cbd472c4d1aefae052c8ff138c1027199b0"
         }
@@ -4196,7 +4132,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_2k.ktx2",
+              "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_1k.ktx2",
               "bytes": 99485,
               "sha256": "19517c182e58f6205b0b479cc56134427fc1d14d98b6b4a4b87ed51e33307f1d",
               "size": 1024,
@@ -4233,11 +4169,6 @@
         },
         {
           "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_1k.ktx2",
-          "bytes": 99485,
-          "sha256": "19517c182e58f6205b0b479cc56134427fc1d14d98b6b4a4b87ed51e33307f1d"
-        },
-        {
-          "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_2k.ktx2",
           "bytes": 99485,
           "sha256": "19517c182e58f6205b0b479cc56134427fc1d14d98b6b4a4b87ed51e33307f1d"
         }
@@ -4680,9 +4611,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_2k.ktx2",
-              "bytes": 22380,
-              "sha256": "9f4dfa94e9f8a97000b59c8f30f4a52d0722517bdbfcaf3cd7fd80669b650052",
+              "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_1k.ktx2",
+              "bytes": 13843,
+              "sha256": "bcb26b732a7088d9d76852167cef6fb1a87f5b9a58679ed56a674d3ef59be673",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -4719,11 +4650,6 @@
           "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_1k.ktx2",
           "bytes": 13843,
           "sha256": "bcb26b732a7088d9d76852167cef6fb1a87f5b9a58679ed56a674d3ef59be673"
-        },
-        {
-          "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_2k.ktx2",
-          "bytes": 22380,
-          "sha256": "9f4dfa94e9f8a97000b59c8f30f4a52d0722517bdbfcaf3cd7fd80669b650052"
         }
       ],
       "fish": {
@@ -4842,7 +4768,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/neolamprologus-brichardi/textures/neolamprologus-brichardi_basecolor_2k.ktx2",
+              "file": "fish/neolamprologus-brichardi/textures/neolamprologus-brichardi_basecolor_1k.ktx2",
               "bytes": 55728,
               "sha256": "2c2fbccf9311f336cb3f2e1c180fbeae9cd1cbe2f8fe97efdf7485efe2b91a93",
               "size": 512,
@@ -4879,11 +4805,6 @@
         },
         {
           "file": "fish/neolamprologus-brichardi/textures/neolamprologus-brichardi_basecolor_1k.ktx2",
-          "bytes": 55728,
-          "sha256": "2c2fbccf9311f336cb3f2e1c180fbeae9cd1cbe2f8fe97efdf7485efe2b91a93"
-        },
-        {
-          "file": "fish/neolamprologus-brichardi/textures/neolamprologus-brichardi_basecolor_2k.ktx2",
           "bytes": 55728,
           "sha256": "2c2fbccf9311f336cb3f2e1c180fbeae9cd1cbe2f8fe97efdf7485efe2b91a93"
         }
@@ -5165,7 +5086,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/neon-tetra/textures/neon-tetra_basecolor_2k.ktx2",
+              "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
               "bytes": 162858,
               "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f",
               "size": 1024,
@@ -5223,11 +5144,6 @@
         },
         {
           "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
-          "bytes": 162858,
-          "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f"
-        },
-        {
-          "file": "fish/neon-tetra/textures/neon-tetra_basecolor_2k.ktx2",
           "bytes": 162858,
           "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f"
         },
@@ -5548,7 +5464,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/orange-chromide/textures/orange-chromide_basecolor_2k.ktx2",
+              "file": "fish/orange-chromide/textures/orange-chromide_basecolor_1k.ktx2",
               "bytes": 47814,
               "sha256": "e65c0c28db66d7ed9176c41472b961417c4b319320066c7ca8cf60e16b492784",
               "size": 1024,
@@ -5585,11 +5501,6 @@
         },
         {
           "file": "fish/orange-chromide/textures/orange-chromide_basecolor_1k.ktx2",
-          "bytes": 47814,
-          "sha256": "e65c0c28db66d7ed9176c41472b961417c4b319320066c7ca8cf60e16b492784"
-        },
-        {
-          "file": "fish/orange-chromide/textures/orange-chromide_basecolor_2k.ktx2",
           "bytes": 47814,
           "sha256": "e65c0c28db66d7ed9176c41472b961417c4b319320066c7ca8cf60e16b492784"
         }
@@ -5900,7 +5811,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/royal-gramma/textures/royal-gramma_basecolor_2k.ktx2",
+              "file": "fish/royal-gramma/textures/royal-gramma_basecolor_1k.ktx2",
               "bytes": 13741,
               "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1",
               "size": 1024,
@@ -5937,11 +5848,6 @@
         },
         {
           "file": "fish/royal-gramma/textures/royal-gramma_basecolor_1k.ktx2",
-          "bytes": 13741,
-          "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1"
-        },
-        {
-          "file": "fish/royal-gramma/textures/royal-gramma_basecolor_2k.ktx2",
           "bytes": 13741,
           "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1"
         }
@@ -6060,9 +5966,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_2k.ktx2",
-              "bytes": 72524,
-              "sha256": "14214fa305e757d68b93a8720f86761aa6e8cf02b07da1b63a400dcf1ebf4861",
+              "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_1k.ktx2",
+              "bytes": 45121,
+              "sha256": "ee97f6bff0ece83f7ec0b3d70bf619f47bd5312ab77cf2c274a2a4e8bee075f4",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -6099,11 +6005,6 @@
           "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_1k.ktx2",
           "bytes": 45121,
           "sha256": "ee97f6bff0ece83f7ec0b3d70bf619f47bd5312ab77cf2c274a2a4e8bee075f4"
-        },
-        {
-          "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_2k.ktx2",
-          "bytes": 72524,
-          "sha256": "14214fa305e757d68b93a8720f86761aa6e8cf02b07da1b63a400dcf1ebf4861"
         }
       ],
       "fish": {
@@ -6220,9 +6121,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/silver-mono/textures/silver-mono_basecolor_2k.ktx2",
-              "bytes": 74342,
-              "sha256": "b758247fccb57a0d3011ca5c3dccc00c9045d86bab651ceaf8b4cbaedbdb3c7a",
+              "file": "fish/silver-mono/textures/silver-mono_basecolor_1k.ktx2",
+              "bytes": 45278,
+              "sha256": "b0da786983b2b387aa927220255a808e10aa0bdb6cd0f7ce24e99b6490964cc8",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -6259,11 +6160,6 @@
           "file": "fish/silver-mono/textures/silver-mono_basecolor_1k.ktx2",
           "bytes": 45278,
           "sha256": "b0da786983b2b387aa927220255a808e10aa0bdb6cd0f7ce24e99b6490964cc8"
-        },
-        {
-          "file": "fish/silver-mono/textures/silver-mono_basecolor_2k.ktx2",
-          "bytes": 74342,
-          "sha256": "b758247fccb57a0d3011ca5c3dccc00c9045d86bab651ceaf8b4cbaedbdb3c7a"
         }
       ],
       "fish": {
@@ -6382,9 +6278,9 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_2k.ktx2",
-              "bytes": 196778,
-              "sha256": "d71444d3373a4abba8cfd2b6624fccfadd2b51c3a576439d3c1c07f8c2540f61",
+              "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
+              "bytes": 108203,
+              "sha256": "dd4a9736d25deef9a4c9073042f6a6c13a4aeb1c57adebe2d5350f1f51f5ea9f",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -6421,11 +6317,6 @@
           "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
           "bytes": 108203,
           "sha256": "dd4a9736d25deef9a4c9073042f6a6c13a4aeb1c57adebe2d5350f1f51f5ea9f"
-        },
-        {
-          "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_2k.ktx2",
-          "bytes": 196778,
-          "sha256": "d71444d3373a4abba8cfd2b6624fccfadd2b51c3a576439d3c1c07f8c2540f61"
         }
       ],
       "fish": {
@@ -6543,7 +6434,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/yellow-tang/textures/yellow-tang_basecolor_2k.ktx2",
+              "file": "fish/yellow-tang/textures/yellow-tang_basecolor_1k.ktx2",
               "bytes": 124003,
               "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d",
               "size": 1024,
@@ -6580,11 +6471,6 @@
         },
         {
           "file": "fish/yellow-tang/textures/yellow-tang_basecolor_1k.ktx2",
-          "bytes": 124003,
-          "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d"
-        },
-        {
-          "file": "fish/yellow-tang/textures/yellow-tang_basecolor_2k.ktx2",
           "bytes": 124003,
           "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d"
         }
@@ -6703,7 +6589,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_2k.ktx2",
+              "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_1k.ktx2",
               "bytes": 50456,
               "sha256": "4e5948fcaf3980c1492123e6e5b884dcd4f74e2482af829c8668e8b4ec37ead6",
               "size": 1024,
@@ -6730,11 +6616,6 @@
         },
         {
           "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_1k.ktx2",
-          "bytes": 50456,
-          "sha256": "4e5948fcaf3980c1492123e6e5b884dcd4f74e2482af829c8668e8b4ec37ead6"
-        },
-        {
-          "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_2k.ktx2",
           "bytes": 50456,
           "sha256": "4e5948fcaf3980c1492123e6e5b884dcd4f74e2482af829c8668e8b4ec37ead6"
         }
@@ -6834,7 +6715,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_2k.ktx2",
+              "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_1k.ktx2",
               "bytes": 21497,
               "sha256": "1fd3f00b0a2b55a5fe67114f22c8eeb4749975dc9583dc6b61756aed23d58f46",
               "size": 1024,
@@ -6861,11 +6742,6 @@
         },
         {
           "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_1k.ktx2",
-          "bytes": 21497,
-          "sha256": "1fd3f00b0a2b55a5fe67114f22c8eeb4749975dc9583dc6b61756aed23d58f46"
-        },
-        {
-          "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_2k.ktx2",
           "bytes": 21497,
           "sha256": "1fd3f00b0a2b55a5fe67114f22c8eeb4749975dc9583dc6b61756aed23d58f46"
         }
@@ -7134,7 +7010,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_2k.ktx2",
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",
               "bytes": 693,
               "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c",
               "size": 64,
@@ -7161,11 +7037,6 @@
         },
         {
           "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",
-          "bytes": 693,
-          "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c"
-        },
-        {
-          "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_2k.ktx2",
           "bytes": 693,
           "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c"
         },
@@ -7263,7 +7134,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "anemone/host-anemone/textures/host-anemone_basecolor_2k.ktx2",
+              "file": "anemone/host-anemone/textures/host-anemone_basecolor_1k.ktx2",
               "bytes": 1042,
               "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a",
               "size": 256,
@@ -7290,11 +7161,6 @@
         },
         {
           "file": "anemone/host-anemone/textures/host-anemone_basecolor_1k.ktx2",
-          "bytes": 1042,
-          "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a"
-        },
-        {
-          "file": "anemone/host-anemone/textures/host-anemone_basecolor_2k.ktx2",
           "bytes": 1042,
           "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a"
         }
@@ -7465,7 +7331,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_2k.ktx2",
+              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_1k.ktx2",
               "bytes": 11473,
               "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4",
               "size": 512,
@@ -7486,11 +7352,11 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_2k.ktx2",
-              "bytes": 78257,
-              "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf",
+              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_1k.ktx2",
+              "bytes": 16884,
+              "sha256": "1d86e74d79b15927e73aa1548852f6cb07f7ca04087fe45a9ae2a6e77e7aac3c",
               "size": 512,
-              "codec": "uastc"
+              "codec": "etc1s"
             }
           }
         },
@@ -7507,7 +7373,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_2k.ktx2",
+              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_1k.ktx2",
               "bytes": 50679,
               "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66",
               "size": 512,
@@ -7528,11 +7394,11 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_2k.ktx2",
-              "bytes": 246627,
-              "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e",
+              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_1k.ktx2",
+              "bytes": 60277,
+              "sha256": "54db6a190df877dc5ffa5870b7768e90fcab9a0c49b51c1a3cc02fbbaf28bb5d",
               "size": 512,
-              "codec": "uastc"
+              "codec": "etc1s"
             }
           }
         },
@@ -7601,19 +7467,9 @@
           "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4"
         },
         {
-          "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_2k.ktx2",
-          "bytes": 11473,
-          "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4"
-        },
-        {
           "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_1k.ktx2",
           "bytes": 16884,
           "sha256": "1d86e74d79b15927e73aa1548852f6cb07f7ca04087fe45a9ae2a6e77e7aac3c"
-        },
-        {
-          "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_2k.ktx2",
-          "bytes": 78257,
-          "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf"
         },
         {
           "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_1k.ktx2",
@@ -7641,19 +7497,9 @@
           "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66"
         },
         {
-          "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_2k.ktx2",
-          "bytes": 50679,
-          "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66"
-        },
-        {
           "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_1k.ktx2",
           "bytes": 60277,
           "sha256": "54db6a190df877dc5ffa5870b7768e90fcab9a0c49b51c1a3cc02fbbaf28bb5d"
-        },
-        {
-          "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_2k.ktx2",
-          "bytes": 246627,
-          "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e"
         }
       ]
     },
@@ -8125,7 +7971,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "plant/water-plant/textures/water-plant_basecolor_2k.ktx2",
+              "file": "plant/water-plant/textures/water-plant_basecolor_1k.ktx2",
               "bytes": 4835,
               "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c",
               "size": 256,
@@ -8152,11 +7998,6 @@
         },
         {
           "file": "plant/water-plant/textures/water-plant_basecolor_1k.ktx2",
-          "bytes": 4835,
-          "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c"
-        },
-        {
-          "file": "plant/water-plant/textures/water-plant_basecolor_2k.ktx2",
           "bytes": 4835,
           "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c"
         }
@@ -9120,7 +8961,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_basecolor_2k.ktx2",
+              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_basecolor_1k.ktx2",
               "bytes": 88028,
               "sha256": "146012395a915be7b3e067e77d0a66b84199b080e8eda9c4dd3c7cb40f2dd134",
               "size": 1024,
@@ -9141,11 +8982,11 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_2k.ktx2",
-              "bytes": 97840,
-              "sha256": "7b93450f1857b0c70878e0fdb2e7f65e1231f87797d35eff62e18cc5178c51fe",
+              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_1k.ktx2",
+              "bytes": 18291,
+              "sha256": "b4a72e26f14dd1fdca4059ba70ed634c1fa9ad193aac2fb6476c4645056328d7",
               "size": 512,
-              "codec": "uastc"
+              "codec": "etc1s"
             }
           }
         }
@@ -9172,19 +9013,9 @@
           "sha256": "146012395a915be7b3e067e77d0a66b84199b080e8eda9c4dd3c7cb40f2dd134"
         },
         {
-          "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_basecolor_2k.ktx2",
-          "bytes": 88028,
-          "sha256": "146012395a915be7b3e067e77d0a66b84199b080e8eda9c4dd3c7cb40f2dd134"
-        },
-        {
           "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_1k.ktx2",
           "bytes": 18291,
           "sha256": "b4a72e26f14dd1fdca4059ba70ed634c1fa9ad193aac2fb6476c4645056328d7"
-        },
-        {
-          "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_2k.ktx2",
-          "bytes": 97840,
-          "sha256": "7b93450f1857b0c70878e0fdb2e7f65e1231f87797d35eff62e18cc5178c51fe"
         }
       ]
     },
@@ -10930,11 +10761,11 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_2k.ktx2",
-              "bytes": 336255,
-              "sha256": "5a45dc710c062672e4debed0ee5f700fc3e7d2e24b001c4b32d0d73e7b954e45",
+              "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_1k.ktx2",
+              "bytes": 108123,
+              "sha256": "87e46a6f23db32e2aa65c125fb84ececf3c04126919fe96fe286e6e14a2bf573",
               "size": 512,
-              "codec": "uastc"
+              "codec": "etc1s"
             }
           }
         }
@@ -10969,11 +10800,6 @@
           "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_1k.ktx2",
           "bytes": 108123,
           "sha256": "87e46a6f23db32e2aa65c125fb84ececf3c04126919fe96fe286e6e14a2bf573"
-        },
-        {
-          "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_2k.ktx2",
-          "bytes": 336255,
-          "sha256": "5a45dc710c062672e4debed0ee5f700fc3e7d2e24b001c4b32d0d73e7b954e45"
         }
       ]
     },
@@ -11144,7 +10970,7 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "decor/neothauma-shell/textures/neothauma-shell_basecolor_2k.ktx2",
+              "file": "decor/neothauma-shell/textures/neothauma-shell_basecolor_1k.ktx2",
               "bytes": 168675,
               "sha256": "1e5bddefc7d177f383e583525fda226d0f99f072af755d103650e69bf3e9926c",
               "size": 1024,
@@ -11165,11 +10991,11 @@
               "codec": "etc1s"
             },
             "2k": {
-              "file": "decor/neothauma-shell/textures/neothauma-shell_normal_2k.ktx2",
-              "bytes": 285919,
-              "sha256": "29e4a5a642d01f10d1db6e4fd07ba5657117f659f2091bf0ff6b0459d245bad1",
+              "file": "decor/neothauma-shell/textures/neothauma-shell_normal_1k.ktx2",
+              "bytes": 58625,
+              "sha256": "fa7be9407046b9893ff31b197f805c12e4a4f56916b62bd2c2a5374d970b282a",
               "size": 512,
-              "codec": "uastc"
+              "codec": "etc1s"
             }
           }
         }
@@ -11196,19 +11022,9 @@
           "sha256": "1e5bddefc7d177f383e583525fda226d0f99f072af755d103650e69bf3e9926c"
         },
         {
-          "file": "decor/neothauma-shell/textures/neothauma-shell_basecolor_2k.ktx2",
-          "bytes": 168675,
-          "sha256": "1e5bddefc7d177f383e583525fda226d0f99f072af755d103650e69bf3e9926c"
-        },
-        {
           "file": "decor/neothauma-shell/textures/neothauma-shell_normal_1k.ktx2",
           "bytes": 58625,
           "sha256": "fa7be9407046b9893ff31b197f805c12e4a4f56916b62bd2c2a5374d970b282a"
-        },
-        {
-          "file": "decor/neothauma-shell/textures/neothauma-shell_normal_2k.ktx2",
-          "bytes": 285919,
-          "sha256": "29e4a5a642d01f10d1db6e4fd07ba5657117f659f2091bf0ff6b0459d245bad1"
         }
       ]
     },
@@ -13545,7 +13361,7 @@
       ],
       "licence": "CC0-1.0",
       "modifications": [
-        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan and a CC0 mud texture with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
         "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
         "all EXIF, XMP, GPS and other metadata removed"
@@ -13829,7 +13645,7 @@
       ],
       "licence": "CC0-1.0",
       "modifications": [
-        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, a CC0 propagule scan and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
         "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
         "all EXIF, XMP, GPS and other metadata removed"

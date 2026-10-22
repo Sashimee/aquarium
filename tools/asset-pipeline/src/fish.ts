@@ -18,6 +18,7 @@ import {
   finDebugColors,
   medianX,
   orient,
+  scaleBody,
   scaleCaudal,
   type Axes,
   type FinHints,
@@ -154,6 +155,7 @@ export function normaliseFish(input: NormaliseInput): Part[] {
       part.positions[i] = part.positions[i]! - xShift;
   }
 
+  if (input.hints?.bodyScale) scaleBody(merged.positions, merged.normals, input.hints.bodyScale);
   const fins = classifyFins(merged.positions, merged.indices, input.hints);
   if (input.hints?.caudalScale !== undefined)
     scaleCaudal(merged.positions, merged.normals, fins, input.hints.caudalScale, input.recipeId);
@@ -287,6 +289,16 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     recipe.skinPose ?? 'bind',
   );
 
+  if (recipe.paint) {
+    const clashing = (['eyes', 'bristles', 'glossyEyes', 'recolour'] as const).filter(
+      (option) => recipe[option] !== undefined,
+    );
+    if (clashing.length > 0)
+      throw new Error(
+        `${recipe.id}: paint cannot combine with ${clashing.join(', ')}; the paint step merges every part into one, which would drop their per-LOD detail. Remove ${clashing.join(', ')} from the recipe.`,
+      );
+  }
+
   const sourceMaterials = doc
     .getRoot()
     .listMaterials()
@@ -390,7 +402,9 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
         'merged meshes, dropped skeleton, animation and unused attributes',
         'oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length',
         'baked fin mask, fin id and mouth mask vertex attributes',
-        'colour and normal maps re-encoded to KTX2 at 1k and 2k',
+        recipe.paint
+          ? 'painted colour map encoded to KTX2'
+          : 'colour and normal maps re-encoded to KTX2 at 1k and 2k',
         ...(recipe.modifications ?? []),
       ],
       fish: fishInfo(

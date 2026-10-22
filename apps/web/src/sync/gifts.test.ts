@@ -151,7 +151,7 @@ describe('offerView', () => {
     expect(view.status).toContain('no longer available');
   });
 
-  it('lets the recipient of a countered trade only withdraw', () => {
+  it('lets the recipient of a countered trade only decline, and says it ends the trade', () => {
     const view = offerView(
       offer({ status: 'countered', wantsReturn: true, pledged: giftFish({ name: 'Bubbles' }) }),
       NOW,
@@ -159,6 +159,7 @@ describe('offerView', () => {
     );
     expect(view.actions).toEqual(['decline']);
     expect(view.status).toContain('Your fish stays in your tank');
+    expect(view.status).toContain('Declining ends the whole trade and sends Pip back to @reef_fan');
   });
 
   it('offers no action on a final offer and says where the fish went', () => {
@@ -290,6 +291,12 @@ describe('giftRefusalText', () => {
       'You cannot send a fish to yourself.',
     );
     expect(giftRefusalText(self, { op: 'create' })).toBe('You cannot send a fish to yourself.');
+  });
+
+  it('explains offer_changed on confirm', () => {
+    expect(giftRefusalText(conflict('offer_changed'), { op: 'confirm' })).toBe(
+      'The offer changed while you were confirming. The list has been refreshed.',
+    );
   });
 
   it('treats a 404 on an existing offer as gone', () => {
@@ -436,6 +443,53 @@ describe('GiftBook', () => {
     expect(await book.accept({ offer: offer(), toTankId: TANK_A })).toBe(false);
     expect(api.gifts).toHaveBeenCalledTimes(1);
     expect(book.getState().error).toContain('already settled');
+  });
+
+  it('refreshes the list after offer_changed on confirm', async () => {
+    const { api, book } = setup({
+      confirmGift: vi.fn().mockRejectedValue(conflict('offer_changed')),
+    });
+    expect(await book.confirm(offer({ role: 'sender', status: 'countered' }), TANK_A)).toBe(false);
+    expect(api.gifts).toHaveBeenCalledTimes(1);
+    expect(book.getState().error).toContain('offer changed while you were confirming');
+  });
+
+  it('keeps the key across a network failure for accept and confirm', async () => {
+    const down = new ApiRequestError(0, 'network', 'down');
+    const acceptGift = vi
+      .fn()
+      .mockRejectedValueOnce(down)
+      .mockResolvedValue({ offer: offer(), tank: sender, arrival });
+    const confirmGift = vi
+      .fn()
+      .mockRejectedValueOnce(down)
+      .mockResolvedValue({ offer: offer(), tank: sender, arrival });
+    const { book } = setup({ acceptGift, confirmGift });
+    await book.accept({ offer: offer(), toTankId: TANK_A });
+    await book.accept({ offer: offer(), toTankId: TANK_A });
+    const countered = offer({ role: 'sender', status: 'countered' });
+    await book.confirm(countered, TANK_A);
+    await book.confirm(countered, TANK_A);
+    const keyOf = (c: unknown[]) => (c[1] as { idempotencyKey: string }).idempotencyKey;
+    expect(acceptGift.mock.calls.map(keyOf)).toEqual(['key-1', 'key-1']);
+    expect(confirmGift.mock.calls.map(keyOf)).toEqual(['key-2', 'key-2']);
+  });
+
+  it('ignores an older refresh that lands after a newer one', async () => {
+    const stale = { incoming: [offer({ id: 'stale' })], outgoing: [] };
+    const fresh = { incoming: [], outgoing: [] };
+    let releaseOld: (v: typeof stale) => void = () => undefined;
+    const gifts = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (releaseOld = resolve)))
+      .mockResolvedValue(fresh);
+    const { book } = setup({ gifts });
+    const old = book.refresh();
+    await book.refresh();
+    releaseOld(stale);
+    await old;
+    expect(book.getState().offers).toEqual(fresh);
+    expect(book.getState().loading).toBe(false);
   });
 
   it('refuses a second call while one is running', async () => {

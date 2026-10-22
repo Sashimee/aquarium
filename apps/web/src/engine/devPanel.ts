@@ -1,4 +1,11 @@
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import {
+  displayPreference,
+  FRAME_RATE_CHOICES,
+  PIXEL_RATIO_CHOICES,
+  type FrameRateChoice,
+  type PixelRatioChoice,
+} from './displayPreference';
 import type { Engine } from './Engine';
 import { TIERS, type Tier } from './quality/tiers';
 import { readStats, type StatsReadout } from './statsReadout';
@@ -39,6 +46,16 @@ export function createDevPanel(engine: Engine): () => void {
   perf.add(readout, 'canvas').disable().listen();
   perf.add(readout, 'draws').disable().listen();
   perf.add(readout, 'triangles').disable().listen();
+
+  const display = { ...displayPreference.snapshot() };
+  perf
+    .add(display, 'frameRate', [...FRAME_RATE_CHOICES])
+    .name('frame rate')
+    .onChange((frameRate: FrameRateChoice) => displayPreference.set({ frameRate }));
+  perf
+    .add(display, 'pixelRatio', [...PIXEL_RATIO_CHOICES])
+    .name('pixel ratio')
+    .onChange((pixelRatio: PixelRatioChoice) => displayPreference.set({ pixelRatio }));
 
   const offStats = engine.events.on('engine:stats', (s) => {
     Object.assign(readout, readStats(engine, s, window.devicePixelRatio));

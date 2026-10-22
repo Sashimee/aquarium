@@ -33,6 +33,8 @@ export interface FinHints {
   shellPectorals?: boolean;
   /** Uniform scale of the caudal fin about its root, for sources whose tail is out of proportion to the body. */
   caudalScale?: number;
+  /** Non-uniform scale of the whole mesh across the body (x) and top to bottom (y), for sources drawn far deeper or rounder than the species. */
+  bodyScale?: { width: number; depth: number };
   /** Fins to leave unclassified, for species whose fin is part of the body mesh. */
   skip?: FinName[];
 }
@@ -61,6 +63,24 @@ export function orient(positions: Float32Array, normals: Float32Array | null, ax
   };
   apply(positions);
   if (normals) apply(normals);
+}
+
+export function scaleBody(
+  positions: Float32Array,
+  normals: Float32Array,
+  scale: { width: number; depth: number },
+): void {
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i] = positions[i]! * scale.width;
+    positions[i + 1] = positions[i + 1]! * scale.depth;
+    const nx = normals[i]! / scale.width;
+    const ny = normals[i + 1]! / scale.depth;
+    const nz = normals[i + 2]!;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    normals[i] = nx / len;
+    normals[i + 1] = ny / len;
+    normals[i + 2] = nz / len;
+  }
 }
 
 export function medianX(positions: Float32Array): number {
