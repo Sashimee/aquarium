@@ -10,6 +10,7 @@ import {
   waitText,
   type CommunityControllerDeps,
 } from './community';
+import { ApiRequestError } from '../ui/api';
 import type { OpenStreamOptions } from './communityStream';
 import { apiError, FISH_1, FISH_2, fishFixture, recordBus, tankFixture } from './fixtures';
 
@@ -399,6 +400,31 @@ describe('live feed and scene', () => {
     expect(drops).toHaveLength(1);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+    controller.dispose();
+  });
+
+  it('treats a 401 on the handle as no handle, without a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const myHandle = vi.fn(() =>
+      Promise.reject(new ApiRequestError(401, 'unauthenticated', 'Sign in.')),
+    );
+    const { controller } = setup({}, { myHandle });
+    controller.start();
+    await settle();
+    expect(myHandle).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+    controller.dispose();
+  });
+
+  it('does not hold the first feed for a slow handle request', async () => {
+    const communityFeed = vi.fn(() => Promise.resolve({ state: stateOf(), replayed: false }));
+    const myHandle = vi.fn(() => new Promise<string | null>(() => undefined));
+    const { controller } = setup({}, { communityFeed, myHandle });
+    controller.start();
+    await settle();
+    await controller.feed('flakes', 0.5);
+    expect(communityFeed).toHaveBeenCalledTimes(1);
     controller.dispose();
   });
 
