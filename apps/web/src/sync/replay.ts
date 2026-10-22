@@ -116,6 +116,12 @@ export function describeEvent(event: CareEvent, fish: FishNames, names: SpeciesN
       return { ...base, text: 'Algae scraped off the glass.', tone: 'good' };
     case 'bottled_bacteria':
       return { ...base, text: 'Bottled bacteria added to the filter.', tone: 'good' };
+    case 'salt_dose':
+      return { ...base, text: 'Salt mix dissolved into the water.', tone: 'good' };
+    case 'buffer_dose':
+      return { ...base, text: 'Buffer dissolved into the water.', tone: 'good' };
+    case 'add_botanicals':
+      return { ...base, text: 'Botanicals added to the water.', tone: 'good' };
     case 'filter_rinse':
       return { ...base, text: 'Filter rinsed.', tone: 'good' };
     case 'born':

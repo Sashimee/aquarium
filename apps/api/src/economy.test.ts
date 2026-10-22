@@ -889,6 +889,53 @@ describe('wallet, shop and ledger', () => {
     });
   });
 
+  describe.each([
+    ['buffer_dose', 'bufferDose', 'blackwater'],
+    ['add_botanicals', 'botanicals', 'reef'],
+  ] as const)('%s', (type, price, refusedBiome) => {
+    it('charges once per key, applies once and logs one event', async () => {
+      const { who, tank } = await primed(h);
+      const dose = (k: string) =>
+        call(h, who, 'POST', `/api/tanks/${tank.id}/care`, { type, idempotencyKey: k });
+      const before = await balance(h, who);
+      const k = key();
+      expect((await dose(k)).statusCode).toBe(200);
+      const once = await call(h, who, 'GET', `/api/tanks/${tank.id}`);
+      expect((await dose(k)).statusCode).toBe(200);
+      const twice = await call(h, who, 'GET', `/api/tanks/${tank.id}`);
+      expect(twice.json().chemistry).toEqual(once.json().chemistry);
+      expect(await balance(h, who)).toBe(before - economy.items.consumables[price]);
+      const events = await h.database.db
+        .select()
+        .from(schema.events)
+        .where(and(eq(schema.events.tankId, tank.id), eq(schema.events.kind, type)));
+      expect(events).toHaveLength(1);
+    });
+
+    it('402s when the user cannot afford it', async () => {
+      const { who, tank } = await primed(h);
+      await setBalance(h, who, economy.items.consumables[price] - 1);
+      const res = await call(h, who, 'POST', `/api/tanks/${tank.id}/care`, {
+        type,
+        idempotencyKey: key(),
+      });
+      expect(res.statusCode).toBe(402);
+    });
+
+    it(`422s in a ${refusedBiome} tank without charging`, async () => {
+      const { who } = await primed(h);
+      const made = await createTank(h, who, { biome: refusedBiome });
+      expect(made.statusCode).toBe(201);
+      const before = await balance(h, who);
+      const res = await call(h, who, 'POST', `/api/tanks/${made.json().id}/care`, {
+        type,
+        idempotencyKey: key(),
+      });
+      expect(res.statusCode).toBe(422);
+      expect(await balance(h, who)).toBe(before);
+    });
+  });
+
   it('keeps server reward keys out of the namespace a client can send', async () => {
     const { who } = await primed(h);
     const rewards = (await ledgerOf(h, who)).filter(

@@ -82,7 +82,7 @@ const NO_BREEDING = {
     },
   },
 };
-const cleanWater: Water = { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 };
+const cleanWater: Water = { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 };
 
 function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}): LifecycleFish {
   const spec = species.get(speciesId);
@@ -1052,6 +1052,230 @@ describe('pH, KH, temperature and salinity', () => {
     const { sourceWater, restoredPerWaterChange } = chemistryParams.kh;
     expect(r.value.chemistry.kh).toBeCloseTo(5 + (sourceWater.reef - 5) * restoredPerWaterChange);
     expect(r.value.chemistry.kh).toBeGreaterThan(5);
+  });
+
+  describe('salt dosing and salinity dilution', () => {
+    const reefAt = (salinity: number): LifecycleState => ({
+      ...tank([fishOf('a', 'ocellaris-clownfish')]),
+      chemistry: { ...newTankChemistry('reef'), salinity },
+    });
+    const mix = chemistryParams.salinity.target.reef;
+    const dose = (state: LifecycleState, biome: Biome = 'reef') => {
+      const r = applyCare(state, { type: 'salt_dose' }, biome, chemistryParams, T0);
+      if (!r.ok) throw new Error(r.reason);
+      return r.value;
+    };
+
+    it('dose and water-change target equal each salt biome default', () => {
+      for (const biome of ['reef', 'mangrove'] as const) {
+        const mixLevel = newTankChemistry(biome).salinity;
+        expect(chemistryParams.salinity.target[biome]).toBe(mixLevel);
+        const atDefault = {
+          ...tank([]),
+          chemistry: newTankChemistry(biome),
+        };
+        const changed = applyCare(atDefault, { type: 'water_change' }, biome, chemistryParams, T0);
+        if (!changed.ok) throw new Error(changed.reason);
+        expect(changed.value.chemistry.salinity).toBe(mixLevel);
+        const dosed = applyCare(atDefault, { type: 'salt_dose' }, biome, chemistryParams, T0);
+        if (!dosed.ok) throw new Error(dosed.reason);
+        expect(dosed.value.chemistry.salinity).toBe(mixLevel);
+      }
+    });
+
+    it('moves salinity a fixed fraction of the gap towards the salt-mix level', () => {
+      const { saltDoseFraction } = chemistryParams.salinity;
+      expect(dose(reefAt(20)).chemistry.salinity).toBeCloseTo(20 + (mix - 20) * saltDoseFraction);
+      const twice = dose(dose(reefAt(20)));
+      expect(twice.chemistry.salinity).toBeGreaterThan(dose(reefAt(20)).chemistry.salinity);
+      expect(twice.chemistry.salinity).toBeLessThan(mix);
+    });
+
+    it('never pushes salinity past the mix level', () => {
+      expect(dose(reefAt(mix)).chemistry.salinity).toBe(mix);
+      expect(dose(reefAt(mix + 4)).chemistry.salinity).toBe(mix + 4);
+    });
+
+    it('refuses to dose a tank whose biome has no salt', () => {
+      for (const biome of ['freshwater', 'cichlid', 'blackwater'] as const) {
+        const state = { ...tank([]), chemistry: newTankChemistry(biome) };
+        const r = applyCare(state, { type: 'salt_dose' }, biome, chemistryParams, T0);
+        expect(r.ok).toBe(false);
+      }
+    });
+
+    it('a water change after dosing dilutes salinity towards the target', () => {
+      const dosed = dose(reefAt(mix + 6));
+      const changed = applyCare(dosed, { type: 'water_change' }, 'reef', chemistryParams, T0);
+      if (!changed.ok) throw new Error(changed.reason);
+      const { restoredPerWaterChange } = chemistryParams.salinity;
+      expect(changed.value.chemistry.salinity).toBeCloseTo(mix + 6 - 6 * restoredPerWaterChange);
+    });
+
+    it('a water change leaves salinity alone at the target and in fresh tanks', () => {
+      const atTarget = applyCare(
+        reefAt(mix),
+        { type: 'water_change' },
+        'reef',
+        chemistryParams,
+        T0,
+      );
+      if (!atTarget.ok) throw new Error(atTarget.reason);
+      expect(atTarget.value.chemistry.salinity).toBe(mix);
+      const fresh = applyCare(
+        tank([]),
+        { type: 'water_change' },
+        'freshwater',
+        chemistryParams,
+        T0,
+      );
+      if (!fresh.ok) throw new Error(fresh.reason);
+      expect(fresh.value.chemistry.salinity).toBe(0);
+    });
+
+    it('offline catch-up after a dose is deterministic and independent of how it is split', () => {
+      const dosed = dose(reefAt(20));
+      const reef = { env: { biome: 'reef' as const } };
+      const whole = run(dosed, 2 * DAY, reef);
+      const again = run(dosed, 2 * DAY, reef);
+      const halves = run(run(dosed, DAY, reef).state, 2 * DAY, { ...reef, from: DAY });
+      expect(again.state.chemistry.salinity).toBe(whole.state.chemistry.salinity);
+      expect(halves.state.chemistry.salinity).toBeCloseTo(whole.state.chemistry.salinity, 9);
+      expect(whole.state.chemistry.salinity).toBeGreaterThan(dosed.chemistry.salinity);
+      expect(whole.state.chemistry.salinity).toBeLessThanOrEqual(mix);
+      expect(whole.state.chemistry.salinity).toBeGreaterThan(
+        run(reefAt(20), 2 * DAY, reef).state.chemistry.salinity,
+      );
+    });
+  });
+
+  describe('buffer dosing', () => {
+    const ceiling = chemistryParams.kh.bufferCeiling;
+    const cichlidAt = (kh: number): LifecycleState => ({
+      ...tank([]),
+      chemistry: { ...newTankChemistry('cichlid'), kh },
+    });
+    const buffer = (state: LifecycleState, biome: Biome) =>
+      applyCare(
+        state,
+        { type: 'buffer_dose', idempotencyKey: 'buffer-test-key' },
+        biome,
+        chemistryParams,
+        T0,
+      );
+
+    it('raises KH by one dose, past the source water', () => {
+      const r = buffer(cichlidAt(10), 'cichlid');
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.value.chemistry.kh).toBeCloseTo(10 + chemistryParams.kh.bufferDoseKh);
+      expect(r.value.chemistry.kh).toBeGreaterThan(chemistryParams.kh.sourceWater.cichlid);
+    });
+
+    it('stops exactly at the biome ceiling and then refuses', () => {
+      const nearly = buffer(cichlidAt(ceiling.cichlid - 0.5), 'cichlid');
+      if (!nearly.ok) throw new Error(nearly.reason);
+      expect(nearly.value.chemistry.kh).toBe(ceiling.cichlid);
+      expect(buffer(nearly.value, 'cichlid').ok).toBe(false);
+      expect(buffer(cichlidAt(ceiling.cichlid + 3), 'cichlid').ok).toBe(false);
+    });
+
+    it('refuses biomes with a zero ceiling', () => {
+      for (const biome of ['blackwater', 'reef'] as const) {
+        expect(ceiling[biome]).toBe(0);
+        expect(buffer({ ...tank([]), chemistry: newTankChemistry(biome) }, biome).ok).toBe(false);
+      }
+    });
+
+    it('lifts the pH through the buffered target once offline time passes', () => {
+      const dosed = buffer(cichlidAt(10), 'cichlid');
+      if (!dosed.ok) throw new Error(dosed.reason);
+      const base = { env: { biome: 'cichlid' as const } };
+      const plain = run(cichlidAt(10), 2 * DAY, base).state.chemistry;
+      const buffered = run(dosed.value, 2 * DAY, base).state.chemistry;
+      expect(buffered.kh).toBeGreaterThan(plain.kh);
+    });
+  });
+
+  describe('botanicals and tannin', () => {
+    const p = chemistryParams.tannin;
+    const blackAt = (tannin: number, ph = 6): LifecycleState => ({
+      ...tank([], { tannin }),
+      chemistry: { ...newTankChemistry('blackwater'), ph },
+    });
+    const botanicals = (state: LifecycleState, biome: Biome = 'blackwater') =>
+      applyCare(
+        state,
+        { type: 'add_botanicals', idempotencyKey: 'botanical-test' },
+        biome,
+        chemistryParams,
+        T0,
+      );
+
+    it('adds tannin and pulls pH down a little', () => {
+      const r = botanicals(blackAt(0));
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.value.water.tannin).toBeCloseTo(p.perDose);
+      expect(r.value.chemistry.ph).toBeCloseTo(6 - p.phPullPerDose);
+    });
+
+    it('never pulls pH below the floor, and never past the tannin ceiling', () => {
+      const lowPh = botanicals(blackAt(0, p.phFloor + 0.05));
+      if (!lowPh.ok) throw new Error(lowPh.reason);
+      expect(lowPh.value.chemistry.ph).toBe(p.phFloor);
+      const floored = botanicals(blackAt(0.1, p.phFloor));
+      if (!floored.ok) throw new Error(floored.reason);
+      expect(floored.value.chemistry.ph).toBe(p.phFloor);
+      const nearly = botanicals(blackAt(p.ceiling.blackwater - 0.1));
+      if (!nearly.ok) throw new Error(nearly.reason);
+      expect(nearly.value.water.tannin).toBe(p.ceiling.blackwater);
+      expect(botanicals(nearly.value).ok).toBe(false);
+    });
+
+    it('keeps the floor inside the pH range every blackwater species shares', () => {
+      const lows = parsedSpecies
+        .filter((s) => s.biome === 'blackwater')
+        .map((s) => s.chemistry.phRange[0]);
+      expect(lows.length).toBeGreaterThan(0);
+      expect(p.phFloor).toBeGreaterThanOrEqual(Math.max(...lows));
+    });
+
+    it('refuses reef, cichlid and mangrove tanks', () => {
+      for (const biome of ['reef', 'cichlid', 'mangrove'] as const) {
+        expect(p.ceiling[biome]).toBe(0);
+        expect(botanicals({ ...tank([]), chemistry: newTankChemistry(biome) }, biome).ok).toBe(
+          false,
+        );
+      }
+    });
+
+    it('a water change dilutes tannin', () => {
+      const r = applyCare(
+        blackAt(0.8),
+        { type: 'water_change' },
+        'blackwater',
+        chemistryParams,
+        T0,
+      );
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.value.water.tannin).toBeCloseTo(0.8 * (1 - p.restoredPerWaterChange));
+    });
+
+    it('decays deterministically offline, independent of how the time is split', () => {
+      const base = { env: { biome: 'blackwater' as const } };
+      const start = blackAt(0.8);
+      const whole = run(start, 3 * DAY, base);
+      const halves = run(run(start, DAY, base).state, 3 * DAY, { ...base, from: DAY });
+      expect(whole.state.water.tannin).toBeCloseTo(0.8 * Math.exp(-p.decayPerHour * 72), 9);
+      expect(halves.state.water.tannin).toBeCloseTo(whole.state.water.tannin, 9);
+      expect(run(start, 3 * DAY, base).state.water.tannin).toBe(whole.state.water.tannin);
+    });
+
+    it('tannin holds the pH target lower while it lasts', () => {
+      const base = { env: { biome: 'blackwater' as const } };
+      const tea = run(blackAt(1), 2 * DAY, base).state.chemistry.ph;
+      const clear = run(blackAt(0), 2 * DAY, base).state.chemistry.ph;
+      expect(tea).toBeLessThan(clear);
+    });
   });
 
   it('names water quality as the cause when out-of-range water kills a fish', () => {

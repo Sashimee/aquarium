@@ -20,6 +20,15 @@ export const bottledBacteriaEventSchema = z.strictObject({
   type: z.literal('bottled_bacteria'),
   idempotencyKey: idempotencyKeySchema.describe('bottled bacteria cost Pearls'),
 });
+export const saltDoseEventSchema = z.strictObject({ type: z.literal('salt_dose') });
+export const bufferDoseEventSchema = z.strictObject({
+  type: z.literal('buffer_dose'),
+  idempotencyKey: idempotencyKeySchema.describe('a buffer dose costs Pearls'),
+});
+export const addBotanicalsEventSchema = z.strictObject({
+  type: z.literal('add_botanicals'),
+  idempotencyKey: idempotencyKeySchema.describe('botanicals cost Pearls'),
+});
 export const filterRinseEventSchema = z.strictObject({ type: z.literal('filter_rinse') });
 
 export const careActionSchema = z.discriminatedUnion('type', [
@@ -29,6 +38,9 @@ export const careActionSchema = z.discriminatedUnion('type', [
   algaeScrapeEventSchema,
   bottledBacteriaEventSchema,
   filterRinseEventSchema,
+  saltDoseEventSchema,
+  bufferDoseEventSchema,
+  addBotanicalsEventSchema,
 ]);
 export type CareAction = z.infer<typeof careActionSchema>;
 
@@ -55,6 +67,9 @@ export const careEventKindSchema = z.enum([
   'algae_scrape',
   'bottled_bacteria',
   'filter_rinse',
+  'salt_dose',
+  'buffer_dose',
+  'add_botanicals',
   'ate',
   'death',
   'born',
@@ -85,6 +100,9 @@ export const careEventSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...eventBase, kind: z.literal('algae_scrape'), payload: emptyPayload }),
   z.strictObject({ ...eventBase, kind: z.literal('bottled_bacteria'), payload: emptyPayload }),
   z.strictObject({ ...eventBase, kind: z.literal('filter_rinse'), payload: emptyPayload }),
+  z.strictObject({ ...eventBase, kind: z.literal('salt_dose'), payload: emptyPayload }),
+  z.strictObject({ ...eventBase, kind: z.literal('buffer_dose'), payload: emptyPayload }),
+  z.strictObject({ ...eventBase, kind: z.literal('add_botanicals'), payload: emptyPayload }),
   z.strictObject({
     ...eventBase,
     kind: z.literal('ate'),

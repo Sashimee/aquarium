@@ -285,22 +285,27 @@ describe('water report', () => {
 
   it('rates ammonia against the strictest living fish', () => {
     expect(
-      waterReport({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 }, tank, species).ammonia,
+      waterReport({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 }, tank, species)
+        .ammonia,
     ).toBe('good');
     expect(
-      waterReport({ ammonia: 0.1, nitrate: 0, algae: 0, uneatenFood: 0 }, tank, species).ammonia,
+      waterReport({ ammonia: 0.1, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 }, tank, species)
+        .ammonia,
     ).toBe('fair');
     expect(
-      waterReport({ ammonia: 0.2, nitrate: 0, algae: 0, uneatenFood: 0 }, tank, species).ammonia,
+      waterReport({ ammonia: 0.2, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 }, tank, species)
+        .ammonia,
     ).toBe('poor');
   });
 
   it('asks for the gravel vacuum once leftovers pile up', () => {
     expect(
-      waterReport({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 2 }, tank, species).needsVacuum,
+      waterReport({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 2 }, tank, species)
+        .needsVacuum,
     ).toBe(false);
     expect(
-      waterReport({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 3 }, tank, species).needsVacuum,
+      waterReport({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 3 }, tank, species)
+        .needsVacuum,
     ).toBe(true);
   });
 
@@ -308,7 +313,7 @@ describe('water report', () => {
     const lines = tankReportLines(
       tankFixture({
         fish: [fishFixture(FISH_2, { name: 'Dot', hunger: 0.8 }), deadTetra],
-        water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 5 },
+        water: { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 5 },
       }),
       species,
     );

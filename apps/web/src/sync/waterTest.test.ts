@@ -90,7 +90,7 @@ describe('readPad', () => {
 describe('dipStrip', () => {
   it('reads every pad of a freshwater strip from the tank values', () => {
     const tank = tankFixture({
-      water: { ammonia: 0.3, nitrate: 45, algae: 0, uneatenFood: 0 },
+      water: { ammonia: 0.3, nitrate: 45, algae: 0, tannin: 0, uneatenFood: 0 },
       chemistry: { ...newTankChemistry('freshwater'), nitrite: 0.5, ph: 6.4, kh: 4 },
     });
     const strip = dipStrip(tank.biome, rawValues(tank));
@@ -174,7 +174,7 @@ describe('verdictHazard', () => {
   const tetra = speciesFixture();
   const tank = (water: { ammonia: number; nitrate: number }) =>
     tankFixture({
-      water: { ...water, algae: 0, uneatenFood: 0 },
+      water: { ...water, algae: 0, tannin: 0, uneatenFood: 0 },
       fish: [
         fishFixture(FISH_1),
         fishFixture('10000000-0000-4000-8000-000000000009', { species: 'discus' }),
