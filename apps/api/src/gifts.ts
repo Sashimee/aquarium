@@ -601,6 +601,9 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     return found;
   };
 
+  const recipientLeft = () =>
+    refuse(409, 'The other player left, so this offer is closed.', 'offer_closed');
+
   type Outcome<T> = { done: T } | { raise: HttpError };
 
   async function recipientVanished(
@@ -774,7 +777,10 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         pre.recipientTankId &&
         pre.pledgedFishId
       ) {
-        const recipient = await loadUser(database.db, pre.toUserId);
+        const recipient = await loadUser(database.db, pre.toUserId).catch((error: unknown) => {
+          if (error instanceof HttpError && error.status === 404) throw recipientLeft();
+          throw error;
+        });
         targets.push({ user: recipient, tankId: pre.recipientTankId });
         const [where] = await database.db
           .select({ tankId: schema.fish.tankId, ownerId: schema.tanks.ownerId })
@@ -837,6 +843,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
             throw refuse(
               409,
               'The offer changed while you were confirming. Reload it and try again.',
+              'offer_changed',
             );
           }
           const recipientTank = offer.recipientTankId
@@ -906,7 +913,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         });
       } catch (error) {
         if (!(await recipientVanished(error, pre.toUserId, user.id))) throw error;
-        throw refuse(409, 'The other player left, so this offer is closed.', 'offer_closed');
+        throw recipientLeft();
       }
       if ('raise' in outcome) throw outcome.raise;
       return outcome.done;
