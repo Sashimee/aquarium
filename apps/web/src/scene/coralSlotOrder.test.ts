@@ -225,7 +225,10 @@ describe('grown euphyllia capsule near the glass', () => {
     expect(cap.sways({ ...nearGlass, assetId: 'brain-coral' })).toBe(false);
   });
 
-  describe.each([0.005, 0.01])('a fragment %s m from the glass', (gap) => {
+  describe.each([
+    [0.005, false],
+    [0.01, true],
+  ])('a fragment %s m from the glass', (gap, capIsPositive) => {
     const floor = 0.25 * nearGlass.scale;
     const place = (assetId: string) => {
       const cap = coralScaleCap(catalog, dimensions, current());
@@ -258,7 +261,8 @@ describe('grown euphyllia capsule near the glass', () => {
     it('holds a hard coral fragment to its cap, below the floor', () => {
       const rigid = place('brain-coral');
       expect(rigid.capAt).toBeLessThan(floor);
-      expect(rigid.capAt).toBeGreaterThanOrEqual(0);
+      if (capIsPositive) expect(rigid.capAt).toBeGreaterThan(0);
+      else expect(rigid.capAt).toBe(0);
       expect(rigid.placed?.item.scale).toBeCloseTo(rigid.capAt);
     });
   });
