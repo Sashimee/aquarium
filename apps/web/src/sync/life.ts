@@ -10,6 +10,7 @@ import type {
   TankSize,
   Water,
 } from '@aquarium/shared';
+import { blackwaterReportLines } from './blackwater';
 import { speciesNameMap, type SpeciesNames } from './speciesNames';
 import { salinityNotice } from './salinityCare';
 import {
@@ -301,6 +302,7 @@ export function tankReportLines(tank: Tank, species: readonly SpeciesSummary[]):
     `Water: ammonia ${water.ammonia}, nitrate ${water.nitrate}, algae ${water.algae}, leftover food ${water.leftoverFood}.`,
   );
   if (water.needsVacuum) lines.push('Leftover food is building up. Vacuum the gravel.');
+  lines.push(...blackwaterReportLines(tank, species));
   const salinity = salinityNotice(tank, species);
   if (salinity) lines.push(salinity.text);
   return lines;
