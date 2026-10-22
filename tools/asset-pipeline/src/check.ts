@@ -720,6 +720,18 @@ export function intraAssetDuplicateTextureProblems(assets: readonly OutputAsset[
   return problems;
 }
 
+export function unreferencedHdriProblems(
+  assets: readonly OutputAsset[],
+  loaded: BudgetInput['hdri'],
+): string[] {
+  return assets
+    .filter((a) => a.kind === 'hdri' && a.id !== loaded.id)
+    .map(
+      (a) =>
+        `asset hdri/${a.id}: apps/web never loads it (DEFAULT_HDRI_URL is hdri/${loaded.id}); remove its recipe or wire it to a use`,
+    );
+}
+
 export function checkAssets(input: CheckInput): string[] {
   const { manifest, credits, index, assetsDir, repoRoot } = input;
   const problems = validateManifest(manifest, credits);
@@ -840,7 +852,10 @@ export function checkAssets(input: CheckInput): string[] {
   if (input.backgrounds) {
     problems.push(...backgroundContentProblems(input.backgrounds, builtBackgrounds));
   }
-  if (input.content) problems.push(...budgetProblems({ index, ...input.content }));
+  if (input.content) {
+    problems.push(...unreferencedHdriProblems(index.assets, input.content.hdri));
+    problems.push(...budgetProblems({ index, ...input.content }));
+  }
   return problems;
 }
 
