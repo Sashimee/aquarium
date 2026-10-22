@@ -29,6 +29,8 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
   REMINDER_DAILY_CAP: z.coerce.number().int().min(0).max(100_000).default(500),
 });
 
@@ -45,7 +47,13 @@ export interface Config {
   testHooks: boolean;
   vapid: VapidKeys | null;
   vapidSubject: string;
+  stripe: StripeKeys | null;
   reminderDailyCap: number;
+}
+
+export interface StripeKeys {
+  secretKey: string;
+  webhookSecret: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -79,6 +87,20 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     throw new Error('VAPID_SUBJECT must be a mailto: or https: URL.');
   }
 
+  const secretKey = e.STRIPE_SECRET_KEY?.trim() ?? '';
+  const webhookSecret = e.STRIPE_WEBHOOK_SECRET?.trim() ?? '';
+  if (Boolean(secretKey) !== Boolean(webhookSecret)) {
+    throw new Error(
+      'STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must be set together or not at all; with neither, payments stay disabled.',
+    );
+  }
+  if (secretKey && !/^(sk|rk)_(test|live)_[A-Za-z0-9_]+$/.test(secretKey)) {
+    throw new Error('STRIPE_SECRET_KEY must be a Stripe secret key (sk_test_... or sk_live_...).');
+  }
+  if (webhookSecret && !/^whsec_[A-Za-z0-9_]+$/.test(webhookSecret)) {
+    throw new Error('STRIPE_WEBHOOK_SECRET must be a Stripe signing secret (whsec_...).');
+  }
+
   return {
     databaseUrl: e.DATABASE_URL,
     authSecret: e.BETTER_AUTH_SECRET,
@@ -91,6 +113,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     testHooks: e.NODE_ENV === 'test',
     vapid,
     vapidSubject,
+    stripe: secretKey ? { secretKey, webhookSecret } : null,
     reminderDailyCap: e.REMINDER_DAILY_CAP,
     trustedProxies: e.TRUSTED_PROXIES
       ? e.TRUSTED_PROXIES.split(',')

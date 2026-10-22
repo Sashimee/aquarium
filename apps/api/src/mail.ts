@@ -98,6 +98,38 @@ export function reminderMessage(
   return { text, html };
 }
 
+export interface ReceiptDetails {
+  description: string;
+  amountCents: number;
+  pearls: number | null;
+  consentAt: Date | null;
+}
+
+const euros = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+
+export function receiptMessage(receipt: ReceiptDetails): { text: string; html: string } {
+  const lines = [
+    `You bought: ${receipt.description}`,
+    `Paid: ${euros(receipt.amountCents)}, VAT included`,
+    ...(receipt.pearls === null ? [] : [`Pearls added to your balance: ${receipt.pearls}`]),
+    'You asked for immediate delivery and acknowledged that you lose your 14-day right of withdrawal.',
+    ...(receipt.consentAt ? [`Confirmed on: ${receipt.consentAt.toISOString()}`] : []),
+    'Pearls you have not spent are lost when you delete your account.',
+  ];
+  const text = `${lines.join('\n')}\n`;
+  const items = lines.map(
+    (l) => `<p style="font-size:14px;line-height:1.5;margin:0 0 8px">${escapeHtml(l)}</p>`,
+  );
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Your Aquarium receipt</title></head><body style="margin:0;padding:24px;background:#f4f7f9;font-family:Arial,Helvetica,sans-serif;color:#12202b">
+<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px">
+<h1 style="font-size:20px;margin:0 0 16px">Your receipt</h1>
+${items.join('\n')}
+</div></body></html>
+`;
+  return { text, html };
+}
+
 export function createSmtpTransport(host: string, port: number): Transporter {
   return nodemailer.createTransport({ host, port, secure: false });
 }
@@ -109,6 +141,8 @@ export interface Mailer {
   sendPasswordReset(to: string, url: string): Promise<void>;
   /** Same limits again, tracked separately. Carries RFC 8058 one-click unsubscribe headers. */
   sendReminder(to: string, appUrl: string, unsubscribeUrl: string): Promise<void>;
+  /** Transactional, so it skips the cooldown and the global cap; only a per-recipient cap applies. */
+  sendReceipt(to: string, receipt: ReceiptDetails): Promise<void>;
   /**
    * Charges one flat per-IP slot per mail-triggering request, whatever the recipient; the mail slot is not charged while the global cap is spent.
    * A separate request counter is always charged first, in the shared store, so an IP cannot outrun its limit during a cap outage.
@@ -247,7 +281,12 @@ export function createMailer(
     throw new MailThrottledError(retryAfterSeconds);
   };
 
-  const admit = async (flow: 'verify' | 'reset' | 'reminder', to: string) => {
+  const admit = async (flow: 'verify' | 'reset' | 'reminder' | 'receipt', to: string) => {
+    if (flow === 'receipt') {
+      const capped = await consume(`receipt:recipient:${recipientKey(to)}`, limits.perRecipient);
+      if (capped > 0) throw new MailThrottledError(capped);
+      return;
+    }
     // The cap may have freed since consumeIp skipped the IP charge; sending now would be unmetered per IP.
     const admission = admissions.getStore();
     if (admission && admission.mailBlockedFor > 0) {
@@ -302,6 +341,16 @@ export function createMailer(
         to,
         subject: 'Reset your Aquarium password',
         ...passwordResetMessage(url),
+        textEncoding: 'base64',
+      });
+    },
+    async sendReceipt(to, receipt) {
+      await admit('receipt', to);
+      await transport.sendMail({
+        from,
+        to,
+        subject: 'Your Aquarium receipt',
+        ...receiptMessage(receipt),
         textEncoding: 'base64',
       });
     },

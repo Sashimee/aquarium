@@ -61,13 +61,14 @@ const withDist = (isIndexable = false): FastifyInstance => (isIndexable ? indexa
 describe('health', () => {
   it('reports ok while the database answers', async () => {
     const res = await plain.app.inject('/api/health');
-    expect(res.json()).toEqual({ status: 'ok' });
+    expect(res.json()).toEqual({ status: 'ok', payments: 'disabled' });
   });
 
   it('reports 503 when the database is gone', async () => {
     await broken.database.pool.end();
     const res = await broken.app.inject('/api/health');
     expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ status: 'unavailable', payments: 'disabled' });
     expect(res.headers['x-robots-tag']).toBe(NOINDEX);
   });
 });
