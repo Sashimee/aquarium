@@ -96,6 +96,49 @@ export function recoveryFor(
   return api === 'WebGPU' && preference === 'auto' ? 'webgl' : 'reload';
 }
 
+export const LOST_NOTICE =
+  'The graphics device stopped responding, so the tank cannot be drawn. Reload to try again.';
+
+/** The engine's side of a loss, injected so the response runs without a renderer or a window. */
+export interface LossResponder {
+  halt(): void;
+  announce(event: { api: DeviceLostInfo['api']; message: string; recovery: LossRecovery }): void;
+  report(message: string, info: DeviceLostInfo): void;
+  readonly location: Pick<Location, 'href' | 'reload' | 'replace'>;
+  readonly store: SessionStore | null;
+  /** Shows `message` with a button that runs `action`, and returns what removes it. */
+  notify(message: string, action: { readonly label: string; run(): void }): () => void;
+}
+
+export function lossMessage(info: DeviceLostInfo): string {
+  const reason = info.reason ? ` (reason: ${info.reason})` : '';
+  return `The ${info.api} device was lost: ${info.message}${reason}`;
+}
+
+/**
+ * Stops drawing first, so the page never sits on a frozen or black canvas, then either reloads
+ * onto WebGL 2 or asks the user to reload. Returns the notice's remover when it shows one.
+ */
+export function respondToDeviceLoss(
+  info: DeviceLostInfo,
+  preference: BackendPreference,
+  responder: LossResponder,
+): (() => void) | null {
+  responder.halt();
+  const recovery = recoveryFor(info.api, preference);
+  responder.announce({ api: info.api, message: info.message, recovery });
+  responder.report(lossMessage(info), info);
+  const { location } = responder;
+  if (recovery === 'webgl') {
+    const here = location.href;
+    const next = webglFallbackUrl(here, responder.store);
+    if (next === here) location.reload();
+    else location.replace(next);
+    return null;
+  }
+  return responder.notify(LOST_NOTICE, { label: 'Reload', run: () => location.reload() });
+}
+
 export interface SessionStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
