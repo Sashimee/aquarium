@@ -58,11 +58,11 @@ import {
   type WalkerValues,
 } from './instances';
 import {
-  atlasDistance,
   drawsAsImpostor,
-  markNearest,
   mouthFade,
+  rankMeshes,
   selectLod,
+  type AtlasFraming,
   type ImpostorChoice,
   type LodThresholds,
 } from './lod';
@@ -226,7 +226,7 @@ interface FishRuntime {
   lod: number;
   /** Camera distance this frame, in metres. */
   cameraDistance: number;
-  /** `atlasDistance` this frame, for ranking against the tier's mesh limit. */
+  /** `atlasDistance` this frame, set by `rankMeshes`. */
   distance: number;
   /** One of the tier's nearest fish, drawn as a mesh at any LOD short of lod2. */
   full: boolean;
@@ -270,6 +270,14 @@ const SICK_PALING = 0.7;
 function youthOfFish(fish: RosterFish): number {
   const growth = speciesGrowth(fish.species)?.fryGrowth;
   return youthOf(maturityOf(fish.stage, ageDaysAt(fish.bornAtMs, Date.now()), growth));
+}
+
+function atlasFramingOf(rt: FishRuntime): AtlasFraming {
+  const impostor = rt.batch.impostor;
+  if (impostor === null) {
+    throw new Error(`fish: ${rt.batch.input.id} ranked for a mesh slot without an impostor atlas`);
+  }
+  return impostor.info;
 }
 
 function capacityFor(needed: number): number {
@@ -1839,17 +1847,11 @@ export class FishSystem {
       const distance = this.position.distanceTo(camera);
       rt.cameraDistance = distance;
       rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, rt.batch.lods.length);
-      const { impostor } = rt.batch;
-      if (impostor !== null) {
-        const { frameSize, radius } = impostor.info;
-        rt.distance = atlasDistance(distance, frameSize, radius, rt.scale);
-        ranked.push(rt);
-      } else {
-        rt.full = true;
-      }
+      if (rt.batch.impostor !== null) ranked.push(rt);
+      else rt.full = true;
     }
     this.bags.end();
-    if (impostors !== null) markNearest(ranked, impostors.fullMeshes);
+    if (impostors !== null) rankMeshes(ranked, atlasFramingOf, impostors.fullMeshes);
     const castsShadow = (this.shadows?.shadowMapSize ?? 0) > 0;
 
     for (const rt of this.runtimes.values()) {
