@@ -7,8 +7,9 @@ import {
   MeshStandardNodeMaterial,
   Texture,
   Vector3,
+  type Node,
 } from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import { float, materialColor, uniform, vec4 } from 'three/tsl';
 import {
   BLEACHED_SKELETON_ALBEDO,
   bleachedAlbedo,
@@ -101,12 +102,29 @@ describe('coralBleachColor', () => {
     });
   }
 
-  it('gives corals at different bleach levels one program', () => {
-    const keys = [0, 0.5, 1].map((bleach) => {
-      const material = coral(true).material as MeshStandardNodeMaterial;
-      setMaterialBleach(material, bleach);
-      return material.customProgramCacheKey();
+  for (const backend of ['webgpu', 'webgl'] as const) {
+    it(`gives corals at bleach 0 and 1 one ${backend} program`, () => {
+      for (const map of [true, false]) {
+        const at = (bleach: number) => {
+          const mesh = coral(map);
+          setMaterialBleach(mesh.material as MeshStandardNodeMaterial, bleach);
+          return buildShaders(mesh, backend);
+        };
+        expect(at(1)).toEqual(at(0));
+      }
     });
-    expect(new Set(keys).size).toBe(1);
-  });
+
+    it(`would build two ${backend} programs if the amount were baked in (the cost this avoids)`, () => {
+      const baked = (bleach: number) => {
+        const mesh = coral(true);
+        const live = vec4(materialColor as unknown as Node<'vec4'>);
+        (mesh.material as MeshStandardNodeMaterial).colorNode = vec4(
+          bleachedAlbedo(live.rgb, float(bleach)),
+          live.a,
+        );
+        return buildShaders(mesh, backend).fragment;
+      };
+      expect(baked(1)).not.toBe(baked(0));
+    });
+  }
 });
