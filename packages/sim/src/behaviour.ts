@@ -1328,7 +1328,7 @@ export class Behaviour {
       this.grazePhase[i] = GrazePhase.None;
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
-      this.planGlassGrazer(i, plan);
+      this.planGlassGrazer(i, plan, rest);
     } else if (at(this.anchor, i) >= 0) {
       this.planAnchored(i, sp, plan);
     } else if (sp.home !== 'none') {
@@ -2486,8 +2486,11 @@ export class Behaviour {
     }
   }
 
-  /** Surface grazers (otocinclus, plecos) attach belly-down to glass or decor and crawl. */
-  private planGlassGrazer(i: number, plan: Plan): void {
+  /**
+   * Surface grazers (otocinclus, plecos) attach belly-down to glass or decor and crawl. Resting,
+   * one settles onto the nearest surface and stays there without crawling or grazing.
+   */
+  private planGlassGrazer(i: number, plan: Plan, rest: number): void {
     const { rng } = this.host;
     const n3 = this.n3;
     const length = at(this.host.bodyLength, i);
@@ -2500,8 +2503,12 @@ export class Behaviour {
     const nx = at(n3, 0);
     const ny = at(n3, 1);
     const nz = at(n3, 2);
+    const resting = rest > 0.5;
+    if (resting && at(this.grazePhase, i) === GrazePhase.Roam) {
+      this.grazePhase[i] = GrazePhase.None;
+    }
     const phase = at(this.grazePhase, i);
-    const left = at(this.grazeTimer, i) - DT;
+    const left = resting ? at(this.grazeTimer, i) : at(this.grazeTimer, i) - DT;
     this.grazeTimer[i] = left;
     plan.floor = false;
     plan.bandLo = this.host.basin.ground(px, pz);
@@ -2527,6 +2534,15 @@ export class Behaviour {
         this.grazeTimer[i] = rng.range(BEHAVIOUR.glassStayMinS, BEHAVIOUR.glassStayMaxS);
         this.crawlSign[i] = rng.next() < 0.5 ? -1 : 1;
       }
+      return;
+    }
+    if (resting) {
+      plan.state = FishState.Rest;
+      plan.wander = 0;
+      plan.speedFloor = 0;
+      plan.speedCap = 0;
+      plan.roll = this.bellyRoll(i, n3);
+      if (d > 4 * standoff) this.grazePhase[i] = GrazePhase.None;
       return;
     }
     plan.state = FishState.Graze;
