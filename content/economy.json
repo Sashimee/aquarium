@@ -53,14 +53,18 @@
         "rock-pile-stack": 130,
         "rock-pile-cave": 150,
         "neothauma-shell": 60,
+        "driftwood-scan-a": 110,
+        "driftwood-scan-b": 130,
+        "dry-branches": 60,
+        "oak-leaf-card": 40,
+        "mangrove-stump": 120,
+        "mangrove-prop-roots": 140,
+        "mangrove-propagule": 45,
         "acropora-cytherea": 180,
         "acropora-palmata": 200,
         "brain-coral": 160,
         "blue-sea-anemone": 150,
-        "host-anemone": 220,
-        "mangrove-stump": 120,
-        "mangrove-prop-roots": 140,
-        "mangrove-propagule": 45
+        "host-anemone": 220
       }
     },
     "euphyllia": 130,

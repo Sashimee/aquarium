@@ -78,6 +78,14 @@ describe('decor rules', () => {
     }
   });
 
+  it('keeps the blackwater wood and leaves out of freshwater and reef', () => {
+    for (const id of ['driftwood-scan-a', 'driftwood-scan-b', 'dry-branches', 'oak-leaf-card']) {
+      expect(isDecorAssetForBiome('blackwater', id)).toBe(true);
+      expect(isDecorAssetForBiome('freshwater', id)).toBe(false);
+      expect(isDecorAssetForBiome('reef', id)).toBe(false);
+    }
+  });
+
   it('keeps euphyllia ids reef-only', () => {
     expect(isDecorAssetForBiome('reef', 'euphyllia-hammer-12')).toBe(true);
     expect(isDecorAssetForBiome('freshwater', 'euphyllia-hammer-12')).toBe(false);

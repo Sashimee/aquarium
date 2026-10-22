@@ -51,7 +51,14 @@ export const DECOR_ASSET_IDS: Readonly<Record<Biome, ReadonlySet<string>>> = {
     'rock-pile-cave',
     'neothauma-shell',
   ]),
-  blackwater: new Set(),
+  blackwater: new Set([
+    ...ROCKS,
+    'driftwood-branch',
+    'driftwood-scan-a',
+    'driftwood-scan-b',
+    'dry-branches',
+    'oak-leaf-card',
+  ]),
   mangrove: new Set([
     ...ROCKS,
     'driftwood-branch',
