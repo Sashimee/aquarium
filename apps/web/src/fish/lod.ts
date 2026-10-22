@@ -40,8 +40,9 @@ export function selectLod(
 /**
  * Camera distance times the impostor atlas's texels per metre of fish. A screen pixel spans a
  * width proportional to the distance, so a fish with a smaller value would show its atlas more
- * undersampled: a small fish baked into 64 px frames has half the texels per metre of one of the
- * same size in 128 px frames, and needs its mesh at twice the distance.
+ * undersampled. Of two fish the same size, one baked into 64 px frames has half the texels per
+ * metre of one in 128 px frames, so it needs its mesh at twice the distance. Fish of different
+ * sizes compare by frame size over extent, not by size alone.
  */
 export function atlasDistance(
   distance: number,
@@ -80,6 +81,34 @@ export function markNearest(items: MeshRank[], limit: number): void {
   items.sort(byRankKey);
   let rank = 0;
   for (const item of items) item.full = rank++ < limit;
+}
+
+export interface AtlasFraming {
+  readonly frameSize: number;
+  readonly radius: number;
+}
+
+export interface MeshCandidate extends MeshRank {
+  /** Camera distance this frame, in metres. */
+  readonly cameraDistance: number;
+  readonly scale: number;
+}
+
+/**
+ * Ranks fish with an impostor for the tier's `limit` full meshes by `atlasDistance`, not by
+ * size-adjusted distance: a large fish with a coarse atlas can look worse as an impostor than a
+ * nearer small one.
+ */
+export function rankMeshes<T extends MeshCandidate>(
+  items: T[],
+  framingOf: (item: T) => AtlasFraming,
+  limit: number,
+): void {
+  for (const item of items) {
+    const { frameSize, radius } = framingOf(item);
+    item.distance = atlasDistance(item.cameraDistance, frameSize, radius, item.scale);
+  }
+  markNearest(items, limit);
 }
 
 /** The level an impostor stands in for. */

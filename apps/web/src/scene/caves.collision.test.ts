@@ -13,6 +13,7 @@ import { compileCollider, FishState, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
+import { SimWorldSpec } from '../fish/simWorld';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { caveAnchors } from './caves';
 import { sceneCollidersToSim } from '../fish/simColliders';
@@ -26,7 +27,7 @@ import { fitPresetToCatalog } from './TankScene';
 const PUBLIC = join(__dirname, '../../public');
 const SHELTERED: readonly Biome[] = ['reef', 'cichlid'];
 const SIZES = Object.keys(TANK_SIZES) as TankSize[];
-const SEEDS = [1, 2, 3];
+const SEEDS = [1, 2, 3, 4];
 const STEPS_PER_PHASE = 9000;
 const CONTACTS_PER_FISH_STEP = 1e-3;
 
@@ -64,12 +65,13 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-type Layer = 'scene hulls' | 'decor boxes';
-const LAYERS: readonly Layer[] = ['scene hulls', 'decor boxes'];
+type Layer = 'scene hulls' | 'decor colliders';
+const LAYERS: readonly Layer[] = ['scene hulls', 'decor colliders'];
 
 /**
  * The hard colliders for a preset's rocks and shells: the scene's own fitted hulls, and the
- * rounded boxes the decor layer reports to the sim once it mounts, which replace them at runtime.
+ * colliders the decor layer reports to the sim once it mounts (shelter parts for shelters, boxes
+ * for other rocks), which replace them at runtime.
  */
 async function hardColliders(
   biome: Biome,
@@ -87,7 +89,7 @@ async function hardColliders(
     if (spec) boxes.push(...collidersFor(`piece-${i}`, spec, item));
     hulls.push(...fitCollider(kind, await library.collisionGeometry(item.assetId), item));
   }
-  return layer === 'decor boxes' ? boxes : sceneCollidersToSim(hulls);
+  return layer === 'decor colliders' ? boxes : sceneCollidersToSim(hulls);
 }
 
 function clearanceTo(colliders: readonly Collider[]) {
@@ -163,4 +165,20 @@ describe.each(LAYERS)('a royal gramma on the reef preset with %s', (layer) => {
     expect(sheltered).toBeGreaterThan(0);
     expect(contacts / fishSteps).toBeLessThan(CONTACTS_PER_FISH_STEP);
   }, 120_000);
+});
+
+describe('the sim at boot', () => {
+  it.each(SHELTERED)(
+    '%s: the scene hulls block no cave, so the anchors are sent once',
+    async (biome) => {
+      const decor = loadPreset(biome).decor;
+      const caves = caveAnchors(decor);
+      const hulls = await hardColliders(biome, 'scene hulls');
+      const spec = new SimWorldSpec(demoTank(DEFAULT_TANK, 1, biome), 1);
+      const sent = spec.setAnchors(caves);
+      expect(sent.filter((a) => a.kind === 'cave')).toHaveLength(caves.length);
+      expect(spec.setDecor(hulls)).toBeNull();
+      expect(spec.anchors).toBe(sent);
+    },
+  );
 });

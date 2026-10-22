@@ -7,8 +7,11 @@ import {
   markNearest,
   MOUTH_LODS,
   mouthFade,
+  rankMeshes,
   REFERENCE_LENGTH_M,
   selectLod,
+  type AtlasFraming,
+  type MeshCandidate,
   type MeshRank,
 } from './lod';
 
@@ -127,6 +130,48 @@ describe('markNearest', () => {
 
   it('rejects a negative limit', () => {
     expect(() => markNearest(ranks(1), -1)).toThrow(RangeError);
+  });
+});
+
+describe('rankMeshes', () => {
+  interface Fish extends MeshCandidate {
+    readonly framing: AtlasFraming;
+  }
+  const fish = (cameraDistance: number, frameSize: number, radius: number, scale = 1): Fish => ({
+    cameraDistance,
+    scale,
+    framing: { frameSize, radius },
+    distance: 0,
+    full: false,
+    rankKey: 0,
+  });
+  const framingOf = (f: Fish): AtlasFraming => f.framing;
+
+  it('gives the slot to a near small 64 px fish over a further large 128 px one', () => {
+    // Size-adjusted distance puts the large fish nearer (0.21 vs 0.375 reference lengths), but the
+    // small one's atlas is coarser per screen pixel (480 vs 533).
+    const small = fish(0.3, 64, 0.02);
+    const large = fish(0.5, 128, 0.06);
+    rankMeshes([large, small], framingOf, 1);
+    expect(small.full).toBe(true);
+    expect(large.full).toBe(false);
+  });
+
+  it('writes each fish its atlas distance and sorts nearest first', () => {
+    const scaled = fish(1, 64, 0.02, 2);
+    const plain = fish(1, 64, 0.02);
+    const items = [plain, scaled];
+    rankMeshes(items, framingOf, 1);
+    expect(scaled.distance).toBeCloseTo(atlasDistance(1, 64, 0.02, 2));
+    expect(plain.distance).toBeCloseTo(atlasDistance(1, 64, 0.02, 1));
+    expect(items).toEqual([scaled, plain]);
+  });
+
+  it('marks nothing full with no slots, and throws on a bad atlas', () => {
+    const items = [fish(0.3, 64, 0.02), fish(0.5, 128, 0.06)];
+    rankMeshes(items, framingOf, 0);
+    expect(items.every((f) => !f.full)).toBe(true);
+    expect(() => rankMeshes([fish(1, 0, 0.02)], framingOf, 1)).toThrow(RangeError);
   });
 });
 
