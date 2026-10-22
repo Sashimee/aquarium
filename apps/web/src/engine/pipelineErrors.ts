@@ -1,4 +1,5 @@
 import { getConsoleFunction, Material, setConsoleFunction, type Object3D } from 'three/webgpu';
+import { isTransientFailure } from './effectsSlot';
 
 /**
  * A pipeline three failed to build. It logs the failure and from then on skips every draw that
@@ -240,11 +241,17 @@ export interface DroppableEffects {
 
 export type ReportFailure = (message: string, cause: unknown) => void;
 
+/** Queues a rebuild of the scene's materials; false once that has been tried too often. */
+export type RebuildMaterials = () => boolean;
+
 /**
  * Answers each pipeline failure once: by dropping the effects while that can still help, otherwise
  * by reporting it. The materials blamed on dropped effects stay quiet afterwards, as their pending
  * builds may still fail, except a scene material, which is reported if it fails without them too.
- * A material already reported is broken without the effects' help, so it never drops them.
+ * A material already reported is broken without the effects' help, so it never drops them. A
+ * transient failure (a submit that bound a freed resource, reported by whichever async compile had
+ * its error scope open) says nothing about the material, so outside the effects' own materials it
+ * rebuilds the scene's materials instead, which three would otherwise skip for the session.
  *
  * The engine rebuilds dropped effects only after a transient failure, so under a temporal resolve
  * (ultra) one broken scene material costs the post effects for the session: only the plain render
@@ -263,12 +270,14 @@ export class PipelineFailureHandler {
     private readonly effects: DroppableEffects,
     private readonly inScene: (materialId: number) => boolean,
     private readonly report: ReportFailure,
+    private readonly rebuild: RebuildMaterials,
   ) {}
 
   handle(failure: PipelineFailure): void {
     const id = failure.materialId;
     const cause = new Error(failure.message);
     if (id !== null && this.reported.has(id)) return;
+    if (this.rebuildsFor(failure, cause)) return;
     if (id !== null && this.blamed.has(id)) {
       if (this.effects.active || !this.suspects.has(id)) return;
       this.suspects.delete(id);
@@ -279,6 +288,13 @@ export class PipelineFailureHandler {
     if (this.reported.has(key)) return;
     this.reported.add(key);
     this.report(reportMessage(failure, id !== null && !this.inScene(id)), cause);
+  }
+
+  private rebuildsFor(failure: PipelineFailure, cause: Error): boolean {
+    if (failure.kind !== 'render' || !isTransientFailure(cause)) return false;
+    const id = failure.materialId;
+    if (id !== null && this.effects.ownsMaterial(id)) return false;
+    return this.rebuild();
   }
 
   private blame(failure: PipelineFailure, cause: Error): boolean {

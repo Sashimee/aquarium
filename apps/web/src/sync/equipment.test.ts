@@ -231,3 +231,26 @@ describe('the shop with CO2 owned but switched off', () => {
     expect(choice).toMatchObject({ ok: true, skipped: 0 });
   });
 });
+
+describe('the CO2 purchase baseline is the larger of running and owned', () => {
+  const co2States = (running: number, owned: number) =>
+    deviceOffers({ ...withTiers({ co2: running }), co2OwnedTier: owned }, economy, cp)
+      .find((o) => o.device === 'co2')
+      ?.tiers.map((t) => t.state);
+
+  it('uses the owned tier when it is above the running one', () => {
+    expect(co2States(1, 2)).toEqual(['installed', 'owned']);
+  });
+
+  it('uses the running tier when nothing else was ever bought', () => {
+    expect(co2States(1, 0)).toEqual(['installed', 'available']);
+  });
+
+  it('treats equal running and owned tiers as one baseline', () => {
+    expect(co2States(1, 1)).toEqual(['installed', 'available']);
+  });
+
+  it('offers every tier when none is running or owned', () => {
+    expect(co2States(0, 0)).toEqual(['available', 'available']);
+  });
+});
