@@ -84,6 +84,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       auditRows,
       collectionRows,
       awardRows,
+      communityFeedRows,
       [walletRow],
       ledgerRows,
     ] = await Promise.all([
@@ -188,6 +189,15 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .from(schema.achievementAwards)
         .where(eq(schema.achievementAwards.userId, userId))
         .orderBy(asc(schema.achievementAwards.earnedAt)),
+      db
+        .select({
+          fedAt: schema.communityFeeds.fedAt,
+          food: schema.communityFeeds.food,
+          portion: schema.communityFeeds.portion,
+        })
+        .from(schema.communityFeeds)
+        .where(eq(schema.communityFeeds.userId, userId))
+        .orderBy(asc(schema.communityFeeds.fedAt)),
       db.select().from(schema.wallet).where(eq(schema.wallet.userId, userId)),
       db
         .select()
@@ -269,6 +279,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             ...rest,
             tank: tankName === null || !visible ? null : publicName(tankName),
           })),
+          communityFeeds: communityFeedRows,
           collection: { entries: collectionRows, achievements: awardRows },
           wallet: { balance: walletRow?.balance ?? 0, ledger: ledgerRows },
           tanks: perTank,

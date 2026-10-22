@@ -176,6 +176,13 @@
       "when": 1792622690562,
       "tag": "0024_coral_growth",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792626010804,
+      "tag": "0025_community_tank",
+      "breakpoints": true
     }
   ]
 }
