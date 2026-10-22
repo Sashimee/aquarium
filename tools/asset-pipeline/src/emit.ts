@@ -34,6 +34,7 @@ export interface LodPlan {
   ratios: [number, number, number];
   minTriangles: number;
   keepSeams?: boolean;
+  sloppyFallback?: boolean;
   /** Runs on each primitive of LOD `level` before simplification. */
   prepare?: (prim: Primitive, level: number) => void;
   /** Runs on each primitive of LOD `level` after simplification. */
@@ -211,6 +212,8 @@ export async function writeTextureEntries(
 ): Promise<{ files: WrittenFile[]; textures: OutputAsset['textures'] }> {
   const files: WrittenFile[] = [];
   const textures: OutputAsset['textures'] = [];
+  // The fish loader swaps to a 2k file only where it is larger; the scene loader swaps every `_1k` URL, so those assets keep both files.
+  const loaderSkipsEqualTiers = /^(fish|shrimp)\//.test(dir);
   for (const entry of entries) {
     const variants = await encodeTiers({
       name: entry.name,
@@ -221,6 +224,10 @@ export async function writeTextureEntries(
     });
     const written = {} as Record<Tier, WrittenFile & { size: number; codec: TextureCodec }>;
     for (const tier of ['1k', '2k'] as const) {
+      if (tier === '2k' && loaderSkipsEqualTiers && variants['2k'].size <= variants['1k'].size) {
+        written['2k'] = written['1k'];
+        continue;
+      }
       const file = entry.shared
         ? sharedFile(entry.shared, tier, variants[tier].bytes)
         : writeFileTracked(
@@ -266,6 +273,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
           ratio: plan.ratios[level]!,
           minTriangles: plan.minTriangles,
           ...(plan.keepSeams ? { keepSeams: true } : {}),
+          ...(plan.sloppyFallback ? { sloppyFallback: true } : {}),
         });
         plan.finish?.(prim, level);
       }

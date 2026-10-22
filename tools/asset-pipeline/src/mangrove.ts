@@ -11,7 +11,7 @@ export const MANGROVE_FISH_RECIPES: FishRecipe[] = [
     sourceId: 'sketchfab-c3bc5a29',
     axes: { forward: '+x', up: '+y' },
     keepMaterial: /^ISG111/,
-    lodPlan: { ratios: [0.065, 0.025, 0.01], minTriangles: 150 },
+    lodPlan: { ratios: [0.065, 0.025, 0.01], minTriangles: 150, sloppyFallback: true },
     fallbackLengthM: 0.09,
     hints: { peduncleFromSnout: 0.8241 },
     modifications: [
@@ -24,7 +24,7 @@ export const MANGROVE_FISH_RECIPES: FishRecipe[] = [
     sourceId: 'sketchfab-0fe8a8af',
     axes: { forward: '+x', up: '+y' },
     keepMaterial: /^Q11533/,
-    lodPlan: { ratios: [0.036, 0.014, 0.0055], minTriangles: 150 },
+    lodPlan: { ratios: [0.036, 0.014, 0.0055], minTriangles: 150, sloppyFallback: true },
     fallbackLengthM: 0.11,
     hints: { peduncleFromSnout: 0.8494 },
     modifications: [
@@ -625,6 +625,7 @@ export const MANGROVE_ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     gltf: 'gltf/scene.gltf',
     longestM: 0.3,
     maxTriangles: 4000,
+    material: { normalMaxPx: 512 },
     modifications: ['scaled to a 30 cm prop-root cluster', 'origin moved to the base centre'],
   },
   {

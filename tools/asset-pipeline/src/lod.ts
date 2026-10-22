@@ -17,7 +17,11 @@ export interface SimplifyOptions {
   minTriangles: number;
   /** Forbid collapses across attribute seams, so a UV chart boundary survives simplification. */
   keepSeams?: boolean;
+  /** Finishes with topology-blind simplification when the first pass stalls above the target, as on scans shredded into islands and open borders. */
+  sloppyFallback?: boolean;
 }
+
+const SLOPPY_TRIGGER = 1.25;
 
 const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
   { semantic: 'NORMAL', size: 3, weight: 0.6 },
@@ -118,6 +122,12 @@ export function simplifyPrimitive(prim: Primitive, options: SimplifyOptions): vo
   );
   if (simplified.length === 0)
     throw new Error('simplifyPrimitive: simplification removed every triangle');
-  indicesAccessor.setArray(Uint32Array.from(simplified));
+  let result = simplified;
+  if (options.sloppyFallback && simplified.length > target * 3 * SLOPPY_TRIGGER) {
+    [result] = MeshoptSimplifier.simplifySloppy(simplified, positions, 3, null, target * 3, 1);
+    if (result.length === 0)
+      throw new Error('simplifyPrimitive: sloppy simplification removed every triangle');
+  }
+  indicesAccessor.setArray(Uint32Array.from(result));
   compactPrimitive(prim);
 }

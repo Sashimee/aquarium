@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { assetIndexSchema, type OutputAsset } from './index-schema.ts';
 import { LOFT_FISH_RECIPES } from './loft-fish.ts';
 import {
   MANGROVE_ENVIRONMENT_RECIPES,
@@ -12,6 +14,15 @@ import {
   paintMono,
 } from './mangrove.ts';
 import { ENVIRONMENT_RECIPES, FISH_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
+
+const INDEX_URL = new URL('../../../apps/web/public/assets/index.json', import.meta.url);
+
+function shipped(id: string): OutputAsset {
+  const index = assetIndexSchema.parse(JSON.parse(readFileSync(INDEX_URL, 'utf8')));
+  const asset = index.assets.find((a) => a.id === id);
+  if (!asset) throw new Error(`${id} is not in assets/index.json`);
+  return asset;
+}
 
 const PAINTERS = {
   'banded-archerfish': paintArcherfish,
@@ -99,12 +110,46 @@ describe('mangrove recipes', () => {
     }
   });
 
-  it('pins the mudskipper peduncle at the FishBase SL/TL, since the opened core ends at the tail tip', () => {
-    const peduncle = Object.fromEntries(
-      MANGROVE_FISH_RECIPES.map((r) => [r.id, r.hints?.peduncleFromSnout]),
-    );
-    expect(peduncle['barred-mudskipper']).toBeCloseTo(0.8241, 3);
-    expect(peduncle['blue-spotted-mudskipper']).toBeCloseTo(1 / 1.1773, 3);
+  it('builds mudskippers whose TL/SL matches FishBase within 10%', () => {
+    const literature: Record<string, number> = {
+      'barred-mudskipper': 1 / 0.8241,
+      'blue-spotted-mudskipper': 1.1773,
+    };
+    for (const [id, tlOverSl] of Object.entries(literature)) {
+      const asset = shipped(id);
+      const tl = (asset.bounds?.max[2] ?? 0) - (asset.bounds?.min[2] ?? 0);
+      const standardLengthM = asset.fish?.standardLengthM ?? 0;
+      expect(standardLengthM, id).toBeGreaterThan(0);
+      expect(Math.abs(tl / standardLengthM / tlOverSl - 1), id).toBeLessThan(0.1);
+    }
+  });
+
+  it('ships scan LODs near their planned triangle ratios', () => {
+    for (const recipe of MANGROVE_FISH_RECIPES) {
+      const plan = recipe.lodPlan;
+      if (!plan) throw new Error(`${recipe.id}: scan recipes carry an explicit LOD plan`);
+      const triangles = shipped(recipe.id).lods.map((lod) => lod.triangles);
+      const top = triangles[0] ?? 0;
+      for (const level of [1, 2] as const) {
+        const planned = plan.ratios[level] / plan.ratios[0];
+        const actual = (triangles[level] ?? 0) / top;
+        expect(actual / planned, `${recipe.id} LOD${level}`).toBeGreaterThan(0.75);
+        expect(actual / planned, `${recipe.id} LOD${level}`).toBeLessThan(1.25);
+      }
+    }
+  });
+
+  it('ships no separate 2k file for a fish texture that is no larger than its 1k tier', () => {
+    const ids = [...MANGROVE_FISH_RECIPES, ...MANGROVE_LOFT_RECIPES].map((r) => r.id);
+    for (const id of ids) {
+      for (const texture of shipped(id).textures) {
+        const { '1k': small, '2k': large } = texture.variants;
+        if (large.size > small.size) continue;
+        expect(large.file, `${id} ${texture.name}`).toBe(small.file);
+      }
+    }
+    const roots = shipped('mangrove-prop-roots').textures.find((t) => t.role === 'normal');
+    expect(roots?.variants['2k'].size).toBe(512);
   });
 
   it('gives every fish a standard length in the sourced range', () => {
