@@ -291,7 +291,7 @@ export class TankScene {
 
     const routed = routeDecor(preset.decor, (assetId) => catalog.get(assetId).kind);
     const { hardItems, layoutPlants, anemoneItems } = routed;
-    const euphylliaItems: EuphylliaItem[] = routed.euphylliaItems;
+    const euphylliaItems: EuphylliaItem[] = [...routed.euphylliaItems];
     for (const patch of preset.plantPatches) {
       if (catalog.get(patch.assetId).kind !== 'plant') {
         throw new Error(`Plant patch "${patch.id}" uses ${patch.assetId}, which is not a plant`);
