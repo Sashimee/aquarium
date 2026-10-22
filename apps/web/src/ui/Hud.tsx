@@ -24,6 +24,7 @@ const BIOME_LABEL: Record<Biome, string> = {
 const TANK_TYPES: readonly { biome: PlayableBiome; label: string }[] = [
   { biome: 'freshwater', label: 'Freshwater' },
   { biome: 'reef', label: 'Reef' },
+  { biome: 'cichlid', label: 'Cichlid' },
 ];
 
 function useTimeOfDay(): TimeOfDay | null {
