@@ -40,7 +40,12 @@ describe('the lake notes in the water test kit', () => {
     container.remove();
   });
 
-  const show = (tank: ReturnType<typeof lakeTank>, revealed: boolean, onWaterChange = vi.fn()) => {
+  const show = (
+    tank: ReturnType<typeof lakeTank>,
+    revealed: boolean,
+    onWaterChange = vi.fn(),
+    onCo2Off: (() => unknown) | undefined = undefined,
+  ) => {
     putDip(tank.id, {
       at: Date.now(),
       strip: dipStrip(tank.biome, rawValues(tank)),
@@ -49,7 +54,14 @@ describe('the lake notes in the water test kit', () => {
       revealed,
     });
     act(() =>
-      root.render(<WaterTest tank={tank} species={[demasoni]} onWaterChange={onWaterChange} />),
+      root.render(
+        <WaterTest
+          tank={tank}
+          species={[demasoni]}
+          onWaterChange={onWaterChange}
+          {...(onCo2Off ? { onCo2Off } : {})}
+        />,
+      ),
     );
     return onWaterChange;
   };
@@ -111,5 +123,41 @@ describe('the lake notes in the water test kit', () => {
   it('adds nothing to other biomes', () => {
     show(lakeTank(3, 'freshwater'), true);
     expect(container.querySelector('[data-testid="lake-notes"]')).toBeNull();
+  });
+
+  describe('with the CO2 system running', () => {
+    const acidTank = (co2Tier: number) => {
+      const base = lakeTank(10);
+      return {
+        ...base,
+        chemistry: { ...base.chemistry, ph: 7.0 },
+        equipment: { ...base.equipment, co2: { tier: co2Tier } },
+        co2OwnedTier: co2Tier,
+      };
+    };
+
+    it('offers turning the CO2 off beside the low-pH note and calls it once', async () => {
+      let finish = (): void => undefined;
+      const off = vi.fn(() => new Promise<void>((r) => (finish = r)));
+      show(acidTank(1), true, vi.fn(), off);
+      const note = container.querySelector('[data-metric="ph"]');
+      expect(note?.textContent).toMatch(/CO2 system is pulling the pH down/);
+      const button = () =>
+        container.querySelector<HTMLButtonElement>('[data-metric="ph"] [data-action="co2-off"]');
+      expect(button()?.textContent).toBe('Turn the CO₂ off');
+      expect(container.querySelector('[data-action="lake-water-change"]')).toBeNull();
+      act(() => button()?.click());
+      act(() => button()?.click());
+      expect(off).toHaveBeenCalledTimes(1);
+      expect(button()?.disabled).toBe(true);
+      await act(async () => finish());
+      expect(button()?.disabled).toBe(false);
+    });
+
+    it('does not offer it when the CO2 is already off', () => {
+      show(acidTank(0), true, vi.fn(), vi.fn());
+      expect(container.querySelector('[data-metric="ph"]')).not.toBeNull();
+      expect(container.querySelector('[data-action="co2-off"]')).toBeNull();
+    });
   });
 });

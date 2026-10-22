@@ -185,6 +185,7 @@ describe('api client', () => {
       acceptsGifts: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
+      co2OwnedTier: 0,
       recentVisitDays: 0,
       fish: [],
       memorials: [],
@@ -877,6 +878,15 @@ describe('api client Pearls contract', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       light: { intensity: 0.5, onHour: 22, offHour: 6 },
     });
+  });
+
+  it('sets the CO2 tier with a PATCH carrying only co2, and accepts 0 for off', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture()));
+    await createApiClient(fetcher).setCo2(TANK_A, 0);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ co2: { tier: 0 } });
   });
 
   it('refuses a lamp schedule whose on and off hours are equal', async () => {

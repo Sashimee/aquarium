@@ -144,12 +144,14 @@ function PanelBody({
   food,
   onFood,
   onCollection,
+  onShop,
 }: {
   panel: OpenPanel;
   newTank: ReturnType<typeof usePanels>['newTank'];
   food: ReturnType<typeof useFood>[0];
   onFood: ReturnType<typeof useFood>[1];
   onCollection(): void;
+  onShop(): void;
 }) {
   switch (panel) {
     case 'feed':
@@ -161,7 +163,7 @@ function PanelBody({
     case 'shop':
       return <ShopPanel />;
     case 'care':
-      return <CarePanel />;
+      return <CarePanel onShop={onShop} />;
     case 'tanks':
       return <TanksPanel key={newTank ?? 'default'} newTankBiome={newTank} />;
     case 'report':
@@ -388,6 +390,7 @@ function Shell() {
                   newTank={newTank}
                   food={food}
                   onFood={setFood}
+                  onShop={() => dispatch({ type: 'open', panel: 'shop' })}
                   onCollection={() => {
                     dispatch({ type: 'close' });
                     setBookOpen(true);

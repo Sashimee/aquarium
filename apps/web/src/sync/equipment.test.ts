@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from './bundledEconomy';
 import {
   chooseEquipment,
+  co2Choices,
   deviceOffers,
   devicesForBiome,
   effectText,
@@ -156,5 +157,53 @@ describe('effect text', () => {
     expect(effectText('filter', 1, cp)).toContain('40%');
     expect(effectText('filter', 2, cp)).toContain('80%');
     expect(effectText('filter', 3, cp)).toContain('100%');
+  });
+});
+
+describe('co2Choices', () => {
+  const states = (tank: Parameters<typeof co2Choices>[0]) =>
+    co2Choices(tank, economy).map((c) => [c.label, c.state]);
+
+  it('marks the running tier, free owned tiers, and tiers still to buy', () => {
+    const tank = { ...withTiers({ co2: 1 }), co2OwnedTier: 1 };
+    expect(states(tank)).toEqual([
+      ['Off', 'available'],
+      ['Tier 1', 'running'],
+      ['Tier 2', 'shop'],
+    ]);
+  });
+
+  it('keeps a tier bought earlier free after the CO2 was turned off', () => {
+    const tank = { ...withTiers({ co2: 0 }), co2OwnedTier: 2 };
+    expect(states(tank)).toEqual([
+      ['Off', 'running'],
+      ['Tier 1', 'available'],
+      ['Tier 2', 'available'],
+    ]);
+  });
+
+  it('sends every tier of a tank that owns none to the shop', () => {
+    expect(states({ ...withTiers({}), co2OwnedTier: 0 }).map(([, s]) => s)).toEqual([
+      'running',
+      'shop',
+      'shop',
+    ]);
+  });
+
+  it('greys out every tier a blackwater tank refuses, and keeps Off pickable', () => {
+    const tank = { ...tankFixture({ biome: 'blackwater' }), co2OwnedTier: 2 };
+    const choices = co2Choices(tank, economy);
+    expect(choices.map((c) => c.state)).toEqual(['running', 'refused', 'refused']);
+    expect(choices[1]?.reason).toMatch(/not used in blackwater/);
+  });
+
+  it('lets a blackwater tank that still runs CO2 switch it off', () => {
+    const tank = {
+      ...tankFixture({ biome: 'blackwater', equipment: withTiers({ co2: 1 }).equipment }),
+      co2OwnedTier: 1,
+    };
+    const choices = co2Choices(tank, economy);
+    expect(choices[0]?.state).toBe('available');
+    expect(choices[1]?.state).toBe('running');
   });
 });

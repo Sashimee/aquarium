@@ -288,6 +288,7 @@ export interface ApiClient {
     tankId?: string;
   }): Promise<PurchaseResponse>;
   saveLight(tankId: string, light: LightSchedule): Promise<Tank>;
+  setCo2(tankId: string, tier: number): Promise<Tank>;
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   treat(tankId: string, request: TreatRequest): Promise<TreatResponse>;
@@ -772,6 +773,10 @@ export function createApiClient(
     },
     async saveLight(tankId, light) {
       const body = validate(updateTankRequestSchema, { light });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async setCo2(tankId, tier) {
+      const body = validate(updateTankRequestSchema, { co2: { tier } });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
     },
     async addFish(tankId, input) {

@@ -150,3 +150,43 @@ export function chooseEquipment(
   }
   return { ok: true, ref: equipmentRef(device, tier), price, skipped: tier - current - 1 };
 }
+
+export type Co2ChoiceState = 'running' | 'available' | 'shop' | 'refused';
+
+export interface Co2Choice {
+  tier: number;
+  label: string;
+  state: Co2ChoiceState;
+  reason: string | null;
+}
+
+/** Off and every tier, each marked as running now, free to pick, a shop purchase, or refused by the biome. */
+export function co2Choices(
+  tank: Pick<Tank, 'biome' | 'equipment' | 'co2OwnedTier'>,
+  economy: Economy,
+): Co2Choice[] {
+  const running = tank.equipment.co2.tier;
+  const owned = Math.max(tank.co2OwnedTier, running);
+  const tiers = [0, ...economy.items.equipment.co2.map((_, i) => i + 1)];
+  return tiers.map((tier): Co2Choice => {
+    const label = tier === 0 ? 'Off' : `Tier ${tier}`;
+    const make = (state: Co2ChoiceState, reason: string | null = null): Co2Choice => ({
+      tier,
+      label,
+      state,
+      reason,
+    });
+    if (tier === running) return make('running');
+    const probe: Equipment = {
+      filter: { tier: 0 },
+      heater: { tier: 0 },
+      light: { tier: 0, intensity: 0.5, onHour: 8, offHour: 20 },
+      co2: { tier },
+      waveMaker: { tier: 0 },
+    };
+    if (equipmentProblems(tank.biome, probe).length > 0) {
+      return make('refused', `CO₂ is not used in ${tank.biome} tanks.`);
+    }
+    return make(tier > owned ? 'shop' : 'available');
+  });
+}

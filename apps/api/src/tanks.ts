@@ -649,6 +649,7 @@ export async function render(
     shared: tank.shareTokenHash !== null,
     inGallery: tank.inGallery,
     acceptsGifts: tank.acceptsGifts,
+    co2OwnedTier: tank.co2OwnedTier,
     shareToken: issuedShareToken,
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,

@@ -38,6 +38,7 @@ function apiMocks() {
     wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
     purchase: vi.fn(),
     saveLight: vi.fn(),
+    setCo2: vi.fn(),
     netFish: vi.fn(),
     care: vi.fn(),
     treat: vi.fn(),
@@ -1636,6 +1637,26 @@ describe('Pearls and the T70 request contract', () => {
     await session.purchase('equipment:filter:2', 'Installed.');
     const keys = api.purchase.mock.calls.map((c) => keyOf(c[0]));
     expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('sets the CO2 tier and shows the saved tank', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    const base = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+    api.setCo2.mockResolvedValue({ ...base, equipment: { ...base.equipment, co2: { tier: 0 } } });
+    expect(await session.setCo2(0)).toBe(true);
+    expect(api.setCo2).toHaveBeenCalledWith(TANK_A, 0);
+    expect(session.getState().notice).toBe('The CO₂ is off.');
+  });
+
+  it('shows the server message when the CO2 change is refused', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.setCo2.mockRejectedValue(
+      new ApiRequestError(400, 'validation_failed', 'this tank has not bought CO2 tier 3.'),
+    );
+    expect(await session.setCo2(3)).toBe(false);
+    expect(session.getState().error).toContain('this tank has not bought CO2 tier 3');
   });
 
   it('saves the lamp schedule in UTC hours and shows the saved tank', async () => {
