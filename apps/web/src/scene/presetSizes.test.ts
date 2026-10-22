@@ -35,7 +35,7 @@ const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 const MIN_DEPTH_SHARE = 0.4;
 const GLASS_NUDGE_TOLERANCE = 0.06;
 const MIN_NUDGED_SCALE_SHARE = 0.95;
-const MAX_NUDGED_ITEMS = 6;
+const MAX_NUDGED_ITEMS = { freshwater: 1, reef: 5 } as const;
 
 /**
  * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
@@ -151,6 +151,12 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
         if (drift > 1e-9) {
           nudged.push(item.assetId);
           expect(drift, item.assetId).toBeLessThanOrEqual(GLASS_NUDGE_TOLERANCE);
+          expect(Math.abs(mine.position[0]), item.assetId).toBeLessThanOrEqual(
+            Math.abs(server.position[0]) + 1e-9,
+          );
+          expect(Math.abs(mine.position[2]), item.assetId).toBeLessThanOrEqual(
+            Math.abs(server.position[2]) + 1e-9,
+          );
         }
         expect(mine.scale, item.assetId).toBeLessThanOrEqual(server.scale + 1e-9);
         expect(mine.scale, item.assetId).toBeGreaterThanOrEqual(
@@ -160,7 +166,7 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
         expect(mine.assetId).toBe(server.assetId);
         expect(mine.rotationY).toBe(server.rotationY);
       });
-      expect(nudged.length).toBeLessThanOrEqual(MAX_NUDGED_ITEMS);
+      expect(nudged.length).toBeLessThanOrEqual(MAX_NUDGED_ITEMS[biome]);
     });
 
     it('keeps every decor item inside the glass and under the waterline', () => {
