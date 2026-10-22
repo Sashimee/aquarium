@@ -7,6 +7,7 @@ import { AssetCatalog } from './assets';
 import {
   coralScaleCap,
   coralSlotOrder,
+  placeFragments,
   grownEuphylliaCapsule,
   grownCoralItem,
   matchLayoutCorals,
@@ -212,5 +213,41 @@ describe('grown euphyllia capsule near the glass', () => {
     expect(capped).toBeGreaterThan(nearGlass.scale);
     expect(capped).toBeLessThan(grownColony.size * nearGlass.scale);
     expect(capped).toBeLessThan(rigid);
+  });
+
+  it('flags a euphyllia as swaying and a hard coral as rigid', () => {
+    const cap = coralScaleCap(catalog, dimensions, current());
+    expect(cap.sways?.(nearGlass)).toBe(true);
+    expect(cap.sways?.({ ...nearGlass, assetId: 'brain-coral' })).toBe(false);
+  });
+
+  it('floors a euphyllia fragment at the glass with the real cap, and a hard coral not', () => {
+    const cap = coralScaleCap(catalog, dimensions, current());
+    const [x, z] = [dimensions.length / 2 - dimensions.glass - 0.03, 0.05];
+    const fragment = (assetId: string): Coral => ({
+      ...grownColony,
+      assetId,
+      key: 's1.1',
+      parentKey: 's1',
+      position: [x, z],
+      size: 1,
+      minSize: 1,
+    });
+    const place = (assetId: string) => {
+      const root = { ...nearGlass, assetId, tintSeed: 1 };
+      const colony = { ...grownColony, assetId, size: 1 };
+      const [placed] = placeFragments(
+        [{ assetId, item: root }],
+        [colony, fragment(assetId)],
+        () => 0.07,
+        cap,
+      );
+      return { placed, capAt: placed ? cap(placed.item) : NaN };
+    };
+    const sway = place(nearGlass.assetId);
+    expect(sway.capAt).toBeLessThan(0.25 * nearGlass.scale);
+    expect(sway.placed?.item.scale).toBeCloseTo(0.25 * nearGlass.scale);
+    const rigid = place('brain-coral');
+    expect(rigid.placed?.item.scale).toBeLessThanOrEqual(rigid.capAt + 1e-9);
   });
 });

@@ -120,9 +120,9 @@ export function placeFragments(
     const wanted = root.item.scale * clampedSize(coral);
     const capped = Math.min(wanted, cap(standing));
     const sways = cap.sways?.(standing) ?? parseEuphylliaId(root.assetId) !== null;
-    const scale = !sways
-      ? capped
-      : Math.max(capped, Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION));
+    const scale = sways
+      ? Math.max(capped, Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION))
+      : capped;
     placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;
