@@ -1,4 +1,6 @@
 import { coralSpeciesId, type Coral, type CoralContent, type Equipment } from '@aquarium/shared';
+import type { EventBus } from '../engine/events';
+import type { InteractionEvents } from '../interaction/events';
 import { ApiRequestError } from '../ui/api';
 
 export const DEFAULT_MAX_BLEACH = 0.3;
@@ -150,4 +152,17 @@ export function fragRefusalText(error: unknown, label: string): string | null {
     default:
       return error.message;
   }
+}
+
+/** Follows the coral the player tapped in the tank; a tank load drops it, since keys repeat between tanks. */
+export function followCoralPick(
+  interaction: EventBus<InteractionEvents>,
+  set: (key: string | null) => void,
+): () => void {
+  const offPicked = interaction.on('coral:picked', ({ key }) => set(key));
+  const offLoaded = interaction.on('tank:loaded', () => set(null));
+  return () => {
+    offPicked();
+    offLoaded();
+  };
 }

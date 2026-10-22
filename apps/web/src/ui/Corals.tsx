@@ -1,7 +1,15 @@
 import type { Tank } from '@aquarium/shared';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import type { EventBus } from '../engine/events';
+import type { InteractionEvents } from '../interaction/events';
 import { BUNDLED_CORALS } from '../sync/bundledCorals';
-import { describeBleach, fragChoices, lampWarning, reefIsBleaching } from '../sync/coralCare';
+import {
+  describeBleach,
+  followCoralPick,
+  fragChoices,
+  lampWarning,
+  reefIsBleaching,
+} from '../sync/coralCare';
 import type { SessionState, TankSession } from '../sync/session';
 
 export function CoralSection(props: CoralSectionProps) {
@@ -9,18 +17,22 @@ export function CoralSection(props: CoralSectionProps) {
 }
 
 interface CoralSectionProps {
+  interaction: EventBus<InteractionEvents>;
   session: TankSession;
   state: SessionState;
   tank: Tank;
 }
 
-function CoralSectionBody({ session, state, tank }: CoralSectionProps) {
+function CoralSectionBody({ interaction, session, state, tank }: CoralSectionProps) {
   const id = useId();
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => followCoralPick(interaction, setPicked), [interaction]);
   const [refusal, setRefusal] = useState<{ key: string; text: string } | null>(null);
   const choices = fragChoices(tank.corals, BUNDLED_CORALS.params.fragMaxBleach);
   if (choices.length === 0) return null;
   const warning = lampWarning(tank.corals, tank.equipment.light, BUNDLED_CORALS);
   const bleaching = reefIsBleaching(tank.corals);
+  const pickedLabel = choices.find((c) => c.coral.key === picked)?.label ?? null;
   return (
     <section aria-labelledby={`${id}-h`} className="block">
       <h3 id={`${id}-h`}>Corals</h3>
@@ -37,7 +49,11 @@ function CoralSectionBody({ session, state, tank }: CoralSectionProps) {
       )}
       <ul className="shop">
         {choices.map(({ coral, label, enabled, why }) => (
-          <li key={coral.key}>
+          <li
+            key={coral.key}
+            aria-current={picked === coral.key ? 'true' : undefined}
+            ref={picked === coral.key ? scrollIntoView : undefined}
+          >
             <span>
               {label}: {Math.round(coral.size * 100)}% size, {describeBleach(coral.bleach)}
               {why && <span className="hint"> {why}</span>}
@@ -64,10 +80,19 @@ function CoralSectionBody({ session, state, tank }: CoralSectionProps) {
           </li>
         ))}
       </ul>
+      {pickedLabel && (
+        <p role="status" className="hint">
+          Selected the {pickedLabel}.
+        </p>
+      )}
       <p className="hint">
-        A fragment starts small on the substrate nearby and grows on its own. Cutting takes size
-        from the colony.
+        Tap a coral in the tank to find it here. A fragment starts small on the substrate nearby and
+        grows on its own. Cutting takes size from the colony.
       </p>
     </section>
   );
+}
+
+function scrollIntoView(row: HTMLLIElement | null): void {
+  row?.scrollIntoView?.({ block: 'nearest' });
 }

@@ -1,11 +1,13 @@
-import type { Biome, Collider, Coral, DecorItem, DecorLayout } from '@aquarium/shared';
+import type { Biome, Coral, DecorItem, DecorLayout } from '@aquarium/shared';
 import type { TankDimensions } from '../../engine/tank/dimensions';
 import type { EventBus } from '../../engine/events';
 import type { CatalogEntry } from '../../scene/assets';
 import type { InteractionEvents } from '../events';
 import type { FeederLayer } from './feederLayer';
 import { collidersFor } from './colliders';
-import { growCorals } from './coralColliders';
+import { growCorals, type GrownCorals } from './coralColliders';
+import { pickCoral } from './coralPick';
+import type { RayLike } from './footprint';
 import { layoutKey } from './key';
 import {
   composeLayout,
@@ -179,9 +181,20 @@ export class DecorWorld {
     this.interaction.emit('decor:colliders', { colliders });
   }
 
-  private grownCorals(): { pieces: readonly Piece[]; extra: readonly Collider[] } {
+  /** The coral a world-space ray enters first, at the size and spot it is drawn. */
+  coralAt(ray: RayLike): Coral | null {
     const env = this.coralEnv;
-    if (!env || this.corals.length === 0) return { pieces: this.current, extra: [] };
+    if (!env) return null;
+    return pickCoral(this.grownCorals().placed, this.specs, this.boundsOf(env), ray);
+  }
+
+  private boundsOf(env: CoralEnv): (assetId: string) => CoralBounds | null {
+    return (assetId) => this.catalogBounds.get(assetId) ?? env.proceduralBounds(assetId);
+  }
+
+  private grownCorals(): GrownCorals {
+    const env = this.coralEnv;
+    if (!env || this.corals.length === 0) return { pieces: this.current, extra: [], placed: [] };
     return growCorals({
       pieces: this.current,
       fixed: this.unmanaged,
@@ -189,7 +202,7 @@ export class DecorWorld {
       corals: this.corals,
       dimensions: env.dimensions(),
       ground: (x, z) => this.scene.groundHeight(x, z),
-      boundsOf: (assetId) => this.catalogBounds.get(assetId) ?? env.proceduralBounds(assetId),
+      boundsOf: this.boundsOf(env),
     });
   }
 

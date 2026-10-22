@@ -32,6 +32,13 @@ export interface GrownCorals {
   readonly pieces: readonly Piece[];
   /** Grown procedural corals and every fragment, which the pieces do not carry. */
   readonly extra: readonly Collider[];
+  /** Every coral that has a place in the tank, at the size and spot it is drawn. */
+  readonly placed: readonly PlacedCoral[];
+}
+
+export interface PlacedCoral {
+  readonly coral: Coral;
+  readonly item: DecorItem;
 }
 
 type Origin = { readonly piece: number } | { readonly fixed: number };
@@ -49,7 +56,7 @@ function softCapsule(id: string, item: DecorItem, bounds: CoralBounds): Collider
  */
 export function growCorals(input: CoralColliderInput): GrownCorals {
   const { pieces, fixed, specs, corals, dimensions, ground, boundsOf } = input;
-  if (corals.length === 0) return { pieces, extra: [] };
+  if (corals.length === 0) return { pieces, extra: [], placed: [] };
 
   const slots: CoralSlot[] = [];
   const origins: Origin[] = [];
@@ -71,11 +78,13 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
   const matched = matchLayoutCorals(slots, corals);
   const grownPieces = [...pieces];
   const extra: Collider[] = [];
+  const placed: PlacedCoral[] = [];
   slots.forEach((slot, s) => {
     const origin = origins[s];
     const coral = matched.get(s);
     if (!origin || !coral) return;
     const grown = grownCoralItem(slot.item, coral, cap);
+    placed.push({ coral, item: grown });
     if ('piece' in origin) {
       const piece = pieces[origin.piece];
       if (piece) grownPieces[origin.piece] = { ...piece, item: grown };
@@ -88,6 +97,7 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
   });
 
   for (const { coral, item } of placeFragments(slots, corals, ground, cap)) {
+    placed.push({ coral, item });
     const spec = specs.get(item.assetId);
     if (spec) {
       extra.push(...collidersFor(`coral:${coral.key}`, spec, item));
@@ -96,5 +106,5 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
     const bounds = parseEuphylliaId(item.assetId) ? boundsOf(item.assetId) : null;
     if (bounds) extra.push(softCapsule(`decor:coral:${coral.key}`, item, bounds));
   }
-  return { pieces: grownPieces, extra };
+  return { pieces: grownPieces, extra, placed };
 }

@@ -3,6 +3,8 @@ import type { Coral, Tank } from '@aquarium/shared';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EventBus } from '../engine/events';
+import type { InteractionEvents } from '../interaction/events';
 import { TANK_A, TANK_B, tankFixture } from '../sync/fixtures';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE } from '../sync/state';
@@ -27,12 +29,14 @@ const coral = (over: Partial<Coral> = {}): Coral => ({
 describe('the coral section', () => {
   let container: HTMLElement;
   let root: Root;
+  let interaction: EventBus<InteractionEvents>;
   const fragCoral = vi.fn<(key: string) => Promise<{ ok: boolean; refusal: string | null }>>();
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
+    interaction = new EventBus<InteractionEvents>();
     fragCoral.mockReset();
     fragCoral.mockResolvedValue({ ok: true, refusal: null });
   });
@@ -46,7 +50,12 @@ describe('the coral section', () => {
     const session = { fragCoral } as unknown as TankSession;
     await act(async () => {
       root.render(
-        <CoralSection session={session} state={{ ...INITIAL_STATE, busy }} tank={tank} />,
+        <CoralSection
+          interaction={interaction}
+          session={session}
+          state={{ ...INITIAL_STATE, busy }}
+          tank={tank}
+        />,
       );
     });
   }
@@ -143,5 +152,62 @@ describe('the coral section', () => {
       }),
     );
     expect(container.textContent).not.toContain('too bright');
+  });
+
+  const rows = (): HTMLLIElement[] => Array.from(container.querySelectorAll('li'));
+  const currentRows = (): HTMLLIElement[] =>
+    rows().filter((row) => row.getAttribute('aria-current') === 'true');
+
+  it('marks the coral the player tapped in the tank and says so', async () => {
+    await mount(
+      tankFixture({
+        biome: 'reef',
+        corals: [coral(), coral({ key: 's2', assetId: 'brain-coral', size: 1.2 })],
+      }),
+    );
+    expect(currentRows()).toHaveLength(0);
+    await act(async () => interaction.emit('coral:picked', { key: 's2' }));
+    expect(currentRows()).toHaveLength(1);
+    expect(currentRows()[0]?.textContent).toContain('brain coral');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      'Selected the brain coral.',
+    );
+  });
+
+  it('moves the mark with each tap and clears it when the tap hits no coral', async () => {
+    await mount(
+      tankFixture({
+        biome: 'reef',
+        corals: [coral(), coral({ key: 's2', assetId: 'brain-coral' })],
+      }),
+    );
+    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+    await act(async () => interaction.emit('coral:picked', { key: 's2' }));
+    expect(currentRows().map((r) => r.textContent)).toEqual([
+      expect.stringContaining('brain coral'),
+    ]);
+    await act(async () => interaction.emit('coral:picked', { key: null }));
+    expect(currentRows()).toHaveLength(0);
+  });
+
+  it("ignores a pick that is not one of this tank's corals", async () => {
+    await mount(tankFixture({ biome: 'reef', corals: [coral()] }));
+    await act(async () => interaction.emit('coral:picked', { key: 'gone' }));
+    expect(currentRows()).toHaveLength(0);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('forgets the pick when another tank loads', async () => {
+    await mount(tankFixture({ id: TANK_A, biome: 'reef', corals: [coral()] }));
+    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+    await mount(tankFixture({ id: TANK_B, biome: 'reef', corals: [coral()] }));
+    expect(currentRows()).toHaveLength(0);
+  });
+
+  it('keeps cutting a picked coral on the same button', async () => {
+    await mount(tankFixture({ biome: 'reef', corals: [coral()] }));
+    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+    await click(cutButtons()[0]);
+    expect(fragCoral).toHaveBeenCalledWith('s1');
   });
 });
