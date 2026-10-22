@@ -161,56 +161,6 @@ export function reconcileCorals(
   return [...roots, ...stored.filter((c) => c.parentKey !== null && alive.has(c.key))];
 }
 
-export interface RootMove {
-  readonly from: readonly [number, number];
-  readonly to: readonly [number, number];
-}
-
-/**
- * Moves fragments cut in raw preset coordinates by the shift of their colony's root. A fragment
- * counts as raw only while it lies within cutting reach of where its parent was and out of reach of
- * where the parent is now, so a second run finds nothing left to move.
- */
-export function rehomeFrags(
-  corals: readonly CoralState[],
-  roots: ReadonlyMap<string, RootMove>,
-  table: CoralTable,
-  bounds: PlantBounds,
-): CoralState[] {
-  const reach = table.params.fragRadiusM + 1e-6;
-  const limitX = Math.max(0, bounds.halfX - table.params.edgeMarginM);
-  const limitZ = Math.max(0, bounds.halfZ - table.params.edgeMarginM);
-  const moves = new Map(roots);
-  const rehomed = new Map<string, CoralState>();
-  let pending = corals.filter((c) => c.parentKey !== null && c.position !== null);
-  for (let progressed = true; progressed && pending.length > 0;) {
-    progressed = false;
-    const waiting: CoralState[] = [];
-    for (const frag of pending) {
-      const parent = frag.parentKey === null ? undefined : moves.get(frag.parentKey);
-      if (!parent || !frag.position) {
-        waiting.push(frag);
-        continue;
-      }
-      progressed = true;
-      const [x, z] = frag.position;
-      const raw =
-        Math.hypot(x - parent.from[0], z - parent.from[1]) <= reach &&
-        Math.hypot(x - parent.to[0], z - parent.to[1]) > reach;
-      const to: [number, number] = raw
-        ? [
-            clamp(x + parent.to[0] - parent.from[0], -limitX, limitX),
-            clamp(z + parent.to[1] - parent.from[1], -limitZ, limitZ),
-          ]
-        : [x, z];
-      moves.set(frag.key, { from: [x, z], to });
-      if (raw) rehomed.set(frag.key, { ...frag, position: to });
-    }
-    pending = waiting;
-  }
-  return corals.map((c) => rehomed.get(c.key) ?? c);
-}
-
 function rootOf(corals: readonly CoralState[], coral: CoralState): CoralState {
   let current = coral;
   while (current.parentKey !== null) {
