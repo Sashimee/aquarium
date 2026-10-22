@@ -373,6 +373,7 @@ function OfferGroup({
 
 export function GiftNotice({ session }: { session: TankSession }) {
   const book = useGiftBook(session);
+  useEffect(() => () => book.clearMessages(), [book]);
   const bookState = useSyncExternalStore(book.subscribe, book.getState);
   return <div role="status">{bookState.notice}</div>;
 }
@@ -385,6 +386,7 @@ export function GiftOffers({ session, state }: { session: TankSession; state: Se
 
   useEffect(() => {
     void book.refresh();
+    return () => book.clearMessages();
   }, [book]);
 
   const waiting = offersNeedingMe(bookState.offers, now);
