@@ -94,6 +94,9 @@ export const BEHAVIOUR = {
   gulpArriveBodyLengths: 0.65,
   gulpHoldS: 0.3,
   gulpTimeoutS: 10,
+  gulpLandBodyLengths: 1.5,
+  gulpPathSamples: 5,
+  gulpPathClearBodyLengths: 0.5,
 
   grazeMeanIntervalS: 20,
   grazeMinS: 1.5,
@@ -217,6 +220,8 @@ export interface BehaviourHost {
   canTurnAt(i: number, x: number, y: number, z: number): boolean;
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number;
+  /** Whether fish `i` could hold against the current everywhere straight up to height `top`. */
+  holdsColumn(i: number, top: number): boolean;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -409,6 +414,8 @@ export class Behaviour {
 
   private gulpPhase: Uint8Array;
   private gulpTimer: Float64Array;
+  /** 1 while a fish needs a breath but has no open water above it to rise through. */
+  private gulpDue: Uint8Array;
 
   private grazePhase: Uint8Array;
   private grazeTimer: Float64Array;
@@ -525,6 +532,7 @@ export class Behaviour {
     this._territoryTarget = new Int32Array(n).fill(-1);
     this.gulpPhase = new Uint8Array(n);
     this.gulpTimer = new Float64Array(n);
+    this.gulpDue = new Uint8Array(n);
     this.grazePhase = new Uint8Array(n);
     this.grazeTimer = new Float64Array(n);
     this.grazeNext = new Float64Array(n);
@@ -600,6 +608,7 @@ export class Behaviour {
     this._territoryTarget = edit.array(this.territoryTarget, 1, -1);
     this.gulpPhase = edit.array(this.gulpPhase);
     this.gulpTimer = edit.array(this.gulpTimer);
+    this.gulpDue = edit.array(this.gulpDue);
     this.grazePhase = edit.array(this.grazePhase);
     this.grazeTimer = edit.array(this.grazeTimer);
     this.grazeNext = edit.array(this.grazeNext);
@@ -2421,7 +2430,11 @@ export class Behaviour {
     plan.state = FishState.Forage;
     if (sp.airGulp) {
       const p = 1 - Math.exp(-(sp.gulpsPerHour / 3600) * DT);
-      if (rng.next() < p) {
+      if (rng.next() < p) this.gulpDue[i] = 1;
+      // Kramer 1983: an air-breather puts off a costly trip to the surface, so a breath waits
+      // for open water it can hold against rather than sweeping the fish into glass or rock.
+      if (at(this.gulpDue, i) === 1 && this.gulpPathOpen(i, length)) {
+        this.gulpDue[i] = 0;
         this.gulpPhase[i] = GulpPhase.Ascend;
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
         this.planGulp(i, plan);
@@ -2450,7 +2463,34 @@ export class Behaviour {
     }
   }
 
-  /** Corydoras rise to the surface for a gulp of air and dart back down (Kramer & McClure 1980). */
+  private gulpTop(length: number): number {
+    return this.host.basin.maxY - BEHAVIOUR.gulpTopBodyLengths * length;
+  }
+
+  /**
+   * Whether fish `i` has a clear rise straight up to the air: no rock or wood overhead, and no
+   * current on the way it would struggle against.
+   */
+  private gulpPathOpen(i: number, length: number): boolean {
+    const top = this.gulpTop(length);
+    const { decorSdf, position } = this.host;
+    if (decorSdf !== null) {
+      const x = at(position, i * 3);
+      const y = at(position, i * 3 + 1);
+      const z = at(position, i * 3 + 2);
+      const clear = BEHAVIOUR.gulpPathClearBodyLengths * length;
+      const last = BEHAVIOUR.gulpPathSamples - 1;
+      for (let k = 0; k <= last; k++) {
+        if (decorSdf.sample(x, y + ((top - y) * k) / last, z, this.n3) < clear) return false;
+      }
+    }
+    return this.host.holdsColumn(i, top);
+  }
+
+  /**
+   * Corydoras rise to the surface for a gulp of air and dart back down (Kramer & McClure 1980),
+   * turning back for the bottom if the current above grows more than they can hold against.
+   */
   private planGulp(i: number, plan: Plan): void {
     const length = at(this.host.bodyLength, i);
     const { basin } = this.host;
@@ -2471,10 +2511,15 @@ export class Behaviour {
     plan.bandHi = h;
     const left = at(this.gulpTimer, i) - DT;
     this.gulpTimer[i] = left;
-    const top = h - BEHAVIOUR.gulpTopBodyLengths * length;
-    const phase = at(this.gulpPhase, i);
+    const top = this.gulpTop(length);
+    let phase = at(this.gulpPhase, i);
+    if (phase !== GulpPhase.Descend && !this.host.holdsColumn(i, top)) {
+      phase = GulpPhase.Descend;
+      this.gulpPhase[i] = phase;
+      this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
+    }
     if (phase === GulpPhase.Ascend) {
-      plan.seek(px, top, pz, speed, 0.3);
+      plan.seek(px, top, pz, speed, 0.6);
       if (py >= h - BEHAVIOUR.gulpArriveBodyLengths * length) {
         this.gulpPhase[i] = GulpPhase.Hold;
         this.gulpTimer[i] = BEHAVIOUR.gulpHoldS;
@@ -2489,9 +2534,12 @@ export class Behaviour {
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
       }
     } else {
+      plan.floor = true;
       const above = BEHAVIOUR.forageBandHighBodyLengths * length;
-      plan.seek(px, ground + above, pz, speed, 0.3);
-      if (py - ground <= 1.5 * above || left <= 0) this.gulpPhase[i] = GulpPhase.None;
+      plan.seek(px, ground + above, pz, speed, 0.6);
+      if (py - ground <= BEHAVIOUR.gulpLandBodyLengths * length || left <= 0) {
+        this.gulpPhase[i] = GulpPhase.None;
+      }
     }
   }
 

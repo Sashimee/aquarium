@@ -13,12 +13,12 @@
   "chemistry": {
     "khMin": 0,
     "nitriteTolerance": 0.2,
-    "phRange": [5, 7],
+    "phRange": [5.5, 7],
     "salinityPpt": [0, 1],
     "sources": [
-      "FishBase (fishbase.se) species summary",
-      "SeriouslyFish species profile (seriouslyfish.com)",
-      "Mikolji, Dwarf cichlid Apistogramma hongsloi in the wild (mikolji.com): its spring-fed streams run below pH 5, so pH 5 is still home water"
+      "FishBase (fishbase.se) species summary: pH 5.5 to 6.0, 23 to 30 C (Ref. 2060)",
+      "SeriouslyFish species profile (seriouslyfish.com): 23 to 29 C, pH 5.5 to 7.0, 1 to 15 dGH",
+      "Mikolji, Dwarf cichlid Apistogramma hongsloi in the wild (mikolji.com): its spring-fed streams run below pH 5; the floor follows the aquarium sources, as the blackwater target is pH 6.0"
     ],
     "temperatureC": [23, 29]
   },

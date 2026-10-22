@@ -14,6 +14,7 @@ import {
   spawnMany,
 } from './fixtures.ts';
 import { TankSdf, type TankDimensions } from './sdf.ts';
+import { FishState } from './snapshot.ts';
 import { toSimSpecies } from './species.ts';
 import { WAVE_MAKER } from './waveMaker.ts';
 import { World } from './world.ts';
@@ -233,6 +234,67 @@ describe('every shipped species in a full-power wave maker current', { timeout: 
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
     expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
   });
+});
+
+describe('air-gulp darts in a full-power wave maker current', { timeout: LONG }, () => {
+  const MAX_GULPS_PER_HOUR = 120;
+  const gulpers = roster
+    .map((r) => r.species)
+    .filter((s) => s.behaviour.traits.includes('air-gulp'))
+    .map((s) => ({
+      ...s,
+      behaviour: { ...s.behaviour, airGulp: { perHour: MAX_GULPS_PER_HOUR } },
+    }));
+
+  it('finds every air-gulping species', () => {
+    expect(gulpers.map((s) => s.id).sort()).toEqual([
+      'barred-mudskipper',
+      'blue-spotted-mudskipper',
+      'bronze-corydoras',
+    ]);
+  });
+
+  it.each(gulpers.map((s) => ({ id: s.id, s })))(
+    'stay under the contact budget at the top gulp rate, and still gulp: $id',
+    ({ s }) => {
+      const species = [...roster.map((r) => r.species).filter((r) => r.id !== s.id), s];
+      let worst = Infinity;
+      let contacts = 0;
+      let fishSteps = 0;
+      let gulps = 0;
+      for (const seed of CONTACT_SEEDS) {
+        const w = new World({
+          seed,
+          tank: SHOW_TANK,
+          species,
+          decor: SHOW_DECOR,
+          fish: spawnsOf(s, fishCount(s)),
+          waveMaker: {
+            direction: [1, 0.3],
+            speedMps: WAVE_MAKER.maxSpeedMps,
+            mode: 'steady',
+            periodS: WAVE_MAKER.pulsePeriodS,
+          },
+        });
+        const clearance = bruteClearance(w, SHOW_TANK, SHOW_DECOR);
+        const gulping = new Uint8Array(w.count);
+        for (let t = 0; t < 10_000; t++) {
+          w.step();
+          for (let i = 0; i < w.count; i++) {
+            worst = Math.min(worst, clearance(i));
+            const now = w.state[i] === FishState.Gulp ? 1 : 0;
+            if (now === 1 && gulping[i] === 0) gulps++;
+            gulping[i] = now;
+          }
+        }
+        contacts += w.contacts;
+        fishSteps += w.count * 10_000;
+      }
+      expect(worst).toBeGreaterThanOrEqual(-1e-9);
+      expect(contacts / fishSteps).toBeLessThan(1e-3);
+      expect(gulps).toBeGreaterThan(0);
+    },
+  );
 });
 
 describe('a mixed community left alone', { timeout: LONG }, () => {

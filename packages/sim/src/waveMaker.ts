@@ -42,6 +42,7 @@ export const WAVE_MAKER = {
   stressTauS: 5,
   refugeProbeBodyLengths: 1,
   refugeMinGradient: 0.05,
+  columnSamples: 5,
 } as const;
 
 /** Along the tank's length, the way a powerhead on the left pane pushes. */
@@ -378,6 +379,27 @@ export class Currents {
     out[0] = fx * share;
     out[1] = fy * share;
     out[2] = fz * share;
+  }
+
+  /**
+   * Whether fish `i` could swim at an easy, sustained effort against the flow everywhere
+   * straight up from it to height `top`. Always true with no wave maker.
+   */
+  holdsColumn(host: CurrentsHost, i: number, top: number): boolean {
+    const field = this.field;
+    if (field === null) return true;
+    const o = i * 3;
+    const x = host.position[o] ?? 0;
+    const y = host.position[o + 1] ?? 0;
+    const z = host.position[o + 2] ?? 0;
+    const easy = WAVE_MAKER.sustainedFraction * this.holdSpeed(host, i);
+    const last = WAVE_MAKER.columnSamples - 1;
+    for (let k = 0; k <= last; k++) {
+      if (this.speedAt(host, field, x, y + ((top - y) * k) / last, z, host.time) > easy) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

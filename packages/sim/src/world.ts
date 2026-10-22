@@ -2077,6 +2077,11 @@ export class World {
     return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
   }
 
+  /** Whether fish `i` could hold against the current everywhere straight up to height `top`. */
+  holdsColumn(i: number, top: number): boolean {
+    return this.currents.holdsColumn(this, i, top);
+  }
+
   /**
    * Whether a fish of `speciesId` could feed on an item fixed at (x, y, z), as the feeding AI
    * judges it: the item is not buried in sand or rock, and the fish can turn round, level, at the
