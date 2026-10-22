@@ -136,3 +136,103 @@ describe('the public links migration on tanks that are already shared', () => {
     ]);
   });
 });
+
+describe('the blackwater CO2 migration on tanks that already have CO2', () => {
+  let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
+  let database: Database;
+  let oldDir: string;
+  const tankId = (n: number) => `00000000-0000-4000-8000-00000000010${n}`;
+  const withCo2 = (tier: number) => JSON.stringify({ ...DEFAULT_EQUIPMENT, co2: { tier } });
+
+  const balance = async (userId: string) =>
+    Number(
+      (
+        await database.pool.query<{ balance: number }>(
+          'select balance from wallet where user_id = $1',
+          [userId],
+        )
+      ).rows[0]?.balance,
+    );
+  const ledgerSum = async (userId: string) =>
+    Number(
+      (
+        await database.pool.query<{ sum: string }>(
+          'select coalesce(sum(delta), 0) as sum from ledger where user_id = $1',
+          [userId],
+        )
+      ).rows[0]?.sum,
+    );
+
+  beforeAll(async () => {
+    testDb = await createTestDatabase();
+    database = connect(testDb.url);
+    oldDir = migrationsUpTo(26);
+    await migrate(drizzle(database.pool), { migrationsFolder: oldDir });
+    await database.pool.query(
+      `insert into "user" (id, name, email) values ('bw1', 'Black', 'bw1@bas.lu'), ('bw2', 'Plain', 'bw2@bas.lu')`,
+    );
+    await database.pool.query(
+      `insert into wallet (user_id, balance) values ('bw1', 1000), ('bw2', 1000)`,
+    );
+    await database.pool.query(
+      `insert into ledger (user_id, delta, reason, source, item_ref, idempotency_key)
+       values ('bw1', 1000, 'grant', 'game', 'grant:start', 'start'), ('bw2', 1000, 'grant', 'game', 'grant:start', 'start')`,
+    );
+    await database.pool.query(
+      `insert into tanks (id, owner_id, biome, name, equipment) values
+        ($1, 'bw1', 'blackwater', 'Tier two', $5),
+        ($2, 'bw1', 'blackwater', 'Tier one', $6),
+        ($3, 'bw1', 'blackwater', 'Clean', $7),
+        ($4, 'bw2', 'freshwater', 'Planted', $5)`,
+      [tankId(1), tankId(2), tankId(3), tankId(4), withCo2(2), withCo2(1), withCo2(0)],
+    );
+    await runMigrations(database);
+  });
+
+  afterAll(async () => {
+    await database.close();
+    await testDb.drop();
+    rmSync(oldDir, { recursive: true, force: true });
+  });
+
+  it('sets CO2 to 0 on blackwater tanks only', async () => {
+    const { rows } = await database.pool.query<{ name: string; equipment: unknown }>(
+      'select name, equipment from tanks order by name',
+    );
+    const tiers = Object.fromEntries(
+      rows.map((r) => [r.name, equipmentSchema.parse(r.equipment).co2.tier]),
+    );
+    expect(tiers).toEqual({ 'Tier two': 0, 'Tier one': 0, Clean: 0, Planted: 2 });
+  });
+
+  it('refunds each removed unit through the ledger and keeps wallet and ledger in step', async () => {
+    expect(await balance('bw1')).toBe(1000 + 700 + 300);
+    expect(await ledgerSum('bw1')).toBe(await balance('bw1'));
+    const { rows } = await database.pool.query<{ delta: number; reason: string; item_ref: string }>(
+      `select delta, reason, item_ref from ledger where user_id = 'bw1' and delta <> 1000 order by delta`,
+    );
+    expect(rows).toEqual([
+      { delta: 300, reason: 'grant', item_ref: 'grant:co2-removed-from-blackwater' },
+      { delta: 700, reason: 'grant', item_ref: 'grant:co2-removed-from-blackwater' },
+    ]);
+  });
+
+  it('refunds nobody else', async () => {
+    expect(await balance('bw2')).toBe(1000);
+    expect(await ledgerSum('bw2')).toBe(1000);
+  });
+
+  it('is idempotent: running it again refunds nothing more', async () => {
+    const sql = readFileSync(join(DRIZZLE, '0027_blackwater_co2_removed.sql'), 'utf8');
+    const client = await database.pool.connect();
+    try {
+      await client.query('begin');
+      for (const statement of sql.split('--> statement-breakpoint')) await client.query(statement);
+      await client.query('commit');
+    } finally {
+      client.release();
+    }
+    expect(await balance('bw1')).toBe(2000);
+    expect(await ledgerSum('bw1')).toBe(2000);
+  });
+});

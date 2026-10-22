@@ -27,7 +27,7 @@ export const NEW_TANK_CHEMISTRY_BY_BIOME: Readonly<Record<Biome, Chemistry>> = {
   cichlid: { nitrite: 0, ph: 8.2, kh: 10, temperatureC: 25, salinity: 0, bacteria: SEEDED_FILTER },
   blackwater: {
     nitrite: 0,
-    ph: 5.5,
+    ph: 6,
     kh: 1,
     temperatureC: 27,
     salinity: 0,

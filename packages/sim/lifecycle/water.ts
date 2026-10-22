@@ -1,10 +1,11 @@
-import type {
-  Bacteria,
-  Biome,
-  Chemistry,
-  ChemistryParameters,
-  Equipment,
-  Water,
+import {
+  usableEquipment,
+  type Bacteria,
+  type Biome,
+  type Chemistry,
+  type ChemistryParameters,
+  type Equipment,
+  type Water,
 } from '@aquarium/shared';
 import { fishBioload } from './fish.ts';
 import {
@@ -131,6 +132,7 @@ export function stepWater(
 ): { water: Water; chemistry: Chemistry } {
   const { water, chemistry } = state;
   const { dtHours, params, chemistryParams: cp } = ctx;
+  const equipment = usableEquipment(ctx.biome, ctx.equipment);
   const { bioload, perHour: massPerHour } = ammoniaProduction(fish, ctx.species);
   const dilution = REFERENCE_TANK_LITRES / ctx.litres;
   const concentration = dilution ** VOLUME_CONCENTRATION_EXPONENT;
@@ -178,7 +180,7 @@ export function stepWater(
   const kh = Math.max(0, chemistry.kh - cp.kh.consumedPerNitrate * nitrateMade);
   const phTarget =
     cp.ph.target[ctx.biome] -
-    atTier(cp.equipment.co2.phDropPerTier, ctx.equipment.co2.tier) -
+    atTier(cp.equipment.co2.phDropPerTier, equipment.co2.tier) -
     (cp.ph.acidificationPerNitrate * nitrate) / Math.max(kh, cp.ph.minBufferKh);
 
   const heater = ctx.equipment.heater.tier;
@@ -202,7 +204,7 @@ export function stepWater(
       algae: Math.min(
         1,
         water.algae +
-          params.algaePerHour * algaeMultiplier(ctx.equipment, cp, ctx.nowMs, dtHours) * dtHours,
+          params.algaePerHour * algaeMultiplier(equipment, cp, ctx.nowMs, dtHours) * dtHours,
       ),
       uneatenFood: Math.max(0, water.uneatenFood - decayed),
     },

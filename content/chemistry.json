@@ -28,7 +28,7 @@
       "freshwater": 7,
       "reef": 8.2,
       "cichlid": 8.2,
-      "blackwater": 5.5,
+      "blackwater": 6,
       "mangrove": 8
     },
     "driftPerHour": 0.02,
@@ -92,7 +92,10 @@
     ],
     "ph": [
       "Wurts & Durborow 1992, Interactions of pH, carbon dioxide, alkalinity and hardness in fish ponds, SRAC 464: nitrification consumes alkalinity and lowers pH where the buffer is weak",
-      "Biome targets are typical hobby values for each water type"
+      "Biome targets are typical hobby values for each water type",
+      "Blackwater: wild Rio Negro water is about pH 4 to 5 with almost no carbonate hardness (Küchler, Miekeley & Forsberg 2000, J. Braz. Chem. Soc. 11(3), A contribution to the chemical characterization of rivers in the Rio Negro Basin, Brazil; Furch 1984 in Sioli (ed.), The Amazon, Junk)",
+      "The blackwater target of 6.0 is a deliberate hobby-practice value set above the wild figures: the species are kept and bred at pH 5.5 to 6.5 (SeriouslyFish profiles for Paracheirodon axelrodi and Apistogramma hongsloi), and it keeps nitrate acidification above the 5.5 floor used for the weakest species",
+      "CO2 is not offered in blackwater: with KH about 1 there is almost no carbonate buffer, so injected CO2 would crash the pH (same SRAC 464 reasoning)"
     ],
     "kh": [
       "Wurts & Durborow 1992, SRAC 464: nitrification consumes about 7 mg alkalinity as CaCO3 per mg ammonia-N",
