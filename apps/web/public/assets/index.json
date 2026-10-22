@@ -3537,7 +3537,7 @@
         "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
         "fin mask and fin id vertex attributes generated analytically",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "Tetraodon biocellatus: no model and no allowed photo, so the body is a procedural loft and the colour map is painted from the species description alone",
+        "Dichotomyctere ocellatus: no model and no allowed photo, so the body is a procedural loft and the colour map is painted from the species description alone",
         "colour map re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
