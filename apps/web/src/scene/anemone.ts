@@ -31,7 +31,7 @@ export const SWAY_ATTRIBUTE = '_sway';
 export const WAVES_PER_WRAP = 12;
 const WAVE_METRES = 0.012;
 /** Seconds of current a tentacle tip leans into. */
-const LEAN_SECONDS = 0.35;
+export const LEAN_SECONDS = 0.35;
 const TWO_PI = Math.PI * 2;
 
 /**

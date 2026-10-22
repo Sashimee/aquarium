@@ -25,7 +25,7 @@ export class RoomPreference {
     this.events?.addEventListener('storage', this.onStorage);
   }
 
-  /** Stops following other tabs. */
+  /** Stops following other tabs and drops every subscriber. */
   dispose(): void {
     this.events?.removeEventListener('storage', this.onStorage);
     this.listeners.clear();
@@ -51,6 +51,7 @@ export class RoomPreference {
   }
 
   private readonly onStorage = (event: StorageEvent): void => {
+    if (event.storageArea !== this.storage) return;
     // A null key means the whole store was cleared.
     if (event.key !== null && event.key !== ROOM_STORAGE_KEY) return;
     const next = this.read();
