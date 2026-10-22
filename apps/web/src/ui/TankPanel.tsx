@@ -18,7 +18,7 @@ import {
   type SpeciesNames,
 } from '../sync/life';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
-import { doseOptions } from '../sync/doses';
+import { doseButtonId, doseOptions } from '../sync/doses';
 import { priceOrFree, priceText, tankPrice } from '../sync/economy';
 import { checkTankName, suggestTankName } from '../sync/naming';
 import { salinityNotice, type SalinityNotice } from '../sync/salinityCare';
@@ -412,7 +412,7 @@ function Care({
               {' '}
               <button
                 type="button"
-                onClick={() => document.getElementById(`${id}-${saltDose.type}`)?.focus()}
+                onClick={() => document.getElementById(doseButtonId('salt_dose'))?.focus()}
               >
                 Go to {saltDose.label.toLowerCase()}
               </button>
@@ -455,7 +455,7 @@ function Care({
               </div>
               <button
                 type="button"
-                id={`${id}-${dose.type}`}
+                id={doseButtonId(dose.type)}
                 data-action={dose.type}
                 disabled={state.busy || dose.disabledReason !== null}
                 onClick={() =>

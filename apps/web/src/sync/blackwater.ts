@@ -64,6 +64,7 @@ export function blackwaterPhGuidance(
   tank: Tank,
   species: readonly SpeciesSummary[],
   ph: number,
+  canAddBotanicals = false,
 ): PhGuidance | null {
   const a = assess(tank, species, ph);
   if (!a) return null;
@@ -80,6 +81,12 @@ export function blackwaterPhGuidance(
         text: `pH ${shown}. The fish in this tank do not share a pH range. Check each fish card and keep only the ones that agree.`,
       };
     case 'too-high':
+      if (canAddBotanicals) {
+        return {
+          standing: a.standing,
+          text: `pH ${shown} is above your fish's ${a.window}. Botanicals release humic acids that lower the pH a little, and a water change will not. CO₂ is not used in blackwater.`,
+        };
+      }
       return {
         standing: a.standing,
         text: `pH ${shown} is above your fish's ${a.window}. Soft blackwater drifts back toward pH 6 on its own, and a water change will not lower it, so wait and test again. CO₂ is not used in blackwater.`,

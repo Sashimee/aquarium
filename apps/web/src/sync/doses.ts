@@ -2,6 +2,8 @@ import type { ChemistryParameters, Economy, Tank } from '@aquarium/shared';
 
 export type DoseType = 'salt_dose' | 'buffer_dose' | 'add_botanicals';
 
+export const doseButtonId = (type: DoseType): string => `dose-${type}`;
+
 export interface DoseOption {
   type: DoseType;
   label: string;

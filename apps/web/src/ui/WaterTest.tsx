@@ -17,6 +17,8 @@ import {
   type SuitKey,
 } from '../sync/waterTest';
 import { blackwaterPhGuidance } from '../sync/blackwater';
+import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { doseButtonId, doseOptions } from '../sync/doses';
 import { getDip, putDip, type Dip } from './dipStore';
 
 const SUIT_KEY: Partial<Record<PadId, SuitKey>> = { ph: 'ph', kh: 'kh', salinity: 'salinity' };
@@ -105,15 +107,30 @@ export function PhAdvice({
   const reading = dip.strip.ph;
   const known = reading !== undefined && (dip.revealed || dip.guesses.ph !== undefined);
   if (!known) return null;
+  const botanicals = doseOptions(tank, BUNDLED_CHEMISTRY, BUNDLED_ECONOMY).find(
+    (d) => d.type === 'add_botanicals' && d.disabledReason === null,
+  );
   const guidance = blackwaterPhGuidance(
     tank,
     species,
     PADS.ph.steps[reading.stepIndex]?.value ?? reading.value,
+    botanicals !== undefined,
   );
   if (!guidance) return null;
   return (
     <p className="ph-advice" data-ph-standing={guidance.standing} role="status">
       {guidance.text}
+      {botanicals && guidance.standing === 'too-high' && (
+        <>
+          {' '}
+          <button
+            type="button"
+            onClick={() => document.getElementById(doseButtonId(botanicals.type))?.focus()}
+          >
+            Go to {botanicals.label.toLowerCase()}
+          </button>
+        </>
+      )}
     </p>
   );
 }
