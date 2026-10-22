@@ -59,6 +59,7 @@ const MVP_ROSTER = [
   ['cleaner-wrasse', 'Labroides dimidiatus', 'reef'],
   ['discus', 'Symphysodon aequifasciatus', 'freshwater'],
   ['dwarf-pencilfish', 'Nannostomus marginatus', 'blackwater'],
+  ['figure-8-puffer', 'Dichotomyctere ocellatus', 'freshwater'],
   ['firefish', 'Nemateleotris magnifica', 'reef'],
   ['guppy', 'Poecilia reticulata', 'freshwater'],
   ['harlequin-rasbora', 'Trigonostigma heteromorpha', 'freshwater'],

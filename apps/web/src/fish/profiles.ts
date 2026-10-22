@@ -224,6 +224,13 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     roughness: 0.5,
     nightPaling: 0.2,
   },
+  // Puffers are scaleless, their skin set with fine spinules rather than guanine-backed scales.
+  'figure-8-puffer': {
+    ...DEFAULTS,
+    assetId: 'figure-8-puffer',
+    iridescence: 0.05,
+    roughness: 0.45,
+  },
   'pseudotropheus-demasoni': {
     ...DEFAULTS,
     assetId: 'pseudotropheus-demasoni',

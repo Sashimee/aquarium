@@ -37,7 +37,8 @@
     "cardinal-tetra": { "juvenile": 20, "adult": 50 },
     "rummy-nose-tetra": { "juvenile": 25, "adult": 60 },
     "dwarf-pencilfish": { "juvenile": 25, "adult": 60 },
-    "apistogramma-hongsloi": { "juvenile": 100, "adult": 250 }
+    "apistogramma-hongsloi": { "juvenile": 100, "adult": 250 },
+    "figure-8-puffer": { "juvenile": 80, "adult": 200 }
   },
   "items": {
     "plant": {

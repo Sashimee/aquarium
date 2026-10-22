@@ -452,13 +452,25 @@ feed-eligible and its state is `Emerse`.
 | Skip escape        | A startle on the bank sends the fish back into the water four times as fast, the way it came                                                                                                                       | Mudskippers escape on land by tail-flip skipping (Swanson & Gibb 2004, J Exp Biol 207:4037). Speed **heuristic**.                                                                                                                                                                                                                                                                                                  | `skipBodyLengthsPerS` 4                                                                                   |
 | Bank moved or gone | Decor that blocks the rest of the path, or a bank that moves or is removed, puts the fish back in the nearest free water                                                                                           | Engineering: keeps hard colliders unpenetrated.                                                                                                                                                                                                                                                                                                                                                                    | `setBanks`, `decorMoved`                                                                                  |
 
+## Figure-8 puffer
+
+_Dichotomyctere ocellatus_ is built from the existing gaits and traits. Water chemistry is in
+`content/species/figure-8-puffer.json`.
+
+| Behaviour               | What the content does                                                                                                                         | Source                                                                                                                | Parameter                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Slow fin-driven hover   | Holds a station with its fins at low speed; tetraodontiforms swim with the median and pectoral fins, which `labriform` is the closest mode to | FishBase _D. ocellatus_ (demersal); Seriously Fish profile (active, needs open swimming space). Speeds **heuristic**. | `gait hover`, `swimmingMode labriform`, `cruiseSpeedMps 0.04`, `maxSpeedMps 0.25` |
+| Fin-nipper, territorial | Charges conspecifics and similar-sized tankmates of other species around its station; the charge stands in for fin nipping                    | FishBase (aggressive against conspecifics); Seriously Fish (nips the fins of slow or long-finned fish)                | `territorial`, `boldness 0.7`, `curiosity 0.9`                                    |
+| Snail eater             | Eats the meaty foods there are; there is no snail food type, so bloodworms and brine shrimp stand in for snails and benthic invertebrates     | FishBase (feeds on snails and other benthic organisms); Seriously Fish (needs snails to wear down its teeth)          | `diet [bloodworms, brine-shrimp, pellets]`                                        |
+
 ## Not yet modelled
 
 _Aulonocara_ territoriality is male-only in nature (Konings 2007; Seriously Fish), but `territorial` is one species flag with no sex, so a female _A. baenschi_ also holds a territory. A per-sex flag needs a field in the shared species schema.
 
 Archerfish do not spit at prey above the water: there are no overhanging insects. Mudskippers
 haul out only onto a bank anchor, not onto open mud. Bumblebee gobies do not breed, since there
-is no cave anchor in the mangrove preset for the male to guard.
+is no cave anchor in the mangrove preset for the male to guard. A figure-8 puffer does not hunt
+live snails.
 
 Clownfish tend at the same rate through development, though both parents tend more as the eggs
 mature (Green & McCormick 2005; Pacaro et al. 2023), and the night-only vigorous fanning, vigorous
