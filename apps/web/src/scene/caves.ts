@@ -17,10 +17,10 @@ interface CaveMouth {
  * a fish can reach it.
  */
 export const CAVE_MOUTHS: Readonly<Record<string, CaveMouth>> = {
-  'reef-arch': { position: [0.005, 0.03, 0.09], facing: [0, 0, 1], radius: 0.025 },
-  'rock-pile-cave': { position: [0, 0.055, 0.2], facing: [0, 0, 1], radius: 0.035 },
-  'rock-pile-stack': { position: [0.11, 0.04, 0.215], facing: [0, 0, 1], radius: 0.025 },
-  'neothauma-shell': { position: [0, 0.013, 0.04], facing: [0, 0, 1], radius: 0.012 },
+  'reef-arch': { position: [0.005, 0.03, 0.042], facing: [0, 0, 1], radius: 0.025 },
+  'rock-pile-cave': { position: [0, 0.055, 0.165], facing: [0, 0, 1], radius: 0.035 },
+  'rock-pile-stack': { position: [0.11, 0.04, 0.14], facing: [0, 0, 1], radius: 0.025 },
+  'neothauma-shell': { position: [0, 0.013, 0.039], facing: [0, 0, 1], radius: 0.012 },
 };
 
 export function offersShelter(assetId: string): boolean {

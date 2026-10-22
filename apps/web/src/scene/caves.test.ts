@@ -4,7 +4,7 @@ import { World } from '@aquarium/sim';
 import { DEFAULT_TANK, TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
 import { substrateHeight } from '../engine/tank/substrate';
-import { caveAnchor, caveAnchors } from './caves';
+import { CAVE_MOUTHS, caveAnchor, caveAnchors } from './caves';
 import { loadPreset } from './preset';
 
 const SHELTERED: readonly Biome[] = ['reef', 'cichlid'];
@@ -53,6 +53,18 @@ describe('cave anchors from presets', () => {
 
   it.each(BARE)('%s has no shelter decor and so no cave anchors', (biome) => {
     expect(caveAnchors(loadPreset(biome).decor)).toEqual([]);
+  });
+});
+
+describe('cave mouth standoffs', () => {
+  it('sit at the worst-case standoffs the shelter hull sweep measured', () => {
+    const z = Object.fromEntries(Object.entries(CAVE_MOUTHS).map(([id, m]) => [id, m.position[2]]));
+    expect(z).toEqual({
+      'reef-arch': 0.042,
+      'rock-pile-cave': 0.165,
+      'rock-pile-stack': 0.14,
+      'neothauma-shell': 0.039,
+    });
   });
 });
 
