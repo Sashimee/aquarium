@@ -1104,10 +1104,13 @@ describe('per-trait parameters', () => {
 
 /** A sphere of rock, exact distance and outward normal. */
 class Ball implements Sdf {
-  constructor(
-    private readonly c: readonly [number, number, number],
-    private readonly r: number,
-  ) {}
+  private readonly c: readonly [number, number, number];
+  private readonly r: number;
+
+  constructor(c: readonly [number, number, number], r: number) {
+    this.c = c;
+    this.r = r;
+  }
 
   sample(x: number, y: number, z: number, normal: Float64Array): number {
     const dx = x - this.c[0];
@@ -1124,7 +1127,11 @@ class Ball implements Sdf {
 /** The nearest of several fields, with its normal. */
 class Nearest implements Sdf {
   private readonly scratch = new Float64Array(3);
-  constructor(private readonly parts: readonly Sdf[]) {}
+  private readonly parts: readonly Sdf[];
+
+  constructor(parts: readonly Sdf[]) {
+    this.parts = parts;
+  }
 
   sample(x: number, y: number, z: number, normal: Float64Array): number {
     let best = Infinity;
