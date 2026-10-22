@@ -3,6 +3,7 @@ import { newTankChemistry } from '@aquarium/shared';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { BUNDLED_CHEMISTRY } from '../sync/bundledEconomy';
 import { FISH_1, fishFixture, speciesFixture, tankFixture } from '../sync/fixtures';
 import { readPad } from '../sync/waterTest';
 import type { Dip } from './dipStore';
@@ -64,6 +65,24 @@ describe('PhAdvice', () => {
   it('shows advice once all readings are revealed', () => {
     render(blackwater, dip({ revealed: true }));
     expect(container.querySelector('.ph-advice')).not.toBeNull();
+  });
+
+  it('points a too-high reading at the botanicals button', () => {
+    render(blackwater, dip({ revealed: true }));
+    const p = container.querySelector('.ph-advice');
+    expect(p?.textContent).toContain('Botanicals release humic acids');
+    expect(p?.querySelector('button')?.textContent).toBe('Go to add botanicals');
+  });
+
+  it('falls back to waiting when the botanicals are at their ceiling', () => {
+    const dark = {
+      ...blackwater,
+      water: { ...blackwater.water, tannin: BUNDLED_CHEMISTRY.tannin.ceiling.blackwater },
+    };
+    render(dark, dip({ revealed: true }));
+    const p = container.querySelector('.ph-advice');
+    expect(p?.textContent).toContain('wait and test again');
+    expect(p?.querySelector('button')).toBeNull();
   });
 
   it('stays silent outside blackwater', () => {

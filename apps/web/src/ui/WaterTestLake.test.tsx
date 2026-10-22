@@ -3,6 +3,7 @@ import { newTankChemistry, speciesChemistrySchema } from '@aquarium/shared';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BUNDLED_CHEMISTRY } from '../sync/bundledEconomy';
 import { fishFixture, speciesFixture, tankFixture } from '../sync/fixtures';
 import { dipStrip, rawValues } from '../sync/waterTest';
 import { putDip } from './dipStore';
@@ -53,6 +54,18 @@ describe('the lake notes in the water test kit', () => {
     );
     return onWaterChange;
   };
+
+  it('links the hardness note to the buffer dose button', () => {
+    show(lakeTank(3), true);
+    const link = container.querySelector('[data-metric="kh"] button');
+    expect(link?.textContent).toBe('Go to add buffer');
+    expect(container.querySelector('[data-metric="ph"] button')).toBeNull();
+  });
+
+  it('drops the buffer link once the hardness is at the ceiling', () => {
+    show(lakeTank(BUNDLED_CHEMISTRY.kh.bufferCeiling.cichlid), true);
+    expect(container.querySelector('[data-metric="kh"] button')).toBeNull();
+  });
 
   it('warns about soft water and changes the water on request', () => {
     const onWaterChange = show(lakeTank(3), true);
