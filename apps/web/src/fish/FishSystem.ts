@@ -123,7 +123,7 @@ import {
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesGrowth, speciesInput } from './species';
 import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
-import { isFinned, SWIM_MODES, SwimState, type SwimModeParams } from './swim';
+import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimSample } from './swim';
 import {
   CRAB_GAIT,
   curlAboveFloor,
@@ -504,6 +504,7 @@ export class FishSystem {
   private readonly quat = new Float32Array(4);
   private readonly toCamera = new Vector3();
   private readonly liftUp = new Vector3();
+  private readonly jabAhead = new Vector3();
   private readonly viewDirection: [number, number, number] = [1, 0, 0];
   private readonly frames: FrameSelection = { i: 0, j: 0, fx: 0, fy: 0 };
   private readonly impostorValues: ImpostorValues = {
@@ -527,6 +528,7 @@ export class FishSystem {
     velvet: 0,
   };
   private readonly pose = createPose();
+  private readonly swimSample: SwimSample = { speed: 0, yawRate: 0, thrust: 1, state: -1 };
   private readonly walkSample: WalkSample = {
     speed: 0,
     state: -1,
@@ -1818,7 +1820,17 @@ export class FishSystem {
         this.walkSample.speed = this.pose.speed;
         motion.advance(deltaS * liveliness, this.walkSample);
       } else {
-        motion.advance(deltaS * liveliness, this.pose);
+        const swim = this.swimSample;
+        swim.speed = this.pose.speed;
+        swim.yawRate = this.pose.yawRate;
+        swim.thrust = this.pose.thrust;
+        swim.state = this.walkSample.state;
+        motion.advance(deltaS * liveliness, swim);
+        const jab = motion.jab * rt.length;
+        if (jab > 0) {
+          this.jabAhead.set(0, 0, jab).applyQuaternion(this.quaternion);
+          this.position.add(this.jabAhead);
+        }
       }
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);

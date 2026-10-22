@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FishState } from '@aquarium/sim';
 import {
   amplitudeScale,
   BITE_CLOSE_S,
@@ -11,6 +12,12 @@ import {
   MAX_BEND,
   MAX_TAIL_BEAT_HZ,
   MOUTH_LEAD_CYCLES,
+  PECK_FIRST_S,
+  PECK_HOLD_BODY_LENGTHS_PER_S,
+  PECK_JAB_BODY_LENGTHS,
+  PECK_MAX_INTERVAL_S,
+  PECK_MIN_INTERVAL_S,
+  POSE_STILLNESS,
   EXERTED_VENTILATION_HZ,
   RESTING_VENTILATION_HZ,
   SWIM_MODES,
@@ -87,10 +94,11 @@ describe('SWIM_MODES', () => {
 describe('SwimState', () => {
   it('integrates the phase at the Strouhal frequency and wraps it', () => {
     const state = new SwimState(0.032, 0.3, SWIM_MODES.carangiform, 0);
-    state.advance(0.1, { speed: 0.12, yawRate: 0, thrust: 1 });
+    state.advance(0.1, { speed: 0.12, yawRate: 0, thrust: 1, state: FishState.Cruise });
     expect(state.frequency).toBeCloseTo(5.625, 6);
     expect(state.phase).toBeCloseTo((TAU * 0.5625) % TAU, 6);
-    for (let i = 0; i < 100; i++) state.advance(0.033, { speed: 0.12, yawRate: 0, thrust: 1 });
+    for (let i = 0; i < 100; i++)
+      state.advance(0.033, { speed: 0.12, yawRate: 0, thrust: 1, state: FishState.Cruise });
     expect(state.phase).toBeGreaterThanOrEqual(0);
     expect(state.phase).toBeLessThan(TAU);
     expect(state.finPhase).toBeLessThan(TAU);
@@ -98,28 +106,31 @@ describe('SwimState', () => {
 
   it('beats the pectorals at their idle rate while hovering', () => {
     const state = new SwimState(0.12, 0.3, SWIM_MODES.labriform, 0);
-    state.advance(0.1, { speed: 0, yawRate: 0, thrust: 1 });
+    state.advance(0.1, { speed: 0, yawRate: 0, thrust: 1, state: FishState.Cruise });
     expect(state.finPhase).toBeCloseTo(TAU * SWIM_MODES.labriform.pectoralIdleHz * 0.1, 6);
   });
 
   it('eases the bend towards the turn instead of snapping', () => {
     const state = new SwimState(0.05, 0.3, SWIM_MODES.subcarangiform, 0);
     const target = turnCurvature(1, 0.1, 0.05);
-    state.advance(0.02, { speed: 0.1, yawRate: 1, thrust: 1 });
+    state.advance(0.02, { speed: 0.1, yawRate: 1, thrust: 1, state: FishState.Cruise });
     expect(state.curvature).toBeGreaterThan(0);
     expect(state.curvature).toBeLessThan(target);
-    for (let i = 0; i < 60; i++) state.advance(0.02, { speed: 0.1, yawRate: 1, thrust: 1 });
+    for (let i = 0; i < 60; i++)
+      state.advance(0.02, { speed: 0.1, yawRate: 1, thrust: 1, state: FishState.Cruise });
     expect(state.curvature).toBeCloseTo(target, 3);
   });
 
   it('leaves the phase alone for a zero step and rejects negative ones', () => {
     const state = new SwimState(0.05, 0.3, SWIM_MODES.carangiform, 1);
-    state.advance(0, { speed: 0.1, yawRate: 0, thrust: 1 });
+    state.advance(0, { speed: 0.1, yawRate: 0, thrust: 1, state: FishState.Cruise });
     expect(state.phase).toBe(1);
-    expect(() => state.advance(-0.01, { speed: 0.1, yawRate: 0, thrust: 1 })).toThrow(RangeError);
-    expect(() => state.advance(Number.NaN, { speed: 0.1, yawRate: 0, thrust: 1 })).toThrow(
-      RangeError,
-    );
+    expect(() =>
+      state.advance(-0.01, { speed: 0.1, yawRate: 0, thrust: 1, state: FishState.Cruise }),
+    ).toThrow(RangeError);
+    expect(() =>
+      state.advance(Number.NaN, { speed: 0.1, yawRate: 0, thrust: 1, state: FishState.Cruise }),
+    ).toThrow(RangeError);
   });
 
   describe('burst and coast', () => {
@@ -128,7 +139,8 @@ describe('SwimState', () => {
     const speed = 3.4 * length;
     const step = 1 / 60;
     const run = (state: SwimState, seconds: number, thrust: number): void => {
-      for (let t = 0; t < seconds; t += step) state.advance(step, { speed, yawRate: 0, thrust });
+      for (let t = 0; t < seconds; t += step)
+        state.advance(step, { speed, yawRate: 0, thrust, state: FishState.Cruise });
     };
 
     it('lets the tail fall almost still within one tail period of a coast', () => {
@@ -145,7 +157,7 @@ describe('SwimState', () => {
     it('fades instead of cutting the beat on the first frame of a coast', () => {
       const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
       run(state, 0.17, 0.6);
-      state.advance(step, { speed, yawRate: 0, thrust: 0 });
+      state.advance(step, { speed, yawRate: 0, thrust: 0, state: FishState.Cruise });
       expect(state.amplitude).toBeGreaterThan(0.5);
     });
 
@@ -158,7 +170,8 @@ describe('SwimState', () => {
 
     it('keeps the station-holding undulation of a fish at rest', () => {
       const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
-      for (let i = 0; i < 120; i++) state.advance(step, { speed: 0, yawRate: 0, thrust: 0 });
+      for (let i = 0; i < 120; i++)
+        state.advance(step, { speed: 0, yawRate: 0, thrust: 0, state: FishState.Cruise });
       expect(state.amplitude).toBe(IDLE_AMPLITUDE);
     });
 
@@ -171,8 +184,8 @@ describe('SwimState', () => {
   describe('gill ventilation', () => {
     const length = 0.05;
     const step = 1 / 60;
-    const hover = { speed: 0, yawRate: 0, thrust: 0 };
-    const cruise = { speed: 2 * length, yawRate: 0, thrust: 1 };
+    const hover = { speed: 0, yawRate: 0, thrust: 0, state: FishState.Cruise };
+    const cruise = { speed: 2 * length, yawRate: 0, thrust: 1, state: FishState.Cruise };
     const run = (state: SwimState, seconds: number, sample: typeof hover): void => {
       for (let t = 0; t < seconds; t += step) state.advance(step, sample);
     };
@@ -228,8 +241,8 @@ describe('SwimState', () => {
   describe('buccal pumping', () => {
     const length = 0.05;
     const step = 1 / 240;
-    const hover = { speed: 0, yawRate: 0, thrust: 0 };
-    const cruise = { speed: 2 * length, yawRate: 0, thrust: 1 };
+    const hover = { speed: 0, yawRate: 0, thrust: 0, state: FishState.Cruise };
+    const cruise = { speed: 2 * length, yawRate: 0, thrust: 1, state: FishState.Cruise };
     const run = (state: SwimState, seconds: number, sample: typeof hover): void => {
       for (let t = 0; t < seconds; t += step) state.advance(step, sample);
     };
@@ -341,5 +354,100 @@ describe('biteGape', () => {
     expect(biteGape(Infinity)).toBe(0);
     expect(biteGape(Number.NaN)).toBe(0);
     expect(biteGape(10)).toBe(0);
+  });
+});
+
+describe('cleaning station motion', () => {
+  const length = 0.085;
+  const step = 1 / 60;
+  const sample = (state: number, speed: number) => ({ speed, yawRate: 0, thrust: 1, state });
+  const wrasse = (phaseOffset = 0) => new SwimState(length, 0.3, SWIM_MODES.labriform, phaseOffset);
+
+  /** Start times of the pecks over `seconds`, sampled once a frame. */
+  function peckTimes(
+    state: SwimState,
+    seconds: number,
+    speed: number,
+    kind: number = FishState.Clean,
+  ): number[] {
+    const starts: number[] = [];
+    let before = state.sincePeck;
+    for (let i = 1; i * step <= seconds + 1e-9; i++) {
+      state.advance(step, sample(kind, speed));
+      if (state.sincePeck < before) starts.push(i * step - state.sincePeck);
+      before = state.sincePeck;
+    }
+    return starts;
+  }
+
+  it('stills a posing client to a quarter of its hover undulation, and lets it go again', () => {
+    const posing = wrasse();
+    const hovering = wrasse();
+    for (let i = 0; i < 180; i++) {
+      posing.advance(step, sample(FishState.Pose, 0.1 * 0.08));
+      hovering.advance(step, sample(FishState.Cruise, 0.1 * 0.08));
+    }
+    expect(posing.stillness).toBeGreaterThan(0.99);
+    expect(posing.amplitude).toBeCloseTo(hovering.amplitude * (1 - POSE_STILLNESS), 2);
+    for (let i = 0; i < 180; i++) posing.advance(step, sample(FishState.Cruise, 0.1 * 0.08));
+    expect(posing.amplitude).toBeCloseTo(hovering.amplitude, 2);
+  });
+
+  it('eases into the pose rather than freezing in one frame', () => {
+    const state = wrasse();
+    state.advance(step, sample(FishState.Pose, 0));
+    expect(state.stillness).toBeGreaterThan(0);
+    expect(state.stillness).toBeLessThan(0.1);
+  });
+
+  it('pecks while holding at a contact: first soon after arriving, then every 0.25-0.5 s', () => {
+    const starts = peckTimes(wrasse(), 3, 0.05 * length);
+    expect(starts[0]).toBeCloseTo(PECK_FIRST_S, 1);
+    const gaps = starts.slice(1).map((t, i) => t - (starts[i] ?? 0));
+    expect(gaps.length).toBeGreaterThanOrEqual(5);
+    for (const gap of gaps) {
+      expect(gap).toBeGreaterThanOrEqual(PECK_MIN_INTERVAL_S - step);
+      expect(gap).toBeLessThanOrEqual(PECK_MAX_INTERVAL_S + step);
+    }
+    expect(new Set(gaps.map((g) => g.toFixed(2))).size).toBeGreaterThan(1);
+  });
+
+  it('shows one to four pecks in a hold of 0.3-1.2 s', () => {
+    for (const offset of [0, 1, 2.5, 4]) {
+      expect(peckTimes(wrasse(offset), 0.3, 0).length).toBeGreaterThanOrEqual(1);
+      expect(peckTimes(wrasse(offset), 1.2, 0).length).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it('snaps the jaws and jerks the head forward at each peck, then settles', () => {
+    const state = wrasse();
+    let mouth = 0;
+    let jab = 0;
+    for (let t = 0; t < PECK_FIRST_S + BITE_OPEN_S + step; t += step) {
+      state.advance(step, sample(FishState.Clean, 0));
+      mouth = Math.max(mouth, state.mouthOpening);
+      jab = Math.max(jab, state.jab);
+    }
+    expect(mouth).toBeGreaterThan(0.9);
+    expect(jab).toBeGreaterThan(0.9 * PECK_JAB_BODY_LENGTHS);
+    expect(jab).toBeLessThanOrEqual(PECK_JAB_BODY_LENGTHS);
+    for (let t = 0; t < 1; t += step) state.advance(step, sample(FishState.Cruise, 0.08));
+    expect(state.jab).toBe(0);
+  });
+
+  it('does not peck while darting between contacts or outside Clean', () => {
+    const darting = wrasse();
+    expect(peckTimes(darting, 2, PECK_HOLD_BODY_LENGTHS_PER_S * length * 2)).toEqual([]);
+    expect(darting.jab).toBe(0);
+    expect(peckTimes(wrasse(), 2, 0, FishState.Cruise)).toEqual([]);
+    expect(peckTimes(wrasse(), 2, 0, FishState.Pose)).toEqual([]);
+  });
+
+  it('waits the first-peck delay again after each dart', () => {
+    const state = wrasse();
+    peckTimes(state, 0.6, 0);
+    for (let i = 0; i < 30; i++) state.advance(step, sample(FishState.Clean, length));
+    const starts = peckTimes(state, 0.5, 0);
+    expect(starts[0]).toBeCloseTo(PECK_FIRST_S, 1);
   });
 });
