@@ -872,7 +872,7 @@ describe('wallet, shop and ledger', () => {
         call(h, who, 'PATCH', `/api/tanks/${tank.id}`, { decorLayout: [{ ...bank, scale }] });
 
       expect((await save(2.5)).statusCode).toBe(200);
-      for (const scale of [0.1, 10]) {
+      for (const scale of [0.01, 10]) {
         const res = await save(scale);
         expect(res.statusCode, `${scale}`).toBe(400);
         expect(errorCode(res)).toBe('validation_failed');

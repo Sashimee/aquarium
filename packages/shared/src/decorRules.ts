@@ -15,9 +15,10 @@ export const VACATION_FEEDER_ASSET_ID = 'vacation-feeder';
 export const MUD_BANK_ASSET_ID = 'mud-bank';
 /**
  * The scale range a saved mud bank may take. The client saves the bank at its fitted scale, which a
- * small tank shrinks toward the 0.05 floor of the web's fit, so the minimum cannot sit above that.
+ * small tank shrinks toward the web fit floor, so the minimum cannot sit above that.
  */
-export const MUD_BANK_SCALE = { min: 0.05, max: 2.5 } as const;
+export const MIN_FIT_SCALE = 0.05;
+export const MUD_BANK_SCALE = { min: MIN_FIT_SCALE, max: 2.5 } as const;
 
 const ROCKS = ['boulder-01', 'coast-rocks-05'] as const;
 
