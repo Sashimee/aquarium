@@ -1078,4 +1078,61 @@ describe('sharedKtx2Problems', () => {
       ]),
     ).toEqual([]);
   });
+
+  it('treats an unset sampler filter as three defaults', () => {
+    const unset = glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2');
+    const explicit = glb('rock/b/lod0.glb', 'baseColorTexture', '../shared/t.ktx2', {
+      wrapS: 10497,
+      wrapT: 10497,
+      magFilter: 9729,
+      minFilter: 9987,
+    });
+    expect(sharedKtx2Problems([unset, explicit])).toEqual([]);
+  });
+
+  it('flags a conflict that only appears at the 2k URI', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t_1k.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t_2k.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/shared/t_2k.ktx2');
+  });
+
+  it('reports both the colour role and the sampler when both differ', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t.ktx2', { wrapS: 33071, wrapT: 10497 }),
+    ]);
+    expect(problems).toHaveLength(2);
+    expect(problems.join('\n')).toContain('sRGB');
+    expect(problems.join('\n')).toContain('sampler');
+  });
+
+  it('does not conflate the same relative name in different folders', () => {
+    expect(
+      sharedKtx2Problems([
+        glb('rock/a/lod0.glb', 'baseColorTexture', 'textures/t.ktx2'),
+        glb('rock/b/lod0.glb', 'normalTexture', 'textures/t.ktx2'),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('reads textures nested inside a material extension', () => {
+    const nested: GlbDocument = {
+      file: 'rock/b/lod0.glb',
+      json: {
+        materials: [{ extensions: { KHR_materials_sheen: { sheenColorTexture: { index: 0 } } } }],
+        textures: [{ sampler: 0, extensions: { KHR_texture_basisu: { source: 0 } } }],
+        samplers: [{ wrapS: 10497, wrapT: 10497 }],
+        images: [{ uri: '../shared/t.ktx2' }],
+      },
+    };
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'normalTexture', '../shared/t.ktx2'),
+      nested,
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/b/lod0.glb');
+  });
 });
