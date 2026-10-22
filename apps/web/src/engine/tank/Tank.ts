@@ -79,6 +79,7 @@ import {
   waterBounds,
 } from './dimensions';
 import { createSubstrateGeometry, createSubstrateMaterial } from './substrate';
+import { mirrorPresence, PaneMirror } from './paneMirror';
 import { SurfaceReflection, UNREFLECTED_LAYER } from './surfaceReflection';
 
 const GLASS_F0 = 0.04;
@@ -331,19 +332,34 @@ function waterAlongRay(
 }
 
 /**
+ * Share of the traced mirror that the plants and fish of a real tank would hide, given to the haze
+ * of a long path instead: the trace sees only the backdrop, and a crisp second copy of it beside
+ * the real one reads as a kaleidoscope rather than a tank.
+ */
+const HIDDEN_BACKDROP = 0.5;
+
+interface GlassFace {
+  material: MeshStandardNodeMaterial;
+  /** The output, with the tank's contents in the mirror if `contents`, else its traced walls. */
+  output(contents: boolean): Node<'vec4'>;
+}
+
+/**
  * The faces of a pane only reflect: diffuse is black and the output is premultiplied, so the
  * reflection adds on top while the scene behind is kept by (1 - F). A face towards the water is
  * seen through it, where the parallel plate acts as a water-air boundary: past the critical angle
  * (48.6°) it reflects totally, which is why side panes look silvered from the front. What they
- * mirror is the water across the tank and the room beyond it, dimmed by that path.
+ * mirror is the water across the tank and the room beyond it, dimmed by that path, and with
+ * `contents` the plants, decor and fish that `mirror` takes from the scene drawn before the glass.
  */
-function createGlassFaceMaterial(
+function createGlassFace(
   medium: WaterMedium,
   interior: InteriorLight,
   algae: UniformNode<'float', number>,
   sky: Texture,
   backdrop: BackdropAlbedo,
-): MeshStandardNodeMaterial {
+  mirror: PaneMirror,
+): GlassFace {
   const material = new MeshStandardNodeMaterial({ roughness: 0.03, metalness: 0 });
   material.name = 'glass-face';
   material.colorNode = vec3(0);
@@ -357,11 +373,22 @@ function createGlassFaceMaterial(
   const cosWater = abs(dot(inWater, normalWorldGeometry));
   const reflectance = fresnelDielectric(cosWater, WATER_IOR / AIR_IOR).toVar();
   const mirrored = reflect(inWater, normalWorldGeometry).toVar();
-  const mirroredScene = waterAlongRay(medium, interior, mirrored, sky, backdrop);
-  const inner = vec4(mirroredScene.mul(reflectance), reflectance);
-  const pane = mix(output, inner, towardsWater);
-  material.outputNode = medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
-  return material;
+  const traced = waterAlongRay(medium, interior, mirrored, sky, backdrop);
+  const haze = medium.inScatter(vec3(0), medium.boxMax.y.sub(positionWorld.y));
+  const fallback = mix(traced, haze, HIDDEN_BACKDROP).toVar();
+  const faceOutput = (contents: boolean): Node<'vec4'> => {
+    let seen: Node<'vec3'> = fallback;
+    if (contents) {
+      const end = positionWorld.add(mirrored.mul(medium.exit(positionWorld, mirrored).distance));
+      const presence = mirrorPresence(towardsWater, reflectance);
+      seen = mirror.radiance(medium, positionWorld, mirrored, end, presence, fallback);
+    }
+    const inner = vec4(seen.mul(reflectance), reflectance);
+    const pane = mix(output, inner, towardsWater);
+    return medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
+  };
+  material.outputNode = faceOutput(false);
+  return { material, output: faceOutput };
 }
 
 /** Light travelling along the pane gives float glass its green edge. */
@@ -538,6 +565,7 @@ export class Tank {
   /** Blended materials that multiply, and the velocity each must write to leave it unchanged. */
   private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
   private readonly glassFaces: Mesh;
+  private readonly glassFace: GlassFace;
   private readonly glassEdges: Mesh;
   private readonly backdrop: Mesh;
   private readonly volume: readonly Mesh[];
@@ -573,10 +601,10 @@ export class Tank {
     this.substrate.receiveShadow = true;
     this.substrate.castShadow = true;
 
-    this.glassFaces = this.addMesh(
-      'glass-faces',
-      createGlassFaceMaterial(medium, interior, this.algae, sky, this.poster.albedo),
-    );
+    const mirror = new PaneMirror();
+    this.disposables.push(mirror);
+    this.glassFace = createGlassFace(medium, interior, this.algae, sky, this.poster.albedo, mirror);
+    this.glassFaces = this.addMesh('glass-faces', this.glassFace.material);
     this.glassEdges = this.addMesh('glass-edges', createGlassEdgeMaterial());
     for (const mesh of [this.glassFaces, this.glassEdges]) mesh.renderOrder = 2;
     // The faces trace the eye's ray as refracted into the water where it meets the box, which
@@ -627,18 +655,22 @@ export class Tank {
 
   /**
    * Total internal reflection under the surface shows the scene itself, drawn again at
-   * `resolutionScale` of the drawing buffer; 0 traces the walls in the shader instead.
+   * `resolutionScale` of the drawing buffer, and the panes mirror the tank's contents from a copy
+   * of the frame; 0 traces the walls in the shaders instead.
    */
   setSurfaceReflection(resolutionScale: number): void {
     const wasEnabled = this.reflection.enabled;
     this.reflection.setResolutionScale(resolutionScale);
-    if (this.reflection.enabled === wasEnabled) return;
+    const enabled = this.reflection.enabled;
+    if (enabled === wasEnabled) return;
     const { material, output, normal, traced } = this.underside;
     const { boxMin, boxMax } = this.medium;
-    material.outputNode = this.reflection.enabled
+    material.outputNode = enabled
       ? output(this.reflection.mirror(normal.xz.mul(RIPPLE_MIRROR_SHIFT), traced, boxMin, boxMax))
       : output();
     material.needsUpdate = true;
+    this.glassFace.material.outputNode = this.glassFace.output(enabled);
+    this.glassFace.material.needsUpdate = true;
   }
 
   get surfaceReflection(): boolean {
@@ -646,8 +678,8 @@ export class Tank {
   }
 
   /**
-   * Builds the pipelines the surface reflection adds: its own pass, and the underside drawn from
-   * `camera` with the reflection in it.
+   * Builds the pipelines the surface reflection adds: its own pass, and the underside and the
+   * glass drawn from `camera` with the reflections in them.
    */
   async compileSurfaceReflection(
     renderer: WebGPURenderer,
@@ -657,6 +689,7 @@ export class Tank {
     if (!this.reflection.enabled) return;
     await this.reflection.compile(renderer, scene, camera);
     await renderer.compileAsync(this.undersideMesh, camera, scene);
+    await renderer.compileAsync(this.glassFaces, camera, scene);
   }
 
   /**
