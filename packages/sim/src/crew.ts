@@ -46,7 +46,12 @@ const mean = (lo: number, hi: number): number => (lo + hi) / 2;
  * Below the smallest particle there is no settled food left to find, so a forager that also
  * grazes glass turns to the glass.
  */
-const SETTLED_FOOD_MIN_PORTIONS = Math.min(...Object.values(FOOD_PARTICLES).map((p) => p.portion));
+export const SETTLED_FOOD_MIN_PORTIONS = Math.min(
+  ...Object.values(FOOD_PARTICLES).map((p) => p.portion),
+);
+
+export const hasSettledFood = (uneatenFood: number): boolean =>
+  uneatenFood > SETTLED_FOOD_MIN_PORTIONS;
 
 /**
  * A bottom forager that grazes glass (a bristlenose pleco) does so only while it is sated or no
@@ -311,7 +316,7 @@ function settledFoodHours(
   anySwitch: boolean,
 ): number {
   if (!anySwitch) return dtHours;
-  if (food <= SETTLED_FOOD_MIN_PORTIONS) return 0;
+  if (!hasSettledFood(food)) return 0;
   if (sweep <= 0) return dtHours;
   return Math.min(dtHours, (floorM2 * Math.log(food / SETTLED_FOOD_MIN_PORTIONS)) / sweep);
 }
