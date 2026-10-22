@@ -105,7 +105,11 @@ function PhAdvice({
   const reading = dip.strip.ph;
   const known = reading !== undefined && (dip.revealed || dip.guesses.ph !== undefined);
   if (!known) return null;
-  const guidance = blackwaterPhGuidance(tank, species, reading.value);
+  const guidance = blackwaterPhGuidance(
+    tank,
+    species,
+    PADS.ph.steps[reading.stepIndex]?.value ?? reading.value,
+  );
   if (!guidance) return null;
   return (
     <p className="ph-advice" data-ph-standing={guidance.standing} role="status">

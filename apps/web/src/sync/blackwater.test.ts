@@ -8,6 +8,7 @@ import {
   sharedPhRange,
 } from './blackwater';
 import { devicesForBiome } from './equipment';
+import { tankReportLines } from './life';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
 
 const withPh = (id: string, phRange: [number, number]) => {
@@ -65,7 +66,9 @@ describe('blackwaterPhGuidance', () => {
   it('recommends a water change when pH is too high, never CO2', () => {
     const g = blackwaterPhGuidance(apistoTank, species, 7.2);
     expect(g?.standing).toBe('too-high');
-    expect(g?.text).toMatch(/change some water/i);
+    expect(g?.text).toMatch(/drifts back toward pH 6 on its own/);
+    expect(g?.text).toMatch(/will not lower it/);
+    expect(g?.text).not.toMatch(/change some water/i);
     expect(g?.text).toMatch(/CO₂ is not used/);
   });
 
@@ -85,7 +88,34 @@ describe('blackwaterPhGuidance', () => {
       fishFixture(FISH_1, { species: 'cardinal' }),
       fishFixture(FISH_2, { species: 'far' }),
     ]);
-    expect(blackwaterPhGuidance(t, [tetra, far], 6)?.text).toMatch(/do not share/);
+    const g = blackwaterPhGuidance(t, [tetra, far], 6);
+    expect(g?.standing).toBe('no-overlap');
+    expect(g?.text).toMatch(/do not share/);
+  });
+
+  it('never blames fish whose species is not loaded', () => {
+    const t = tank([fishFixture(FISH_1, { species: 'mystery' })]);
+    expect(blackwaterPhGuidance(t, [tetra], 6)).toBeNull();
+    expect(blackwaterReportLines(t, [tetra])).toEqual([]);
+  });
+
+  it('ignores an unloaded species next to a known one', () => {
+    const t = tank([
+      fishFixture(FISH_1, { species: 'mystery' }),
+      fishFixture(FISH_2, { species: 'apisto' }),
+    ]);
+    expect(blackwaterPhGuidance(t, [apisto], 6)?.standing).toBe('in-range');
+  });
+
+  it('compares the rounded value it shows', () => {
+    const g = blackwaterPhGuidance(apistoTank, species, 6.54);
+    expect(g?.standing).toBe('near-edge');
+    expect(g?.text).toMatch(/^pH 6\.5 /);
+    const edge = tank([fishFixture(FISH_1, { species: 'cardinal' })]);
+    const high = blackwaterPhGuidance(edge, species, 7.04);
+    expect(high?.standing).not.toBe('too-high');
+    expect(high?.text).toMatch(/^pH 7\.0 /);
+    expect(blackwaterPhGuidance(edge, species, 7.06)?.standing).toBe('too-high');
   });
 });
 
@@ -99,5 +129,22 @@ describe('blackwater shop and report', () => {
   it('adds a pH line to the text report only for blackwater', () => {
     expect(blackwaterReportLines(tank(), [tetra])).toHaveLength(1);
     expect(blackwaterReportLines(tankFixture(), [tetra])).toEqual([]);
+  });
+
+  it('keeps the live pH number out of the report', () => {
+    for (const ph of [4.9, 5.6, 6.04, 7.4]) {
+      const t = tank([fishFixture(FISH_2, { species: 'apisto' })]);
+      const lines = blackwaterReportLines({ ...t, chemistry: { ...t.chemistry, ph } }, [
+        apisto,
+      ]).join(' ');
+      expect(lines).not.toContain(ph.toFixed(1));
+      expect(lines).not.toMatch(/pH \d/);
+    }
+  });
+
+  it('reaches the report through tankReportLines', () => {
+    const t = tank([fishFixture(FISH_2, { species: 'apisto' })]);
+    expect(tankReportLines(t, [apisto]).join(' ')).toMatch(/pH range/);
+    expect(tankReportLines(tankFixture(), [apisto]).join(' ')).not.toMatch(/pH range/);
   });
 });
