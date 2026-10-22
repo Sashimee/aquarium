@@ -27,7 +27,7 @@
     "phRange": [7.5, 8.6],
     "salinityPpt": [0, 1],
     "sources": [
-      "FishBase (fishbase.se) species summary",
+      "FishBase (fishbase.se) species summary: size and diet only; its 22-26 C, pH 7.2-8.2 aquarium range is not used",
       "SeriouslyFish species profile (seriouslyfish.com): 25-29 C, pH 7.5-9.0",
       "Konings 2007, Malawi Cichlids in their Natural Habitat, 4th ed. (Lake Malawi water: pH 7.7-8.6, 24-29 C)"
     ],

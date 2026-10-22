@@ -7,6 +7,7 @@ import type { Anchor } from './behaviour.ts';
 import { ARCHETYPES, SHOW_TANK, spawnMany } from './fixtures.ts';
 import { FishState } from './snapshot.ts';
 import { toSimSpecies } from './species.ts';
+import { WAVE_MAKER } from './waveMaker.ts';
 import { STEP_HZ, World, type FishSpawn } from './world.ts';
 
 const dir = join(import.meta.dirname, '../../../content/species');
@@ -315,6 +316,100 @@ describe('mudskippers on an emergent bank', () => {
       /outside the tank/,
     );
     expect(() => w.setAnchors([{ ...BANK_AT, radius: 0 }])).toThrow(/radius must be positive/);
+  });
+
+  it('takes a breath it owed in the water on the perch', () => {
+    // A frequent breath that a strong current keeps putting off is often still owed at the bank.
+    const gasping = {
+      ...BARRED,
+      behaviour: { ...BARRED.behaviour, airGulp: { perHour: 360 } },
+    };
+    const w = new World({
+      seed: 5,
+      tank: SHOW_TANK,
+      species: [gasping, BLUE_SPOTTED, ...ARCHETYPES],
+      decor: [STUMP],
+      fish: spawnMany('barred-mudskipper', 2),
+      anchors: [BANK_AT],
+      waveMaker: {
+        direction: [1, 0.3],
+        speedMps: WAVE_MAKER.maxSpeedMps,
+        mode: 'steady',
+        periodS: WAVE_MAKER.pulsePeriodS,
+      },
+    });
+    const wait = w.behaviour.gulpWait;
+    const owed = new Float64Array(w.count);
+    const wasPerched = new Uint8Array(w.count);
+    const wasOut = new Uint8Array(w.count);
+    let arrivedOwing = 0;
+    let returnedOwing = 0;
+    let returns = 0;
+    for (let t = 0; t < seconds(30 * 60); t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        const perched = w.behaviour.banks.perched(i);
+        const out = w.behaviour.banks.emersed(i);
+        if (perched) expect(at(wait, i)).toBe(0);
+        if (perched && wasPerched[i] === 0 && at(owed, i) > 0) arrivedOwing++;
+        if (!out && wasOut[i] === 1) {
+          returns++;
+          if (at(wait, i) > 0) returnedOwing++;
+        }
+        owed[i] = at(wait, i);
+        wasPerched[i] = perched ? 1 : 0;
+        wasOut[i] = out ? 1 : 0;
+      }
+    }
+    expect(arrivedOwing).toBeGreaterThan(0);
+    expect(returns).toBeGreaterThan(0);
+    expect(returnedOwing).toBe(0);
+  });
+
+  it('goes back into the water without touching anything when its bank moves', () => {
+    const w = tank(spawnMany('barred-mudskipper', 1));
+    const i = perchedFish(w, seconds(20 * 60));
+    const dx = -0.2;
+    w.setDecor([
+      { ...STUMP, a: [STUMP_X + dx, 0, STUMP_Z], b: [STUMP_X + dx, WATER_TOP, STUMP_Z] },
+    ]);
+    w.setAnchors([{ ...BANK_AT, position: [STUMP_X + dx, WATER_TOP + STUMP_RADIUS, STUMP_Z] }]);
+    expect(w.behaviour.banks.emersed(i)).toBe(false);
+    expect(at(w.position, i * 3 + 1)).toBeLessThan(WATER_TOP);
+    const contacts = w.contacts;
+    let worst = w.bodyClearance(i);
+    for (let t = 0; t < seconds(10); t++) {
+      w.step();
+      worst = Math.min(worst, w.bodyClearance(i));
+      expect(at(w.position, i * 3 + 1)).toBeLessThan(WATER_TOP);
+    }
+    expect(worst).toBeGreaterThanOrEqual(-1e-6);
+    expect(w.contacts).toBe(contacts);
+  });
+
+  it('goes back into the water without touching anything when decor lands on its perch', () => {
+    const w = tank(spawnMany('barred-mudskipper', 1));
+    const i = perchedFish(w, seconds(20 * 60));
+    const o = i * 3;
+    const rock: Collider = {
+      id: 'rock',
+      hard: true,
+      kind: 'sphere',
+      center: [at(w.position, o), at(w.position, o + 1), at(w.position, o + 2)],
+      radius: 0.02,
+    };
+    w.setDecor([STUMP, rock]);
+    expect(w.behaviour.banks.emersed(i)).toBe(false);
+    expect(at(w.position, o + 1)).toBeLessThan(WATER_TOP);
+    const contacts = w.contacts;
+    let worst = w.bodyClearance(i);
+    for (let t = 0; t < seconds(10); t++) {
+      w.step();
+      worst = Math.min(worst, w.bodyClearance(i));
+      expect(w.behaviour.banks.emersed(i)).toBe(false);
+    }
+    expect(worst).toBeGreaterThanOrEqual(-1e-6);
+    expect(w.contacts).toBe(contacts);
   });
 
   it('requires an amphibious species to breathe air', () => {
