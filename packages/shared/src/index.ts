@@ -27,3 +27,4 @@ export * from './plants.js';
 export * from './corals.js';
 export * from './gifts.js';
 export * from './community.js';
+export * from './payments.js';
