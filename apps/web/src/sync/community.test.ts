@@ -573,6 +573,30 @@ describe('applyTankToScene', () => {
     };
     applyTankToScene(bus, dimmer, later);
     expect(of('tank:lamp')).toHaveLength(3);
+    expect(of('tank:lamp')[2]).toMatchObject({
+      intensity: light.intensity / 2,
+      onHour: light.onHour,
+      offHour: (light.offHour + 1) % 24,
+    });
+  });
+
+  it('announces the lamp when only the on-hour changes', () => {
+    const { bus, of } = recordBus();
+    const first = tankFixture();
+    applyTankToScene(bus, null, first);
+    const light = first.equipment.light;
+    const onHour = (light.onHour + 1) % 24;
+    const next: Tank = {
+      ...first,
+      equipment: { ...first.equipment, light: { ...light, onHour } },
+    };
+    applyTankToScene(bus, first, next);
+    expect(of('tank:lamp')).toHaveLength(2);
+    expect(of('tank:lamp')[1]).toMatchObject({
+      intensity: light.intensity,
+      onHour,
+      offHour: light.offHour,
+    });
   });
 
   it('does not announce the lamp when the snapshot leaves it unchanged', () => {
