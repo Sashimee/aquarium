@@ -1,3 +1,4 @@
+import { isDecorAssetForBiome } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
@@ -249,6 +250,61 @@ describe.each(['freshwater', 'reef'] as const)('%s preset glass clearance at loa
         };
         expect(() => checkClearOfGlass(entry, item, current, extent), item.assetId).not.toThrow();
       }
+    }
+  });
+});
+
+describe('cichlid preset', () => {
+  const preset = loadPreset('cichlid');
+  const entries = new Map(catalog.assets.map((a) => [a.id, a]));
+
+  it('is rockwork on sand with caves, shells and no plants', () => {
+    expect(preset.biome).toBe('cichlid');
+    expect(kinds.get(preset.substrate?.assetId ?? '')).toBe('substrate');
+    expect(preset.plantPatches).toHaveLength(0);
+    const ids = preset.decor.map((d) => d.assetId);
+    expect(ids).toContain('rock-pile-cave');
+    expect(ids).toContain('rock-pile-stack');
+    expect(ids.filter((id) => id === 'neothauma-shell').length).toBeGreaterThanOrEqual(5);
+    expect(ids.filter((id) => kinds.get(id) === 'rock').length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('uses only decor the biome allows', () => {
+    for (const item of preset.decor) {
+      expect(isDecorAssetForBiome('cichlid', item.assetId), item.assetId).toBe(true);
+    }
+  });
+
+  it('seats rocks and shells on the sand', () => {
+    for (const item of preset.decor) {
+      const ground = substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
+      expect(Math.abs(item.position[1] - ground), item.assetId).toBeLessThan(0.03);
+    }
+  });
+
+  it('keeps every footprint inside the glass', () => {
+    const halfL = DEFAULT_TANK.length / 2 - DEFAULT_TANK.glass;
+    const halfD = DEFAULT_TANK.depth / 2 - DEFAULT_TANK.glass;
+    for (const item of preset.decor) {
+      const bounds = entries.get(item.assetId)?.bounds;
+      if (!bounds) throw new Error(`${item.assetId} has no bounds`);
+      const [x0 = 0, , z0 = 0] = bounds.min;
+      const [x1 = 0, , z1 = 0] = bounds.max;
+      const cos = Math.cos(item.rotationY);
+      const sin = Math.sin(item.rotationY);
+      let reachX = 0;
+      let reachZ = 0;
+      for (const [x, z] of [
+        [x0, z0],
+        [x0, z1],
+        [x1, z0],
+        [x1, z1],
+      ] as const) {
+        reachX = Math.max(reachX, Math.abs(x * cos + z * sin));
+        reachZ = Math.max(reachZ, Math.abs(-x * sin + z * cos));
+      }
+      expect(Math.abs(item.position[0]) + reachX * item.scale, item.assetId).toBeLessThan(halfL);
+      expect(Math.abs(item.position[2]) + reachZ * item.scale, item.assetId).toBeLessThan(halfD);
     }
   });
 });

@@ -4101,7 +4101,7 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-22",
-      "sha256": "0e6679cf532fab58709a38a7713c959b86580f6021d36379984665db3c019a02",
+      "sha256": "b5cd34b66e71718bb3ca24c742ff4bfb42352818e8126de257c6d7a3ddc50ce8",
       "polycount": 216740,
       "textures": "Material.001_baseColor.jpeg 1024x1024, ISG111-W01-1-1_baseColor.jpeg 4096x4096 (baseColor only)",
       "rigged": false,
@@ -4110,27 +4110,27 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "ce2d66afbc78a4a1afb69984251008d8e4538de55dfe9741108c01fec60a38a0",
           "bytes": 421
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "9c2248e2fb3bb17fe1e881560750ef18b56e74509f9b7b818d667d141e2d7987",
           "bytes": 9534576
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "9c990a521ff8656940e76635b0cfaa430f6cfb65798de9ea2c2f7dc2509a078a",
           "bytes": 10907
         },
         {
-          "path": "textures/ISG111-W01-1-1_baseColor.jpeg",
+          "path": "gltf/textures/ISG111-W01-1-1_baseColor.jpeg",
           "sha256": "d19fe208cc9b10f242772184ad78dc242aaa72a2f52c6cdb70180b9e23dea8d8",
           "bytes": 8913079
         },
         {
-          "path": "textures/Material.001_baseColor.jpeg",
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
           "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
           "bytes": 184018
         }
@@ -4147,7 +4147,7 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-22",
-      "sha256": "a4f7428488bafcdafc0957acd1b0fb74aae46764c8836a046718a408f246e70f",
+      "sha256": "6b94facd0c23ef88c69bc4b07e711f112374ec12392b59ede6d4ab80c446ab3d",
       "polycount": 392134,
       "textures": "Material.001_baseColor.jpeg 1024x1024, Q11533-1all_baseColor.jpeg 4096x4096 (baseColor only)",
       "rigged": false,
@@ -4156,27 +4156,27 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "056e67d02024f058c147954b95a357ac27cd48fad2f7f64c6c9842be2541575a",
           "bytes": 423
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "69ce90edd53df17271fabde163aef5948180d0d04aed5c18b8090ca22af197db",
           "bytes": 17096956
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "fee62b0fa973df10ea0b0df0b998e8f9761350082fbaf8bb918f7789c1b0c09a",
           "bytes": 14099
         },
         {
-          "path": "textures/Material.001_baseColor.jpeg",
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
           "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
           "bytes": 184018
         },
         {
-          "path": "textures/Q11533-1all_baseColor.jpeg",
+          "path": "gltf/textures/Q11533-1all_baseColor.jpeg",
           "sha256": "12c64d4a383250bcf0d30b807f490c26e287da772d8443c8be6a319901ff6e63",
           "bytes": 11329663
         }
@@ -4193,7 +4193,7 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-22",
-      "sha256": "c9476222bcfe6a92b0f7f26b3a167d78203c242b71cb2fc11f3e0f9cb9fe3945",
+      "sha256": "0d79ff9433ce6b63dd75ed81aa3a76b9b30a7d6681a7b86ab22057ac71e9e452",
       "polycount": 312662,
       "textures": "Material.001_baseColor.jpeg 1024x1024, Q11389-1all-1_baseColor.jpeg 4096x4096 (baseColor only)",
       "rigged": false,
@@ -4202,27 +4202,27 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "306de2460822c88f28b41e309a809040c3854239719d6154f863a7cb06ee9de1",
           "bytes": 443
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "6efe7de969d0701e38a3dfbc25878b6e18bedfe611519ca0455ff72055a30568",
           "bytes": 13133288
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "66e1a7caa5859d42a59b1de648e8dbd96c2c95badf2faacb72efd62b44eb5f83",
           "bytes": 12622
         },
         {
-          "path": "textures/Material.001_baseColor.jpeg",
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
           "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
           "bytes": 184018
         },
         {
-          "path": "textures/Q11389-1all-1_baseColor.jpeg",
+          "path": "gltf/textures/Q11389-1all-1_baseColor.jpeg",
           "sha256": "c0f4a164e4b0b8b65f5fa12355d40f8939e1d729a124810d73f19e2128dad13f",
           "bytes": 9820700
         }
@@ -4238,7 +4238,7 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-22",
-      "sha256": "2d900017cc3a608be3240b002d3451d69a70b9804ec1bec6025df29e1fdb74d3",
+      "sha256": "13aaca7c05a7ced97ec378b89861a0d74ecdee48efc9b9efb04f16ada9db0a11",
       "polycount": 1378644,
       "textures": "Material0_baseColor.jpeg 8192x8192 (baseColor only)",
       "rigged": false,
@@ -4247,22 +4247,22 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "e9c54067ecde8e8d64fb70af210f262eea00d3a80e58c3bf2eeb7f6e88500713",
           "bytes": 445
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "9074f1b0d453b3c64c2b269f5cea549a8b1b504d964956a923e41118eaa1ee0c",
           "bytes": 108404336
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "26af388bba5b713ec96a2c25305f9fd54f7bf03e16a7abafe31ac98a3fb67f40",
           "bytes": 70521
         },
         {
-          "path": "textures/Material0_baseColor.jpeg",
+          "path": "gltf/textures/Material0_baseColor.jpeg",
           "sha256": "367d120f97c5a2b340510fcbb9b13fcd986e8e18fd303d076bc831b63ca5109a",
           "bytes": 46129875
         }
@@ -4278,31 +4278,39 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-22",
-      "sha256": "2b9941bebec7d098cc5a5878091fe1e1b178f0a99e9e157494b71637d3ec5842",
+      "sha256": "22673de089674ca36ff6e1e5ae9939e89fe09fd6aa5a0a91a4cd84d6294c53a2",
       "polycount": 362021,
       "textures": "main_baseColor.jpeg 8192x8192 (baseColor only)",
       "rigged": false,
       "notes": "Phone photogrammetry scan (Scaniverse) of a petrified mangrove stump with aerial roots, Sarawak: 362,021 triangles in 4 meshes, one 8192 texture, no rig. Weathered grey-brown wood, good as sunken hardscape beside the live roots. Heavy as shipped. Licence CC-BY-4.0 and downloadable flag read from the Sketchfab model record and the bundled license.txt on 2026-10-22. Zip sha256 0f65c7d2a7ae469cd7e89fbc1ed26b8d7e0b3e0631b79770d68f7ce8f244dcf6; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-a221abc9/ (not committed). Planned pipeline steps: decimate to LOD0 to LOD2, bake the 8192 texture down to 2k KTX2, origin at the base, scale to 15 to 30 cm, add a normal map baked from the high mesh.",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.28 m",
+        "LOD0 capped at 18000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "scan ground slab clipped",
+        "decimated from 360k triangles",
+        "scaled to a 28 cm stump"
+      ],
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "1cb6819b7677e9980574fa38a92e071d0f8b37ef1db4ad8bd4f36f3532111eba",
           "bytes": 784
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "d7c70e863544c3f420c3c33827ceeb53f2894914237e4ea2c049fac45a9d3c96",
           "bytes": 26182484
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "21420fb07f64c6eff39d8f798608608107be73016b1123172e991a6d30bb545d",
           "bytes": 20295
         },
         {
-          "path": "textures/main_baseColor.jpeg",
+          "path": "gltf/textures/main_baseColor.jpeg",
           "sha256": "4ff34e0b681056895c7d60e9dd2f34f87cf2d5b106f4679b5982b674f44a1e14",
           "bytes": 20908188
         }
@@ -4318,36 +4326,43 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-22",
-      "sha256": "501ae87ebeefefc535f5bb4898fec06aad1d18fa6ab556f89e015a10ae8cbd5a",
+      "sha256": "433f324adc1c64474ead8f7780b1ca279f0b380760a2aff82a3866a6a36fdf8f",
       "polycount": 3926,
       "textures": "lambert1_baseColor.png 2048x2048, lambert1_normal.png 2048x2048",
       "rigged": false,
       "notes": "Hand-modelled low-poly mangrove prop roots: 3,926 triangles in one mesh, with a base colour and a normal map. Stylised rather than photoreal, but light enough to instance many times as the arching prop-root thicket; use the scanned roots from sketchfab-5658cc51 for hero pieces. Licence CC-BY-4.0 and downloadable flag read from the Sketchfab model record and the bundled license.txt on 2026-10-22. Zip sha256 ef63d5a864e288877b26ff09374db69f9a722cf0aab95d368bf42417801a1934; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-c32d977c/ (not committed). Planned pipeline steps: origin at the root base, scale to 20 to 35 cm tall, re-encode textures to KTX2 at 1k, recolour to match the red mangrove scan.",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "scaled to a 30 cm prop-root cluster",
+        "origin moved to the base centre"
+      ],
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "98f8a9d3e4e82b2b60d36ac43c1d19aa7c50bb7341f60775d08e1d46b216aee0",
           "bytes": 688
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "ace86b4b98e9388f83cea4b46e42af2813a477f970e58216abac34f0745339c5",
           "bytes": 188520
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "c265055b910a94b557ac6e200af67dc0f26b1e1901a85ce1e3a0fd912ae67f49",
           "bytes": 4951
         },
         {
-          "path": "textures/lambert1_baseColor.png",
+          "path": "gltf/textures/lambert1_baseColor.png",
           "sha256": "8b29041f00f4205d8395bb3a6cdee5d4bfb14650c79d2468d366080f26f21f02",
           "bytes": 4730057
         },
         {
-          "path": "textures/lambert1_normal.png",
+          "path": "gltf/textures/lambert1_normal.png",
           "sha256": "f8d937687725efeaf49587ad30c00df6e0ac287716c129e6fe88e565faf556d7",
           "bytes": 8061412
         }
@@ -4363,7 +4378,7 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-22",
-      "sha256": "487a4481adc4600f5ba99ed10c691b132c4cf94ac1855d00f52a758261fd8639",
+      "sha256": "d41cb34bd2bc4bfe936ee279e5d44d7b2542f5b13bf4c4ade3c4750afd3ed9e8",
       "polycount": 669262,
       "textures": "Material.001_baseColor.jpeg 1024x1024, four 4096x4096 baseColor jpegs (propagule and leaf atlases)",
       "rigged": false,
@@ -4372,42 +4387,42 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "72156d23058e3bac4383b7f54d794bb77d36e832dafa8e77b8c0ed3917d278b4",
           "bytes": 445
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "6f89a428c9e4323ee01e7361d37b1d66e7771896d0696133c6fe85d9950530d5",
           "bytes": 24796232
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "4d720fefae9193d2fe26ee476635eb98014f204c3b6c3052a055d7d74e1ac429",
           "bytes": 23873
         },
         {
-          "path": "textures/ISG110-W03-1-1-tane1_baseColor.jpeg",
+          "path": "gltf/textures/ISG110-W03-1-1-tane1_baseColor.jpeg",
           "sha256": "316839130579bcd0194c96abd8028e1ce27e2d72c78f720a01e7aacabc62efd1",
           "bytes": 3888870
         },
         {
-          "path": "textures/ISG110-W03-1-1-tane2_baseColor.jpeg",
+          "path": "gltf/textures/ISG110-W03-1-1-tane2_baseColor.jpeg",
           "sha256": "cc8b9729ab49425b07a2ce1fdb55867433d9725d19aa07f32a8d2ed84119b93f",
           "bytes": 4341727
         },
         {
-          "path": "textures/ISG110-W03-2-1-leaf1_baseColor.jpeg",
+          "path": "gltf/textures/ISG110-W03-2-1-leaf1_baseColor.jpeg",
           "sha256": "58158692e712a7955c44b3603af3a4ef5fa13621a3e08d1bee20c768b82a6408",
           "bytes": 6495900
         },
         {
-          "path": "textures/ISG110-W03-2-1-leaf2_baseColor.jpeg",
+          "path": "gltf/textures/ISG110-W03-2-1-leaf2_baseColor.jpeg",
           "sha256": "ad0dcb6836ae53e9c72b10b7e53251daeae0f5427abed2ec26e61da59a44708d",
           "bytes": 6157550
         },
         {
-          "path": "textures/Material.001_baseColor.jpeg",
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
           "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
           "bytes": 184018
         }

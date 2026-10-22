@@ -8,7 +8,7 @@ import {
   triangleCountOf,
 } from './lod.ts';
 
-function gridPrimitive(cells: number, indexed = true) {
+function gridPrimitive(cells: number, indexed = true, noisyMask = false) {
   const doc = new Document();
   const buffer = doc.createBuffer();
   const side = cells + 1;
@@ -31,6 +31,15 @@ function gridPrimitive(cells: number, indexed = true) {
     .setAttribute(
       'POSITION',
       doc.createAccessor().setType('VEC3').setArray(positions).setBuffer(buffer),
+    );
+  if (noisyMask)
+    prim.setAttribute(
+      '_FIN_MASK',
+      doc
+        .createAccessor()
+        .setType('SCALAR')
+        .setArray(Float32Array.from({ length: side * side }, (_, v) => ((v * 7919) % 13) / 12))
+        .setBuffer(buffer),
     );
   if (indexed)
     prim.setIndices(
@@ -112,5 +121,25 @@ describe('keepLargeComponents', () => {
     const other = bodiesPrimitive([20, 12]);
     keepMainComponent(other);
     expect(triangleCountOf(other)).toBe(20 * 20 * 2);
+  });
+
+  describe('sloppy fallback', () => {
+    it('reaches a target the topology-preserving pass stalls above', () => {
+      const stalled = gridPrimitive(40, true, true);
+      simplifyPrimitive(stalled, { ratio: 0.02, minTriangles: 10 });
+      expect(triangleCountOf(stalled)).toBeGreaterThan(64 * 1.25);
+
+      const prim = gridPrimitive(40, true, true);
+      simplifyPrimitive(prim, { ratio: 0.02, minTriangles: 10, sloppyFallback: true });
+      expect(triangleCountOf(prim)).toBeLessThanOrEqual(64 * 1.25);
+    });
+
+    it('leaves a primitive that already reached its target untouched by the fallback', () => {
+      const plain = gridPrimitive(30);
+      const withFallback = gridPrimitive(30);
+      simplifyPrimitive(plain, { ratio: 0.25, minTriangles: 10 });
+      simplifyPrimitive(withFallback, { ratio: 0.25, minTriangles: 10, sloppyFallback: true });
+      expect(triangleCountOf(withFallback)).toBe(triangleCountOf(plain));
+    });
   });
 });

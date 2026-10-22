@@ -257,7 +257,7 @@ describe('the committed presets', () => {
       resolve(import.meta.dirname, '../../..'),
     );
     expect(hdri.id).toBe('studio-small-09');
-    expect(presets.map((p) => p.biome).sort()).toEqual(['freshwater', 'reef']);
+    expect(presets.map((p) => p.biome).sort()).toEqual(['cichlid', 'freshwater', 'reef']);
     expect(presets.every((p) => p.assetIds.length > 1)).toBe(true);
     expect(speciesBiome.get('neon-tetra')).toBe('freshwater');
   });
