@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { chemistryParametersSchema } from './chemistry.js';
-import { DEFAULT_EQUIPMENT, equipmentSchema, lightScheduleSchema } from './equipment.js';
+import {
+  DEFAULT_EQUIPMENT,
+  MAX_EQUIPMENT_TIER,
+  equipmentSchema,
+  lightScheduleSchema,
+} from './equipment.js';
 import { isWarmWater, speciesChemistrySchema } from './species.js';
 import { updateTankRequestSchema } from './tank.js';
 
@@ -20,6 +25,17 @@ describe('lamp schedule', () => {
     expect(updateTankRequestSchema.safeParse({ light }).success).toBe(true);
     expect(updateTankRequestSchema.safeParse({}).success).toBe(false);
     expect(equipmentSchema.parse(DEFAULT_EQUIPMENT)).toEqual(DEFAULT_EQUIPMENT);
+  });
+});
+
+describe('co2 in a tank update', () => {
+  it('takes a tier from off to the top, alone, and nothing else', () => {
+    for (const tier of [0, 1, MAX_EQUIPMENT_TIER]) {
+      expect(updateTankRequestSchema.safeParse({ co2: { tier } }).success, `${tier}`).toBe(true);
+    }
+    for (const co2 of [{ tier: -1 }, { tier: MAX_EQUIPMENT_TIER + 1 }, { tier: 1.5 }, {}]) {
+      expect(updateTankRequestSchema.safeParse({ co2 }).success, JSON.stringify(co2)).toBe(false);
+    }
   });
 });
 

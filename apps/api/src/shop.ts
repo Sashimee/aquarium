@@ -165,7 +165,13 @@ export function registerShopRoutes(ctx: ShopContext): void {
       const charged = await charge(item.price);
       await tx
         .update(schema.tanks)
-        .set({ equipment: upgraded, updatedAt: new Date(nowMs) })
+        .set({
+          equipment: upgraded,
+          ...(item.device === 'co2'
+            ? { co2OwnedTier: Math.max(ticked.tank.co2OwnedTier, item.tier) }
+            : {}),
+          updatedAt: new Date(nowMs),
+        })
         .where(eq(schema.tanks.id, ticked.tank.id));
       return respond(charged);
     }
