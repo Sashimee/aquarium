@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { FRESHWATER_PUFFER_RECIPES, paintFigure8Puffer } from './freshwater-puffer.ts';
 import { LOFT_FISH_RECIPES } from './loft-fish.ts';
-import { MANGROVE_LOFT_RECIPES } from './mangrove.ts';
+import {
+  MANGROVE_ENVIRONMENT_RECIPES,
+  MANGROVE_FISH_RECIPES,
+  MANGROVE_LOFT_RECIPES,
+  MANGROVE_SUBSTRATE_RECIPES,
+} from './mangrove.ts';
+import { ENVIRONMENT_RECIPES, FISH_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
 
 describe('freshwater puffer', () => {
   it('builds only the figure-8 puffer, and the mangrove set no longer claims it', () => {
@@ -19,6 +25,51 @@ describe('freshwater puffer', () => {
           expect(channel).toBeLessThanOrEqual(1);
         }
       }
+    }
+  });
+
+  it('uses ids that no other recipe claims', () => {
+    const mine = FRESHWATER_PUFFER_RECIPES.map((r) => r.id);
+    const others = new Set([
+      ...FISH_RECIPES.map((r) => r.id),
+      ...LOFT_FISH_RECIPES.map((r) => r.id),
+      ...ENVIRONMENT_RECIPES.map((r) => r.id),
+      ...SUBSTRATE_RECIPES.map((r) => r.id),
+      ...MANGROVE_FISH_RECIPES.map((r) => r.id),
+      ...MANGROVE_LOFT_RECIPES.map((r) => r.id),
+      ...MANGROVE_ENVIRONMENT_RECIPES.map((r) => r.id),
+      ...MANGROVE_SUBSTRATE_RECIPES.map((r) => r.id),
+    ]);
+    expect(new Set(mine).size).toBe(mine.length);
+    expect(mine.filter((id) => others.has(id))).toEqual([]);
+  });
+
+  it('keeps the loft canvas large enough for its snout and tail pixels', () => {
+    for (const recipe of FRESHWATER_PUFFER_RECIPES) {
+      expect(recipe.texture.kind).toBe('synthetic');
+      if (recipe.texture.kind !== 'synthetic') continue;
+      const { width, height, snoutPixel, tailPixel } = recipe.texture;
+      for (const [x, y] of [snoutPixel, tailPixel]) {
+        expect(x).toBeGreaterThan(0);
+        expect(x).toBeLessThan(width);
+        expect(y).toBeGreaterThan(0);
+        expect(y).toBeLessThan(height);
+      }
+      expect(tailPixel[0] - snoutPixel[0]).toBeGreaterThan(width / 2);
+    }
+  });
+
+  it('never references the parked public-domain photo', () => {
+    const used = FRESHWATER_PUFFER_RECIPES.flatMap((r) =>
+      r.texture.kind === 'synthetic' ? (r.texture.references ?? []) : [],
+    );
+    expect(used).not.toContain('wm-figure8-geyer');
+  });
+
+  it('gives the puffer a standard length in the sourced range', () => {
+    for (const recipe of FRESHWATER_PUFFER_RECIPES) {
+      expect(recipe.fallbackLengthM).toBeGreaterThan(0.02);
+      expect(recipe.fallbackLengthM).toBeLessThan(0.2);
     }
   });
 });
