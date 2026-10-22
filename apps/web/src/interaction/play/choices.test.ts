@@ -141,3 +141,39 @@ describe('feed requests that keep the selection', () => {
     choices.stop();
   });
 });
+
+describe('feed lock', () => {
+  const setupLocked = () => {
+    const events = new EventBus<InteractionEvents>();
+    const choices = new PlayChoices(events);
+    const dropped: string[] = [];
+    events.on('feed:dropped', ({ food }) => dropped.push(food));
+    return { events, choices, dropped };
+  };
+
+  it('refuses hand-feed taps whatever tool was remembered, even one set before the scene existed', () => {
+    const { events, choices, dropped } = setupLocked();
+    events.emit('play:request-tool', { tool: 'feed' });
+    events.emit('play:feed-lock', { locked: true });
+    const controller = controllerOn(events, new FeedGate({ cooldownMs: 0 }));
+    choices.applyTo(controller);
+    expect(controller.tool).toBe('feed');
+    controller.tap(0, 0);
+    expect(dropped).toEqual([]);
+    events.emit('feed:request', { food: 'flakes', portion: 0.25, keepSelection: true });
+    expect(dropped).toEqual(['flakes']);
+  });
+
+  it('drops taps again once unlocked', () => {
+    const { events, choices, dropped } = setupLocked();
+    events.emit('play:feed-lock', { locked: true });
+    const controller = controllerOn(events, new FeedGate({ cooldownMs: 0 }));
+    choices.applyTo(controller);
+    controller.setTool('feed');
+    controller.tap(0, 0);
+    expect(dropped).toEqual([]);
+    events.emit('play:feed-lock', { locked: false });
+    controller.tap(0, 0);
+    expect(dropped).toEqual(['flakes']);
+  });
+});

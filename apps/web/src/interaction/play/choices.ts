@@ -14,6 +14,7 @@ import type { InteractionEvents, PlayTool } from '../events';
 export class PlayChoices {
   private tool: PlayTool = 'tap';
   private food: FoodType = 'flakes';
+  private feedLocked = false;
   private readonly unsubscribe: (() => void)[];
 
   constructor(private readonly interaction: EventBus<InteractionEvents>) {
@@ -23,6 +24,9 @@ export class PlayChoices {
       }),
       interaction.on('play:tool-changed', ({ tool }) => {
         if (tool !== 'game') this.tool = tool;
+      }),
+      interaction.on('play:feed-lock', ({ locked }) => {
+        this.feedLocked = locked;
       }),
       interaction.on('feed:select', ({ food }) => {
         this.food = food;
@@ -34,7 +38,11 @@ export class PlayChoices {
   }
 
   /** Call right after creating a play system, before any input reaches it. */
-  applyTo(controller: { setTool(tool: PlayTool): void }): void {
+  applyTo(controller: {
+    setTool(tool: PlayTool): void;
+    setFeedLocked?(locked: boolean): void;
+  }): void {
+    controller.setFeedLocked?.(this.feedLocked);
     controller.setTool(this.tool);
     this.interaction.emit('feed:select', { food: this.food });
   }

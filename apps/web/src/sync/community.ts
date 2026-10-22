@@ -13,7 +13,12 @@ import {
 } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
-import { ApiRequestError, type ApiClient } from '../ui/api';
+import {
+  ApiRequestError,
+  REQUEST_TIMEOUT_MS,
+  TOTAL_TIMEOUT_FACTOR,
+  type ApiClient,
+} from '../ui/api';
 import { AteUploader, type AteUploaderOptions } from './ateUploader';
 import { backoffDelay, realSleep } from './backoff';
 import { bundledCommonName } from './bundledSpecies';
@@ -68,7 +73,8 @@ export const INITIAL_COMMUNITY_STATE: CommunityViewState = {
 };
 
 export const MAX_FEED_LINES = 12;
-const ECHO_WINDOW_MS = 30_000;
+// At least the POST's overall deadline (REQUEST_TIMEOUT_MS x TOTAL_TIMEOUT_FACTOR), or a slow reply outlives its echo.
+const ECHO_WINDOW_MS = REQUEST_TIMEOUT_MS * TOTAL_TIMEOUT_FACTOR + 5_000;
 const PORTION_EPSILON = 1e-6;
 const QUOTA_REFRESH_SLACK_MS = 1_000;
 export const STREAM_BACKOFF = { baseMs: 1_000, maxMs: 30_000 } as const;
@@ -228,7 +234,8 @@ export function applyTankToScene(bus: SceneBus, held: Tank | null, next: Tank): 
 }
 
 export interface CommunityControllerDeps {
-  api: Pick<ApiClient, 'community' | 'communityFeed' | 'communityAte'>;
+  api: Pick<ApiClient, 'community' | 'communityFeed' | 'communityAte'> &
+    Partial<Pick<ApiClient, 'myHandle'>>;
   openStream: OpenStream;
   /** Applies a tank snapshot to the scene; called only for snapshots newer than the one held. */
   onTank?(held: Tank | null, next: Tank): void;
@@ -246,6 +253,7 @@ interface Echo {
   until: number;
   /** The food of this feed is already in the water, whichever of the stream frame and the reply came first. */
   dropped: boolean;
+  by: string | null;
 }
 
 /** The client side of the shared tank: one live stream, the player's quota, and feeding with retry-safe keys. */
@@ -261,6 +269,8 @@ export class CommunityController {
   private quotaTimer: ReturnType<typeof setTimeout> | null = null;
   private uploader: AteUploader | null = null;
   private started = false;
+  private handle: string | null = null;
+  private handleLoaded: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: CommunityControllerDeps) {
     this.now = deps.now ?? Date.now;
@@ -278,6 +288,7 @@ export class CommunityController {
     if (this.started) return;
     this.started = true;
     void this.refreshQuota();
+    this.handleLoaded = this.loadHandle();
     void this.runStream();
   }
 
@@ -297,7 +308,14 @@ export class CommunityController {
     if (problem && secondsLeft(problem.retryAt, this.now()) > 0) return;
     const intent = `${food}:${portion}`;
     this.patch({ feeding: true, problem: null, notice: null });
-    const echo: Echo = { food, portion, until: this.now() + ECHO_WINDOW_MS, dropped: false };
+    await this.handleLoaded;
+    const echo: Echo = {
+      food,
+      portion,
+      until: this.now() + ECHO_WINDOW_MS,
+      dropped: false,
+      by: this.handle,
+    };
     this.echoes.push(echo);
     try {
       const response = await this.deps.api.communityFeed({
@@ -342,6 +360,16 @@ export class CommunityController {
       },
     }));
     for (const e of eaten) uploader.add(e.fishId, e.portion);
+  }
+
+  /** Own feeds are matched on the handle the server publishes; without one the frame carries null. */
+  private async loadHandle(): Promise<void> {
+    try {
+      const handle = await this.deps.api.myHandle?.();
+      if (handle !== undefined && !this.lifetime.signal.aborted) this.handle = handle;
+    } catch {
+      this.handle = null;
+    }
   }
 
   async refreshQuota(): Promise<void> {
@@ -468,7 +496,10 @@ export class CommunityController {
     const now = this.now();
     this.echoes = this.echoes.filter((e) => e.until > now);
     const echo = this.echoes.find(
-      (e) => e.food === event.food && Math.abs(e.portion - event.portion) < PORTION_EPSILON,
+      (e) =>
+        e.by === event.by &&
+        e.food === event.food &&
+        Math.abs(e.portion - event.portion) < PORTION_EPSILON,
     );
     if (echo?.dropped) {
       this.forgetEcho(echo);

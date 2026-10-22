@@ -25,6 +25,7 @@ import {
   communityFeedRequestSchema,
   communityFeedResponseSchema,
   communityStateSchema,
+  handleResponseSchema,
   dataExportSchema,
   privacyPolicySchema,
   publicTankSchema,
@@ -293,6 +294,7 @@ export interface ApiClient {
   community(): Promise<CommunityState>;
   communityFeed(request: CommunityFeedRequest): Promise<CommunityFeedResponse>;
   communityAte(reports: readonly AteReport[], batchId?: string): Promise<CommunityState>;
+  myHandle(): Promise<string | null>;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -861,6 +863,11 @@ export function createApiClient(
       const res = await send('/api/community');
       if (!res.ok) throw await toError(res);
       return parsed(res, communityStateSchema);
+    },
+    async myHandle() {
+      const res = await send('/api/me/handle');
+      if (!res.ok) throw await toError(res);
+      return (await parsed(res, handleResponseSchema)).handle;
     },
     async communityFeed(request) {
       const body = validate(communityFeedRequestSchema, request);

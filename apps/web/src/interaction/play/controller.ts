@@ -179,6 +179,7 @@ export class PlayController {
     position: [0, 0, 0],
     velocity: [0, 0, 0],
   };
+  private feedLocked = false;
   private lastToys = '';
   private lastGameKey = '';
 
@@ -191,6 +192,7 @@ export class PlayController {
         if (!keepSelection) this.selectedFood = food;
         this.feed(food, portion, null);
       }),
+      deps.events.on('play:feed-lock', ({ locked }) => this.setFeedLocked(locked)),
       deps.events.on('toys:remove', ({ toy }) => this.removeToy(toy)),
       deps.events.on('game:request', (request) => {
         if (request.action === 'stop') this.stopGame();
@@ -226,6 +228,10 @@ export class PlayController {
   /** Laser and wand own the drag so the camera does not orbit under the finger. */
   get claimsDrag(): boolean {
     return this.activeTool === 'laser' || this.activeTool === 'wand' || this.activeTool === 'ball';
+  }
+
+  setFeedLocked(locked: boolean): void {
+    this.feedLocked = locked;
   }
 
   setTool(tool: PlayTool): void {
@@ -553,6 +559,7 @@ export class PlayController {
 
   /** Drops the food and returns how many particles went in; 0 when it was refused. */
   private feed(food: FoodType, portion: number, at: Vec3 | null): number {
+    if (this.feedLocked && at !== null) return 0;
     const { gate, events, food: field, min, max } = this.deps;
     const fedAt = this.deps.now();
     const decision = gate.tryFeed(fedAt);

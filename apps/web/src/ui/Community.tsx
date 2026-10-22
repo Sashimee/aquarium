@@ -8,6 +8,7 @@ import {
   secondsLeft,
   waitText,
   type CommunityViewState,
+  type FeedProblemNeeds,
 } from '../sync/community';
 import { createOpenStream } from '../sync/communityStream';
 import { bundledCommonName } from '../sync/bundledSpecies';
@@ -58,10 +59,8 @@ function useCommunity(): { controller: CommunityController | null; state: Commun
   }, [api, interaction, status, userKey]);
 
   useEffect(() => {
-    const before = interaction.peek('play:tool-changed')?.tool;
-    if (before !== 'feed') return;
-    interaction.emit('play:request-tool', { tool: 'tap' });
-    return () => interaction.emit('play:request-tool', { tool: 'feed' });
+    interaction.emit('play:feed-lock', { locked: true });
+    return () => interaction.emit('play:feed-lock', { locked: false });
   }, [interaction]);
 
   const state = useSyncExternalStore(
@@ -111,7 +110,7 @@ function ConnectionNote({ state, now }: { state: CommunityViewState; now: number
   );
 }
 
-function SignInPrompt() {
+export function SignInPrompt() {
   const go = (destination: string) => (e: React.MouseEvent) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
@@ -130,6 +129,13 @@ function SignInPrompt() {
       to feed the fish.
     </p>
   );
+}
+
+export function FeedFollowUp({ needs }: { needs: FeedProblemNeeds }) {
+  if (needs === 'sign-in') return <SignInPrompt />;
+  if (needs === 'verify')
+    return <p className="hint">Check your inbox for the verification link.</p>;
+  return null;
 }
 
 function FeedBox({
@@ -207,10 +213,7 @@ function FeedBox({
           ? `${state.problem.text}${wait > 0 ? ` Try again in ${waitText(wait)}.` : ''}`
           : state.notice}
       </p>
-      {state.problem?.needs === 'sign-in' && <SignInPrompt />}
-      {state.problem?.needs === 'verify' && (
-        <p className="hint">Check your inbox for the verification link.</p>
-      )}
+      <FeedFollowUp needs={state.problem?.needs ?? null} />
     </div>
   );
 }

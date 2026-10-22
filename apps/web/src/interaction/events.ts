@@ -104,6 +104,8 @@ export interface InteractionEvents {
   'camera:focus-fish': { fishIds: readonly string[] };
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
+  /** A tank the player may not feed locally (the shared tank): taps never drop food while locked. */
+  'play:feed-lock': { locked: boolean };
   /** Which toys are in the tank; the play panel offers to remove them. */
   'toys:changed': { mirror: boolean; ball: boolean };
   'toys:remove': { toy: Toy };

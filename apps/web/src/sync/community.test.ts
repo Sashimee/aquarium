@@ -72,6 +72,7 @@ function setup(
     community: vi.fn(() => Promise.resolve(stateOf())),
     communityFeed: vi.fn(() => Promise.resolve({ state: stateOf(), replayed: false })),
     communityAte: vi.fn(() => Promise.resolve(stateOf())),
+    myHandle: vi.fn(() => Promise.resolve<string | null>('mossy')),
     ...api,
   };
   const controller = new CommunityController({
@@ -312,6 +313,7 @@ describe('live feed and scene', () => {
     controller.start();
     await settle();
     const pending = controller.feed('flakes', 0.5);
+    await settle();
     streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('mossy', 0.5)) });
     expect(drops).toEqual([['flakes', 0.5]]);
     reply({ state: stateOf(), replayed: false });
@@ -353,6 +355,45 @@ describe('live feed and scene', () => {
     reply(stateOf({ tank: tankFixture({ lastTickAt: '2026-02-02T00:00:00.000Z' }) }));
     await settle();
     expect(onTank).not.toHaveBeenCalled();
+  });
+
+  it('does not mistake another player with the same food and portion for the own echo', async () => {
+    let reply: (v: { state: CommunityState; replayed: boolean }) => void = () => undefined;
+    const communityFeed = vi.fn(
+      () => new Promise<{ state: CommunityState; replayed: boolean }>((r) => (reply = r)),
+    );
+    const { controller, streams, drops } = setup(
+      {},
+      { communityFeed, myHandle: vi.fn(() => Promise.resolve('mossy')) },
+    );
+    controller.start();
+    await settle();
+    const pending = controller.feed('flakes', 0.5);
+    await settle();
+    streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('misty', 0.5)) });
+    streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('mossy', 0.5)) });
+    expect(drops).toHaveLength(2);
+    reply({ state: stateOf(), replayed: false });
+    await pending;
+    expect(drops).toHaveLength(2);
+    controller.dispose();
+  });
+
+  it('keeps the pending feed matchable for as long as the request may run', async () => {
+    let reply: (v: { state: CommunityState; replayed: boolean }) => void = () => undefined;
+    const communityFeed = vi.fn(
+      () => new Promise<{ state: CommunityState; replayed: boolean }>((r) => (reply = r)),
+    );
+    const { controller, streams, drops } = setup({}, { communityFeed });
+    controller.start();
+    await settle();
+    const pending = controller.feed('flakes', 0.5);
+    await vi.advanceTimersByTimeAsync(59_000);
+    streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('mossy', 0.5)) });
+    reply({ state: stateOf(), replayed: false });
+    await pending;
+    expect(drops).toHaveLength(1);
+    controller.dispose();
   });
 
   it('refuses an older snapshot than the one held', async () => {
