@@ -1477,16 +1477,16 @@ describe('FishSystem toys and display', () => {
   );
 
   it.each([
-    ['without shadows', 0],
-    ['with shadows', 1024],
+    ['without shadows', 0, 0, 1],
+    ['with shadows', 1024, 0, 1],
+    ['in display', 1024, 0.8, 0],
   ])(
-    'draws a near fish with no atlas outside the mesh cap at lod2, %s',
-    async (_, shadowMapSize) => {
-      const lod2Geometry = new BoxGeometry(0.012, 0.026, 0.065);
+    'draws a near fish with no atlas outside the mesh cap one level coarser, unless in display: %s',
+    async (_, shadowMapSize, display, drawnLevel) => {
       const lodGeometries = [
         new BoxGeometry(0.012, 0.026, 0.073),
         new BoxGeometry(0.012, 0.026, 0.07),
-        lod2Geometry,
+        new BoxGeometry(0.012, 0.026, 0.065),
       ];
       const model: FishModel = {
         ...bettaModel(),
@@ -1507,15 +1507,16 @@ describe('FishSystem toys and display', () => {
       );
       load();
       await nextWorld();
-      for (let i = 0; i < 3; i++) snapshot(0, 0);
+      for (let i = 0; i < 3; i++) snapshot(display, 0);
       const drawn = new Map<BoxGeometry, InstancedMesh>();
       engine.scene.traverse((object) => {
         if (object instanceof InstancedMesh && object.geometry instanceof BoxGeometry) {
           if (object.count > 0) drawn.set(object.geometry, object);
         }
       });
-      expect([...drawn.keys()]).toEqual([lod2Geometry]);
-      expect(drawn.get(lod2Geometry)?.castShadow).toBe(shadowMapSize > 0);
+      const expected = lodGeometries[drawnLevel];
+      expect([...drawn.keys()]).toEqual([expected]);
+      expect(expected && drawn.get(expected)?.castShadow).toBe(shadowMapSize > 0);
       fish.dispose();
     },
   );

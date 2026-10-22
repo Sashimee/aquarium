@@ -35,7 +35,12 @@ import {
   vec4,
   viewZToPerspectiveDepth,
 } from 'three/tsl';
-import { ImpostorSlot, type ImpostorAtlas, type ImpostorInstanceData } from './impostor';
+import {
+  droppedNormalLevels,
+  ImpostorSlot,
+  type ImpostorAtlas,
+  type ImpostorInstanceData,
+} from './impostor';
 import {
   bodyBend,
   diseasedAlbedo,
@@ -162,6 +167,8 @@ export class FishImpostorMaterial extends MeshPhysicalNodeMaterial {
 
     const footprint = max(length(dFdx(q)), length(dFdy(q))).mul(frameSize / (2 * radius));
     const level = clamp(log2(max(footprint, 1e-6)), 0, maxMip);
+    const normalDrop = droppedNormalLevels(frameSize);
+    const normalLevel = max(level.sub(normalDrop), 0);
 
     let colour: Node<'vec4'> = vec4(0);
     let surface: Node<'vec4'> = vec4(0);
@@ -193,7 +200,7 @@ export class FishImpostorMaterial extends MeshPhysicalNodeMaterial {
       const lv = clamp(float(0.5).sub(dot(x, up).mul(0.5 / radius)), inset, 1 - inset);
       const uv = vec2(i.add(lu), j.add(lv)).div(grid);
       const albedo = texture(atlas.albedo, uv, level);
-      const stored = texture(atlas.normal, uv, level);
+      const stored = texture(atlas.normal, uv, normalLevel);
       const nx = stored.x.mul(2).sub(1);
       const ny = stored.y.mul(2).sub(1);
       const nz = sqrt(max(float(1).sub(nx.mul(nx)).sub(ny.mul(ny)), 0));
