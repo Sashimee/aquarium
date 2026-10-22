@@ -271,6 +271,30 @@ describe('PlayController net', () => {
   });
 });
 
+describe('PlayController tap announcement', () => {
+  it.each(['feed', 'tap', 'trim', 'net'] as const)(
+    'announces the tapped ray with the %s tool',
+    (tool) => {
+      const t = makeController();
+      const seen = vi.fn();
+      t.events.on('play:tapped', seen);
+      t.controller.setTool(tool);
+      t.controller.tap(10, 10);
+      expect(seen).toHaveBeenCalledOnce();
+      expect(seen).toHaveBeenCalledWith({ ray: frontRay() });
+    },
+  );
+
+  it('says nothing when the camera has no ray', () => {
+    const t = makeController();
+    const seen = vi.fn();
+    t.events.on('play:tapped', seen);
+    t.setRay(null);
+    t.controller.tap(10, 10);
+    expect(seen).not.toHaveBeenCalled();
+  });
+});
+
 describe('PlayController trim', () => {
   const pick = { key: 's7', size: 1.6, minSize: 0.4, maxSize: 2.4, distance: 0.5 };
 

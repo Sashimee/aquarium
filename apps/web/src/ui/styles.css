@@ -331,6 +331,12 @@
   gap: 0.75rem;
 }
 
+.shop li[aria-current='true'] {
+  outline: 2px solid #ffd27f;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 .shop .hint {
   margin: 0.1rem 0 0;
 }
