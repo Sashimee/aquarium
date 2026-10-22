@@ -155,7 +155,8 @@ describe('growCorals', () => {
     const box = must(extra.find((c) => c.id === 'decor:coral:s7.1'));
     expect(box.kind).toBe('box');
     if (box.kind === 'box') {
-      expect(box.center[0]).toBeGreaterThan(0.1);
+      expect(box.center[0]).toBe(0.2);
+      expect(box.center[2]).toBe(0.1);
       expect(box.halfExtents[0]).toBeGreaterThan(0);
     }
   });

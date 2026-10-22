@@ -238,6 +238,7 @@ describe('the coral section', () => {
       expect(own.textContent).toBe('');
       expect(errors).not.toHaveBeenCalled();
     } finally {
+      act(() => ownRoot.unmount());
       errors.mockRestore();
       own.remove();
     }
