@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DecorItem } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { SceneAnchor } from './anemone';
+import { ModelLibrary } from './assets';
 import { TankScene } from './TankScene';
 import { fakeEngine, preset } from './tankSceneHarness';
 
@@ -41,12 +42,12 @@ async function builtScene() {
   );
   const release = setInterval(() => h.ktx2.releaseAll(), 1);
   releasers.push(release);
-  return building;
+  return { scene: await building, h };
 }
 
 describe('TankScene cave anchors through setHardDecor', () => {
   it('tell a listener the anchors for a placed, a moved and a removed shelter', async () => {
-    const scene = await builtScene();
+    const { scene } = await builtScene();
     const heard: (readonly SceneAnchor[])[] = [];
     const off = scene.onAnchorsChanged((anchors) => heard.push(anchors));
     const caves = (anchors: readonly SceneAnchor[]) => anchors.filter((a) => a.kind === 'cave');
@@ -67,6 +68,57 @@ describe('TankScene cave anchors through setHardDecor', () => {
     off();
     await scene.setHardDecor([arch]);
     expect(heard).toHaveLength(3);
+    await scene.dispose();
+  }, 30_000);
+});
+
+describe('TankScene anchor notification ordering', () => {
+  it('evicts unused models before telling listeners', async () => {
+    const { scene } = await builtScene();
+    const order: string[] = [];
+    const retain = vi
+      .spyOn(ModelLibrary.prototype, 'retainOnly')
+      .mockImplementation(async () => void order.push('evict'));
+    scene.onAnchorsChanged(() => order.push('notify'));
+    await scene.setHardDecor([arch]);
+    expect(order).toEqual(['evict', 'notify']);
+    retain.mockRestore();
+    await scene.dispose();
+  }, 30_000);
+
+  it('still evicts and reaches later listeners when one listener throws', async () => {
+    const { scene, h } = await builtScene();
+    const retain = vi.spyOn(ModelLibrary.prototype, 'retainOnly');
+    const heard: number[] = [];
+    scene.onAnchorsChanged(() => {
+      throw new Error('listener boom');
+    });
+    scene.onAnchorsChanged((anchors) => heard.push(anchors.length));
+    h.errors.length = 0;
+    await scene.setHardDecor([arch]);
+    expect(retain).toHaveBeenCalled();
+    expect(heard).toHaveLength(1);
+    expect(h.errors).toHaveLength(1);
+    expect(h.errors[0]).toMatchObject({ message: 'An anchor listener threw' });
+    retain.mockRestore();
+    await scene.dispose();
+  }, 30_000);
+
+  it('still tells listeners about the applied layout when eviction throws', async () => {
+    const { scene, h } = await builtScene();
+    const retain = vi
+      .spyOn(ModelLibrary.prototype, 'retainOnly')
+      .mockRejectedValue(new Error('evict boom'));
+    const heard: (readonly SceneAnchor[])[] = [];
+    scene.onAnchorsChanged((anchors) => heard.push(anchors));
+    h.errors.length = 0;
+    await scene.setHardDecor([arch]);
+    expect(heard).toHaveLength(1);
+    expect(heard[0]?.some((a) => a.kind === 'cave')).toBe(true);
+    expect(h.errors[0]).toMatchObject({
+      cause: expect.objectContaining({ message: 'evict boom' }),
+    });
+    retain.mockRestore();
     await scene.dispose();
   }, 30_000);
 });
