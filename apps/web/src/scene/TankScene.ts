@@ -204,6 +204,7 @@ export class TankScene {
   private substrate: SubstrateInstall | null = null;
   private readonly placeholderSubstrate: Material | Material[];
   private disposed = false;
+  private readonly anchorListeners = new Set<(anchors: readonly SceneAnchor[]) => void>();
   private readonly presetMovable: readonly { item: DecorItem; kind: string }[];
   private movablePlants = false;
   private plantSlots = new Map<number, number>();
@@ -339,7 +340,6 @@ export class TankScene {
       colliders.push(anemoneCollider(entry, item));
       anchors.push(anemoneAnchor(`anemone-${i + 1}`, entry, item));
     });
-    anchors.push(...caveAnchors(hardItems.map(({ item }) => item)));
 
     const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
     for (const [i, entry] of euphylliaItems.entries()) {
@@ -870,7 +870,13 @@ export class TankScene {
 
   /** Where species with a home (clownfish and their anemone) are drawn to. */
   get anchors(): readonly SceneAnchor[] {
-    return this.anchorData;
+    return [...this.anchorData, ...caveAnchors(this.hardItems.map(({ item }) => item))];
+  }
+
+  /** Called with the anchors after a layout change moves, adds or removes shelter decor. */
+  onAnchorsChanged(listener: (anchors: readonly SceneAnchor[]) => void): () => void {
+    this.anchorListeners.add(listener);
+    return () => this.anchorListeners.delete(listener);
   }
 
   get plantCount(): number {

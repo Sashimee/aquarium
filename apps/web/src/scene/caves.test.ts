@@ -27,7 +27,7 @@ describe('cave anchors from presets', () => {
       expect(Math.abs(x)).toBeLessThan(half(DEFAULT_TANK.length));
       expect(Math.abs(z)).toBeLessThan(half(DEFAULT_TANK.depth));
       expect(y).toBeGreaterThan(substrateHeight(DEFAULT_TANK, x, z));
-      expect(y).toBeLessThan(DEFAULT_TANK.height);
+      expect(y).toBeLessThan(DEFAULT_TANK.height - DEFAULT_TANK.freeboard);
     }
   });
 

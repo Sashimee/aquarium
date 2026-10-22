@@ -10,12 +10,17 @@ interface CaveMouth {
   readonly radius: number;
 }
 
-/** Read off each asset's mesh: where the opening sits and which way it looks out. */
+/**
+ * Where the opening sits and which way it looks out. A shelter is solid to the sim: the scene fits
+ * one convex hull to it, and the decor layer replaces that with a rounded box over its whole
+ * footprint. The mouth is set outside both along `facing`, at least its own `radius` clear, where
+ * a fish can reach it.
+ */
 export const CAVE_MOUTHS: Readonly<Record<string, CaveMouth>> = {
-  'reef-arch': { position: [0.005, 0.03, 0.02], facing: [0, 0, 1], radius: 0.025 },
-  'rock-pile-cave': { position: [0, 0.055, 0.07], facing: [0, 0, 1], radius: 0.035 },
-  'rock-pile-stack': { position: [0.11, 0.04, 0.09], facing: [0, 0, 1], radius: 0.025 },
-  'neothauma-shell': { position: [0, 0.013, 0.012], facing: [0, 0, 1], radius: 0.012 },
+  'reef-arch': { position: [0.005, 0.03, 0.09], facing: [0, 0, 1], radius: 0.025 },
+  'rock-pile-cave': { position: [0, 0.055, 0.2], facing: [0, 0, 1], radius: 0.035 },
+  'rock-pile-stack': { position: [0.11, 0.04, 0.215], facing: [0, 0, 1], radius: 0.025 },
+  'neothauma-shell': { position: [0, 0.013, 0.04], facing: [0, 0, 1], radius: 0.012 },
 };
 
 export function offersShelter(assetId: string): boolean {
