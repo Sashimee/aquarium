@@ -27,7 +27,8 @@ const TEST_TIMEOUT_MS = 120_000;
 // The gate is therefore coarse: a sim slowdown up to about 1.4x passes a loaded run and up to
 // about 1.5x a quiet one; a doubled cost failed all 30 loaded runs. A reference with a sim-sized
 // working set (a 2 MB gather table) spread 1.35-2.5x between loaded runs, against 1.15-1.19x for
-// the 60-point flock. Tight ratio limits for an idle machine are in scripts/bench.ts.
+// the 60-point flock. Tight ratio limits for an idle machine are in scripts/bench.ts, which CI never
+// runs, so a 1.2-1.4x slowdown is caught by nothing automated.
 const HEADROOM = 1.3;
 const SWIMMING_LIMIT = 1.45 * HEADROOM;
 const WALKING_LIMIT = 2.25 * HEADROOM;

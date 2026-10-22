@@ -19,7 +19,8 @@ const DESKTOP_BUDGET_MS = 2;
 const THROTTLED_BUDGET_MS = 4;
 // Worst of 10 runs on the budget desktop at load average 3-8 (Ryzen 5 7600X, Node 24, 2026-10-22):
 // swimming 1.137-1.163, walking 1.743-1.783, feeding 2.247-2.358, times 1.15. A clean process
-// keeps the ratio far steadier than under vitest, so a 1.2x slowdown of the sim fails here.
+// keeps the ratio far steadier than under vitest: a sim slowdown fails here from 1.15x at the slow
+// end of each range and from 1.18-1.21x at the fast end.
 const REFERENCE_RATIO_LIMITS = { swimming: 1.34, walking: 2.05, feeding: 2.71 } as const;
 
 function percentile(sorted: readonly number[], p: number): number {
@@ -145,6 +146,11 @@ for (let i = 0; i < toySteps; i++) {
 }
 const toyMean = toyMs / toySteps;
 
+// Node queues gc entries to the observer only once the event loop turns.
+await new Promise((resolve) => setTimeout(resolve, 0));
+gc.disconnect();
+const gcMs = gcPauses.reduce((sum, e) => sum + e.duration, 0);
+
 function ratioToReference(make: () => readonly [Scenario, Scenario]): number {
   const { meanMs } = fastestMeanMs(make);
   return at(meanMs, 0) / at(meanMs, 1);
@@ -155,11 +161,6 @@ const ratios = {
   walking: ratioToReference(() => [swimming(4, walkerBenchmarkConfig(4)), reference()]),
   feeding: ratioToReference(() => [frenzy(), reference()]),
 };
-
-// Node queues gc entries to the observer only once the event loop turns.
-await new Promise((resolve) => setTimeout(resolve, 0));
-gc.disconnect();
-const gcMs = gcPauses.reduce((sum, e) => sum + e.duration, 0);
 
 samples.sort((a, b) => a - b);
 feedSamples.sort((a, b) => a - b);
@@ -213,7 +214,7 @@ for (const [name, ms] of gates) {
   }
 }
 for (const name of ['swimming', 'walking', 'feeding'] as const) {
-  if (ratios[name] > REFERENCE_RATIO_LIMITS[name]) {
+  if (!(ratios[name] <= REFERENCE_RATIO_LIMITS[name])) {
     over.push(
       `${name} step ${ratios[name].toFixed(3)}x the reference workload is over the ${REFERENCE_RATIO_LIMITS[name]}x limit`,
     );
