@@ -136,8 +136,7 @@ export function fragRefusalText(error: unknown, label: string): string | null {
   }
   if (error.status === 404) return `The ${label} is no longer in this tank.`;
   if (error.status !== 409) return null;
-  const reason: string | null = error.reason;
-  switch (reason) {
+  switch (error.reason) {
     case 'coral_not_grown':
       return `The ${label} has not grown enough to cut a fragment yet.`;
     case 'coral_bleached':

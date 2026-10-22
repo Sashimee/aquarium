@@ -144,15 +144,8 @@ describe('sameCorals', () => {
 });
 
 describe('fragRefusalText', () => {
-  const refused = (status: number, reason: string | null) =>
-    new ApiRequestError(
-      status,
-      'conflict',
-      'server words',
-      {},
-      null,
-      reason as ApiRequestError['reason'],
-    );
+  const refused = (status: number, reason: ApiRequestError['reason']) =>
+    new ApiRequestError(status, 'conflict', 'server words', {}, null, reason);
 
   it('explains no room on the substrate', () => {
     expect(fragRefusalText(refused(409, 'coral_no_room'), 'brain coral')).toMatch(
@@ -160,8 +153,8 @@ describe('fragRefusalText', () => {
     );
   });
 
-  it('falls back to the server words for a reason it does not know', () => {
-    expect(fragRefusalText(refused(409, 'something_new'), 'brain coral')).toBe('server words');
+  it('falls back to the server words for a reason it has no text for', () => {
+    expect(fragRefusalText(refused(409, 'tank_full'), 'brain coral')).toBe('server words');
   });
 
   it('leaves other failures to the caller', () => {

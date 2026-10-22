@@ -3,7 +3,7 @@ import type { Coral, Tank } from '@aquarium/shared';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { tankFixture } from '../sync/fixtures';
+import { TANK_A, TANK_B, tankFixture } from '../sync/fixtures';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE } from '../sync/state';
 import { CoralSection } from './Corals';
@@ -110,6 +110,15 @@ describe('the coral section', () => {
     expect(alerts).toHaveLength(1);
     expect(alerts[0]?.textContent).toContain('no room on the substrate');
     expect(alerts[0]?.closest('li')?.textContent).toContain('acropora cytherea');
+  });
+
+  it('does not carry a refusal over to another tank with the same coral key', async () => {
+    fragCoral.mockResolvedValueOnce({ ok: false, refusal: 'No room.' });
+    await mount(tankFixture({ id: TANK_A, biome: 'reef', corals: [coral()] }));
+    await click(cutButtons()[0]);
+    expect(container.querySelectorAll('li [role="alert"]')).toHaveLength(1);
+    await mount(tankFixture({ id: TANK_B, biome: 'reef', corals: [coral()] }));
+    expect(container.querySelectorAll('li [role="alert"]')).toHaveLength(0);
   });
 
   it('warns about the lamp when it is set above what the coral takes', async () => {

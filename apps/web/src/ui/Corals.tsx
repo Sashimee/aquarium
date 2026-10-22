@@ -4,15 +4,17 @@ import { BUNDLED_CORALS } from '../sync/bundledCorals';
 import { describeBleach, fragChoices, lampWarning, reefIsBleaching } from '../sync/coralCare';
 import type { SessionState, TankSession } from '../sync/session';
 
-export function CoralSection({
-  session,
-  state,
-  tank,
-}: {
+export function CoralSection(props: CoralSectionProps) {
+  return <CoralSectionBody key={props.tank.id} {...props} />;
+}
+
+interface CoralSectionProps {
   session: TankSession;
   state: SessionState;
   tank: Tank;
-}) {
+}
+
+function CoralSectionBody({ session, state, tank }: CoralSectionProps) {
   const id = useId();
   const [refusal, setRefusal] = useState<{ key: string; text: string } | null>(null);
   const choices = fragChoices(tank.corals, BUNDLED_CORALS.params.fragMaxBleach);

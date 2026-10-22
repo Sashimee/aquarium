@@ -394,6 +394,19 @@ describe('api client sharing', () => {
     expect(JSON.parse(init.body as string)).toEqual(request);
   });
 
+  it('keeps the coral_no_room reason of a refused frag through the error parser', async () => {
+    const refusal = new Response(
+      JSON.stringify({
+        error: { code: 'conflict', message: 'No room.', reason: 'coral_no_room' },
+      }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const request = { coralKey: 's7', idempotencyKey: 'frag-key-0002' };
+    await expect(
+      createApiClient(vi.fn().mockResolvedValue(refusal)).fragCoral(TANK_A, request),
+    ).rejects.toMatchObject({ status: 409, reason: 'coral_no_room' });
+  });
+
   it('patches acceptsGifts on the tank', async () => {
     const fetcher = vi.fn().mockResolvedValue(json(tankFixture({ acceptsGifts: true })));
     await createApiClient(fetcher).setAcceptsGifts(TANK_A, true);
