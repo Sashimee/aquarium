@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   adultConfirmationRequestSchema,
+  checkoutResponseSchema,
   errorCodeSchema,
   healthResponseSchema,
   packCheckoutRequestSchema,
@@ -29,6 +30,23 @@ describe('checkout requests', () => {
     expect(
       packCheckoutRequestSchema.safeParse({ packId: 'pearls-550', consent, priceCents: 1 }).success,
     ).toBe(false);
+  });
+});
+
+describe('checkout bounds', () => {
+  it('caps the pack id length', () => {
+    expect(packCheckoutRequestSchema.safeParse({ packId: 'a'.repeat(65), consent }).success).toBe(
+      false,
+    );
+  });
+
+  it('only sends the browser to https', () => {
+    expect(
+      checkoutResponseSchema.safeParse({ url: 'https://checkout.stripe.com/c/pay' }).success,
+    ).toBe(true);
+    for (const url of ['javascript:alert(1)', 'http://checkout.stripe.com/c', 'data:text/html,x']) {
+      expect(checkoutResponseSchema.safeParse({ url }).success, url).toBe(false);
+    }
   });
 });
 

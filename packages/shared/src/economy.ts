@@ -186,7 +186,7 @@ export type Pack = z.infer<typeof packSchema>;
 
 export const subscriptionOfferSchema = z.strictObject({
   id: slugSchema,
-  priceCents: z.int().positive(),
+  priceCents: z.int().positive().describe('euro cents per month, VAT included'),
   interval: z.literal('month'),
   pearlsPerDay: priceSchema,
 });
