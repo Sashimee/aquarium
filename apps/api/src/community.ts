@@ -20,7 +20,7 @@ import {
   type CommunityStreamState,
   type Tank,
 } from '@aquarium/shared';
-import { applyCare } from '@aquarium/sim/lifecycle';
+import { applyCare, type LifecycleState } from '@aquarium/sim/lifecycle';
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -296,14 +296,29 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
   // queue every feeder behind them.
   async function readState(): Promise<CommunityStreamState> {
     const id = await ensureTankId();
-    const resting = await database.db.transaction(async (tx) => {
-      const [row] = await tx.select().from(schema.tanks).where(eq(schema.tanks.id, id));
-      if (!row) throw new Error('the community tank row is missing');
-      const ticked = await readTicked(tx, deps, row);
-      return ticked ? streamState(tx, ticked, undefined, ticked.nowMs) : null;
-    });
+    const resting = await database.db.transaction(
+      async (tx) => {
+        const [row] = await tx.select().from(schema.tanks).where(eq(schema.tanks.id, id));
+        if (!row) throw new Error('the community tank row is missing');
+        const ticked = await readTicked(tx, deps, row);
+        return ticked ? streamState(tx, ticked, undefined, ticked.nowMs) : null;
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
     if (resting) return resting;
     return (await transact(async (_tx, ticked) => ({ value: null, ticked }))).state;
+  }
+
+  function safeForStarterStock(state: LifecycleState): boolean {
+    return COMMUNITY_STARTER_STOCK.every((stock) => {
+      const spec = species.get(stock.species);
+      if (!spec)
+        throw new Error(`community starter species "${stock.species}" is not in the catalog`);
+      return (
+        state.water.ammonia <= spec.lifecycle.ammoniaTolerance &&
+        state.chemistry.nitrite <= spec.chemistry.nitriteTolerance
+      );
+    });
   }
 
   async function keepTank(): Promise<void> {
@@ -320,7 +335,7 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
         .orderBy(desc(schema.events.at))
         .limit(1);
       const lastChangeMs = (lastChange?.at ?? tank.createdAt).getTime();
-      if (nowMs - lastChangeMs >= COMMUNITY_UPKEEP.waterChangeEveryMs) {
+      const changeWater = async () => {
         const applied = applyCare(
           state,
           { type: 'water_change' },
@@ -341,7 +356,8 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
           medicine: wireMedicine(state.medicine),
         };
         changed = true;
-      }
+      };
+      if (nowMs - lastChangeMs >= COMMUNITY_UPKEEP.waterChangeEveryMs) await changeWater();
 
       const cleared = fishRows.filter(
         (f) =>
@@ -350,6 +366,22 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
           nowMs - f.diedAt.getTime() >= COMMUNITY_UPKEEP.deadFishKeepMs,
       );
       if (cleared.length > 0) {
+        await tx.insert(schema.memorials).values(
+          cleared.flatMap((f) =>
+            f.diedAt && f.cause
+              ? [
+                  {
+                    tankId: tank.id,
+                    fishName: f.name,
+                    species: f.species,
+                    bornAt: f.bornAt,
+                    diedAt: f.diedAt,
+                    cause: f.cause,
+                  },
+                ]
+              : [],
+          ),
+        );
         await tx.delete(schema.fish).where(
           inArray(
             schema.fish.id,
@@ -363,6 +395,9 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
 
       const alive = fishRows.filter((f) => f.status === 'alive');
       if (alive.length < COMMUNITY_UPKEEP.restockBelowAlive) {
+        if (!safeForStarterStock(state)) await changeWater();
+      }
+      if (alive.length < COMMUNITY_UPKEEP.restockBelowAlive && safeForStarterStock(state)) {
         const wanted = COMMUNITY_STARTER_STOCK.map((stock) => ({
           ...stock,
           count: stock.count - alive.filter((f) => f.species === stock.species).length,
@@ -665,7 +700,17 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
   );
 
   let ticking = false;
+  let upkeepRun: Promise<void> | null = null;
   const timers: NodeJS.Timeout[] = [];
+
+  function runUpkeep(): void {
+    if (upkeepRun) return;
+    upkeepRun = keepTank()
+      .catch((err: unknown) => app.log.error({ err }, 'community upkeep failed'))
+      .finally(() => {
+        upkeepRun = null;
+      });
+  }
 
   async function tickWhileWatched(): Promise<void> {
     if (ticking || streams.size === 0) return;
@@ -685,18 +730,18 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
       if (streams.size > 0) streams.broadcast('viewers', { viewers: streams.size });
     }, config.heartbeatMs);
     const ticker = setInterval(() => void tickWhileWatched(), config.tickMs);
-    const upkeep = setInterval(() => {
-      keepTank().catch((err: unknown) => app.log.error({ err }, 'community upkeep failed'));
-    }, config.upkeepMs);
+    const upkeep = setInterval(runUpkeep, config.upkeepMs);
     upkeep.unref();
     timers.push(upkeep);
     heartbeat.unref();
     ticker.unref();
     timers.push(heartbeat, ticker);
+    runUpkeep();
   });
 
   app.addHook('preClose', async () => {
     for (const timer of timers) clearInterval(timer);
     streams.closeAll();
+    await upkeepRun;
   });
 }
