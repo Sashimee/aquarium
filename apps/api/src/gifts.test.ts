@@ -972,14 +972,16 @@ describe('gifting and trading fish', () => {
             .where(eq(schema.giftOffers.id, id));
         },
       );
-      let res;
+      const pending = confirm(h, a, id, tankA2);
       try {
-        const pending = confirm(h, a, id, tankA2);
         await counter.whenBlocked();
-        res = await pending;
+      } catch (err) {
+        void pending.catch(() => undefined);
+        throw err;
       } finally {
         await counter.release();
       }
+      const res = await pending;
       expect(res.statusCode, res.body).toBe(409);
       expect(errorOf(res).reason).toBe('offer_changed');
       expect((await offerRow(h, id)).status).toBe('countered');
@@ -999,14 +1001,16 @@ describe('gifting and trading fish', () => {
           await tx.delete(schema.user).where(eq(schema.user.id, t.b.userId));
         },
       );
-      let res;
+      const pending = confirm(h, t.a, t.id, t.tankA2);
       try {
-        const pending = confirm(h, t.a, t.id, t.tankA2);
         await deletion.whenBlocked();
-        res = await pending;
+      } catch (err) {
+        void pending.catch(() => undefined);
+        throw err;
       } finally {
         await deletion.release();
       }
+      const res = await pending;
       expect(res.statusCode, res.body).toBe(409);
       expect(errorOf(res).reason).toBe('offer_closed');
     });
