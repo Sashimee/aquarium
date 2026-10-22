@@ -379,6 +379,29 @@ describe('live feed and scene', () => {
     controller.dispose();
   });
 
+  it('drops once when the handle cannot be loaded, matching on food and portion', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let reply: (v: { state: CommunityState; replayed: boolean }) => void = () => undefined;
+    const communityFeed = vi.fn(
+      () => new Promise<{ state: CommunityState; replayed: boolean }>((r) => (reply = r)),
+    );
+    const { controller, streams, drops } = setup(
+      {},
+      { communityFeed, myHandle: vi.fn(() => Promise.reject(new Error('offline'))) },
+    );
+    controller.start();
+    await settle();
+    const pending = controller.feed('flakes', 0.5);
+    await settle();
+    streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('mossy', 0.5)) });
+    reply({ state: stateOf(), replayed: false });
+    await pending;
+    expect(drops).toHaveLength(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+    controller.dispose();
+  });
+
   it('keeps the pending feed matchable for as long as the request may run', async () => {
     let reply: (v: { state: CommunityState; replayed: boolean }) => void = () => undefined;
     const communityFeed = vi.fn(

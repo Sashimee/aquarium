@@ -253,7 +253,8 @@ interface Echo {
   until: number;
   /** The food of this feed is already in the water, whichever of the stream frame and the reply came first. */
   dropped: boolean;
-  by: string | null;
+  /** undefined when the handle could not be loaded: match on food and portion only. */
+  by: string | null | undefined;
 }
 
 /** The client side of the shared tank: one live stream, the player's quota, and feeding with retry-safe keys. */
@@ -269,7 +270,7 @@ export class CommunityController {
   private quotaTimer: ReturnType<typeof setTimeout> | null = null;
   private uploader: AteUploader | null = null;
   private started = false;
-  private handle: string | null = null;
+  private handle: string | null | undefined = null;
   private handleLoaded: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: CommunityControllerDeps) {
@@ -367,8 +368,12 @@ export class CommunityController {
     try {
       const handle = await this.deps.api.myHandle?.();
       if (handle !== undefined && !this.lifetime.signal.aborted) this.handle = handle;
-    } catch {
-      this.handle = null;
+    } catch (error) {
+      this.handle = undefined;
+      console.warn(
+        'could not load your handle; matching own feeds on food and portion only',
+        error,
+      );
     }
   }
 
@@ -497,7 +502,7 @@ export class CommunityController {
     this.echoes = this.echoes.filter((e) => e.until > now);
     const echo = this.echoes.find(
       (e) =>
-        e.by === event.by &&
+        (e.by === undefined || e.by === event.by) &&
         e.food === event.food &&
         Math.abs(e.portion - event.portion) < PORTION_EPSILON,
     );
