@@ -1078,8 +1078,7 @@ describe('pH, KH, temperature and salinity', () => {
         if (!changed.ok) throw new Error(changed.reason);
         expect(changed.value.chemistry.salinity).toBe(mixLevel);
         const dosed = applyCare(atDefault, { type: 'salt_dose' }, biome, chemistryParams, T0);
-        if (!dosed.ok) throw new Error(dosed.reason);
-        expect(dosed.value.chemistry.salinity).toBe(mixLevel);
+        expect(dosed.ok).toBe(false);
       }
     });
 
@@ -1091,9 +1090,11 @@ describe('pH, KH, temperature and salinity', () => {
       expect(twice.chemistry.salinity).toBeLessThan(mix);
     });
 
-    it('never pushes salinity past the mix level', () => {
-      expect(dose(reefAt(mix)).chemistry.salinity).toBe(mix);
-      expect(dose(reefAt(mix + 4)).chemistry.salinity).toBe(mix + 4);
+    it('refuses at or above the mix level instead of diluting or no-oping', () => {
+      for (const salinity of [mix, mix + 4]) {
+        const r = applyCare(reefAt(salinity), { type: 'salt_dose' }, 'reef', chemistryParams, T0);
+        expect(r.ok).toBe(false);
+      }
     });
 
     it('refuses to dose a tank whose biome has no salt', () => {
@@ -1105,7 +1106,7 @@ describe('pH, KH, temperature and salinity', () => {
     });
 
     it('a water change after dosing dilutes salinity towards the target', () => {
-      const dosed = dose(reefAt(mix + 6));
+      const dosed = reefAt(mix + 6);
       const changed = applyCare(dosed, { type: 'water_change' }, 'reef', chemistryParams, T0);
       if (!changed.ok) throw new Error(changed.reason);
       const { restoredPerWaterChange } = chemistryParams.salinity;
@@ -1186,7 +1187,7 @@ describe('pH, KH, temperature and salinity', () => {
       }
     });
 
-    it('lifts the pH through the buffered target once offline time passes', () => {
+    it('lifts the KH through the buffered target once offline time passes', () => {
       const dosed = buffer(cichlidAt(10), 'cichlid');
       if (!dosed.ok) throw new Error(dosed.reason);
       const base = { env: { biome: 'cichlid' as const } };

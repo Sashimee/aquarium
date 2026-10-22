@@ -922,6 +922,19 @@ describe('wallet, shop and ledger', () => {
       expect(res.statusCode).toBe(402);
     });
 
+    it(`refuses in a ${refusedBiome} tank before looking at the balance`, async () => {
+      const { who } = await primed(h);
+      const made = await createTank(h, who, { biome: refusedBiome });
+      await setBalance(h, who, 0);
+      const rows = (await ledgerOf(h, who)).length;
+      const res = await call(h, who, 'POST', `/api/tanks/${made.json().id}/care`, {
+        type,
+        idempotencyKey: key(),
+      });
+      expect(res.statusCode).toBe(422);
+      expect(await ledgerOf(h, who)).toHaveLength(rows);
+    });
+
     it(`422s in a ${refusedBiome} tank without charging`, async () => {
       const { who } = await primed(h);
       const made = await createTank(h, who, { biome: refusedBiome });

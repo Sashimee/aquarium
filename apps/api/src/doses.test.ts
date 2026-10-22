@@ -94,6 +94,13 @@ describe('salt, buffer and botanicals care actions', () => {
     expect(await kinds(tank.id)).toEqual(['salt_dose', 'water_change']);
   });
 
+  it('refuses salt at the mix level with 422 and logs nothing', async () => {
+    const tank = await newTank('reef');
+    expect(tank.chemistry.salinity).toBeGreaterThanOrEqual(35);
+    expect((await care(tank.id, { type: 'salt_dose' })).statusCode).toBe(422);
+    expect(await kinds(tank.id)).toEqual([]);
+  });
+
   it('refuses salt on a freshwater tank with 422 and logs nothing', async () => {
     const tank = await newTank('freshwater');
     expect((await care(tank.id, { type: 'salt_dose' })).statusCode).toBe(422);
