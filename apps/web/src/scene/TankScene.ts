@@ -76,9 +76,11 @@ import {
 } from './plantGrowth';
 import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import {
+  coralSlotOrder,
   grownCoralItem,
   matchLayoutCorals,
   placeFragments,
+  type CoralOrigin,
   type CoralSlot,
   type ScaleCap,
   type PlacedFragment,
@@ -110,8 +112,6 @@ interface SubstrateInstall {
   readonly textures: readonly Texture[];
   readonly textureSize: 1024 | 2048;
 }
-
-type CoralOrigin = { readonly hard: number } | { readonly euphyllia: number };
 
 interface EuphylliaItem {
   readonly item: DecorItem;
@@ -608,30 +608,20 @@ export class TankScene {
     slots: CoralSlot[];
     origins: CoralOrigin[];
   } {
-    const hard = items.flatMap(({ kind }, index) => (kind === 'coral' ? [index] : []));
-    const slots: CoralSlot[] = [];
-    const origins: CoralOrigin[] = [];
-    let nextHard = 0;
-    let nextEuphyllia = 0;
-    const takeHard = () => {
-      const index = hard[nextHard++];
-      const entry = index === undefined ? undefined : items[index];
-      if (index === undefined || !entry) return;
-      slots.push({ assetId: entry.item.assetId, item: entry.item });
-      origins.push({ hard: index });
+    const hardCorals = items.flatMap(({ item, kind }, index) =>
+      kind === 'coral' ? [{ index, item }] : [],
+    );
+    const order = coralSlotOrder(
+      this.preset.decor,
+      (assetId) => this.library.catalog.get(assetId).kind === 'coral',
+      (assetId) => parseEuphylliaId(assetId) !== null,
+      hardCorals,
+      this.euphylliaItems.map((entry) => entry.item),
+    );
+    return {
+      slots: order.map(({ assetId, item }) => ({ assetId, item })),
+      origins: order.map(({ origin }) => origin),
     };
-    for (const decor of this.preset.decor) {
-      if (parseEuphylliaId(decor.assetId)) {
-        const euphyllia = this.euphylliaItems[nextEuphyllia];
-        if (!euphyllia) continue;
-        slots.push({ assetId: euphyllia.item.assetId, item: euphyllia.item });
-        origins.push({ euphyllia: nextEuphyllia++ });
-      } else if (this.library.catalog.get(decor.assetId).kind === 'coral') {
-        takeHard();
-      }
-    }
-    while (nextHard < hard.length) takeHard();
-    return { slots, origins };
   }
 
   private fitModel(assetId: string): FitModel | null {

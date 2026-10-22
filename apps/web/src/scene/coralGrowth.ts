@@ -1,6 +1,7 @@
 import { legacyTintSeed, type Coral, type DecorItem } from '@aquarium/shared';
 import { hashKey } from './plantGrowth';
 import { mulberry32 } from './placement';
+import { euphylliaCapsule, type EuphylliaCapsule, type EuphylliaMesh } from './euphyllia';
 
 const MAX_ANCESTORS = 64;
 
@@ -103,4 +104,56 @@ export function placeFragments(
     placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;
+}
+
+export type CoralOrigin = { readonly hard: number } | { readonly euphyllia: number };
+
+export interface CoralLayoutSlot extends CoralSlot {
+  readonly origin: CoralOrigin;
+}
+
+/**
+ * The single coral slot order: the preset's own order, with edited pieces taking the place of the
+ * preset piece before them and any extra after. `hardCorals` are the layout's hard corals in layout
+ * order, each with its index in the hardscape list; `euphyllias` the procedural colonies in preset
+ * order. This is the order the server numbers repeated tint seeds in, so a slot index is what
+ * `matchLayoutCorals` returns.
+ */
+export function coralSlotOrder(
+  presetDecor: readonly DecorItem[],
+  isHardCoral: (assetId: string) => boolean,
+  isEuphyllia: (assetId: string) => boolean,
+  hardCorals: readonly { readonly index: number; readonly item: DecorItem }[],
+  euphyllias: readonly DecorItem[],
+): CoralLayoutSlot[] {
+  const slots: CoralLayoutSlot[] = [];
+  let nextHard = 0;
+  let nextEuphyllia = 0;
+  const takeHard = () => {
+    const entry = hardCorals[nextHard++];
+    if (entry) {
+      slots.push({ assetId: entry.item.assetId, item: entry.item, origin: { hard: entry.index } });
+    }
+  };
+  for (const decor of presetDecor) {
+    if (isEuphyllia(decor.assetId)) {
+      const item = euphyllias[nextEuphyllia];
+      if (!item) continue;
+      slots.push({ assetId: item.assetId, item, origin: { euphyllia: nextEuphyllia++ } });
+    } else if (isHardCoral(decor.assetId)) {
+      takeHard();
+    }
+  }
+  while (nextHard < hardCorals.length) takeHard();
+  return slots;
+}
+
+/** The euphyllia capsule at the colony's grown size, with its lean, as `setCorals` fits it. */
+export function grownEuphylliaCapsule(
+  bounds: EuphylliaMesh['bounds'],
+  item: DecorItem,
+  coral: Coral | undefined,
+  cap: ScaleCap = () => Infinity,
+): EuphylliaCapsule {
+  return euphylliaCapsule(bounds, grownCoralItem(item, coral, cap));
 }
