@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { decorLayoutSchema, type Collider, type DecorItem } from '@aquarium/shared';
+import {
+  decorLayoutSchema,
+  type CapsuleCollider,
+  type Collider,
+  type DecorItem,
+} from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import type { Anchor } from './behaviour.ts';
 import { ARCHETYPES, blueTang, FoodRain, SLOPED_SPACE, spawnMany, yellowTang } from './fixtures.ts';
@@ -23,6 +28,7 @@ interface IndexEntry {
 }
 
 type Spot = readonly [string, number, number, number];
+type Vec3 = readonly [number, number, number];
 
 const preset = JSON.parse(readFileSync(join(root, 'content/presets/reef.json'), 'utf8')) as {
   decor: unknown;
@@ -37,11 +43,47 @@ const catalog = new Map(
 );
 
 const HARD_KINDS = new Set(['rock', 'coral', 'decor']);
+
+interface EuphylliaShape {
+  readonly radius: number;
+  /** Height of the upper sphere centre above the foot. */
+  readonly top: number;
+  /** Drift [x, z] of the upper sphere centre from the lower one, in the colony's own frame. */
+  readonly lean: readonly [number, number];
+}
+
 /**
- * Euphyllia colonies are generated in the scene and have no catalogue bounds; this is the
- * footprint and height of the scene's soft capsule for a scale-1 colony, rounded up.
+ * Euphyllia colonies are generated in the scene and have no catalogue bounds. These are the
+ * scene's capsules for the preset's two colonies at scale 1 (`euphylliaCapsule` in
+ * apps/web/src/scene/euphyllia.ts), from `generateEuphyllia(variant, seed, 2).bounds`: radius 0.6
+ * times the horizontal footprint, top 0.85 times the height, and the top sphere drifted by the
+ * mesh's horizontal bounds centre, which leans it toward the polyps.
  */
-const EUPHYLLIA = { radius: 0.06, height: 0.14 };
+const EUPHYLLIA: Readonly<Record<string, EuphylliaShape>> = {
+  'euphyllia-hammer-3': { radius: 0.05299, top: 0.10125, lean: [-0.01052, 0.01817] },
+  'euphyllia-torch-8': { radius: 0.06325, top: 0.11817, lean: [-0.02483, 0.02139] },
+};
+
+/** A colony's capsule as clients send it: the lean turns with the item and grows with its scale. */
+function euphylliaCapsule(id: string, item: DecorItem): CapsuleCollider {
+  const shape = EUPHYLLIA[item.assetId];
+  if (shape === undefined) {
+    throw new Error(`reef preset colony "${item.assetId}" has no hand-built euphyllia capsule`);
+  }
+  const [x, y, z] = item.position;
+  const s = item.scale;
+  const c = Math.cos(item.rotationY);
+  const sn = Math.sin(item.rotationY);
+  const [lx, lz] = shape.lean;
+  return {
+    id,
+    hard: false,
+    kind: 'capsule',
+    a: [x, y + shape.radius * s, z],
+    b: [x + (lx * c + lz * sn) * s, y + shape.top * s, z + (-lx * sn + lz * c) * s],
+    radius: shape.radius * s,
+  };
+}
 
 /**
  * The reef preset's colliders as the scene builds them, with every rock, coral and shell's
@@ -55,16 +97,7 @@ function reefColliders(): { decor: Collider[]; anchors: Anchor[] } {
     const id = `${item.assetId}-${n}`;
     const [x, y, z] = item.position;
     if (item.assetId.startsWith('euphyllia-')) {
-      const r = EUPHYLLIA.radius * item.scale;
-      const top = EUPHYLLIA.height * item.scale;
-      decor.push({
-        id,
-        hard: false,
-        kind: 'capsule',
-        a: [x, y + r, z],
-        b: [x, y + top, z],
-        radius: r,
-      });
+      decor.push(euphylliaCapsule(id, item));
       return;
     }
     const entry = catalog.get(item.assetId);
@@ -164,6 +197,79 @@ function graze(w: World, x: number, y: number, z: number, steps: number): Grazin
   }
   return { first, contacts: w.contacts, fishSteps: w.count * steps };
 }
+
+describe('a leaning euphyllia on the reef preset', () => {
+  const colony = REEF.decor.find(
+    (c): c is CapsuleCollider => c.id.startsWith('euphyllia-torch-') && c.kind === 'capsule',
+  );
+  if (colony === undefined) throw new Error('the reef preset lost its torch euphyllia');
+  const { a, b, radius } = colony;
+  const drift = Math.hypot(b[0] - a[0], b[2] - a[2]);
+  const ux = (b[0] - a[0]) / drift;
+  const uz = (b[2] - a[2]) / drift;
+  const SEEDS = [1, 2, 3];
+  const STEPS = STEP_HZ / 3;
+
+  function startAt(decor: readonly Collider[], [x, y, z]: Vec3, seed: number): World {
+    const w = new World({
+      seed,
+      space: SLOPED_SPACE,
+      species: ARCHETYPES,
+      fish: spawnMany('royal-gramma', 1),
+    });
+    w.setDecor(decor);
+    w.setAnchors(REEF.anchors);
+    w.position[0] = x;
+    w.position[1] = y;
+    w.position[2] = z;
+    // Heading across the lean, so the body samples sit level with the point on both sides.
+    w.yaw[0] = Math.atan2(-uz, ux);
+    expect(w.bodyClearance(0)).toBeGreaterThan(0);
+    return w;
+  }
+
+  // A fish feels a plant once its centre is within its own radius of the surface.
+  const reach = startAt(REEF.decor, [a[0], 0.4, a[2]], 1).radius[0] ?? NaN;
+  // Level with the top sphere, on the line of the lean. Each point is half the drift inside the
+  // fish's reach of one capsule and half the drift beyond it of the other: the leaning capsule on
+  // the side it leans to, and a vertical capsule on the same foot on the side it leans from.
+  const out = radius + reach + drift / 2;
+  const leanSide: Vec3 = [a[0] + ux * out, b[1], a[2] + uz * out];
+  const fromSide: Vec3 = [a[0] - ux * (out - drift), b[1], a[2] - uz * (out - drift)];
+
+  /** How far the fish has moved along the lean after `STEPS`. */
+  function along(decor: readonly Collider[], start: Vec3, seed: number): number {
+    const w = startAt(decor, start, seed);
+    for (let t = 0; t < STEPS; t++) w.step();
+    return ((w.position[0] ?? 0) - start[0]) * ux + ((w.position[2] ?? 0) - start[2]) * uz;
+  }
+
+  it('leans by more than the margin either test point keeps', () => {
+    expect(drift).toBeGreaterThan(0.02);
+    expect(Math.hypot(leanSide[0] - a[0], leanSide[2] - a[2]) - radius).toBeGreaterThan(reach);
+    expect(Math.hypot(fromSide[0] - a[0], fromSide[2] - a[2]) - radius).toBeLessThan(reach);
+  });
+
+  it('pushes a fish on the side it leans to away along the lean', () => {
+    const bare = REEF.decor.filter((c) => c !== colony);
+    for (const seed of SEEDS) {
+      const w = startAt(REEF.decor, leanSide, seed);
+      w.step();
+      expect(w.plantContacts).toBe(1);
+      expect(along(REEF.decor, leanSide, seed)).toBeGreaterThan(along(bare, leanSide, seed));
+    }
+  });
+
+  it('leaves a fish on the side it leans from untouched', () => {
+    // Rock backs the colony on this side, so only the preset's soft colliders are placed.
+    const soft = REEF.decor.filter((c) => !c.hard);
+    for (const seed of SEEDS) {
+      const w = startAt(soft, fromSide, seed);
+      w.step();
+      expect(w.plantContacts).toBe(0);
+    }
+  });
+});
 
 describe('tangs on the reef preset', { timeout: LONG }, () => {
   // Room for one abandoned approach (pursuit timeout, then ignoring the clip) and a second go.
