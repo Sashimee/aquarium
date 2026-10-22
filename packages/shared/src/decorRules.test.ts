@@ -1,13 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { presetLayoutSchema } from './species.js';
-import type { Biome } from './common.js';
+import { fitPresetItem, presetFit } from './presetFit.js';
+import { TANK_SIZES, type TankSize } from './tankSize.js';
+import type { Biome, DecorItem } from './common.js';
 import {
   DECOR_ASSET_IDS,
   decorPositionLimits,
   findDecorProblems,
   isDecorAssetForBiome,
   MUD_BANK_ASSET_ID,
+  MUD_BANK_SCALE,
 } from './decorRules.js';
 
 const read = (path: string): unknown =>
@@ -102,5 +105,52 @@ describe('decor rules', () => {
 
   it('bounds the default tank interior', () => {
     expect(decorPositionLimits()).toEqual({ x: 0.6 - 0.01, z: 0.25 - 0.01, yMax: 0.5 });
+  });
+
+  describe('mud bank', () => {
+    const bank = (scale = 1): DecorItem => ({
+      assetId: MUD_BANK_ASSET_ID,
+      position: [0, 0.1, 0],
+      rotationY: 0,
+      scale,
+    });
+
+    it('allows one bank and rejects the second', () => {
+      expect(findDecorProblems('mangrove', [bank()], 'vacation-feeder')).toEqual([]);
+      expect(findDecorProblems('mangrove', [bank(), bank()], 'vacation-feeder')).toEqual([
+        { index: 1, field: 'assetId', message: 'A tank holds one mud bank.' },
+      ]);
+    });
+
+    it.each(Object.keys(TANK_SIZES) as TankSize[])(
+      'accepts the mangrove preset bank fitted to %s, shrunk as far as the web fit allows',
+      (size) => {
+        const preset = presetLayoutSchema.parse(read('content/presets/mangrove.json'));
+        const authored = preset.decor.find((item) => item.assetId === MUD_BANK_ASSET_ID);
+        if (!authored) throw new Error('mangrove preset has no mud bank');
+        const fitted = fitPresetItem(authored, size);
+        const worst = {
+          ...authored,
+          scale: Math.max(0.05, authored.scale * presetFit(size).scale),
+        };
+        for (const bank of [fitted, worst]) {
+          expect(findDecorProblems('mangrove', [bank], 'vacation-feeder'), size).toEqual([]);
+        }
+      },
+    );
+
+    it('holds the scale to its range, ends included', () => {
+      for (const scale of [MUD_BANK_SCALE.min, MUD_BANK_SCALE.max, 1.3]) {
+        expect(findDecorProblems('mangrove', [bank(scale)], 'vacation-feeder'), `${scale}`).toEqual(
+          [],
+        );
+      }
+      for (const scale of [MUD_BANK_SCALE.min / 2, MUD_BANK_SCALE.max * 2, 10]) {
+        expect(
+          findDecorProblems('mangrove', [bank(scale)], 'vacation-feeder').map((p) => p.field),
+          `${scale}`,
+        ).toEqual(['scale']);
+      }
+    });
   });
 });

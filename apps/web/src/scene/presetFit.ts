@@ -1,4 +1,5 @@
 import {
+  MIN_FIT_SCALE,
   fitPresetItem,
   presetFit,
   type DecorItem,
@@ -24,7 +25,6 @@ import { isMudBankId, mudBankBounds } from './mudBank';
 import { GLASS_SHRINK_FLOOR } from './placement';
 import { SURFACE_MARGIN } from './plants';
 
-const MIN_PLANT_SCALE = 0.05;
 const WALL_MARGIN = 0.005;
 const PERCH_SETTLE_PASSES = 4;
 
@@ -184,7 +184,7 @@ function fitItem(
   return {
     ...stretched,
     position: [x, y, z],
-    scale: Math.max(scale, MIN_PLANT_SCALE),
+    scale: Math.max(scale, MIN_FIT_SCALE),
   };
 }
 
@@ -198,8 +198,8 @@ function fitPatch(
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const scale: [number, number] = [
-    Math.max(MIN_PLANT_SCALE, patch.scale[0] * k),
-    Math.max(MIN_PLANT_SCALE, patch.scale[1] * k),
+    Math.max(MIN_FIT_SCALE, patch.scale[0] * k),
+    Math.max(MIN_FIT_SCALE, patch.scale[1] * k),
   ];
   const fitted = { ...patch, scale, radius: patch.radius * k };
   const smallest = scale[0] * GLASS_SHRINK_FLOOR;

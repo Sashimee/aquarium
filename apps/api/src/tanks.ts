@@ -1131,18 +1131,6 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             body.decorLayout,
             VACATION_FEEDER_ASSET_ID,
           );
-          let banks = 0;
-          body.decorLayout.forEach((item, index) => {
-            if (item.assetId !== MUD_BANK_ASSET_ID) return;
-            banks += 1;
-            if (banks > 1) {
-              problems.push({
-                index,
-                field: 'assetId',
-                message: 'A tank holds one mud bank.',
-              });
-            }
-          });
           if (problems.length > 0) {
             throw new HttpError(
               400,
