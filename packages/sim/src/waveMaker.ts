@@ -382,17 +382,21 @@ export class Currents {
   }
 
   /**
-   * Whether fish `i` could swim at an easy, sustained effort against the flow everywhere
-   * straight up from it to height `top`. Always true with no wave maker.
+   * Whether fish `i` could hold against the flow, putting in no more than `effort` of its hold
+   * speed, everywhere straight up from (x, y, z) to height `top`. Always true with no wave maker.
    */
-  holdsColumn(host: CurrentsHost, i: number, top: number): boolean {
+  holdsColumn(
+    host: CurrentsHost,
+    i: number,
+    x: number,
+    y: number,
+    z: number,
+    top: number,
+    effort: number,
+  ): boolean {
     const field = this.field;
     if (field === null) return true;
-    const o = i * 3;
-    const x = host.position[o] ?? 0;
-    const y = host.position[o + 1] ?? 0;
-    const z = host.position[o + 2] ?? 0;
-    const easy = WAVE_MAKER.sustainedFraction * this.holdSpeed(host, i);
+    const easy = effort * this.holdSpeed(host, i);
     const last = WAVE_MAKER.columnSamples - 1;
     for (let k = 0; k <= last; k++) {
       if (this.speedAt(host, field, x, y + ((top - y) * k) / last, z, host.time) > easy) {

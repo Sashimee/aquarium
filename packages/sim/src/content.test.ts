@@ -14,7 +14,6 @@ import {
   spawnMany,
 } from './fixtures.ts';
 import { TankSdf, type TankDimensions } from './sdf.ts';
-import { FishState } from './snapshot.ts';
 import { toSimSpecies } from './species.ts';
 import { WAVE_MAKER } from './waveMaker.ts';
 import { World } from './world.ts';
@@ -119,6 +118,7 @@ function fishCount(species: ReturnType<typeof speciesContentSchema.parse>): numb
 /** Male length over the species length, as apps/web/src/fish/profiles.ts draws and simulates it. */
 const MALE_LENGTH_FACTOR: Readonly<Record<string, number>> = {
   'apistogramma-hongsloi': 0.05 / 0.03,
+  'aulonocara-baenschi': 1.33,
 };
 
 /** The species' fish, the last one a full-grown male where males outgrow the species length. */
@@ -254,14 +254,29 @@ describe('air-gulp darts in a full-power wave maker current', { timeout: LONG },
     ]);
   });
 
-  it.each(gulpers.map((s) => ({ id: s.id, s })))(
-    'stay under the contact budget at the top gulp rate, and still gulp: $id',
+  /**
+   * A due breath is only ever deferred: after gulpOverdueS of waiting the fish climbs the glass,
+   * and one climb plus one failed attempt each spend at most gulpTimeoutS.
+   */
+  const LONGEST_WAIT_S = BEHAVIOUR.gulpOverdueS + 2 * BEHAVIOUR.gulpTimeoutS;
+  const cases = gulpers.flatMap((s) => {
+    const configured = roster.find((r) => r.species.id === s.id)?.species;
+    if (configured === undefined) throw new Error(`${s.id} is missing from the roster`);
+    return [
+      { id: s.id, rate: `${MAX_GULPS_PER_HOUR}/h`, s },
+      { id: s.id, rate: 'configured', s: configured },
+    ];
+  });
+
+  it.each(cases)(
+    'reach the surface within the cap and stay under the contact budget: $id at $rate',
     ({ s }) => {
       const species = [...roster.map((r) => r.species).filter((r) => r.id !== s.id), s];
       let worst = Infinity;
       let contacts = 0;
       let fishSteps = 0;
-      let gulps = 0;
+      let breaths = 0;
+      let longestWait = 0;
       for (const seed of CONTACT_SEEDS) {
         const w = new World({
           seed,
@@ -277,14 +292,16 @@ describe('air-gulp darts in a full-power wave maker current', { timeout: LONG },
           },
         });
         const clearance = bruteClearance(w, SHOW_TANK, SHOW_DECOR);
-        const gulping = new Uint8Array(w.count);
+        const wait = w.behaviour.gulpWait;
+        const before = new Float64Array(w.count);
         for (let t = 0; t < 10_000; t++) {
           w.step();
           for (let i = 0; i < w.count; i++) {
             worst = Math.min(worst, clearance(i));
-            const now = w.state[i] === FishState.Gulp ? 1 : 0;
-            if (now === 1 && gulping[i] === 0) gulps++;
-            gulping[i] = now;
+            const now = wait[i] ?? 0;
+            if (now === 0 && (before[i] ?? 0) > 0) breaths++;
+            longestWait = Math.max(longestWait, now);
+            before[i] = now;
           }
         }
         contacts += w.contacts;
@@ -292,7 +309,8 @@ describe('air-gulp darts in a full-power wave maker current', { timeout: LONG },
       }
       expect(worst).toBeGreaterThanOrEqual(-1e-9);
       expect(contacts / fishSteps).toBeLessThan(1e-3);
-      expect(gulps).toBeGreaterThan(0);
+      expect(breaths).toBeGreaterThan(0);
+      expect(longestWait).toBeLessThan(LONGEST_WAIT_S);
     },
   );
 });

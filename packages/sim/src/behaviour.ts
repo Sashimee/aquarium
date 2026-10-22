@@ -15,6 +15,7 @@ import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
 import type { SimSpecies, SimWalking } from './species.ts';
 import { TOYS, Toys, type SimToy } from './toys.ts';
+import { WAVE_MAKER } from './waveMaker.ts';
 import { BROOD, Brood, type SimBrood } from './brood.ts';
 
 /** Every tunable of the species behaviours; sources are in BEHAVIOUR.md. */
@@ -97,6 +98,13 @@ export const BEHAVIOUR = {
   gulpLandBodyLengths: 1.5,
   gulpPathSamples: 5,
   gulpPathClearBodyLengths: 0.5,
+  gulpOverdueS: 30,
+  gulpClimbReachBodyLengths: 1,
+  gulpClimbStandoffBodyLengths: 0.5,
+  gulpClimbSlantBodyLengths: 1,
+  gulpClimbCornerBodyLengths: 1.5,
+  gulpGlassClearBodyLengths: 1,
+  gulpClimbTopBodyLengths: 0.45,
 
   grazeMeanIntervalS: 20,
   grazeMinS: 1.5,
@@ -220,8 +228,11 @@ export interface BehaviourHost {
   canTurnAt(i: number, x: number, y: number, z: number): boolean;
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number;
-  /** Whether fish `i` could hold against the current everywhere straight up to height `top`. */
-  holdsColumn(i: number, top: number): boolean;
+  /**
+   * Whether fish `i`, at no more than `effort` of its hold speed, could hold against the current
+   * everywhere straight up from (x, y, z) to height `top`.
+   */
+  holdsColumn(i: number, x: number, y: number, z: number, top: number, effort: number): boolean;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -336,7 +347,7 @@ export class Plan {
 
 const StartlePhase = { None: 0, Bend: 1, Burst: 2, Flee: 3 } as const;
 const TerritoryPhase = { Idle: 0, Approach: 1, Flare: 2, Charge: 3 } as const;
-const GulpPhase = { None: 0, Ascend: 1, Hold: 2, Descend: 3 } as const;
+const GulpPhase = { None: 0, Ascend: 1, Hold: 2, Descend: 3, Climb: 4 } as const;
 const GrazePhase = { None: 0, Approach: 1, Graze: 2, Roam: 3 } as const;
 
 const DT = 1 / 30;
@@ -347,6 +358,13 @@ function at(a: ArrayLike<number>, i: number): number {
 
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
+}
+
+/** `v` kept `margin` inside [lo, hi], or the middle when the span is narrower than two margins. */
+function insetClamp(v: number, lo: number, hi: number, margin: number): number {
+  const a = lo + margin;
+  const b = hi - margin;
+  return a > b ? 0.5 * (lo + hi) : clamp(v, a, b);
 }
 
 /** How far out from the rock a grazer's body centre sits while it pecks. */
@@ -416,6 +434,11 @@ export class Behaviour {
   private gulpTimer: Float64Array;
   /** 1 while a fish needs a breath but has no open water above it to rise through. */
   private gulpDue: Uint8Array;
+  private _gulpWait: Float64Array;
+  /** Failed climbs since the last breath, so the next climb tries another pane. */
+  private gulpTries: Uint8Array;
+  /** 0 until a climbing fish reaches its pane, then 1 or 2 for the way it slants along it. */
+  private climbing: Uint8Array;
 
   private grazePhase: Uint8Array;
   private grazeTimer: Float64Array;
@@ -442,6 +465,9 @@ export class Behaviour {
   private _gillFlare: Float64Array;
 
   private readonly n3 = new Float64Array(3);
+  private readonly climbPanes = new Float64Array(8);
+  private readonly climbOrder = new Uint8Array(4);
+  private readonly climbDist = new Float64Array(4);
   private readonly spot = new Float64Array(3);
   private readonly greetBoldness = (i: number): number =>
     this.personality.effectiveBoldness(i, this.speciesOf(i).boldness);
@@ -473,6 +499,11 @@ export class Behaviour {
 
   get yieldTimer(): Float64Array {
     return this._yieldTimer;
+  }
+
+  /** Seconds since each fish's pending breath fell due; 0 once it has gulped. */
+  get gulpWait(): Float64Array {
+    return this._gulpWait;
   }
 
   get territoryTarget(): Int32Array {
@@ -533,6 +564,9 @@ export class Behaviour {
     this.gulpPhase = new Uint8Array(n);
     this.gulpTimer = new Float64Array(n);
     this.gulpDue = new Uint8Array(n);
+    this._gulpWait = new Float64Array(n);
+    this.gulpTries = new Uint8Array(n);
+    this.climbing = new Uint8Array(n);
     this.grazePhase = new Uint8Array(n);
     this.grazeTimer = new Float64Array(n);
     this.grazeNext = new Float64Array(n);
@@ -609,6 +643,9 @@ export class Behaviour {
     this.gulpPhase = edit.array(this.gulpPhase);
     this.gulpTimer = edit.array(this.gulpTimer);
     this.gulpDue = edit.array(this.gulpDue);
+    this._gulpWait = edit.array(this._gulpWait);
+    this.gulpTries = edit.array(this.gulpTries);
+    this.climbing = edit.array(this.climbing);
     this.grazePhase = edit.array(this.grazePhase);
     this.grazeTimer = edit.array(this.grazeTimer);
     this.grazeNext = edit.array(this.grazeNext);
@@ -1275,6 +1312,10 @@ export class Behaviour {
     if (plan === undefined) throw new RangeError(`no plan for fish ${i}`);
     this.bandAt(i, at(this.host.position, i * 3), at(this.host.position, i * 3 + 2));
     plan.reset(this.bandLo, this.bandHi);
+    const gulping = at(this.gulpPhase, i);
+    if (at(this.gulpDue, i) === 1 || gulping === GulpPhase.Ascend || gulping === GulpPhase.Climb) {
+      this._gulpWait[i] = at(this.gulpWait, i) + DT;
+    }
     const rest = at(this.rest, i);
     const calm = 1 - (1 - BEHAVIOUR.restSpeedFactor) * rest;
     plan.cruiseScale = calm * this.personality.activity(i);
@@ -1315,6 +1356,7 @@ export class Behaviour {
       this.planGulp(i, plan);
       return;
     }
+    if (this.planOverdueGulp(i, plan)) return;
     if (this.planShelter(i, sp, plan)) return;
     if (this.brood.planTend(i, plan)) return;
     if (this.brood.hides(i)) {
@@ -2434,10 +2476,7 @@ export class Behaviour {
       // Kramer 1983: an air-breather puts off a costly trip to the surface, so a breath waits
       // for open water it can hold against rather than sweeping the fish into glass or rock.
       if (at(this.gulpDue, i) === 1 && this.gulpPathOpen(i, length)) {
-        this.gulpDue[i] = 0;
-        this.gulpPhase[i] = GulpPhase.Ascend;
-        this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
-        this.planGulp(i, plan);
+        this.startGulp(i, plan, GulpPhase.Ascend);
         return;
       }
     }
@@ -2467,6 +2506,14 @@ export class Behaviour {
     return this.host.basin.maxY - BEHAVIOUR.gulpTopBodyLengths * length;
   }
 
+  private startGulp(i: number, plan: Plan, phase: number): void {
+    this.gulpDue[i] = 0;
+    this.climbing[i] = 0;
+    this.gulpPhase[i] = phase;
+    this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
+    this.planGulp(i, plan);
+  }
+
   /**
    * Whether fish `i` has a clear rise straight up to the air: no rock or wood overhead, and no
    * current on the way it would struggle against.
@@ -2474,17 +2521,28 @@ export class Behaviour {
   private gulpPathOpen(i: number, length: number): boolean {
     const top = this.gulpTop(length);
     const { decorSdf, position } = this.host;
+    const x = at(position, i * 3);
+    const y = at(position, i * 3 + 1);
+    const z = at(position, i * 3 + 2);
     if (decorSdf !== null) {
-      const x = at(position, i * 3);
-      const y = at(position, i * 3 + 1);
-      const z = at(position, i * 3 + 2);
       const clear = BEHAVIOUR.gulpPathClearBodyLengths * length;
       const last = BEHAVIOUR.gulpPathSamples - 1;
       for (let k = 0; k <= last; k++) {
         if (decorSdf.sample(x, y + ((top - y) * k) / last, z, this.n3) < clear) return false;
       }
     }
-    return this.host.holdsColumn(i, top);
+    return this.host.holdsColumn(i, x, y, z, top, WAVE_MAKER.sustainedFraction);
+  }
+
+  /**
+   * A fish whose breath has waited `gulpOverdueS` stops putting it off: it rises where it is if
+   * it can, and otherwise climbs to the air along the nearest pane.
+   */
+  private planOverdueGulp(i: number, plan: Plan): boolean {
+    if (at(this.gulpDue, i) !== 1 || at(this.gulpWait, i) < BEHAVIOUR.gulpOverdueS) return false;
+    const open = this.gulpPathOpen(i, at(this.host.bodyLength, i));
+    this.startGulp(i, plan, open ? GulpPhase.Ascend : GulpPhase.Climb);
+    return true;
   }
 
   /**
@@ -2512,23 +2570,51 @@ export class Behaviour {
     const left = at(this.gulpTimer, i) - DT;
     this.gulpTimer[i] = left;
     const top = this.gulpTop(length);
+    // Turning over at the surface beside a pane sweeps the tail across it, so the breath and the
+    // dive back down are taken a body length clear of the glass.
+    const glass = BEHAVIOUR.gulpGlassClearBodyLengths * length;
     let phase = at(this.gulpPhase, i);
-    if (phase !== GulpPhase.Descend && !this.host.holdsColumn(i, top)) {
-      phase = GulpPhase.Descend;
+    if (
+      (phase === GulpPhase.Ascend || phase === GulpPhase.Hold) &&
+      !this.host.holdsColumn(i, px, py, pz, top, WAVE_MAKER.sustainedFraction)
+    ) {
+      if (phase === GulpPhase.Hold) {
+        phase = GulpPhase.Descend;
+      } else if (at(this._gulpWait, i) >= BEHAVIOUR.gulpOverdueS) {
+        phase = GulpPhase.Climb;
+        this.climbing[i] = 0;
+      } else {
+        this.gulpDue[i] = 1;
+        phase = GulpPhase.Descend;
+      }
       this.gulpPhase[i] = phase;
       this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
     }
-    if (phase === GulpPhase.Ascend) {
-      plan.seek(px, top, pz, speed, 0.6);
+    if (phase === GulpPhase.Ascend || phase === GulpPhase.Climb) {
+      if (phase === GulpPhase.Climb) {
+        this.planClimb(i, plan, length, h - BEHAVIOUR.gulpClimbTopBodyLengths * length, speed);
+      } else {
+        plan.seek(px, top, pz, speed, 0.6);
+      }
       if (py >= h - BEHAVIOUR.gulpArriveBodyLengths * length) {
         this.gulpPhase[i] = GulpPhase.Hold;
         this.gulpTimer[i] = BEHAVIOUR.gulpHoldS;
+        this._gulpWait[i] = 0;
+        this.gulpTries[i] = 0;
       } else if (left <= 0) {
+        if (phase === GulpPhase.Climb) this.gulpTries[i] = (at(this.gulpTries, i) + 1) % 4;
+        this.gulpDue[i] = 1;
         this.gulpPhase[i] = GulpPhase.Descend;
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
       }
     } else if (phase === GulpPhase.Hold) {
-      plan.seek(px, top, pz, 0.2 * speed, 0.3);
+      plan.seek(
+        insetClamp(px, basin.minX, basin.maxX, glass),
+        top,
+        insetClamp(pz, basin.minZ, basin.maxZ, glass),
+        0.2 * speed,
+        0.3,
+      );
       if (left <= 0) {
         this.gulpPhase[i] = GulpPhase.Descend;
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
@@ -2536,11 +2622,110 @@ export class Behaviour {
     } else {
       plan.floor = true;
       const above = BEHAVIOUR.forageBandHighBodyLengths * length;
-      plan.seek(px, ground + above, pz, speed, 0.6);
+      plan.seek(
+        insetClamp(px, basin.minX, basin.maxX, glass),
+        ground + above,
+        insetClamp(pz, basin.minZ, basin.maxZ, glass),
+        speed,
+        0.6,
+      );
       if (py - ground <= BEHAVIOUR.gulpLandBodyLengths * length || left <= 0) {
         this.gulpPhase[i] = GulpPhase.None;
       }
     }
+  }
+
+  /**
+   * Fish `i` makes for a pane with no rock or wood up it and climbs it in the slow water against
+   * the glass, as corydoras and mudskippers work their way up glass. The nearest such pane comes
+   * first; each failed climb moves on to the next nearest.
+   */
+  private planClimb(i: number, plan: Plan, length: number, top: number, speed: number): void {
+    const { basin, position } = this.host;
+    const px = at(position, i * 3);
+    const pz = at(position, i * 3 + 2);
+    const standoff = BEHAVIOUR.gulpClimbStandoffBodyLengths * length;
+    const xLo = basin.minX + standoff;
+    const xHi = basin.maxX - standoff;
+    const zLo = basin.minZ + standoff;
+    const zHi = basin.maxZ - standoff;
+    const corner = BEHAVIOUR.gulpClimbCornerBodyLengths * length;
+    const cx = insetClamp(px, basin.minX, basin.maxX, corner);
+    const cz = insetClamp(pz, basin.minZ, basin.maxZ, corner);
+    const panes = this.climbPanes;
+    panes[0] = xLo;
+    panes[1] = cz;
+    panes[2] = xHi;
+    panes[3] = cz;
+    panes[4] = cx;
+    panes[5] = zLo;
+    panes[6] = cx;
+    panes[7] = zHi;
+    const order = this.climbOrder;
+    let open = 0;
+    for (let k = 0; k < 4; k++) {
+      const x = at(panes, k * 2);
+      const z = at(panes, k * 2 + 1);
+      const clear = this.climbClear(x, z, length, top);
+      const d = Math.hypot(x - px, z - pz) + (clear ? 0 : 1e6);
+      if (clear) open++;
+      let m = k;
+      while (m > 0 && at(this.climbDist, m - 1) > d) {
+        this.climbDist[m] = at(this.climbDist, m - 1);
+        order[m] = at(order, m - 1);
+        m--;
+      }
+      this.climbDist[m] = d;
+      order[m] = k;
+    }
+    const k = at(order, at(this.gulpTries, i) % Math.max(1, open));
+    const gx = at(panes, k * 2);
+    const gz = at(panes, k * 2 + 1);
+    const near = Math.hypot(gx - px, gz - pz) <= BEHAVIOUR.gulpClimbReachBodyLengths * length;
+    const alongX = k >= 2 ? 1 : 0;
+    const alongZ = 1 - alongX;
+    if (near && at(this.climbing, i) === 0) {
+      const ahead =
+        at(this.host.forward, i * 3) * alongX + at(this.host.forward, i * 3 + 2) * alongZ;
+      this.climbing[i] = ahead < 0 ? 2 : 1;
+    }
+    const latched = at(this.climbing, i);
+    if (latched === 0) {
+      plan.seek(gx, this.climbStart(gx, gz, length), gz, speed, 0.6);
+      return;
+    }
+    plan.comfort = BEHAVIOUR.minComfort;
+    // Climbing head-on to the glass would put the nose into it, so it slants up along the pane,
+    // keeping the side it chose: re-picking it as the current swings the fish turns it on the glass.
+    const slant = (latched === 2 ? -1 : 1) * BEHAVIOUR.gulpClimbSlantBodyLengths * length;
+    plan.seek(
+      alongX === 1 ? insetClamp(gx + slant, basin.minX, basin.maxX, corner) : gx,
+      top,
+      alongZ === 1 ? insetClamp(gz + slant, basin.minZ, basin.maxZ, corner) : gz,
+      speed,
+      0.6,
+    );
+  }
+
+  /**
+   * The height a climber crosses to its pane at: mid-water, where a wave maker's gyre turns and
+   * the flow is slackest, and above the tall decor on the bottom.
+   */
+  private climbStart(x: number, z: number, length: number): number {
+    const { basin } = this.host;
+    return Math.max(basin.ground(x, z) + length, 0.5 * (basin.minY + basin.maxY));
+  }
+
+  private climbClear(x: number, z: number, length: number, top: number): boolean {
+    const { decorSdf } = this.host;
+    if (decorSdf === null) return true;
+    const clear = BEHAVIOUR.gulpPathClearBodyLengths * length;
+    const y0 = this.climbStart(x, z, length);
+    const last = BEHAVIOUR.gulpPathSamples - 1;
+    for (let k = 0; k <= last; k++) {
+      if (decorSdf.sample(x, y0 + ((top - y0) * k) / last, z, this.n3) < clear) return false;
+    }
+    return true;
   }
 
   /**

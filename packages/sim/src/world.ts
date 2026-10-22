@@ -1428,6 +1428,9 @@ export class World {
       this.currents.shelter[i] === 1 &&
       !plan.homing &&
       plan.state !== FishState.Startle &&
+      // A fish going up for air has picked its way up already; the pull towards slack water
+      // would draw a climber's nose into the pane it climbs beside.
+      plan.state !== FishState.Gulp &&
       (this.behaviour.feeding.target[i] ?? -1) < 0 &&
       this.currents.refuge(this, i, flow)
     ) {
@@ -2077,9 +2080,12 @@ export class World {
     return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
   }
 
-  /** Whether fish `i` could hold against the current everywhere straight up to height `top`. */
-  holdsColumn(i: number, top: number): boolean {
-    return this.currents.holdsColumn(this, i, top);
+  /**
+   * Whether fish `i`, at no more than `effort` of its hold speed, could hold against the current
+   * everywhere straight up from (x, y, z) to height `top`.
+   */
+  holdsColumn(i: number, x: number, y: number, z: number, top: number, effort: number): boolean {
+    return this.currents.holdsColumn(this, i, x, y, z, top, effort);
   }
 
   /**
