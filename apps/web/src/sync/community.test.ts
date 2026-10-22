@@ -574,6 +574,7 @@ describe('applyTankToScene', () => {
     applyTankToScene(bus, dimmer, later);
     expect(of('tank:lamp')).toHaveLength(3);
     expect(of('tank:lamp')[2]).toMatchObject({
+      tankId: first.id,
       intensity: light.intensity / 2,
       onHour: light.onHour,
       offHour: (light.offHour + 1) % 24,
@@ -593,6 +594,7 @@ describe('applyTankToScene', () => {
     applyTankToScene(bus, first, next);
     expect(of('tank:lamp')).toHaveLength(2);
     expect(of('tank:lamp')[1]).toMatchObject({
+      tankId: first.id,
       intensity: light.intensity,
       onHour,
       offHour: light.offHour,
