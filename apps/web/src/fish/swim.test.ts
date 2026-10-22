@@ -465,6 +465,29 @@ describe('cleaning station motion', () => {
     }
   });
 
+  it('picks a peck up from the feeding gape at the instant it lands, not the end of its frame', () => {
+    const atBoundary = wrasse();
+    atBoundary.bite();
+    atBoundary.advance(PECK_FIRST_S, sample(FishState.Clean, 0));
+    expect(atBoundary.sincePeck).toBeCloseTo(0, 12);
+    const midFrame = wrasse();
+    midFrame.bite();
+    const frameS = 1 / 30;
+    for (let t = 0; t < PECK_FIRST_S; t += frameS)
+      midFrame.advance(frameS, sample(FishState.Clean, 0));
+    const pastPeck = midFrame.sincePeck;
+    expect(pastPeck).toBeGreaterThan(0.01);
+    atBoundary.advance(pastPeck, sample(FishState.Clean, 0));
+    for (let i = 0; i < 8; i++) {
+      expect(biteGape(midFrame.sinceBite), `frame ${i} after the peck`).toBeCloseTo(
+        biteGape(atBoundary.sinceBite),
+        9,
+      );
+      midFrame.advance(frameS, sample(FishState.Clean, 0));
+      atBoundary.advance(frameS, sample(FishState.Clean, 0));
+    }
+  });
+
   it('does not peck while darting between contacts or outside Clean', () => {
     const darting = wrasse();
     expect(peckTimes(darting, 2, PECK_HOLD_BODY_LENGTHS_PER_S * length * 2)).toEqual([]);

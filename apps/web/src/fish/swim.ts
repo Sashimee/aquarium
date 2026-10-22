@@ -271,7 +271,7 @@ export class SwimState {
    * long ago, within the frame just advanced, the bite actually began.
    */
   bite(elapsed = 0): void {
-    this.sinceBite = openingTime(biteGape(this.sinceBite)) + elapsed;
+    this.sinceBite = openingTime(biteGape(this.sinceBite - elapsed)) + elapsed;
   }
 
   advance(dt: number, sample: SwimSample): void {
