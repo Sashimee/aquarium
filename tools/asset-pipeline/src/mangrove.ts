@@ -33,9 +33,9 @@ export const MANGROVE_FISH_RECIPES: FishRecipe[] = [
   },
 ];
 
-type Rgb = [number, number, number];
+export type Rgb = [number, number, number];
 
-const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
+export const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
   a[0] + (b[0] - a[0]) * t,
   a[1] + (b[1] - a[1]) * t,
   a[2] + (b[2] - a[2]) * t,
@@ -44,7 +44,7 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
 const PIXELS_PER_SL = 760;
 const MARGIN_PX = 40;
 
-interface Canvas {
+export interface Canvas {
   width: number;
   height: number;
   snoutPixel: [number, number];
@@ -52,7 +52,7 @@ interface Canvas {
 }
 
 /** Sizes a painting canvas so the loft, its fins and a margin fit; `topY` and `bottomY` bound the fins in standard lengths. */
-function canvasFor(
+export function canvasFor(
   sections: SectionKey[],
   topY: number,
   bottomY: number,
@@ -81,13 +81,13 @@ interface BodyPoint {
   fin: boolean;
 }
 
-function locate(sections: SectionKey[], tn: number, yn: number): BodyPoint {
+export function locate(sections: SectionKey[], tn: number, yn: number): BodyPoint {
   const { top, bottom } = sectionEdges(sections, clamp(tn, 0, 1));
   const h = (yn - bottom) / (top - bottom);
   return { tn, yn, h, fin: tn > 1 || h < 0 || h > 1 };
 }
 
-function ring(
+export function ring(
   tn: number,
   yn: number,
   cx: number,
@@ -98,11 +98,11 @@ function ring(
   return 1 - smoothstep(width * 0.4, width, Math.abs(Math.hypot(tn - cx, yn - cy) - radius));
 }
 
-function disc(tn: number, yn: number, cx: number, cy: number, radius: number): number {
+export function disc(tn: number, yn: number, cx: number, cy: number, radius: number): number {
   return 1 - smoothstep(radius * 0.7, radius, Math.hypot(tn - cx, yn - cy));
 }
 
-function band(tn: number, centre: number, half: number, soft: number): number {
+export function band(tn: number, centre: number, half: number, soft: number): number {
   return 1 - smoothstep(half - soft, half + soft, Math.abs(tn - centre));
 }
 
@@ -111,11 +111,11 @@ function fract(x: number): number {
 }
 
 /** Cheap deterministic hash noise in 0..1, for scale and freckle texture. */
-function noise(x: number, y: number): number {
+export function noise(x: number, y: number): number {
   return fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453);
 }
 
-function eyeSpot(
+export function eyeSpot(
   tn: number,
   yn: number,
   cx: number,
@@ -225,44 +225,6 @@ export function paintMono(tn: number, yn: number): Rgb {
   colour = mix(colour, yellow, rim * 0.5);
   const eye = eyeSpot(tn, yn, 0.075, 0.015, 0.03, [0.78, 0.74, 0.55]);
   return eye ?? colour;
-}
-
-const PUFFER_SECTIONS: SectionKey[] = [
-  { t: 0, top: 0.06, bottom: -0.08, halfWidth: 0.04 },
-  { t: 0.06, top: 0.16, bottom: -0.17, halfWidth: 0.11 },
-  { t: 0.2, top: 0.22, bottom: -0.23, halfWidth: 0.19 },
-  { t: 0.4, top: 0.22, bottom: -0.22, halfWidth: 0.19 },
-  { t: 0.6, top: 0.17, bottom: -0.17, halfWidth: 0.14 },
-  { t: 0.8, top: 0.11, bottom: -0.1, halfWidth: 0.09 },
-  { t: 1, top: 0.08, bottom: -0.07, halfWidth: 0.06 },
-];
-
-/** Figure-8 puffer, painted from the species description: olive back, cream belly, two dark rings forming the 8, a black ocellus on the dorsal. */
-export function paintFigure8Puffer(tn: number, yn: number): Rgb {
-  const p = locate(PUFFER_SECTIONS, tn, yn);
-  const olive: Rgb = [0.36, 0.33, 0.13];
-  const cream: Rgb = [0.9, 0.86, 0.6];
-  const dark: Rgb = [0.07, 0.05, 0.03];
-  if (p.tn > 1) return mix([0.5, 0.42, 0.2], [0.78, 0.7, 0.35], smoothstep(1, 1.2, p.tn));
-  if (p.fin) {
-    const colour: Rgb = [0.55, 0.5, 0.25];
-    const ocellus = disc(tn, yn, 0.68, 0.17, 0.045);
-    const halo = disc(tn, yn, 0.68, 0.17, 0.065);
-    return mix(mix(colour, [0.95, 0.85, 0.2], halo * 0.9), dark, ocellus);
-  }
-  let colour = mix(cream, olive, smoothstep(0.35, 0.8, p.h));
-  const freckle = noise(Math.floor(p.tn * 300), Math.floor(p.h * 100));
-  colour = mix(colour, dark, smoothstep(0.88, 1, freckle) * 0.6 * smoothstep(0.3, 0.7, p.h));
-  const eye = ring(tn, yn, 0.12, 0.08, 0.07, 0.018);
-  const flank = ring(tn, yn, 0.5, 0.05, 0.12, 0.022) * smoothstep(0.2, 0.5, p.h);
-  const stripes =
-    Math.max(
-      band(p.tn - (p.h - 0.5) * 0.1, 0.3, 0.01, 0.006),
-      band(p.tn - (p.h - 0.5) * 0.1, 0.78, 0.012, 0.006),
-    ) * smoothstep(0.45, 0.8, p.h);
-  colour = mix(colour, dark, Math.max(eye, flank, stripes) * 0.85);
-  const iris = eyeSpot(tn, yn, 0.12, 0.08, 0.028, [0.75, 0.55, 0.15]);
-  return iris ?? colour;
 }
 
 const GOBY_SECTIONS: SectionKey[] = [
@@ -453,52 +415,6 @@ export const MANGROVE_LOFT_RECIPES: LoftFishRecipe[] = [
         },
       ],
       caudal: { shape: [0.2, 0.25, 0.27, 0.25, 0.2], spread: 0.07 },
-    },
-  },
-  {
-    id: 'figure-8-puffer',
-    species: 'figure-8-puffer',
-    fallbackLengthM: 0.055,
-    roughness: 0.4,
-    note: 'Tetraodon biocellatus: no model and no allowed photo, so the body is a procedural loft and the colour map is painted from the species description alone',
-    texture: {
-      kind: 'synthetic',
-      ...canvasFor(PUFFER_SECTIONS, 0.32, -0.32, 0.25),
-      paint: paintFigure8Puffer,
-    },
-    spec: {
-      roundness: 2.1,
-      membrane: true,
-      sections: PUFFER_SECTIONS,
-      fins: [
-        {
-          fin: 'dorsal',
-          from: 0.6,
-          to: 0.76,
-          anchor: 'top',
-          shape: [0.06, 0.12, 0.13, 0.07],
-          sweep: 0.3,
-        },
-        {
-          fin: 'anal',
-          from: 0.62,
-          to: 0.76,
-          anchor: 'bottom',
-          shape: [0.05, 0.1, 0.1, 0.05],
-          sweep: 0.3,
-        },
-        {
-          fin: 'pectoral',
-          from: 0.2,
-          to: 0.26,
-          anchor: 'side',
-          flankHeight: 0.4,
-          direction: [0.85, -0.1],
-          shape: [0.04, 0.1, 0.08],
-          sweep: 0.5,
-        },
-      ],
-      caudal: { shape: [0.14, 0.19, 0.21, 0.19, 0.14], spread: 0.02 },
     },
   },
   {

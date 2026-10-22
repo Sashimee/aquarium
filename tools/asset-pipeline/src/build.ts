@@ -10,6 +10,7 @@ import { HERMIT_RECIPES, buildHermit } from './hermit.ts';
 import { buildEnvironment, buildHdri, buildSubstrate } from './environment.ts';
 import { BLACKWATER_FISH_RECIPES } from './blackwater-fish.ts';
 import { LEAF_CARD_RECIPES, buildLeafCard } from './leaf-card.ts';
+import { FRESHWATER_PUFFER_RECIPES } from './freshwater-puffer.ts';
 import { LOFT_FISH_RECIPES, buildLoftFish } from './loft-fish.ts';
 import {
   MANGROVE_ENVIRONMENT_RECIPES,
@@ -137,11 +138,13 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       id: recipe.id,
       run: (ctx: FishContext) => buildHdri(recipe, ctx),
     })),
-    ...[...LOFT_FISH_RECIPES, ...BLACKWATER_FISH_RECIPES].map((recipe) => ({
-      kind: 'fish' as const,
-      id: recipe.id,
-      run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
-    })),
+    ...[...LOFT_FISH_RECIPES, ...BLACKWATER_FISH_RECIPES, ...FRESHWATER_PUFFER_RECIPES].map(
+      (recipe) => ({
+        kind: 'fish' as const,
+        id: recipe.id,
+        run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
+      }),
+    ),
     ...MANGROVE_LOFT_RECIPES.map((recipe) => ({
       kind: 'fish' as const,
       id: recipe.id,
