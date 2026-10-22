@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-import { addDisplayControls } from './devPanel';
+import { Box3, Vector3 } from 'three/webgpu';
+import { addDisplayControls, liveWater, WATER_SLIDER_MAX } from './devPanel';
 import { DisplayPreference } from './displayPreference';
+import { applyBiomeWater, BIOME_WATER } from './water/biomeWater';
+import { WaterMedium } from './water/medium';
 
 let gui: GUI | null = null;
 
@@ -54,5 +57,47 @@ describe('addDisplayControls', () => {
     off();
     preference.set({ frameRate: 'display' });
     expect(frameRate.getValue()).toBe('capped');
+  });
+});
+
+describe('liveWater', () => {
+  const tankWater = () =>
+    new WaterMedium(new Box3(new Vector3(-0.5, 0, -0.2), new Vector3(0.5, 0.4, 0.2)), {
+      ...BIOME_WATER.freshwater,
+    });
+
+  it('has slider room for every biome water', () => {
+    for (const { cdom440, turbidity } of Object.values(BIOME_WATER)) {
+      expect(cdom440).toBeLessThan(WATER_SLIDER_MAX);
+      expect(turbidity).toBeLessThan(WATER_SLIDER_MAX);
+    }
+  });
+
+  it('shows the water a biome switch set after the panel opened', () => {
+    const medium = tankWater();
+    gui = new GUI();
+    const slider = gui.add(liveWater(medium), 'cdom440', 0, WATER_SLIDER_MAX, 0.01);
+    applyBiomeWater(medium, 'blackwater');
+    expect(slider.getValue()).toBe(BIOME_WATER.blackwater.cdom440);
+  });
+
+  it('changes only its own term and keeps the rest of the current water', () => {
+    const medium = tankWater();
+    const water = liveWater(medium);
+    applyBiomeWater(medium, 'mangrove');
+    water.cdom440 = 1.2;
+    expect(medium.getQuality()).toEqual({
+      cdom440: 1.2,
+      turbidity: BIOME_WATER.mangrove.turbidity,
+    });
+    water.turbidity = 0.3;
+    expect(medium.getQuality()).toEqual({ cdom440: 1.2, turbidity: 0.3 });
+  });
+
+  it('rejects negative water the way the medium does', () => {
+    const water = liveWater(tankWater());
+    expect(() => {
+      water.turbidity = -1;
+    }).toThrow(RangeError);
   });
 });
