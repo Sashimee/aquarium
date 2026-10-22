@@ -79,7 +79,7 @@ import {
   waterBounds,
 } from './dimensions';
 import { createSubstrateGeometry, createSubstrateMaterial } from './substrate';
-import { PaneMirror } from './paneMirror';
+import { mirrorPresence, PaneMirror } from './paneMirror';
 import { SurfaceReflection, UNREFLECTED_LAYER } from './surfaceReflection';
 
 const GLASS_F0 = 0.04;
@@ -337,11 +337,6 @@ function waterAlongRay(
  * the real one reads as a kaleidoscope rather than a tank.
  */
 const HIDDEN_BACKDROP = 0.5;
-/**
- * Below this reflectance a pane's mirror is too faint for the copy of the scene to be worth its
- * taps: the back pane seen head-on mirrors a few percent, a side pane past the critical angle all.
- */
-const PANE_MIRROR_MIN_REFLECTANCE = 0.2;
 
 interface GlassFace {
   material: MeshStandardNodeMaterial;
@@ -384,19 +379,9 @@ function createGlassFace(
   const faceOutput = (contents: boolean): Node<'vec4'> => {
     let seen: Node<'vec3'> = fallback;
     if (contents) {
-      const ray = traceSegment(medium, interior, positionWorld, mirrored, backdrop);
-      const gate = towardsWater
-        .greaterThan(0)
-        .and(reflectance.greaterThan(PANE_MIRROR_MIN_REFLECTANCE));
-      seen = mirror.radiance(
-        medium,
-        positionWorld,
-        mirrored,
-        ray.exitPoint,
-        ray.inTank,
-        gate,
-        fallback,
-      );
+      const end = positionWorld.add(mirrored.mul(medium.exit(positionWorld, mirrored).distance));
+      const presence = mirrorPresence(towardsWater, reflectance);
+      seen = mirror.radiance(medium, positionWorld, mirrored, end, presence, fallback);
     }
     const inner = vec4(seen.mul(reflectance), reflectance);
     const pane = mix(output, inner, towardsWater);
@@ -616,14 +601,9 @@ export class Tank {
     this.substrate.receiveShadow = true;
     this.substrate.castShadow = true;
 
-    this.glassFace = createGlassFace(
-      medium,
-      interior,
-      this.algae,
-      sky,
-      this.poster.albedo,
-      new PaneMirror(),
-    );
+    const mirror = new PaneMirror();
+    this.disposables.push(mirror);
+    this.glassFace = createGlassFace(medium, interior, this.algae, sky, this.poster.albedo, mirror);
     this.glassFaces = this.addMesh('glass-faces', this.glassFace.material);
     this.glassEdges = this.addMesh('glass-edges', createGlassEdgeMaterial());
     for (const mesh of [this.glassFaces, this.glassEdges]) mesh.renderOrder = 2;
