@@ -34,12 +34,13 @@ writeFileSync(
   readFileSync(new URL('../../content/economy.json', import.meta.url)),
 );
 
+const presetsDir = new URL('../../content/presets/', import.meta.url);
+const presetFiles = readdirSync(presetsDir).filter((name) => name.endsWith('.json'));
+if (presetFiles.length === 0) throw new Error('content/presets has no preset files.');
 const presets = Object.fromEntries(
-  ['freshwater', 'reef'].map((biome) => [
-    biome,
-    JSON.parse(
-      readFileSync(new URL(`../../content/presets/${biome}.json`, import.meta.url), 'utf8'),
-    ),
+  presetFiles.map((name) => [
+    name.slice(0, -'.json'.length),
+    JSON.parse(readFileSync(new URL(name, presetsDir), 'utf8')),
   ]),
 );
 writeFileSync(new URL('./dist/presets.json', import.meta.url), JSON.stringify(presets));
