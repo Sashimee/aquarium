@@ -142,6 +142,22 @@ export function backgroundFile(id: string, tier: BackgroundTier): string {
   return `${BACKGROUND_KIND}/${id}/${BACKGROUND_TIER_ALIAS[tier] ?? tier}.ktx2`;
 }
 
+const RENDER_INPUTS: Record<string, string> = {
+  'bg-cichlid-tanganyika-shell-bed': 'CC0 rocks and a CC0 ground texture and a CC-BY shell model',
+};
+
+const RENDER_INPUTS_BY_BIOME: Record<string, string> = {
+  cichlid: 'CC0 rocks and a CC0 ground texture',
+};
+
+function renderInputs(entry: ManifestAsset): string {
+  return (
+    RENDER_INPUTS[entry.id] ??
+    (typeof entry['biome'] === 'string' ? RENDER_INPUTS_BY_BIOME[entry['biome']] : undefined) ??
+    `the ${entry.licence} source assets credited for this background`
+  );
+}
+
 export function backgroundModifications(entry: ManifestAsset, crop: CropBox | null): string[] {
   const resized =
     'resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier';
@@ -157,7 +173,7 @@ export function backgroundModifications(entry: ManifestAsset, crop: CropBox | nu
   }
   if (isRenderEntry(entry)) {
     return [
-      'composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)',
+      `composed and rendered by the Aquarium project from ${renderInputs(entry)} with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)`,
       resized,
       encoded,
       stripped,

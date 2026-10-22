@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { CICHLID_BACKGROUND_IDS } from './cichlid-render.ts';
 import { CICHLID_LOFT_RECIPES } from './loft-cichlid-recipes.ts';
 import { LOFT_FISH_RECIPES } from './loft-fish.ts';
-import { manifestSchema } from './manifest.ts';
+import { SHARE_ALIKE_ALLOWLIST, manifestSchema } from './manifest.ts';
 import { ENVIRONMENT_RECIPES, ROCK_PILE_RECIPES } from './recipes.ts';
 
 const REPO = join(import.meta.dirname, '..', '..', '..');
@@ -30,12 +30,31 @@ describe('cichlid loft recipes', () => {
     }
   });
 
-  it('never rest on a share-alike or unlicensed photo', () => {
+  it('rest only on CC0, CC-BY or an approved share-alike photo of their own species', () => {
     for (const recipe of CICHLID_LOFT_RECIPES) {
       if (recipe.texture.kind !== 'photo') continue;
-      const source = byId.get(recipe.texture.sourceId);
-      expect(['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'], recipe.id).toContain(source?.licence);
+      const { sourceId } = recipe.texture;
+      const source = byId.get(sourceId);
+      if (source?.licence?.startsWith('CC-BY-SA')) {
+        const approved = SHARE_ALIKE_ALLOWLIST.find((entry) => entry.id === sourceId);
+        expect(approved?.species, `${recipe.id} uses unapproved share-alike ${sourceId}`).toBe(
+          recipe.species,
+        );
+      } else {
+        expect(['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'], recipe.id).toContain(source?.licence);
+      }
     }
+  });
+
+  it('builds the three approved share-alike species', () => {
+    const ids = CICHLID_LOFT_RECIPES.map((r) => r.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'neolamprologus-brichardi',
+        'aulonocara-baenschi',
+        'neolamprologus-multifasciatus',
+      ]),
+    );
   });
 });
 

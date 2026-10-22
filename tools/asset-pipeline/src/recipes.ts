@@ -396,6 +396,7 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     longestM: 0.045,
     maxTriangles: 3727,
     material: { roughness: 0.55 },
+    maxTexturePx: 1024,
     modifications: ['land-snail shell scan scaled to Neothauma size (4.5 cm)'],
   },
 ];

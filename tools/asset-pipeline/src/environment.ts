@@ -33,7 +33,7 @@ import {
   flipVertical,
   halve,
 } from './rgbe.ts';
-import { decodeImage, encodeHdrKtx2, type Rgba } from './textures.ts';
+import { decodeImage, encodeHdrKtx2, resizeImage, type Rgba } from './textures.ts';
 
 export interface EnvironmentRecipe {
   id: string;
@@ -61,6 +61,8 @@ export interface EnvironmentRecipe {
   tint?: TintSpec;
   /** Adds procedural pores to the normal and colour maps; both are upscaled to 2048 px first. */
   pores?: PoreSpec;
+  /** Caps the colour map at this size and the normal map at half of it, so the 2k tier carries no more detail than the 1k tier. */
+  maxTexturePx?: number;
   modifications: string[];
 }
 
@@ -202,7 +204,20 @@ function assertTexcoordZero(doc: Document, source: Material, recipe: string): vo
   }
 }
 
+async function capTextures(def: MaterialDef, maxPx: number): Promise<MaterialDef> {
+  return {
+    ...def,
+    ...(def.baseColor
+      ? { baseColor: { ...def.baseColor, image: await resizeImage(def.baseColor.image, maxPx) } }
+      : {}),
+    ...(def.normal
+      ? { normal: { ...def.normal, image: await resizeImage(def.normal.image, maxPx / 2) } }
+      : {}),
+  };
+}
+
 async function finishMaterial(def: MaterialDef, recipe: EnvironmentRecipe): Promise<MaterialDef> {
+  if (recipe.maxTexturePx) def = await capTextures(def, recipe.maxTexturePx);
   if (!recipe.tint && !recipe.pores) return def;
   if (!def.baseColor) throw new Error(`${recipe.id}: tint and pores need a base colour texture`);
   let image = recipe.pores ? await upscaleTo(def.baseColor.image, 2048) : def.baseColor.image;
@@ -301,9 +316,11 @@ export async function buildEnvironment(
         'merged meshes, dropped unused attributes, skeleton and animation',
         `origin at the centre of the base, scaled so the longest edge is ${recipe.longestM} m${recipe.keepUncroppedScale ? ' before cropping' : ''}`,
         `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
-        recipe.pores
-          ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
-          : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+        recipe.maxTexturePx
+          ? `textures capped at ${recipe.maxTexturePx} px (normal ${recipe.maxTexturePx / 2} px) and re-encoded to KTX2`
+          : recipe.pores
+            ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
+            : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
         ...recipe.modifications,
       ],
     },

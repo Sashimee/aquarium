@@ -1,4 +1,10 @@
-import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
+import {
+  buildDocument,
+  emitAsset,
+  texturePrefix,
+  type LodPlan,
+  type SharedTexture,
+} from './emit.ts';
 import { loadEnvironment, normaliseToBase, type EnvironmentRecipe } from './environment.ts';
 import type { FishContext } from './fish.ts';
 import type { OutputAsset } from './index-schema.ts';
@@ -94,6 +100,16 @@ export async function buildRockPile(
       loaded.set(placement.recipeId, await loadEnvironment(member, ctx));
   }
   const { parts, materials } = composeRockPile(recipe, loaded);
+  const shared = new Map<string, SharedTexture>();
+  for (const [memberId, rock] of loaded)
+    for (const def of rock.materials) {
+      if (shared.has(def.name))
+        throw new Error(`${recipe.id}: two member rocks both use a material named "${def.name}"`);
+      shared.set(def.name, {
+        assetDir: `rock/${memberId}`,
+        prefix: texturePrefix(memberId, rock.materials.length, def.name),
+      });
+    }
   const triangles = parts.reduce((s, p) => s + p.indices.length / 3, 0);
   const lod0 = Math.min(1, budget / triangles);
   const plan: LodPlan = { ratios: [lod0, lod0 * 0.25, lod0 * 0.075], minTriangles: 200 };
@@ -104,7 +120,7 @@ export async function buildRockPile(
     outRoot: ctx.outRoot,
     kind: 'rock',
     id: recipe.id,
-    built: buildDocument(recipe.id, parts, materials),
+    built: buildDocument(recipe.id, parts, materials, shared),
     plan,
     meta: {
       origin: 'model',
@@ -113,6 +129,7 @@ export async function buildRockPile(
       modifications: [
         'merged meshes, dropped unused attributes',
         `${recipe.placements.length} rocks arranged into one pile, base centred on the origin`,
+        "textures are the member rocks' own KTX2 files, referenced and not copied",
         `LOD0 capped at ${budget} triangles, LOD1 at a quarter of that`,
         ...recipe.modifications,
       ],
