@@ -363,18 +363,19 @@ describe('cleaning station motion', () => {
   const sample = (state: number, speed: number) => ({ speed, yawRate: 0, thrust: 1, state });
   const wrasse = (phaseOffset = 0) => new SwimState(length, 0.3, SWIM_MODES.labriform, phaseOffset);
 
-  /** Start times of the pecks over `seconds`, sampled once a frame. */
+  /** Start times of the pecks over `seconds`, sampled once a frame of `frameS`. */
   function peckTimes(
     state: SwimState,
     seconds: number,
     speed: number,
     kind: number = FishState.Clean,
+    frameS = step,
   ): number[] {
     const starts: number[] = [];
     let before = state.sincePeck;
-    for (let i = 1; i * step <= seconds + 1e-9; i++) {
-      state.advance(step, sample(kind, speed));
-      if (state.sincePeck < before) starts.push(i * step - state.sincePeck);
+    for (let i = 1; i * frameS <= seconds + 1e-9; i++) {
+      state.advance(frameS, sample(kind, speed));
+      if (state.sincePeck < before) starts.push(i * frameS - state.sincePeck);
       before = state.sincePeck;
     }
     return starts;
@@ -410,6 +411,14 @@ describe('cleaning station motion', () => {
       expect(gap).toBeLessThanOrEqual(PECK_MAX_INTERVAL_S + step);
     }
     expect(new Set(gaps.map((g) => g.toFixed(2))).size).toBeGreaterThan(1);
+  });
+
+  it('pecks on the same beat at 30 Hz as at 144 Hz', () => {
+    const slow = peckTimes(wrasse(1), 3, 0, FishState.Clean, 1 / 30);
+    const fast = peckTimes(wrasse(1), 3, 0, FishState.Clean, 1 / 144);
+    expect(slow.length).toBeGreaterThanOrEqual(6);
+    expect(slow).toHaveLength(fast.length);
+    slow.forEach((t, i) => expect(t).toBeCloseTo(fast[i] ?? NaN, 6));
   });
 
   it('shows one to four pecks in a hold of 0.3-1.2 s', () => {

@@ -1655,7 +1655,9 @@ export class FishSystem {
     const { fish } = rt;
     pose.thrust = 1;
     const walk = this.walkSample;
+    const swim = this.swimSample;
     walk.state = -1;
+    swim.state = -1;
     walk.legPhase = rt.motion instanceof WalkState ? rt.motion.legPhase : 0;
     walk.flip = 0;
     walk.attached = 1;
@@ -1699,6 +1701,7 @@ export class FishSystem {
         pose.liveliness = 1;
         pose.thrust = frame[o + SnapshotField.Thrust] ?? 1;
         walk.state = frame[o + SnapshotField.State] ?? -1;
+        swim.state = walk.state;
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
         walk.flip = frame[o + SnapshotField.Flip] ?? 0;
         walk.attached = frame[o + SnapshotField.Attached] ?? 1;
@@ -1824,13 +1827,7 @@ export class FishSystem {
         swim.speed = this.pose.speed;
         swim.yawRate = this.pose.yawRate;
         swim.thrust = this.pose.thrust;
-        swim.state = this.walkSample.state;
         motion.advance(deltaS * liveliness, swim);
-        const jab = motion.jab * rt.length;
-        if (jab > 0) {
-          this.jabAhead.set(0, 0, jab).applyQuaternion(this.quaternion);
-          this.position.add(this.jabAhead);
-        }
       }
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
@@ -1853,6 +1850,12 @@ export class FishSystem {
       this.quaternion.copy(rt.lastQuaternion);
       const { impostor } = rt.batch;
       const { motion } = rt;
+      // Only the drawn pose takes the peck's jab: a held fish restarts from `lastPosition` every
+      // frame and would otherwise creep forward by the jab again and again.
+      if (motion instanceof SwimState && motion.jab > 0) {
+        this.jabAhead.set(0, 0, motion.jab * rt.length).applyQuaternion(this.quaternion);
+        this.position.add(this.jabAhead);
+      }
       const choice = this.impostorChoice;
       choice.tierImpostors = impostors !== null;
       choice.available = impostor !== null && motion instanceof SwimState;

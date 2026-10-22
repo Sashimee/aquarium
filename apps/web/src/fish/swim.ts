@@ -306,10 +306,10 @@ export class SwimState {
     }
     this.peckDue -= dt;
     if (this.peckDue > 0) return;
-    this.sincePeck = 0;
+    this.sincePeck = -this.peckDue;
     this.bite();
     this.peckJitter = (this.peckJitter + GOLDEN_FRACTION) % 1;
-    this.peckDue =
+    this.peckDue +=
       PECK_MIN_INTERVAL_S + (PECK_MAX_INTERVAL_S - PECK_MIN_INTERVAL_S) * this.peckJitter;
   }
 }
