@@ -13,6 +13,7 @@ import {
 } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { TankDimensions } from '../engine/tank/dimensions';
+import { WATER_INSET } from '../engine/tank/dimensions';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
 import { abortError } from './abortable';
@@ -477,6 +478,8 @@ export class TankScene {
         this.engine.scene.add(group.object);
       }
       this.syncGrowth();
+      const anchors = this.anchors;
+      for (const listener of this.anchorListeners) listener(anchors);
       await this.evictUnused();
       return;
     }
@@ -870,7 +873,18 @@ export class TankScene {
 
   /** Where species with a home (clownfish and their anemone) are drawn to. */
   get anchors(): readonly SceneAnchor[] {
-    return [...this.anchorData, ...caveAnchors(this.hardItems.map(({ item }) => item))];
+    const d = this.engine.tank.dimensions;
+    const reach = {
+      halfX: d.length / 2 - d.glass - WATER_INSET,
+      halfZ: d.depth / 2 - d.glass - WATER_INSET,
+    };
+    return [
+      ...this.anchorData,
+      ...caveAnchors(
+        this.hardItems.map(({ item }) => item),
+        reach,
+      ),
+    ];
   }
 
   /** Called with the anchors after a layout change moves, adds or removes shelter decor. */

@@ -43,8 +43,24 @@ export function caveAnchor(id: string, item: DecorItem): SceneAnchor {
   };
 }
 
-export function caveAnchors(items: readonly DecorItem[]): SceneAnchor[] {
+/** Half-extents, in x and z, of the water the sim lets an anchor sit in. */
+export interface WaterReach {
+  readonly halfX: number;
+  readonly halfZ: number;
+}
+
+/**
+ * A mouth that falls outside the water, as one facing the glass of a rock set close to it does, has
+ * no place a fish can reach and the sim refuses it, so it is left out. Ids stay tied to the
+ * shelter's place in the list, so dropping one does not renumber the rest.
+ */
+export function caveAnchors(items: readonly DecorItem[], water?: WaterReach): SceneAnchor[] {
   return items
     .filter((item) => offersShelter(item.assetId))
-    .map((item, i) => caveAnchor(`cave-${i + 1}`, item));
+    .map((item, i) => caveAnchor(`cave-${i + 1}`, item))
+    .filter((a) => {
+      if (!water) return true;
+      const [x, , z] = a.position;
+      return Math.abs(x) + a.radius < water.halfX && Math.abs(z) + a.radius < water.halfZ;
+    });
 }

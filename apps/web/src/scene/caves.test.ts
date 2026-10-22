@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Biome, DecorItem } from '@aquarium/shared';
-import { DEFAULT_TANK } from '../engine/tank/dimensions';
+import { World } from '@aquarium/sim';
+import { DEFAULT_TANK, TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
+import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
 import { substrateHeight } from '../engine/tank/substrate';
 import { caveAnchor, caveAnchors } from './caves';
 import { loadPreset } from './preset';
@@ -77,5 +79,46 @@ describe('caveAnchor', () => {
 
   it('rejects an asset with no known mouth', () => {
     expect(() => caveAnchor('c', arch({ assetId: 'boulder-01' }))).toThrow(/no cave mouth/);
+  });
+});
+
+describe('a shelter close to the glass', () => {
+  const sizes = Object.entries(TANK_DIMENSIONS);
+
+  it.each(sizes)('%s: a mouth facing the glass is dropped and the sim still builds', (_, tank) => {
+    const reach = {
+      halfX: tank.length / 2 - tank.glass - WATER_INSET,
+      halfZ: tank.depth / 2 - tank.glass - WATER_INSET,
+    };
+    const nearFront = reach.halfZ - 0.05;
+    const facingGlass: DecorItem = {
+      assetId: 'rock-pile-cave',
+      position: [0, 0.1, nearFront],
+      rotationY: 0,
+      scale: 0.4,
+    };
+    const facingAway: DecorItem = { ...facingGlass, position: [0, 0.1, 0], rotationY: Math.PI };
+    const nearSide: DecorItem = {
+      ...facingGlass,
+      position: [reach.halfX - 0.03, 0.1, 0],
+      rotationY: Math.PI / 2,
+    };
+
+    const anchors = caveAnchors([facingGlass, facingAway, nearSide], reach);
+    expect(anchors.map((a) => a.id)).toEqual(['cave-2']);
+
+    const { config } = demoTank(tank, 1, 'reef');
+    const world = () => new World({ ...config, anchors: sceneAnchorsToSim(anchors, { config }) });
+    expect(world).not.toThrow();
+
+    const unfiltered = caveAnchors([facingGlass]);
+    expect(
+      () => new World({ ...config, anchors: sceneAnchorsToSim(unfiltered, { config }) }),
+    ).toThrow(/outside the tank/);
+  });
+
+  it('keeps every shelter when no water reach is given', () => {
+    const item = arch({ position: [0, 0.1, 0.2], scale: 1 });
+    expect(caveAnchors([item, item])).toHaveLength(2);
   });
 });
