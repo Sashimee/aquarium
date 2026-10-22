@@ -1,7 +1,16 @@
 import { legacyTintSeed, type Coral, type DecorItem } from '@aquarium/shared';
 import { hashKey } from './plantGrowth';
 import { mulberry32 } from './placement';
-import { euphylliaCapsule, type EuphylliaCapsule, type EuphylliaMesh } from './euphyllia';
+import type { AssetCatalog } from './assets';
+import type { CurrentParameters } from './current';
+import type { TankDimensions } from '../engine/tank/dimensions';
+import {
+  euphylliaCapsule,
+  parseEuphylliaId,
+  type EuphylliaCapsule,
+  type EuphylliaMesh,
+} from './euphyllia';
+import { boundsFromCatalog, maxScaleAt, type FitModel } from './presetFit';
 
 const MAX_ANCESTORS = 64;
 
@@ -121,11 +130,13 @@ export interface CoralLayoutSlot extends CoralSlot {
  */
 export function coralSlotOrder(
   presetDecor: readonly DecorItem[],
-  isHardCoral: (assetId: string) => boolean,
-  isEuphyllia: (assetId: string) => boolean,
-  hardCorals: readonly { readonly index: number; readonly item: DecorItem }[],
+  kindOf: (assetId: string) => string,
+  hardItems: readonly { readonly item: DecorItem; readonly kind: string }[],
   euphyllias: readonly DecorItem[],
 ): CoralLayoutSlot[] {
+  const hardCorals = hardItems.flatMap(({ item, kind }, index) =>
+    kind === 'coral' ? [{ index, item }] : [],
+  );
   const slots: CoralLayoutSlot[] = [];
   let nextHard = 0;
   let nextEuphyllia = 0;
@@ -136,11 +147,11 @@ export function coralSlotOrder(
     }
   };
   for (const decor of presetDecor) {
-    if (isEuphyllia(decor.assetId)) {
+    if (parseEuphylliaId(decor.assetId)) {
       const item = euphyllias[nextEuphyllia];
       if (!item) continue;
       slots.push({ assetId: item.assetId, item, origin: { euphyllia: nextEuphyllia++ } });
-    } else if (isHardCoral(decor.assetId)) {
+    } else if (kindOf(decor.assetId) === 'coral') {
       takeHard();
     }
   }
@@ -153,7 +164,21 @@ export function grownEuphylliaCapsule(
   bounds: EuphylliaMesh['bounds'],
   item: DecorItem,
   coral: Coral | undefined,
-  cap: ScaleCap = () => Infinity,
+  cap: ScaleCap,
 ): EuphylliaCapsule {
   return euphylliaCapsule(bounds, grownCoralItem(item, coral, cap));
+}
+
+/** The one scale cap the scene fits corals with, including a swaying colony's reach in the current. */
+export function coralScaleCap(
+  catalog: Pick<AssetCatalog, 'get'>,
+  dimensions: TankDimensions,
+  current: CurrentParameters,
+): ScaleCap {
+  const modelOf = boundsFromCatalog(catalog, current);
+  const models = new Map<string, FitModel | null>();
+  return (item) => {
+    if (!models.has(item.assetId)) models.set(item.assetId, modelOf(item.assetId));
+    return maxScaleAt(item, dimensions, models.get(item.assetId) ?? null);
+  };
 }

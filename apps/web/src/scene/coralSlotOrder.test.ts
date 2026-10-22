@@ -4,16 +4,24 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Coral, DecorItem } from '@aquarium/shared';
 import { TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { AssetCatalog } from './assets';
-import { coralSlotOrder, grownEuphylliaCapsule, matchLayoutCorals } from './coralGrowth';
+import {
+  coralScaleCap,
+  coralSlotOrder,
+  grownEuphylliaCapsule,
+  grownCoralItem,
+  matchLayoutCorals,
+} from './coralGrowth';
 import {
   euphylliaCapsule,
   euphylliaCollider,
   generateEuphyllia,
   parseEuphylliaId,
 } from './euphyllia';
-import { HARDSCAPE_KINDS } from './hardscape';
+import { routeDecor } from './decorRouting';
 import { loadPreset } from './preset';
-import { fitPresetToCatalog } from './TankScene';
+import { reachCurrent } from './current';
+import { maxScaleAt } from './presetFit';
+import { DEFAULT_CURRENT, fitPresetToCatalog } from './TankScene';
 
 let catalog: AssetCatalog;
 
@@ -25,24 +33,19 @@ beforeAll(async () => {
 });
 
 const isEuphyllia = (assetId: string) => parseEuphylliaId(assetId) !== null;
-const isHardCoral = (assetId: string) => catalog.get(assetId).kind === 'coral';
-
-// The same partition TankScene.build makes before setCorals ever runs.
-function partition(decor: readonly DecorItem[]) {
-  const hardItems = decor.filter(
-    (item) => !isEuphyllia(item.assetId) && HARDSCAPE_KINDS.has(catalog.get(item.assetId).kind),
-  );
-  const hardCorals = hardItems.flatMap((item, index) =>
-    isHardCoral(item.assetId) ? [{ index, item }] : [],
-  );
-  const euphyllias = decor.filter((item) => isEuphyllia(item.assetId));
-  return { hardItems, hardCorals, euphyllias };
-}
+const kindOf = (assetId: string) => catalog.get(assetId).kind;
 
 const orderOf = (decor: readonly DecorItem[], edited = decor) => {
-  const { hardCorals, euphyllias } = partition(edited);
-  return coralSlotOrder(decor, isHardCoral, isEuphyllia, hardCorals, euphyllias);
+  const { hardItems, euphylliaItems } = routeDecor(edited, kindOf);
+  return coralSlotOrder(
+    decor,
+    kindOf,
+    hardItems,
+    euphylliaItems.map((entry) => entry.item),
+  );
 };
+
+const isHardCoral = (assetId: string) => !isEuphyllia(assetId) && kindOf(assetId) === 'coral';
 
 const reef = () => fitPresetToCatalog(loadPreset('reef'), TANK_DIMENSIONS.standard, catalog);
 
@@ -58,17 +61,20 @@ describe('coralSlotOrder', () => {
 
   it('points each origin at the list entry the scene renders for that slot', () => {
     const decor = reef().decor;
-    const { hardItems, euphyllias } = partition(decor);
+    const { hardItems, euphylliaItems } = routeDecor(decor, kindOf);
+    const euphyllias = euphylliaItems.map((entry) => entry.item);
     for (const slot of orderOf(decor)) {
       const source =
-        'hard' in slot.origin ? hardItems[slot.origin.hard] : euphyllias[slot.origin.euphyllia];
+        'hard' in slot.origin
+          ? hardItems[slot.origin.hard]?.item
+          : euphyllias[slot.origin.euphyllia];
       expect(source).toBe(slot.item);
     }
   });
 
   it('puts an extra hard coral after the preset ones and an edited piece in place', () => {
     const decor = reef().decor;
-    const first = decor.findIndex((d) => !isEuphyllia(d.assetId) && isHardCoral(d.assetId));
+    const first = decor.findIndex((d) => isHardCoral(d.assetId));
     const original = decor[first] as DecorItem;
     const moved: DecorItem = { ...original, position: [0.2, 0.1, 0.1] };
     const extra: DecorItem = { ...original, tintSeed: 77 };
@@ -80,9 +86,7 @@ describe('coralSlotOrder', () => {
   });
 
   it('numbers repeated tint seeds in this order for matchLayoutCorals', () => {
-    const decor = reef().decor.map((d) =>
-      !isEuphyllia(d.assetId) && isHardCoral(d.assetId) ? { ...d, tintSeed: 5 } : d,
-    );
+    const decor = reef().decor.map((d) => (isHardCoral(d.assetId) ? { ...d, tintSeed: 5 } : d));
     const slots = orderOf(decor);
     const hardSlots = slots.map((s, i) => [s, i] as const).filter(([s]) => 'hard' in s.origin);
     const corals: Coral[] = hardSlots.map(([s], n) => ({
@@ -128,7 +132,7 @@ describe('euphyllia capsule', () => {
 
   it('grows with the colony', () => {
     const placed = euphylliaCapsule(mesh.bounds, item);
-    const grown = grownEuphylliaCapsule(mesh.bounds, item, coral(2));
+    const grown = grownEuphylliaCapsule(mesh.bounds, item, coral(2), () => Infinity);
     expect(grown.radius).toBeCloseTo(placed.radius * 2);
     expect(grown.height).toBeCloseTo(placed.height * 2, 6);
     expect(Math.hypot(...grown.lean)).toBeCloseTo(Math.hypot(...placed.lean) * 2, 6);
@@ -138,7 +142,7 @@ describe('euphyllia capsule', () => {
     expect(grownEuphylliaCapsule(mesh.bounds, item, coral(2), () => 1.25).radius).toBeCloseTo(
       euphylliaCapsule(mesh.bounds, { ...item, scale: 1.25 }).radius,
     );
-    expect(grownEuphylliaCapsule(mesh.bounds, item, undefined)).toEqual(
+    expect(grownEuphylliaCapsule(mesh.bounds, item, undefined, () => 1.25)).toEqual(
       euphylliaCapsule(mesh.bounds, item),
     );
   });
@@ -164,5 +168,48 @@ describe('euphyllia capsule', () => {
     expect(collider.b[1] - collider.a[1]).toBeCloseTo(capsule.height);
     expect((collider.a[1] + collider.b[1]) / 2).toBeCloseTo(capsule.centre[1]);
     expect(collider.radius).toBe(capsule.radius);
+  });
+});
+
+describe('grown euphyllia capsule near the glass', () => {
+  const dimensions = TANK_DIMENSIONS.standard;
+  const current = () => reachCurrent(loadPreset('reef').current ?? DEFAULT_CURRENT, 'reef');
+  const mesh = generateEuphyllia('hammer', 3, 2);
+  const nearGlass: DecorItem = {
+    assetId: 'euphyllia-hammer-3',
+    position: [dimensions.length / 2 - dimensions.glass - 0.25, 0.07, 0],
+    rotationY: 0.4,
+    scale: 1,
+  };
+  const grownColony: Coral = {
+    key: 's1',
+    assetId: nearGlass.assetId,
+    tintSeed: 1,
+    parentKey: null,
+    position: null,
+    size: 2.5,
+    minSize: 0.3,
+    maxSize: 2.5,
+    fragMinSize: 1.5,
+    bleach: 0,
+  };
+
+  it('is the capsule of the collider the scene builds from the shared cap', () => {
+    const cap = coralScaleCap(catalog, dimensions, current());
+    const capsule = grownEuphylliaCapsule(mesh.bounds, nearGlass, grownColony, cap);
+    const collider = euphylliaCollider(mesh.bounds, grownCoralItem(nearGlass, grownColony, cap));
+    expect(capsule.radius).toBe(collider.radius);
+    expect(capsule.centre[0] - capsule.lean[0] / 2).toBeCloseTo(collider.a[0]);
+    expect(capsule.centre[0] + capsule.lean[0] / 2).toBeCloseTo(collider.b[0]);
+    expect(capsule.centre[1] + capsule.height / 2).toBeCloseTo(collider.b[1]);
+  });
+
+  it('is held back by the colony sway reach, which a rigid cap would ignore', () => {
+    const cap = coralScaleCap(catalog, dimensions, current());
+    const capped = grownCoralItem(nearGlass, grownColony, cap).scale;
+    const rigid = maxScaleAt(nearGlass, dimensions, { bounds: mesh.bounds, swayReach: null });
+    expect(capped).toBeGreaterThan(nearGlass.scale);
+    expect(capped).toBeLessThan(grownColony.size * nearGlass.scale);
+    expect(capped).toBeLessThan(rigid);
   });
 });
