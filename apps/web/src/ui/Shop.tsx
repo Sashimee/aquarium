@@ -17,6 +17,7 @@ import { fishNeedsConfirm } from '../sync/spending';
 import { checkFishName, suggestFishName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { backgroundOptions } from './backgroundTitles';
+import { PaymentsShop } from './PaymentsShop';
 import { useSpend, type SpendRequest } from './spend';
 
 const economy = BUNDLED_ECONOMY;
@@ -57,6 +58,7 @@ export function ShopSections({ session, state, tank }: ShopProps) {
       <LampControl session={session} state={state} tank={tank} />
       <SuppliesShop session={session} state={state} spend={spend} />
       <PieceShop session={session} state={state} tank={tank} spend={spend} />
+      <PaymentsShop session={session} balance={state.balance} />
     </>
   );
 }
