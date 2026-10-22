@@ -1,4 +1,5 @@
 import type { CameraMode } from '../interaction/camera';
+import { blackwaterReportLines } from '../sync/blackwater';
 import { tankReportLines } from '../sync/life';
 import { useCameraMode, useDemoBiome, useEngineReady } from './context';
 import { useActiveTank, useSessionState } from './session';
@@ -19,7 +20,9 @@ export default function TankReport() {
     <div className="report">
       <div id="tank-report-body">
         {tank ? (
-          tankReportLines(tank, species).map((line) => <p key={line}>{line}</p>)
+          [...tankReportLines(tank, species), ...blackwaterReportLines(tank, species)].map(
+            (line) => <p key={line}>{line}</p>,
+          )
         ) : (
           <>
             <p>A 300 litre {demoBiome} aquarium, 120 by 50 by 50 centimetres.</p>

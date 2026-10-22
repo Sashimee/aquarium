@@ -16,6 +16,7 @@ import {
   type PadReading,
   type SuitKey,
 } from '../sync/waterTest';
+import { blackwaterPhGuidance } from '../sync/blackwater';
 import { getDip, putDip, type Dip } from './dipStore';
 
 const SUIT_KEY: Partial<Record<PadId, SuitKey>> = { ph: 'ph', kh: 'kh', salinity: 'salinity' };
@@ -89,6 +90,27 @@ function Pad({
         </p>
       )}
     </fieldset>
+  );
+}
+
+function PhAdvice({
+  tank,
+  species,
+  dip,
+}: {
+  tank: Tank;
+  species: readonly SpeciesSummary[];
+  dip: Dip;
+}) {
+  const reading = dip.strip.ph;
+  const known = reading !== undefined && (dip.revealed || dip.guesses.ph !== undefined);
+  if (!known) return null;
+  const guidance = blackwaterPhGuidance(tank, species, reading.value);
+  if (!guidance) return null;
+  return (
+    <p className="ph-advice" data-ph-standing={guidance.standing} role="status">
+      {guidance.text}
+    </p>
   );
 }
 
@@ -200,6 +222,7 @@ export default function WaterTest({
       {dip && (
         <>
           <Readings tank={tank} species={species} dip={dip} now={now} />
+          <PhAdvice tank={tank} species={species} dip={dip} />
           {!dip.revealed && (
             <button type="button" onClick={() => store({ ...dip, revealed: true })}>
               Show all readings
