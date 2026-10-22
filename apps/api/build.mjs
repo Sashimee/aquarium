@@ -6,6 +6,32 @@ import { build, context } from 'esbuild';
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const runtimeDeps = Object.keys(pkg.dependencies).filter((name) => !name.startsWith('@aquarium/'));
 
+const presetsDir = new URL('../../content/presets/', import.meta.url);
+const presetFiles = readdirSync(presetsDir).filter((name) => name.endsWith('.json'));
+if (presetFiles.length === 0) throw new Error('content/presets has no preset files.');
+const checker = await build({
+  stdin: {
+    contents: "export { assertPresetNames, PresetNameError } from './src/presetNames.ts';",
+    resolveDir: fileURLToPath(new URL('./', import.meta.url)),
+    loader: 'ts',
+  },
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+  logLevel: 'silent',
+});
+const { assertPresetNames, PresetNameError } = await import(
+  `data:text/javascript;base64,${Buffer.from(checker.outputFiles[0].text).toString('base64')}`
+);
+try {
+  assertPresetNames(presetFiles);
+} catch (error) {
+  if (!(error instanceof PresetNameError)) throw error;
+  console.error(error.message);
+  process.exit(1);
+}
+
 const speciesDir = new URL('../../content/species/', import.meta.url);
 const species = readdirSync(speciesDir)
   .filter((name) => name.endsWith('.json'))
@@ -35,30 +61,6 @@ writeFileSync(
   readFileSync(new URL('../../content/economy.json', import.meta.url)),
 );
 
-const presetsDir = new URL('../../content/presets/', import.meta.url);
-const presetFiles = readdirSync(presetsDir).filter((name) => name.endsWith('.json'));
-if (presetFiles.length === 0) throw new Error('content/presets has no preset files.');
-const checker = await build({
-  stdin: {
-    contents: "export { assertPresetNames } from './src/presetNames.ts';",
-    resolveDir: fileURLToPath(new URL('./', import.meta.url)),
-    loader: 'ts',
-  },
-  bundle: true,
-  write: false,
-  platform: 'node',
-  format: 'esm',
-  logLevel: 'silent',
-});
-const { assertPresetNames } = await import(
-  `data:text/javascript;base64,${Buffer.from(checker.outputFiles[0].text).toString('base64')}`
-);
-try {
-  assertPresetNames(presetFiles);
-} catch (error) {
-  console.error(error.message);
-  process.exit(1);
-}
 const presets = Object.fromEntries(
   presetFiles.map((name) => [
     name.slice(0, -'.json'.length),

@@ -1,6 +1,6 @@
 import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { assertPresetNames } from './presetNames.ts';
+import { assertPresetNames, PresetNameError } from './presetNames.ts';
 
 const biomes = ['freshwater', 'reef'];
 
@@ -19,6 +19,10 @@ describe('assertPresetNames', () => {
     expect(() => assertPresetNames(['freshwater.json', 'reef.json', 'draft.json'], biomes)).toThrow(
       /content\/presets\/draft\.json is not a known biome/,
     );
+  });
+
+  it('throws a PresetNameError so callers can tell it from other failures', () => {
+    expect(() => assertPresetNames([], biomes)).toThrow(PresetNameError);
   });
 
   it('reports every problem at once', () => {

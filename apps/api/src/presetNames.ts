@@ -1,9 +1,8 @@
 import { biomeSchema } from '@aquarium/shared';
 
-export function presetNameProblems(
-  fileNames: readonly string[],
-  biomes: readonly string[] = biomeSchema.options,
-): string[] {
+export class PresetNameError extends Error {}
+
+function presetNameProblems(fileNames: readonly string[], biomes: readonly string[]): string[] {
   const present = new Set(fileNames.map((name) => name.slice(0, -'.json'.length)));
   const problems: string[] = [];
   for (const name of [...present].sort()) {
@@ -28,5 +27,7 @@ export function assertPresetNames(
   biomes: readonly string[] = biomeSchema.options,
 ): void {
   const problems = presetNameProblems(fileNames, biomes);
-  if (problems.length > 0) throw new Error(`Preset validation failed:\n- ${problems.join('\n- ')}`);
+  if (problems.length > 0) {
+    throw new PresetNameError(`Preset validation failed:\n- ${problems.join('\n- ')}`);
+  }
 }
