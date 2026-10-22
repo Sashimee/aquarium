@@ -97,7 +97,7 @@ export function limitLeanNode(
 ): Node<'vec3'> {
   const length = max(shear.length(), 1e-6);
   const over = max(length.sub(linear), 0);
-  const limited = min(length, linear).add(over.mul(room).div(over.add(room)));
+  const limited = min(length, linear).add(over.mul(room).div(max(over.add(room), 1e-6)));
   return shear.mul(limited.div(length));
 }
 

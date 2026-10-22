@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { Color, DirectionalLight, MeshBasicMaterial, Scene, Texture } from 'three/webgpu';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import type { PresetLayout } from '@aquarium/shared';
+import type { PresetLayout, TankSize } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { TIER_SETTINGS } from '../engine/quality/tiers';
@@ -55,7 +55,7 @@ export function fakeEngine() {
       getQuality: () => water,
       setQuality: (quality: typeof water) => (water = quality),
     },
-    tankSize: 'standard',
+    tankSize: 'standard' satisfies TankSize,
     tank: { dimensions: DEFAULT_TANK, substrate: { material: placeholder } },
     quality: {
       tier: 'medium',
