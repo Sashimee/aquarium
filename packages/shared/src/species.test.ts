@@ -263,14 +263,19 @@ describe('walking invertebrates', () => {
       expect(issuePaths(withBehaviour({ territorial: true }))).toEqual(['behaviour.territorial']);
     });
 
-    it.each(['shoal', 'air-gulp', 'glass-grazer', 'rock-grazer', 'anemone-host', 'flare-display'])(
-      'rejects swimmer trait %s',
-      (trait) => {
-        expect(issuePaths(withBehaviour({ traits: ['biofilm-grazer', trait] }))).toEqual([
-          'behaviour.traits',
-        ]);
-      },
-    );
+    it.each([
+      'shoal',
+      'air-gulp',
+      'amphibious',
+      'glass-grazer',
+      'rock-grazer',
+      'anemone-host',
+      'flare-display',
+    ])('rejects swimmer trait %s', (trait) => {
+      expect(issuePaths(withBehaviour({ traits: ['biofilm-grazer', trait] }))).toEqual([
+        'behaviour.traits',
+      ]);
+    });
 
     it('keeps cave-dweller and cleaner allowed', () => {
       expect(ok(withBehaviour({ traits: ['cave-dweller', 'cleaner'] }))).toBe(true);

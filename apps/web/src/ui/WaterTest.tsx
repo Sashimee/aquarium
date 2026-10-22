@@ -16,6 +16,10 @@ import {
   type PadReading,
   type SuitKey,
 } from '../sync/waterTest';
+import { blackwaterPhGuidance } from '../sync/blackwater';
+import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { doseButtonId, doseOptions } from '../sync/doses';
+import { lakeWaterNotes } from '../sync/cichlid';
 import { getDip, putDip, type Dip } from './dipStore';
 
 const SUIT_KEY: Partial<Record<PadId, SuitKey>> = { ph: 'ph', kh: 'kh', salinity: 'salinity' };
@@ -92,6 +96,46 @@ function Pad({
   );
 }
 
+export function PhAdvice({
+  tank,
+  species,
+  dip,
+}: {
+  tank: Tank;
+  species: readonly SpeciesSummary[];
+  dip: Dip;
+}) {
+  const reading = dip.strip.ph;
+  const known = reading !== undefined && (dip.revealed || dip.guesses.ph !== undefined);
+  if (!known) return null;
+  const botanicals = doseOptions(tank, BUNDLED_CHEMISTRY, BUNDLED_ECONOMY).find(
+    (d) => d.type === 'add_botanicals' && d.disabledReason === null,
+  );
+  const guidance = blackwaterPhGuidance(
+    tank,
+    species,
+    PADS.ph.steps[reading.stepIndex]?.value ?? reading.value,
+    botanicals !== undefined,
+  );
+  if (!guidance) return null;
+  return (
+    <p className="ph-advice" data-ph-standing={guidance.standing} role="status">
+      {guidance.text}
+      {botanicals && guidance.standing === 'too-high' && (
+        <>
+          {' '}
+          <button
+            type="button"
+            onClick={() => document.getElementById(doseButtonId(botanicals.type))?.focus()}
+          >
+            Go to {botanicals.label.toLowerCase()}
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
 function Readings({
   tank,
   species,
@@ -148,12 +192,78 @@ function Readings({
   );
 }
 
-export default function WaterTest({
+function LakeWater({
   tank,
   species,
+  dip,
+  onWaterChange,
 }: {
   tank: Tank;
   species: readonly SpeciesSummary[];
+  dip: Dip;
+  onWaterChange: (() => unknown) | undefined;
+}) {
+  const [pending, setPending] = useState(false);
+  const change = () => {
+    if (!onWaterChange) return;
+    setPending(true);
+    void Promise.resolve(onWaterChange()).finally(() => setPending(false));
+  };
+  const known = (id: 'kh' | 'ph') => {
+    const reading = dip.strip[id];
+    if (!reading || !(dip.revealed || dip.guesses[id] !== undefined)) return undefined;
+    return PADS[id].steps[reading.stepIndex]?.value;
+  };
+  const notes = lakeWaterNotes(tank, species, { kh: known('kh'), ph: known('ph') });
+  if (notes.length === 0) return null;
+  const buffer = doseOptions(tank, BUNDLED_CHEMISTRY, BUNDLED_ECONOMY).find(
+    (d) => d.type === 'buffer_dose' && d.disabledReason === null,
+  );
+  const canChange = onWaterChange !== undefined && notes.some((n) => n.fix === 'water-change');
+  return (
+    <div className="lake-notes" data-testid="lake-notes">
+      <div role="status">
+        <ul>
+          {notes.map((n) => (
+            <li
+              key={n.metric}
+              className={n.level === 'watch' ? 'hint' : 'warning'}
+              data-level={n.level}
+              data-metric={n.metric}
+            >
+              {n.text}
+              {buffer && n.metric === 'kh' && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById(doseButtonId(buffer.type))?.focus()}
+                  >
+                    Go to {buffer.label.toLowerCase()}
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {canChange && (
+        <button type="button" data-action="lake-water-change" disabled={pending} onClick={change}>
+          Change half the water
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function WaterTest({
+  tank,
+  species,
+  onWaterChange,
+}: {
+  tank: Tank;
+  species: readonly SpeciesSummary[];
+  onWaterChange?: () => unknown;
 }) {
   const id = useId();
   const [dip, setDip] = useState<Dip | null>(() => getDip(tank.id));
@@ -200,6 +310,10 @@ export default function WaterTest({
       {dip && (
         <>
           <Readings tank={tank} species={species} dip={dip} now={now} />
+          {tank.biome === 'cichlid' && (
+            <LakeWater tank={tank} species={species} dip={dip} onWaterChange={onWaterChange} />
+          )}
+          <PhAdvice tank={tank} species={species} dip={dip} />
           {!dip.revealed && (
             <button type="button" onClick={() => store({ ...dip, revealed: true })}>
               Show all readings

@@ -1,7 +1,6 @@
 import { newTankChemistry } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
-import { BUNDLED_CHEMISTRY } from './bundledEconomy';
 import { FULL_STRESS_PPT, salinityNotice } from './salinityCare';
 
 const base = speciesFixture().chemistry;
@@ -46,7 +45,11 @@ describe('salinityNotice', () => {
     expect(danger?.severity).toBe('danger');
     expect(danger?.text).toContain('Dangerously');
     expect(caution?.text).not.toContain('Dangerously');
-    expect(FULL_STRESS_PPT).toBe(BUNDLED_CHEMISTRY.stress.fullStressDeviation.salinity);
+    const [lo] = brackish.chemistry.salinityPpt;
+    expect(salinityNotice(mangrove(lo - FULL_STRESS_PPT + 0.1), [brackish])?.severity).toBe(
+      'caution',
+    );
+    expect(salinityNotice(mangrove(lo - FULL_STRESS_PPT), [brackish])?.severity).toBe('danger');
     expect(salinityNotice(mangrove(25), [brackish])).toMatchObject({
       direction: 'high',
       severity: 'danger',

@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 126016626,
+  "totalBytes": 119828553,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -403,13 +403,13 @@
       "files": [
         {
           "file": "fish/apistogramma-hongsloi/impostor_albedo.ktx2",
-          "bytes": 115022,
-          "sha256": "af9c0ed49377e6013b2efdf016b1d96d9aec8d0ec027606070aa1669813496c9"
+          "bytes": 52334,
+          "sha256": "ca46b520403fedd26d88865a7d04e14237d34521204978e3346a52e2a05bb378"
         },
         {
           "file": "fish/apistogramma-hongsloi/impostor_normal.ktx2",
-          "bytes": 312469,
-          "sha256": "38ea7eedad4814f5223b4308737664c24af2b643407bce5658747755cb8bed80"
+          "bytes": 127453,
+          "sha256": "c1668eeb5c91108e4ffcc3f0e3739be0cd56a645133a43193545ff7f40921103"
         },
         {
           "file": "fish/apistogramma-hongsloi/lod0.glb",
@@ -461,8 +461,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.000418,
@@ -471,14 +471,14 @@
         "radius": 0.019783,
         "albedo": {
           "file": "fish/apistogramma-hongsloi/impostor_albedo.ktx2",
-          "bytes": 115022,
-          "sha256": "af9c0ed49377e6013b2efdf016b1d96d9aec8d0ec027606070aa1669813496c9",
+          "bytes": 52334,
+          "sha256": "ca46b520403fedd26d88865a7d04e14237d34521204978e3346a52e2a05bb378",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/apistogramma-hongsloi/impostor_normal.ktx2",
-          "bytes": 312469,
-          "sha256": "38ea7eedad4814f5223b4308737664c24af2b643407bce5658747755cb8bed80",
+          "bytes": 127453,
+          "sha256": "c1668eeb5c91108e4ffcc3f0e3739be0cd56a645133a43193545ff7f40921103",
           "codec": "uastc"
         }
       }
@@ -560,13 +560,13 @@
       "files": [
         {
           "file": "fish/apistogramma-hongsloi-male/impostor_albedo.ktx2",
-          "bytes": 130910,
-          "sha256": "7aded68c6de45c776c254b4f5bdc8a0c09ec0d320bff23d4f9fb38f52f631181"
+          "bytes": 58871,
+          "sha256": "dea24ed9b098082117c40426ba4d095a92b1d500693773572a1feb558296ecc2"
         },
         {
           "file": "fish/apistogramma-hongsloi-male/impostor_normal.ktx2",
-          "bytes": 335656,
-          "sha256": "913554a58613b4ec84b1a8a003be2016a4f0e0bea695374ca58f8e1c77ac009d"
+          "bytes": 135407,
+          "sha256": "3688c614a63c072c749dba73079621f4e3deebcb8e4d9f1d4f6137dff8440a7c"
         },
         {
           "file": "fish/apistogramma-hongsloi-male/lod0.glb",
@@ -623,8 +623,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.000801,
@@ -633,14 +633,14 @@
         "radius": 0.032974,
         "albedo": {
           "file": "fish/apistogramma-hongsloi-male/impostor_albedo.ktx2",
-          "bytes": 130910,
-          "sha256": "7aded68c6de45c776c254b4f5bdc8a0c09ec0d320bff23d4f9fb38f52f631181",
+          "bytes": 58871,
+          "sha256": "dea24ed9b098082117c40426ba4d095a92b1d500693773572a1feb558296ecc2",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/apistogramma-hongsloi-male/impostor_normal.ktx2",
-          "bytes": 335656,
-          "sha256": "913554a58613b4ec84b1a8a003be2016a4f0e0bea695374ca58f8e1c77ac009d",
+          "bytes": 135407,
+          "sha256": "3688c614a63c072c749dba73079621f4e3deebcb8e4d9f1d4f6137dff8440a7c",
           "codec": "uastc"
         }
       }
@@ -1189,13 +1189,13 @@
       "files": [
         {
           "file": "fish/banggai-cardinalfish/impostor_albedo.ktx2",
-          "bytes": 137391,
-          "sha256": "ff6daaada18cfb707124dbf21ac5f2ee864554575d894221660799e7dd551c0f"
+          "bytes": 58034,
+          "sha256": "baf2edb4f42111f7e2b7a2fcb1343fbe0c41f4883d02bd956dacb47688944173"
         },
         {
           "file": "fish/banggai-cardinalfish/impostor_normal.ktx2",
-          "bytes": 399389,
-          "sha256": "d1ad2329c09564540578b9813eb5f91b03195758aba0d4fe2dd45c34d9f148ed"
+          "bytes": 156067,
+          "sha256": "adbfde6e462bc67250d980538905360858a7b1264be6fe5cec23ccec09c2292d"
         },
         {
           "file": "fish/banggai-cardinalfish/lod0.glb",
@@ -1247,8 +1247,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           0.002018,
@@ -1257,14 +1257,14 @@
         "radius": 0.031115,
         "albedo": {
           "file": "fish/banggai-cardinalfish/impostor_albedo.ktx2",
-          "bytes": 137391,
-          "sha256": "ff6daaada18cfb707124dbf21ac5f2ee864554575d894221660799e7dd551c0f",
+          "bytes": 58034,
+          "sha256": "baf2edb4f42111f7e2b7a2fcb1343fbe0c41f4883d02bd956dacb47688944173",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/banggai-cardinalfish/impostor_normal.ktx2",
-          "bytes": 399389,
-          "sha256": "d1ad2329c09564540578b9813eb5f91b03195758aba0d4fe2dd45c34d9f148ed",
+          "bytes": 156067,
+          "sha256": "adbfde6e462bc67250d980538905360858a7b1264be6fe5cec23ccec09c2292d",
           "codec": "uastc"
         }
       }
@@ -1703,13 +1703,13 @@
       "files": [
         {
           "file": "fish/black-phantom-tetra/impostor_albedo.ktx2",
-          "bytes": 127201,
-          "sha256": "8affcaf9376d2632ca1494717bb8e88e9f6d188b5b9e119fd0254cc7ec8f11d8"
+          "bytes": 57611,
+          "sha256": "2730a41dfcba29de46e6b584c7493fe52316a24768084d5f887f40b69ddd997e"
         },
         {
           "file": "fish/black-phantom-tetra/impostor_normal.ktx2",
-          "bytes": 401791,
-          "sha256": "c598a2ba696f009cfa226fffbb27b702d70fc6f68bf5098ed2072d96f89c1443"
+          "bytes": 158506,
+          "sha256": "f1513c407325ccf6680b9dd055b3e2efc946812d328b0e87d47b2355068f104a"
         },
         {
           "file": "fish/black-phantom-tetra/lod0.glb",
@@ -1761,8 +1761,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0.000045,
           0.000425,
@@ -1771,14 +1771,14 @@
         "radius": 0.026808,
         "albedo": {
           "file": "fish/black-phantom-tetra/impostor_albedo.ktx2",
-          "bytes": 127201,
-          "sha256": "8affcaf9376d2632ca1494717bb8e88e9f6d188b5b9e119fd0254cc7ec8f11d8",
+          "bytes": 57611,
+          "sha256": "2730a41dfcba29de46e6b584c7493fe52316a24768084d5f887f40b69ddd997e",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/black-phantom-tetra/impostor_normal.ktx2",
-          "bytes": 401791,
-          "sha256": "c598a2ba696f009cfa226fffbb27b702d70fc6f68bf5098ed2072d96f89c1443",
+          "bytes": 158506,
+          "sha256": "f1513c407325ccf6680b9dd055b3e2efc946812d328b0e87d47b2355068f104a",
           "codec": "uastc"
         }
       }
@@ -2437,13 +2437,13 @@
       "files": [
         {
           "file": "fish/bronze-corydoras/impostor_albedo.ktx2",
-          "bytes": 117171,
-          "sha256": "909619108e98b7f38bca401309bbd232e8f8edc27b9772bfd688f3c2d4269881"
+          "bytes": 51761,
+          "sha256": "78c7c4776fac1c96fc65b923b6f7eff3c5a778f7a0b479ceb76af1a4dade67ab"
         },
         {
           "file": "fish/bronze-corydoras/impostor_normal.ktx2",
-          "bytes": 319499,
-          "sha256": "c257b6abd3c0bbc13b247a704c7ffb5823ec43c18a0d59f38bcb27b34a1d8310"
+          "bytes": 131416,
+          "sha256": "a8f1fb85980e5fc87f7ccf39b31fd2bff623e40ba77e837ab803186e0af42eca"
         },
         {
           "file": "fish/bronze-corydoras/lod0.glb",
@@ -2495,8 +2495,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           0.000834,
@@ -2505,14 +2505,14 @@
         "radius": 0.031765,
         "albedo": {
           "file": "fish/bronze-corydoras/impostor_albedo.ktx2",
-          "bytes": 117171,
-          "sha256": "909619108e98b7f38bca401309bbd232e8f8edc27b9772bfd688f3c2d4269881",
+          "bytes": 51761,
+          "sha256": "78c7c4776fac1c96fc65b923b6f7eff3c5a778f7a0b479ceb76af1a4dade67ab",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/bronze-corydoras/impostor_normal.ktx2",
-          "bytes": 319499,
-          "sha256": "c257b6abd3c0bbc13b247a704c7ffb5823ec43c18a0d59f38bcb27b34a1d8310",
+          "bytes": 131416,
+          "sha256": "a8f1fb85980e5fc87f7ccf39b31fd2bff623e40ba77e837ab803186e0af42eca",
           "codec": "uastc"
         }
       }
@@ -2592,13 +2592,13 @@
       "files": [
         {
           "file": "fish/bumblebee-goby/impostor_albedo.ktx2",
-          "bytes": 113712,
-          "sha256": "2f824026e1e3fccf048026dccf309f29514bfc882b8299c333b1db2fef9012d8"
+          "bytes": 52807,
+          "sha256": "9b4f314928710b3e6c1d053bb702ccbae443d323841c545c62f21927c2a6d8e4"
         },
         {
           "file": "fish/bumblebee-goby/impostor_normal.ktx2",
-          "bytes": 285607,
-          "sha256": "1841ce584e59b6a58774bcc3d6f4d2697b93677a62fdec6ac34c60242c68ffa7"
+          "bytes": 121577,
+          "sha256": "90caf82e5b073f871c71236679662a6371a3dc90a41c10631847fdbb733cc2e8"
         },
         {
           "file": "fish/bumblebee-goby/lod0.glb",
@@ -2650,8 +2650,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           0.000043,
@@ -2660,14 +2660,14 @@
         "radius": 0.016109,
         "albedo": {
           "file": "fish/bumblebee-goby/impostor_albedo.ktx2",
-          "bytes": 113712,
-          "sha256": "2f824026e1e3fccf048026dccf309f29514bfc882b8299c333b1db2fef9012d8",
+          "bytes": 52807,
+          "sha256": "9b4f314928710b3e6c1d053bb702ccbae443d323841c545c62f21927c2a6d8e4",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/bumblebee-goby/impostor_normal.ktx2",
-          "bytes": 285607,
-          "sha256": "1841ce584e59b6a58774bcc3d6f4d2697b93677a62fdec6ac34c60242c68ffa7",
+          "bytes": 121577,
+          "sha256": "90caf82e5b073f871c71236679662a6371a3dc90a41c10631847fdbb733cc2e8",
           "codec": "uastc"
         }
       }
@@ -2747,13 +2747,13 @@
       "files": [
         {
           "file": "fish/cardinal-tetra/impostor_albedo.ktx2",
-          "bytes": 111749,
-          "sha256": "1217f65a2541d6dfd36a244e12f36d199023ec2a568e3668e8bdeb9d8f066dcb"
+          "bytes": 51816,
+          "sha256": "11cde9b11cadd88728337179625a3ff01e6565ee3267b4298502c24cd5e98c27"
         },
         {
           "file": "fish/cardinal-tetra/impostor_normal.ktx2",
-          "bytes": 283618,
-          "sha256": "b3009a8a8ef5cfc93fb442a4921b6dba5ecc7da34b5efdd7f411dae7d3838a46"
+          "bytes": 118907,
+          "sha256": "71b4c42c74e00390a059e587e9011e7769cc8c51b190652ac8acf4f5404fed06"
         },
         {
           "file": "fish/cardinal-tetra/lod0.glb",
@@ -2805,8 +2805,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.00002,
@@ -2815,14 +2815,14 @@
         "radius": 0.018133,
         "albedo": {
           "file": "fish/cardinal-tetra/impostor_albedo.ktx2",
-          "bytes": 111749,
-          "sha256": "1217f65a2541d6dfd36a244e12f36d199023ec2a568e3668e8bdeb9d8f066dcb",
+          "bytes": 51816,
+          "sha256": "11cde9b11cadd88728337179625a3ff01e6565ee3267b4298502c24cd5e98c27",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/cardinal-tetra/impostor_normal.ktx2",
-          "bytes": 283618,
-          "sha256": "b3009a8a8ef5cfc93fb442a4921b6dba5ecc7da34b5efdd7f411dae7d3838a46",
+          "bytes": 118907,
+          "sha256": "71b4c42c74e00390a059e587e9011e7769cc8c51b190652ac8acf4f5404fed06",
           "codec": "uastc"
         }
       }
@@ -3284,13 +3284,13 @@
       "files": [
         {
           "file": "fish/dwarf-pencilfish/impostor_albedo.ktx2",
-          "bytes": 117330,
-          "sha256": "887ef27bf05acca20a998fd50746cf5e0ac1b1e219916464ab8e69d2050d2593"
+          "bytes": 53700,
+          "sha256": "c9b5be4d886861b6f0d3d8c78253fe18c75ec25fa85a5de289162e4b3d5a463a"
         },
         {
           "file": "fish/dwarf-pencilfish/impostor_normal.ktx2",
-          "bytes": 290233,
-          "sha256": "d0ba5067afd7ce26367389542868b43ee8e038dad97f281643185a74dba62039"
+          "bytes": 121283,
+          "sha256": "544ee5396b10bc4f9d972addfddea104aec7f69ac2aef00bcb1ffef2823b4b2a"
         },
         {
           "file": "fish/dwarf-pencilfish/lod0.glb",
@@ -3342,8 +3342,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           -0.000005,
           0.000511,
@@ -3352,14 +3352,14 @@
         "radius": 0.015523,
         "albedo": {
           "file": "fish/dwarf-pencilfish/impostor_albedo.ktx2",
-          "bytes": 117330,
-          "sha256": "887ef27bf05acca20a998fd50746cf5e0ac1b1e219916464ab8e69d2050d2593",
+          "bytes": 53700,
+          "sha256": "c9b5be4d886861b6f0d3d8c78253fe18c75ec25fa85a5de289162e4b3d5a463a",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/dwarf-pencilfish/impostor_normal.ktx2",
-          "bytes": 290233,
-          "sha256": "d0ba5067afd7ce26367389542868b43ee8e038dad97f281643185a74dba62039",
+          "bytes": 121283,
+          "sha256": "544ee5396b10bc4f9d972addfddea104aec7f69ac2aef00bcb1ffef2823b4b2a",
           "codec": "uastc"
         }
       }
@@ -3441,13 +3441,13 @@
       "files": [
         {
           "file": "fish/dwarf-pencilfish-male/impostor_albedo.ktx2",
-          "bytes": 110780,
-          "sha256": "4006125c35aa3f84b6c3aa2dac6266b560c30df87c383f846b70d823db7b619d"
+          "bytes": 51417,
+          "sha256": "88648b61c121c5781caccd6b34a872bff8b43eedb09df0be93b6ad805390753f"
         },
         {
           "file": "fish/dwarf-pencilfish-male/impostor_normal.ktx2",
-          "bytes": 258401,
-          "sha256": "c71b14ccb764687f342176788ca5cf0b5fe2ac1e221d96ade9da42be3080be4a"
+          "bytes": 111751,
+          "sha256": "937fa1c39c4eff939802d8e027877993945ced593a249e04e1d3f73ebb6c93f5"
         },
         {
           "file": "fish/dwarf-pencilfish-male/lod0.glb",
@@ -3504,8 +3504,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           0.000213,
@@ -3514,14 +3514,14 @@
         "radius": 0.015508,
         "albedo": {
           "file": "fish/dwarf-pencilfish-male/impostor_albedo.ktx2",
-          "bytes": 110780,
-          "sha256": "4006125c35aa3f84b6c3aa2dac6266b560c30df87c383f846b70d823db7b619d",
+          "bytes": 51417,
+          "sha256": "88648b61c121c5781caccd6b34a872bff8b43eedb09df0be93b6ad805390753f",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/dwarf-pencilfish-male/impostor_normal.ktx2",
-          "bytes": 258401,
-          "sha256": "c71b14ccb764687f342176788ca5cf0b5fe2ac1e221d96ade9da42be3080be4a",
+          "bytes": 111751,
+          "sha256": "937fa1c39c4eff939802d8e027877993945ced593a249e04e1d3f73ebb6c93f5",
           "codec": "uastc"
         }
       }
@@ -3601,13 +3601,13 @@
       "files": [
         {
           "file": "fish/figure-8-puffer/impostor_albedo.ktx2",
-          "bytes": 125143,
-          "sha256": "d4c4d8360c977d059f7c8dd69693448db1d063479e78274099ac1e72155a9c65"
+          "bytes": 55815,
+          "sha256": "6ddecde54fc714e82f6603deeed3079b05434be41eb37155a840b01716caaec7"
         },
         {
           "file": "fish/figure-8-puffer/impostor_normal.ktx2",
-          "bytes": 368694,
-          "sha256": "0d8ac2830ea22b865600998c7ab90cbccdea587e21d23f94956d3330548e48ec"
+          "bytes": 145383,
+          "sha256": "516d0a0a25e5521be9329a131dd3b987e886b9d6af7109c918866992b0aea955"
         },
         {
           "file": "fish/figure-8-puffer/lod0.glb",
@@ -3659,8 +3659,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0.000009,
           0.000721,
@@ -3669,14 +3669,14 @@
         "radius": 0.036,
         "albedo": {
           "file": "fish/figure-8-puffer/impostor_albedo.ktx2",
-          "bytes": 125143,
-          "sha256": "d4c4d8360c977d059f7c8dd69693448db1d063479e78274099ac1e72155a9c65",
+          "bytes": 55815,
+          "sha256": "6ddecde54fc714e82f6603deeed3079b05434be41eb37155a840b01716caaec7",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/figure-8-puffer/impostor_normal.ktx2",
-          "bytes": 368694,
-          "sha256": "0d8ac2830ea22b865600998c7ab90cbccdea587e21d23f94956d3330548e48ec",
+          "bytes": 145383,
+          "sha256": "516d0a0a25e5521be9329a131dd3b987e886b9d6af7109c918866992b0aea955",
           "codec": "uastc"
         }
       }
@@ -3758,13 +3758,13 @@
       "files": [
         {
           "file": "fish/firefish/impostor_albedo.ktx2",
-          "bytes": 110456,
-          "sha256": "840f600c44ac66193a77f38003e8efde5d7960d74a91fb9014013d6d9a42900b"
+          "bytes": 53012,
+          "sha256": "52877e36536dc039604d4ed1687c6d418bd450bfe7b6f97e00d6ab9b4b2c06c8"
         },
         {
           "file": "fish/firefish/impostor_normal.ktx2",
-          "bytes": 262829,
-          "sha256": "f0934877414cc17a1f9296f13cb20da3608f897724e88965c1f485dc6c39bc78"
+          "bytes": 115817,
+          "sha256": "1dd11a6173521a2c0e0ac2a9082ac0332cbc7969bd340c1d6721fd182ed55e33"
         },
         {
           "file": "fish/firefish/lod0.glb",
@@ -3816,8 +3816,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           -0.000005,
           0.010288,
@@ -3826,14 +3826,14 @@
         "radius": 0.044128,
         "albedo": {
           "file": "fish/firefish/impostor_albedo.ktx2",
-          "bytes": 110456,
-          "sha256": "840f600c44ac66193a77f38003e8efde5d7960d74a91fb9014013d6d9a42900b",
+          "bytes": 53012,
+          "sha256": "52877e36536dc039604d4ed1687c6d418bd450bfe7b6f97e00d6ab9b4b2c06c8",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/firefish/impostor_normal.ktx2",
-          "bytes": 262829,
-          "sha256": "f0934877414cc17a1f9296f13cb20da3608f897724e88965c1f485dc6c39bc78",
+          "bytes": 115817,
+          "sha256": "1dd11a6173521a2c0e0ac2a9082ac0332cbc7969bd340c1d6721fd182ed55e33",
           "codec": "uastc"
         }
       }
@@ -3956,13 +3956,13 @@
       "files": [
         {
           "file": "fish/guppy-female/impostor_albedo.ktx2",
-          "bytes": 129118,
-          "sha256": "3398b85051486f6b76a711350da71b2f08de96adba0ba8f8e3e36862cec6a02f"
+          "bytes": 53926,
+          "sha256": "bcfdef7500aeb2bdb7245f8b0bec561b1d524ce4901a59fe5ee34fb123a3bf6e"
         },
         {
           "file": "fish/guppy-female/impostor_normal.ktx2",
-          "bytes": 397281,
-          "sha256": "d5b89171d47f408aeac0c1302762643c727de4fc83188359f906bec6be6e34f5"
+          "bytes": 153933,
+          "sha256": "ea4d433ccbc796861dfb1d96cc7d08ac716ec859c403014b7e608e3c1093e661"
         },
         {
           "file": "fish/guppy-female/lod0.glb",
@@ -4039,8 +4039,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           -0.00003,
           0.000067,
@@ -4049,14 +4049,14 @@
         "radius": 0.019629,
         "albedo": {
           "file": "fish/guppy-female/impostor_albedo.ktx2",
-          "bytes": 129118,
-          "sha256": "3398b85051486f6b76a711350da71b2f08de96adba0ba8f8e3e36862cec6a02f",
+          "bytes": 53926,
+          "sha256": "bcfdef7500aeb2bdb7245f8b0bec561b1d524ce4901a59fe5ee34fb123a3bf6e",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/guppy-female/impostor_normal.ktx2",
-          "bytes": 397281,
-          "sha256": "d5b89171d47f408aeac0c1302762643c727de4fc83188359f906bec6be6e34f5",
+          "bytes": 153933,
+          "sha256": "ea4d433ccbc796861dfb1d96cc7d08ac716ec859c403014b7e608e3c1093e661",
           "codec": "uastc"
         }
       }
@@ -4138,13 +4138,13 @@
       "files": [
         {
           "file": "fish/guppy-male/impostor_albedo.ktx2",
-          "bytes": 120772,
-          "sha256": "943077dd5053f366f8e06b3b5af1486e23505457de18c3e9373bdf01a4372d89"
+          "bytes": 55583,
+          "sha256": "c882c99a6d3abddcb38f926359313d5db3eaa3a556b590c9cd679b1252bacafe"
         },
         {
           "file": "fish/guppy-male/impostor_normal.ktx2",
-          "bytes": 277716,
-          "sha256": "362bf91f9bd16eae9680ff00b868045755b9a4e66d834faf85f7e517820f6d06"
+          "bytes": 120703,
+          "sha256": "98631ef78a22ef838984340df1faf9da69972b972afeb533ad42c60ce4a620b9"
         },
         {
           "file": "fish/guppy-male/lod0.glb",
@@ -4201,8 +4201,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.002798,
@@ -4211,14 +4211,14 @@
         "radius": 0.018106,
         "albedo": {
           "file": "fish/guppy-male/impostor_albedo.ktx2",
-          "bytes": 120772,
-          "sha256": "943077dd5053f366f8e06b3b5af1486e23505457de18c3e9373bdf01a4372d89",
+          "bytes": 55583,
+          "sha256": "c882c99a6d3abddcb38f926359313d5db3eaa3a556b590c9cd679b1252bacafe",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/guppy-male/impostor_normal.ktx2",
-          "bytes": 277716,
-          "sha256": "362bf91f9bd16eae9680ff00b868045755b9a4e66d834faf85f7e517820f6d06",
+          "bytes": 120703,
+          "sha256": "98631ef78a22ef838984340df1faf9da69972b972afeb533ad42c60ce4a620b9",
           "codec": "uastc"
         }
       }
@@ -4300,13 +4300,13 @@
       "files": [
         {
           "file": "fish/harlequin-rasbora/impostor_albedo.ktx2",
-          "bytes": 124208,
-          "sha256": "e44085e109aa262ac7fc03bd684d9d0f929d2422185f6df5d1084a1f43950ba0"
+          "bytes": 57044,
+          "sha256": "9b14ede7fc3c2734b625e93b0b5b654fd7019f2c1d6f865942b9ad2163379792"
         },
         {
           "file": "fish/harlequin-rasbora/impostor_normal.ktx2",
-          "bytes": 317752,
-          "sha256": "ea40e40d50e4bfa8259747a75231e76264eede554250fc216666a635c68aec6f"
+          "bytes": 130168,
+          "sha256": "8ff2a3bbe51ea38e688604ad82532b465eacee36a06c1bdadd4a0846bf15e74f"
         },
         {
           "file": "fish/harlequin-rasbora/lod0.glb",
@@ -4358,8 +4358,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           -0.000005,
           0.000163,
@@ -4368,14 +4368,14 @@
         "radius": 0.025117,
         "albedo": {
           "file": "fish/harlequin-rasbora/impostor_albedo.ktx2",
-          "bytes": 124208,
-          "sha256": "e44085e109aa262ac7fc03bd684d9d0f929d2422185f6df5d1084a1f43950ba0",
+          "bytes": 57044,
+          "sha256": "9b14ede7fc3c2734b625e93b0b5b654fd7019f2c1d6f865942b9ad2163379792",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/harlequin-rasbora/impostor_normal.ktx2",
-          "bytes": 317752,
-          "sha256": "ea40e40d50e4bfa8259747a75231e76264eede554250fc216666a635c68aec6f",
+          "bytes": 130168,
+          "sha256": "8ff2a3bbe51ea38e688604ad82532b465eacee36a06c1bdadd4a0846bf15e74f",
           "codec": "uastc"
         }
       }
@@ -4457,13 +4457,13 @@
       "files": [
         {
           "file": "fish/labidochromis-caeruleus/impostor_albedo.ktx2",
-          "bytes": 134042,
-          "sha256": "9b4ed8ee16f6cbb8559bbfa1a01bd12437bb5a34978e78d6e9f84b6842d03f79"
+          "bytes": 57832,
+          "sha256": "f7d8c72c9a8465f1394a5426ccd031159e285ef4b9a93a8ce2ec8358b79b96a6"
         },
         {
           "file": "fish/labidochromis-caeruleus/impostor_normal.ktx2",
-          "bytes": 352598,
-          "sha256": "f78dc84dd09dc8e1e98919d4ced86fb547d2c5509189df69e5ce3581e0b53cc8"
+          "bytes": 141822,
+          "sha256": "558aa1cbb2045fc22fc678300ba944d16d93f047f6dd2e0e06864e1509410cc5"
         },
         {
           "file": "fish/labidochromis-caeruleus/lod0.glb",
@@ -4520,8 +4520,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.001279,
@@ -4530,14 +4530,14 @@
         "radius": 0.043096,
         "albedo": {
           "file": "fish/labidochromis-caeruleus/impostor_albedo.ktx2",
-          "bytes": 134042,
-          "sha256": "9b4ed8ee16f6cbb8559bbfa1a01bd12437bb5a34978e78d6e9f84b6842d03f79",
+          "bytes": 57832,
+          "sha256": "f7d8c72c9a8465f1394a5426ccd031159e285ef4b9a93a8ce2ec8358b79b96a6",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/labidochromis-caeruleus/impostor_normal.ktx2",
-          "bytes": 352598,
-          "sha256": "f78dc84dd09dc8e1e98919d4ced86fb547d2c5509189df69e5ce3581e0b53cc8",
+          "bytes": 141822,
+          "sha256": "558aa1cbb2045fc22fc678300ba944d16d93f047f6dd2e0e06864e1509410cc5",
           "codec": "uastc"
         }
       }
@@ -4936,13 +4936,13 @@
       "files": [
         {
           "file": "fish/neolamprologus-brichardi/impostor_albedo.ktx2",
-          "bytes": 135343,
-          "sha256": "d99586c99098fc7f08bbe465337dbed7be36146baa32d57678c126e0d7547d82"
+          "bytes": 57536,
+          "sha256": "a1cd9136ada41e2be3f103e301bcb5a533ca859e7122cd4583b57dd0cb43ce8c"
         },
         {
           "file": "fish/neolamprologus-brichardi/impostor_normal.ktx2",
-          "bytes": 347010,
-          "sha256": "f4b0ea760410b0f507e397327e93fb53f86da65e3aec3ef4340da72104bb574a"
+          "bytes": 139224,
+          "sha256": "614e67f4f1eb9614bb903f4721baecba1c5c46e62c9dee81bf05305fd87ee3d6"
         },
         {
           "file": "fish/neolamprologus-brichardi/lod0.glb",
@@ -4994,8 +4994,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.002698,
@@ -5004,14 +5004,14 @@
         "radius": 0.04035,
         "albedo": {
           "file": "fish/neolamprologus-brichardi/impostor_albedo.ktx2",
-          "bytes": 135343,
-          "sha256": "d99586c99098fc7f08bbe465337dbed7be36146baa32d57678c126e0d7547d82",
+          "bytes": 57536,
+          "sha256": "a1cd9136ada41e2be3f103e301bcb5a533ca859e7122cd4583b57dd0cb43ce8c",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/neolamprologus-brichardi/impostor_normal.ktx2",
-          "bytes": 347010,
-          "sha256": "f4b0ea760410b0f507e397327e93fb53f86da65e3aec3ef4340da72104bb574a",
+          "bytes": 139224,
+          "sha256": "614e67f4f1eb9614bb903f4721baecba1c5c46e62c9dee81bf05305fd87ee3d6",
           "codec": "uastc"
         }
       }
@@ -5093,13 +5093,13 @@
       "files": [
         {
           "file": "fish/neolamprologus-multifasciatus/impostor_albedo.ktx2",
-          "bytes": 138543,
-          "sha256": "b1ea7707f73011ac8664100dc7872219271b835d73521927d85db8af95b4d093"
+          "bytes": 59605,
+          "sha256": "0b0df65582afa88a676b6803ce28c013854038d661cf7d056d40818175426dca"
         },
         {
           "file": "fish/neolamprologus-multifasciatus/impostor_normal.ktx2",
-          "bytes": 365872,
-          "sha256": "bc153eeb0a9f6c149903cd3c4be8588c83f7e840f8f25849e849443f2433d45c"
+          "bytes": 145239,
+          "sha256": "a05f68adb74682bb4dfbc3b4dc6bfd3465aca6d0d3444246a1a22b5a66e84508"
         },
         {
           "file": "fish/neolamprologus-multifasciatus/lod0.glb",
@@ -5156,8 +5156,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.001098,
@@ -5166,14 +5166,14 @@
         "radius": 0.016628,
         "albedo": {
           "file": "fish/neolamprologus-multifasciatus/impostor_albedo.ktx2",
-          "bytes": 138543,
-          "sha256": "b1ea7707f73011ac8664100dc7872219271b835d73521927d85db8af95b4d093",
+          "bytes": 59605,
+          "sha256": "0b0df65582afa88a676b6803ce28c013854038d661cf7d056d40818175426dca",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/neolamprologus-multifasciatus/impostor_normal.ktx2",
-          "bytes": 365872,
-          "sha256": "bc153eeb0a9f6c149903cd3c4be8588c83f7e840f8f25849e849443f2433d45c",
+          "bytes": 145239,
+          "sha256": "a05f68adb74682bb4dfbc3b4dc6bfd3465aca6d0d3444246a1a22b5a66e84508",
           "codec": "uastc"
         }
       }
@@ -5275,13 +5275,13 @@
       "files": [
         {
           "file": "fish/neon-tetra/impostor_albedo.ktx2",
-          "bytes": 123302,
-          "sha256": "9950cad0c3e8de9803234dfd3710f2b829fbfa23fe5863980bf46ed78fa63eba"
+          "bytes": 55615,
+          "sha256": "65bf67594248bb61a37d279e18e90c326cc95c5d23fb7ff4f128b23f3448bc28"
         },
         {
           "file": "fish/neon-tetra/impostor_normal.ktx2",
-          "bytes": 321482,
-          "sha256": "391a8c359c330edc4e8934fe10192cd72071341d438be6858dc26c9522ef8fa6"
+          "bytes": 131750,
+          "sha256": "efecb6982161f597073c2254bc36ec5ae3eb3aa7177dbe436288761c237f592f"
         },
         {
           "file": "fish/neon-tetra/lod0.glb",
@@ -5343,8 +5343,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           0.00016,
@@ -5353,14 +5353,14 @@
         "radius": 0.01444,
         "albedo": {
           "file": "fish/neon-tetra/impostor_albedo.ktx2",
-          "bytes": 123302,
-          "sha256": "9950cad0c3e8de9803234dfd3710f2b829fbfa23fe5863980bf46ed78fa63eba",
+          "bytes": 55615,
+          "sha256": "65bf67594248bb61a37d279e18e90c326cc95c5d23fb7ff4f128b23f3448bc28",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/neon-tetra/impostor_normal.ktx2",
-          "bytes": 321482,
-          "sha256": "391a8c359c330edc4e8934fe10192cd72071341d438be6858dc26c9522ef8fa6",
+          "bytes": 131750,
+          "sha256": "efecb6982161f597073c2254bc36ec5ae3eb3aa7177dbe436288761c237f592f",
           "codec": "uastc"
         }
       }
@@ -5462,13 +5462,13 @@
       "files": [
         {
           "file": "fish/ocellaris-clownfish/impostor_albedo.ktx2",
-          "bytes": 139381,
-          "sha256": "e7d308d525691f5d7faa889a33e0ab7466f2f4b188e469045b44d17133773708"
+          "bytes": 59735,
+          "sha256": "48d32371c16b25bf9c2889c24418610bf3007cabbf37754c55a8b0a1610c63af"
         },
         {
           "file": "fish/ocellaris-clownfish/impostor_normal.ktx2",
-          "bytes": 407194,
-          "sha256": "2508506fd8a5d062944cbe4e9f72639535656e7c8efd03d85f4c7f49308699c1"
+          "bytes": 157568,
+          "sha256": "dcdb40438dfa36679af5fb23fdd459f68462f6ae4059b12dd8311955f4b1252b"
         },
         {
           "file": "fish/ocellaris-clownfish/lod0.glb",
@@ -5535,8 +5535,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.000392,
@@ -5545,14 +5545,14 @@
         "radius": 0.044104,
         "albedo": {
           "file": "fish/ocellaris-clownfish/impostor_albedo.ktx2",
-          "bytes": 139381,
-          "sha256": "e7d308d525691f5d7faa889a33e0ab7466f2f4b188e469045b44d17133773708",
+          "bytes": 59735,
+          "sha256": "48d32371c16b25bf9c2889c24418610bf3007cabbf37754c55a8b0a1610c63af",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/ocellaris-clownfish/impostor_normal.ktx2",
-          "bytes": 407194,
-          "sha256": "2508506fd8a5d062944cbe4e9f72639535656e7c8efd03d85f4c7f49308699c1",
+          "bytes": 157568,
+          "sha256": "dcdb40438dfa36679af5fb23fdd459f68462f6ae4059b12dd8311955f4b1252b",
           "codec": "uastc"
         }
       }
@@ -5632,13 +5632,13 @@
       "files": [
         {
           "file": "fish/orange-chromide/impostor_albedo.ktx2",
-          "bytes": 130916,
-          "sha256": "d5a71f488d4510f6fc7d6b7a7a1f0dccf3341a29535c25ee76e3833d5308065b"
+          "bytes": 56309,
+          "sha256": "f6533d0af070381bb548abf77293fe135317c7f83e5183dcbe054d8af1498fab"
         },
         {
           "file": "fish/orange-chromide/impostor_normal.ktx2",
-          "bytes": 398996,
-          "sha256": "e4731525a01f6b3342c319e8175a7054fddbccd1b54c3c7e098f47989586fd41"
+          "bytes": 154335,
+          "sha256": "99970aed50a013c04b5218720f93b272b5e028e6fe0368c9d94f576753fd0c31"
         },
         {
           "file": "fish/orange-chromide/lod0.glb",
@@ -5690,8 +5690,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.000474,
@@ -5700,14 +5700,14 @@
         "radius": 0.039456,
         "albedo": {
           "file": "fish/orange-chromide/impostor_albedo.ktx2",
-          "bytes": 130916,
-          "sha256": "d5a71f488d4510f6fc7d6b7a7a1f0dccf3341a29535c25ee76e3833d5308065b",
+          "bytes": 56309,
+          "sha256": "f6533d0af070381bb548abf77293fe135317c7f83e5183dcbe054d8af1498fab",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/orange-chromide/impostor_normal.ktx2",
-          "bytes": 398996,
-          "sha256": "e4731525a01f6b3342c319e8175a7054fddbccd1b54c3c7e098f47989586fd41",
+          "bytes": 154335,
+          "sha256": "99970aed50a013c04b5218720f93b272b5e028e6fe0368c9d94f576753fd0c31",
           "codec": "uastc"
         }
       }
@@ -5809,13 +5809,13 @@
       "files": [
         {
           "file": "fish/pseudotropheus-demasoni/impostor_albedo.ktx2",
-          "bytes": 139318,
-          "sha256": "8c69c7ef34e2775f376106d78a90b062c58955e1d31a1143523efae86fb6662e"
+          "bytes": 62513,
+          "sha256": "67ea91262cdd16c3ee8047aecd9000b9cee5ac2bbbe201720121fb5f610a0624"
         },
         {
           "file": "fish/pseudotropheus-demasoni/impostor_normal.ktx2",
-          "bytes": 404582,
-          "sha256": "d4fcb83c0355cbc7a857e6121f2f02e76edb1aed43875c7c00aef3ae6117244f"
+          "bytes": 157553,
+          "sha256": "f0453218cc9bc99b0e8b24f9f3e52990cc50716923bf785a40301abc5e51de07"
         },
         {
           "file": "fish/pseudotropheus-demasoni/lod0.glb",
@@ -5882,8 +5882,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           -0.000217,
           -0.001412,
@@ -5892,14 +5892,14 @@
         "radius": 0.033205,
         "albedo": {
           "file": "fish/pseudotropheus-demasoni/impostor_albedo.ktx2",
-          "bytes": 139318,
-          "sha256": "8c69c7ef34e2775f376106d78a90b062c58955e1d31a1143523efae86fb6662e",
+          "bytes": 62513,
+          "sha256": "67ea91262cdd16c3ee8047aecd9000b9cee5ac2bbbe201720121fb5f610a0624",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/pseudotropheus-demasoni/impostor_normal.ktx2",
-          "bytes": 404582,
-          "sha256": "d4fcb83c0355cbc7a857e6121f2f02e76edb1aed43875c7c00aef3ae6117244f",
+          "bytes": 157553,
+          "sha256": "f0453218cc9bc99b0e8b24f9f3e52990cc50716923bf785a40301abc5e51de07",
           "codec": "uastc"
         }
       }
@@ -5979,13 +5979,13 @@
       "files": [
         {
           "file": "fish/royal-gramma/impostor_albedo.ktx2",
-          "bytes": 119999,
-          "sha256": "06c9389da781fcccb67a4ce3d2405c306a1e7c9350dd0b19f2775b39056c8cec"
+          "bytes": 54729,
+          "sha256": "3c33fb4831b9a605e009f1afd045a9cbca741847aa09c329a5c95260cd88498d"
         },
         {
           "file": "fish/royal-gramma/impostor_normal.ktx2",
-          "bytes": 367381,
-          "sha256": "bdc20fd5a806678c7421a05913587ba787f38b4385ad7b3d1f1b4ad7437344a4"
+          "bytes": 145976,
+          "sha256": "d776b0aec7d236ea8de39f7a4db63620b70ecfcbdbb3da9068fc045166b2e6da"
         },
         {
           "file": "fish/royal-gramma/lod0.glb",
@@ -6037,8 +6037,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.000521,
@@ -6047,14 +6047,14 @@
         "radius": 0.036076,
         "albedo": {
           "file": "fish/royal-gramma/impostor_albedo.ktx2",
-          "bytes": 119999,
-          "sha256": "06c9389da781fcccb67a4ce3d2405c306a1e7c9350dd0b19f2775b39056c8cec",
+          "bytes": 54729,
+          "sha256": "3c33fb4831b9a605e009f1afd045a9cbca741847aa09c329a5c95260cd88498d",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/royal-gramma/impostor_normal.ktx2",
-          "bytes": 367381,
-          "sha256": "bdc20fd5a806678c7421a05913587ba787f38b4385ad7b3d1f1b4ad7437344a4",
+          "bytes": 145976,
+          "sha256": "d776b0aec7d236ea8de39f7a4db63620b70ecfcbdbb3da9068fc045166b2e6da",
           "codec": "uastc"
         }
       }
@@ -6134,13 +6134,13 @@
       "files": [
         {
           "file": "fish/rummy-nose-tetra/impostor_albedo.ktx2",
-          "bytes": 105978,
-          "sha256": "f59dcd309991b6b2182d1787bcd247ebb006de0f0c752ebd0c247478d17c5e68"
+          "bytes": 49556,
+          "sha256": "498f781bb9ecd3c157469569f45d545b692e02d6c8ffd401cbe8f4cf838e549d"
         },
         {
           "file": "fish/rummy-nose-tetra/impostor_normal.ktx2",
-          "bytes": 268441,
-          "sha256": "582ab9aef2626cd74dbc8955a985c84f8ab822d156fd41a254f8d03e13518936"
+          "bytes": 115204,
+          "sha256": "57a3e4f60c4712ed18fcdcdeba2a636f93afb9bcb98aeeb387f612e3f9eac0ea"
         },
         {
           "file": "fish/rummy-nose-tetra/lod0.glb",
@@ -6192,8 +6192,8 @@
         "layout": "octahedral",
         "pose": "rest",
         "grid": 9,
-        "frameSize": 128,
-        "atlasSize": 1152,
+        "frameSize": 64,
+        "atlasSize": 576,
         "pivot": [
           0,
           -0.000038,
@@ -6202,14 +6202,14 @@
         "radius": 0.020342,
         "albedo": {
           "file": "fish/rummy-nose-tetra/impostor_albedo.ktx2",
-          "bytes": 105978,
-          "sha256": "f59dcd309991b6b2182d1787bcd247ebb006de0f0c752ebd0c247478d17c5e68",
+          "bytes": 49556,
+          "sha256": "498f781bb9ecd3c157469569f45d545b692e02d6c8ffd401cbe8f4cf838e549d",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/rummy-nose-tetra/impostor_normal.ktx2",
-          "bytes": 268441,
-          "sha256": "582ab9aef2626cd74dbc8955a985c84f8ab822d156fd41a254f8d03e13518936",
+          "bytes": 115204,
+          "sha256": "57a3e4f60c4712ed18fcdcdeba2a636f93afb9bcb98aeeb387f612e3f9eac0ea",
           "codec": "uastc"
         }
       }

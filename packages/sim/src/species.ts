@@ -77,6 +77,7 @@ export const FLIP_PEAK_OVER_MEAN = Math.PI / 2;
 const SWIMMER_TRAITS: readonly Trait[] = [
   'shoal',
   'air-gulp',
+  'amphibious',
   'glass-grazer',
   'rock-grazer',
   'anemone-host',
@@ -110,6 +111,8 @@ export interface SimSpecies {
   readonly activity: Activity;
   readonly home: HomeKind;
   readonly airGulp: boolean;
+  /** Hauls out onto an emergent bank when the tank has one (`bank.ts`). */
+  readonly amphibious: boolean;
   readonly grazer: 'glass' | 'rock' | 'none';
   readonly flare: boolean;
   /** A cleaner fish holding a cleaning station (`cleaning.ts`); walkers that clean are not. */
@@ -185,6 +188,11 @@ function requireReachable(id: string, traits: ReadonlySet<Trait>, gait: Gait): v
   const forager = gait === 'forage';
   const rules: [Trait, boolean, string][] = [
     ['air-gulp', forager, 'gait "forage", the only gait that starts a gulp'],
+    [
+      'amphibious',
+      traits.has('air-gulp'),
+      'trait "air-gulp": only an air-breather leaves the water',
+    ],
     [
       'anemone-host',
       !forager && !traits.has('glass-grazer'),
@@ -392,6 +400,7 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     activity: parseActivity(id, behaviour.activity),
     home,
     airGulp: traits.has('air-gulp'),
+    amphibious: traits.has('amphibious'),
     grazer: traits.has('glass-grazer') ? 'glass' : traits.has('rock-grazer') ? 'rock' : 'none',
     flare: traits.has('flare-display'),
     cleaner: traits.has('cleaner') && walking === null,
