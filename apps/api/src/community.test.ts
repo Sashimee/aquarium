@@ -3,6 +3,8 @@ import {
   apiErrorSchema,
   COMMUNITY_TANK_FEED_CAP,
   COMMUNITY_USER_FEED_QUOTA,
+  COMMUNITY_STARTER_STOCK,
+  COMMUNITY_UPKEEP,
   communityEventSchema,
   communityFeedResponseSchema,
   communityStateSchema,
@@ -14,6 +16,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { secondsUntilRoom } from './community.ts';
 import { schema } from './db/index.ts';
+import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness, type HarnessOptions } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -553,7 +556,16 @@ describe('community tank', () => {
 
     it('limits streams per user and frees a slot on close', async () => {
       const harness = await start({
-        community: { streams: { perUser: 2, perIp: 50, total: 50, maxQueue: 32, stallMs: 30_000 } },
+        community: {
+          streams: {
+            perUser: 2,
+            perIp: 50,
+            total: 50,
+            maxQueue: 32,
+            stallMs: 30_000,
+            closeGraceMs: 2000,
+          },
+        },
       });
       const base = await listen(harness);
       const cookie = await signedIn(harness);
@@ -571,7 +583,16 @@ describe('community tank', () => {
 
     it('limits streams per network address', async () => {
       const harness = await start({
-        community: { streams: { perUser: 5, perIp: 2, total: 50, maxQueue: 32, stallMs: 30_000 } },
+        community: {
+          streams: {
+            perUser: 5,
+            perIp: 2,
+            total: 50,
+            maxQueue: 32,
+            stallMs: 30_000,
+            closeGraceMs: 2000,
+          },
+        },
       });
       const base = await listen(harness);
       await watch(base, { ip: '10.1.1.1' });
@@ -582,7 +603,16 @@ describe('community tank', () => {
 
     it('limits the total number of streams', async () => {
       const harness = await start({
-        community: { streams: { perUser: 5, perIp: 50, total: 2, maxQueue: 32, stallMs: 30_000 } },
+        community: {
+          streams: {
+            perUser: 5,
+            perIp: 50,
+            total: 2,
+            maxQueue: 32,
+            stallMs: 30_000,
+            closeGraceMs: 2000,
+          },
+        },
       });
       const base = await listen(harness);
       await watch(base, { ip: '10.2.2.1' });
@@ -598,6 +628,212 @@ describe('community tank', () => {
       expect((await watch(base)).status).toBe(200);
       expect((await watch(base)).status).toBe(200);
       expect((await watch(base)).status).toBe(429);
+    });
+  });
+
+  describe('tank-wide cap and account deletion', () => {
+    it('keeps the cap when the accounts that fed it are deleted', async () => {
+      const harness = await start();
+      const gone = await signedIn(harness);
+      expect((await feed(harness, gone, 1)).statusCode).toBe(201);
+      expect((await feed(harness, gone, 1)).statusCode).toBe(201);
+      const deleted = await post(harness, gone, '/api/me/delete', { password: PASSWORD });
+      expect(deleted.statusCode).toBe(204);
+      const next = await signedIn(harness);
+      expect((await feed(harness, next, 1)).statusCode).toBe(201);
+      const blocked = await feed(harness, await signedIn(harness), 0.1);
+      expect(blocked.statusCode).toBe(429);
+      expect(errorCode(blocked)).toBe('quota_exceeded');
+      const state = communityStateSchema.parse((await getState(harness)).json());
+      expect(state.tankFeedRemaining).toBeCloseTo(0);
+    });
+  });
+
+  describe('reads and the row lock', () => {
+    async function holdingTankLock<T>(harness: Harness, during: () => Promise<T>): Promise<T> {
+      const [tank] = await harness.database.db.select().from(schema.tanks);
+      if (!tank) throw new Error('tank not seeded');
+      let result!: T;
+      await harness.database.db.transaction(async (tx) => {
+        await tx.select().from(schema.tanks).where(eq(schema.tanks.id, tank.id)).for('update');
+        result = await Promise.race([
+          during(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('blocked behind the tank row lock')), 3000),
+          ),
+        ]);
+      });
+      return result;
+    }
+
+    it('serves anonymous reads and key replays while a writer holds the lock', async () => {
+      const harness = await start();
+      const cookie = await signedIn(harness);
+      const key = randomUUID();
+      expect((await feed(harness, cookie, 0.5, key)).statusCode).toBe(201);
+      const read = await holdingTankLock(harness, () => getState(harness));
+      expect(read.statusCode).toBe(200);
+      const replay = await holdingTankLock(harness, () => feed(harness, cookie, 0.5, key));
+      expect(replay.statusCode).toBe(200);
+    });
+
+    it('serves a stream connection without the lock', async () => {
+      const harness = await start();
+      const base = await listen(harness);
+      await getState(harness);
+      const s = await holdingTankLock(harness, async () => {
+        const opened = await watch(base);
+        await opened.next('state');
+        return opened;
+      });
+      expect(s.status).toBe(200);
+    });
+
+    it('still catches the tank up on read once a step is due', async () => {
+      const harness = await start();
+      await getState(harness);
+      await advance(harness, 20 * 24 * HOUR);
+      const state = communityStateSchema.parse((await getState(harness)).json());
+      expect(state.tank.fish.some((f) => f.status === 'dead')).toBe(true);
+    });
+  });
+
+  describe('rate limit answers', () => {
+    it('tells the caller when to retry after a feed or ate throttle', async () => {
+      const harness = await start({
+        community: { feed: { max: 1, windowMs: 60_000 }, ate: { max: 1, windowMs: 60_000 } },
+      });
+      const cookie = await signedIn(harness);
+      await feed(harness, cookie, 0.1);
+      const slowFeed = await feed(harness, cookie, 0.1);
+      expect(slowFeed.statusCode).toBe(429);
+      expect(Number(slowFeed.headers['retry-after'])).toBeGreaterThan(0);
+      const fishId = communityStateSchema.parse((await getState(harness)).json()).tank.fish[0]?.id;
+      const report = () =>
+        post(harness, cookie, '/api/community/ate', {
+          reports: [{ fishId, portion: 0.05, at: new Date(harness.clock.now()).toISOString() }],
+        });
+      await report();
+      const slowAte = await report();
+      expect(slowAte.statusCode).toBe(429);
+      expect(Number(slowAte.headers['retry-after'])).toBeGreaterThan(0);
+    });
+  });
+
+  describe('maintenance', () => {
+    it('prunes community feeds after seven days and keeps newer ones', async () => {
+      const harness = await start();
+      const cookie = await signedIn(harness);
+      await feed(harness, cookie, 0.5);
+      const [owner] = await harness.database.db.select().from(schema.user);
+      if (!owner) throw new Error('no user');
+      const ago = (days: number) => new Date(harness.clock.now() - days * 24 * HOUR);
+      await harness.database.db.insert(schema.communityFeeds).values([
+        {
+          userId: owner.id,
+          idempotencyKey: 'old-feed-key-0001',
+          food: 'flakes',
+          portion: 0.5,
+          fedAt: ago(8),
+        },
+        {
+          userId: owner.id,
+          idempotencyKey: 'mid-feed-key-0001',
+          food: 'flakes',
+          portion: 0.5,
+          fedAt: ago(6),
+        },
+      ]);
+      await pruneExpired(harness.database, harness.clock);
+      const keys = (await harness.database.db.select().from(schema.communityFeeds)).map(
+        (r) => r.idempotencyKey,
+      );
+      expect(keys).toHaveLength(2);
+      expect(keys).toContain('mid-feed-key-0001');
+      expect(keys).not.toContain('old-feed-key-0001');
+    });
+  });
+
+  describe('upkeep', () => {
+    const waitFor = async <T>(read: () => Promise<T>, done: (v: T) => boolean): Promise<T> => {
+      const deadline = Date.now() + 5000;
+      for (;;) {
+        const value = await read();
+        if (done(value)) return value;
+        if (Date.now() > deadline) throw new Error('upkeep did not reach the expected state');
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+    };
+    const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const fishOf = (harness: Harness) => async () => harness.database.db.select().from(schema.fish);
+    const waterChanges = (harness: Harness) => async () =>
+      harness.database.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.kind, 'water_change'));
+    const killSome = async (harness: Harness, count: number, hoursAgo: number) => {
+      const fish = await fishOf(harness)();
+      const died = new Date(harness.clock.now() - hoursAgo * HOUR);
+      for (const f of fish.slice(0, count)) {
+        await harness.database.db
+          .update(schema.fish)
+          .set({ status: 'dead', diedAt: died, cause: 'starvation', health: 0 })
+          .where(eq(schema.fish.id, f.id));
+      }
+    };
+    const totalStock = COMMUNITY_STARTER_STOCK.reduce((n, s) => n + s.count, 0);
+    const longDead = COMMUNITY_UPKEEP.deadFishKeepMs / HOUR + 1;
+
+    it('clears long-dead fish but does not restock a population at the floor', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await killSome(harness, totalStock - COMMUNITY_UPKEEP.restockBelowAlive, longDead);
+      const left = await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+      expect(left).toHaveLength(COMMUNITY_UPKEEP.restockBelowAlive);
+      await pause(200);
+      expect(await fishOf(harness)()).toHaveLength(COMMUNITY_UPKEEP.restockBelowAlive);
+    });
+
+    it('keeps recently dead fish in the tank', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await killSome(harness, 1, 1);
+      await pause(200);
+      const fish = await fishOf(harness)();
+      expect(fish.filter((f) => f.status === 'dead')).toHaveLength(1);
+    });
+
+    it('restocks the starting species once the population drops below the floor', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await killSome(harness, totalStock - COMMUNITY_UPKEEP.restockBelowAlive + 1, longDead);
+      const fish = await waitFor(
+        fishOf(harness),
+        (f) => f.length === totalStock && f.every((x) => x.status === 'alive'),
+      );
+      for (const stock of COMMUNITY_STARTER_STOCK) {
+        expect(fish.filter((f) => f.species === stock.species)).toHaveLength(stock.count);
+      }
+      expect(new Set(fish.map((f) => f.name)).size).toBe(totalStock);
+    });
+
+    it('changes the water once a week and not again before the next', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await advance(harness, COMMUNITY_UPKEEP.waterChangeEveryMs + HOUR);
+      await waitFor(waterChanges(harness), (rows) => rows.length === 1);
+      await pause(250);
+      expect(await waterChanges(harness)()).toHaveLength(1);
+      await advance(harness, 3 * 24 * HOUR);
+      await pause(250);
+      expect(await waterChanges(harness)()).toHaveLength(1);
+    });
+
+    it('leaves the water of a fresh tank alone', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await pause(200);
+      expect(await waterChanges(harness)()).toHaveLength(0);
     });
   });
 

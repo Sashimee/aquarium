@@ -2,7 +2,14 @@ import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { CommunityStreams, frame, type StreamCaps } from './communityStream.ts';
 
-const caps: StreamCaps = { perUser: 2, perIp: 3, total: 4, maxQueue: 3, stallMs: 1000 };
+const caps: StreamCaps = {
+  perUser: 2,
+  perIp: 3,
+  total: 4,
+  maxQueue: 3,
+  stallMs: 1000,
+  closeGraceMs: 30,
+};
 
 interface Sink {
   stream: Writable;
@@ -148,6 +155,20 @@ describe('CommunityStreams', () => {
     const closed = new Promise((resolve) => s.stream.once('close', resolve));
     streams.closeAll();
     await closed;
+    expect(streams.size).toBe(0);
+  });
+
+  it('destroys a reader that never drains shortly after closeAll', async () => {
+    const streams = new CommunityStreams(caps);
+    const s = sink(true);
+    const client = streams.open(null, '1.1.1.1', s.stream);
+    if (typeof client === 'string') throw new Error('refused');
+    streams.start(client, frame('state', {}));
+    const closed = new Promise((resolve) => s.stream.once('close', resolve));
+    streams.closeAll();
+    expect(s.stream.destroyed).toBe(false);
+    await closed;
+    expect(s.stream.destroyed).toBe(true);
     expect(streams.size).toBe(0);
   });
 });

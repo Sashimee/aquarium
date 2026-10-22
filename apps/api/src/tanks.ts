@@ -51,6 +51,7 @@ import {
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
+  STEP_MS,
   VACATION_FEEDER_ASSET_ID,
   type BirthRecord,
   type LifecycleFish,
@@ -274,6 +275,35 @@ async function lockAndTick(
   user: SessionUser,
 ): Promise<Ticked> {
   return tickLocked(tx, deps, await lockTank(tx, tankId, user), user);
+}
+
+/** The tank as it stands, when no catch-up step is due; null when one is, so the caller must lock and tick. */
+export async function readTicked(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tank: TankRow,
+): Promise<Ticked | null> {
+  const now = deps.clock.now();
+  if (now - tank.lastTickAt.getTime() >= STEP_MS) return null;
+  const fishRows = await tx.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
+  const plants = currentPlants(tank, deps.presets, deps.plants);
+  const corals = currentCorals(tank, deps.presets, deps.corals);
+  return {
+    tank,
+    fishRows,
+    state: {
+      water: waterSchema.parse(tank.water),
+      chemistry: chemistrySchema.parse(tank.chemistry),
+      fish: fishRows.map(toLifecycleFish),
+      medicine: simMedicine(tank.medicine),
+    },
+    away: null,
+    nowMs: now,
+    plants,
+    plantView: wirePlants(tank, deps.presets, deps.plants, plants),
+    corals,
+    coralView: wireCorals(tank, deps.presets, deps.corals, corals),
+  };
 }
 
 export async function tickLocked(

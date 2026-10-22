@@ -16,6 +16,21 @@ export const COMMUNITY_USER_FEED_QUOTA = { portions: 2, windowMs: 24 * HOUR_MS }
 // Across everyone, so a crowd cannot overfeed the shared fish. Sized under the tank's uneaten-food ceiling.
 export const COMMUNITY_TANK_FEED_CAP = { portions: 3, windowMs: 3 * HOUR_MS } as const;
 
+// Upkeep the server does for the shared tank, since no one owns it: dead fish are cleared after a
+// while, the water is changed on a schedule, and a collapsed population is restocked from the
+// starting species.
+export const COMMUNITY_UPKEEP = {
+  deadFishKeepMs: 6 * HOUR_MS,
+  waterChangeEveryMs: 7 * 24 * HOUR_MS,
+  restockBelowAlive: 6,
+} as const;
+
+export const COMMUNITY_STARTER_STOCK = [
+  { species: 'neon-tetra', count: 6, label: 'Neon' },
+  { species: 'harlequin-rasbora', count: 4, label: 'Rasbora' },
+  { species: 'bronze-corydoras', count: 3, label: 'Cory' },
+] as const;
+
 export const COMMUNITY_MAX_STREAMS_PER_USER = 3;
 export const COMMUNITY_MAX_STREAMS_PER_IP = 8;
 export const COMMUNITY_MAX_STREAMS_TOTAL = 500;

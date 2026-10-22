@@ -6,6 +6,7 @@ export interface StreamCaps {
   total: number;
   maxQueue: number;
   stallMs: number;
+  closeGraceMs: number;
 }
 
 export type Refusal = 'user' | 'ip' | 'total';
@@ -111,6 +112,8 @@ export class CommunityStreams {
     for (const slot of [...this.slots.values()]) {
       slot.ready = false;
       slot.stream.end();
+      // A reader that never drains would keep end() pending and hold server.close() open.
+      setTimeout(() => slot.stream.destroy(), this.caps.closeGraceMs).unref();
     }
   }
 

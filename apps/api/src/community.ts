@@ -5,8 +5,10 @@ import {
   COMMUNITY_MAX_STREAMS_PER_IP,
   COMMUNITY_MAX_STREAMS_PER_USER,
   COMMUNITY_MAX_STREAMS_TOTAL,
+  COMMUNITY_STARTER_STOCK,
   COMMUNITY_STREAM_PATH,
   COMMUNITY_TANK_FEED_CAP,
+  COMMUNITY_UPKEEP,
   COMMUNITY_USER_FEED_QUOTA,
   communityFeedRequestSchema,
   communityFeedResponseSchema,
@@ -19,7 +21,8 @@ import {
   type Tank,
 } from '@aquarium/shared';
 import { applyCare } from '@aquarium/sim/lifecycle';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PassThrough } from 'node:stream';
 import { schema } from './db/index.ts';
@@ -30,6 +33,7 @@ import type { Limit } from './rate-limit.ts';
 import {
   applyAteBatch,
   persistState,
+  readTicked,
   render,
   tickLocked,
   type SessionUser,
@@ -48,6 +52,7 @@ export interface CommunityConfig {
   streams: StreamCaps;
   heartbeatMs: number;
   tickMs: number;
+  upkeepMs: number;
 }
 
 export const DEFAULT_COMMUNITY_CONFIG: CommunityConfig = {
@@ -61,21 +66,18 @@ export const DEFAULT_COMMUNITY_CONFIG: CommunityConfig = {
     total: COMMUNITY_MAX_STREAMS_TOTAL,
     maxQueue: 32,
     stallMs: 30_000,
+    closeGraceMs: 2000,
   },
   heartbeatMs: COMMUNITY_HEARTBEAT_MS,
   tickMs: 60_000,
+  upkeepMs: 60 * 60_000,
 };
 
 const COMMUNITY_TANK_NAME = 'Community Tank';
 
-const STARTER_STOCK = [
-  { species: 'neon-tetra', count: 6, label: 'Neon' },
-  { species: 'harlequin-rasbora', count: 4, label: 'Rasbora' },
-  { species: 'bronze-corydoras', count: 3, label: 'Cory' },
-] as const;
-
 const SEED_AGE_MS = 7 * 86_400_000;
 const EPSILON = 1e-9;
+const feedEventPayload = z.object({ portion: z.number() });
 
 interface FeedRow {
   portion: number;
@@ -123,6 +125,31 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
   const streams = new CommunityStreams(config.streams);
   let tankId: string | undefined;
 
+  function stockRows(
+    id: string,
+    nowMs: number,
+    wanted: readonly { species: string; label: string; count: number; first: number }[],
+  ) {
+    return wanted.flatMap(({ species: speciesId, count, label, first }) => {
+      const spec = species.get(speciesId);
+      if (!spec) throw new Error(`community tank stock names unknown species "${speciesId}"`);
+      return Array.from({ length: count }, (_, i) => {
+        const fishId = randomUUID();
+        return {
+          id: fishId,
+          tankId: id,
+          species: speciesId,
+          name: `${label} ${first + i}`,
+          sex: randomInt(2) === 0 ? ('male' as const) : ('female' as const),
+          stage: 'adult' as const,
+          personality: personalityFromFishId(fishId),
+          bornAt: new Date(nowMs - SEED_AGE_MS),
+          size: spec.lifecycle.maxSizeM,
+        };
+      });
+    });
+  }
+
   async function ensureTankId(): Promise<string> {
     if (tankId) return tankId;
     tankId = await database.db.transaction(async (tx) => {
@@ -140,25 +167,13 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
         chemistry: newTankChemistry('freshwater'),
         lastTickAt: new Date(nowMs),
       });
-      const fish = STARTER_STOCK.flatMap(({ species: speciesId, count, label }) => {
-        const spec = species.get(speciesId);
-        if (!spec) throw new Error(`community tank stock names unknown species "${speciesId}"`);
-        return Array.from({ length: count }, (_, i) => {
-          const fishId = randomUUID();
-          return {
-            id: fishId,
-            tankId: id,
-            species: speciesId,
-            name: `${label} ${i + 1}`,
-            sex: randomInt(2) === 0 ? ('male' as const) : ('female' as const),
-            stage: 'adult' as const,
-            personality: personalityFromFishId(fishId),
-            bornAt: new Date(nowMs - SEED_AGE_MS),
-            size: spec.lifecycle.maxSizeM,
-          };
-        });
-      });
-      await tx.insert(schema.fish).values(fish);
+      await tx.insert(schema.fish).values(
+        stockRows(
+          id,
+          nowMs,
+          COMMUNITY_STARTER_STOCK.map((s) => ({ ...s, first: 1 })),
+        ),
+      );
       await tx.insert(schema.communityTank).values({ id: 1, tankId: id });
       return id;
     });
@@ -188,11 +203,23 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
     ].toSorted((a, b) => a.at.localeCompare(b.at));
   }
 
+  // Counted from the tank's own events, which carry no user and outlive an account, so deleting
+  // an account cannot free the tank-wide cap.
   async function tankFeedRows(tx: Tx, nowMs: number): Promise<FeedRow[]> {
-    return tx
-      .select({ portion: schema.communityFeeds.portion, fedAt: schema.communityFeeds.fedAt })
-      .from(schema.communityFeeds)
-      .where(gt(schema.communityFeeds.fedAt, new Date(nowMs - COMMUNITY_TANK_FEED_CAP.windowMs)));
+    const rows = await tx
+      .select({ payload: schema.events.payload, at: schema.events.at })
+      .from(schema.events)
+      .where(
+        and(
+          eq(schema.events.tankId, await ensureTankId()),
+          eq(schema.events.kind, 'feed'),
+          gt(schema.events.at, new Date(nowMs - COMMUNITY_TANK_FEED_CAP.windowMs)),
+        ),
+      );
+    return rows.map((r) => ({
+      portion: feedEventPayload.parse(r.payload).portion,
+      fedAt: r.at,
+    }));
   }
 
   async function userFeedRows(tx: Tx, userId: string, nowMs: number): Promise<FeedRow[]> {
@@ -265,6 +292,102 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
     return { value: done.outcome.value, state: done.state };
   }
 
+  // Viewers and replays read without the row lock unless a catch-up step is due, so they cannot
+  // queue every feeder behind them.
+  async function readState(): Promise<CommunityStreamState> {
+    const id = await ensureTankId();
+    const resting = await database.db.transaction(async (tx) => {
+      const [row] = await tx.select().from(schema.tanks).where(eq(schema.tanks.id, id));
+      if (!row) throw new Error('the community tank row is missing');
+      const ticked = await readTicked(tx, deps, row);
+      return ticked ? streamState(tx, ticked, undefined, ticked.nowMs) : null;
+    });
+    if (resting) return resting;
+    return (await transact(async (_tx, ticked) => ({ value: null, ticked }))).state;
+  }
+
+  async function keepTank(): Promise<void> {
+    await transact(async (tx, ticked, nowMs) => {
+      let { tank } = ticked;
+      let state = ticked.state;
+      let fishRows = ticked.fishRows;
+      let changed = false;
+
+      const [lastChange] = await tx
+        .select({ at: schema.events.at })
+        .from(schema.events)
+        .where(and(eq(schema.events.tankId, tank.id), eq(schema.events.kind, 'water_change')))
+        .orderBy(desc(schema.events.at))
+        .limit(1);
+      const lastChangeMs = (lastChange?.at ?? tank.createdAt).getTime();
+      if (nowMs - lastChangeMs >= COMMUNITY_UPKEEP.waterChangeEveryMs) {
+        const applied = applyCare(
+          state,
+          { type: 'water_change' },
+          tank.biome,
+          deps.chemistryParams,
+          nowMs,
+        );
+        if (!applied.ok) throw new Error(`community water change was refused: ${applied.reason}`);
+        state = applied.value;
+        fishRows = await persistState(tx, tank, fishRows, state);
+        await tx
+          .insert(schema.events)
+          .values({ tankId: tank.id, at: new Date(nowMs), kind: 'water_change', payload: {} });
+        tank = {
+          ...tank,
+          water: state.water,
+          chemistry: state.chemistry,
+          medicine: wireMedicine(state.medicine),
+        };
+        changed = true;
+      }
+
+      const cleared = fishRows.filter(
+        (f) =>
+          f.status === 'dead' &&
+          f.diedAt !== null &&
+          nowMs - f.diedAt.getTime() >= COMMUNITY_UPKEEP.deadFishKeepMs,
+      );
+      if (cleared.length > 0) {
+        await tx.delete(schema.fish).where(
+          inArray(
+            schema.fish.id,
+            cleared.map((f) => f.id),
+          ),
+        );
+        const gone = new Set(cleared.map((f) => f.id));
+        fishRows = fishRows.filter((f) => !gone.has(f.id));
+        changed = true;
+      }
+
+      const alive = fishRows.filter((f) => f.status === 'alive');
+      if (alive.length < COMMUNITY_UPKEEP.restockBelowAlive) {
+        const wanted = COMMUNITY_STARTER_STOCK.map((stock) => ({
+          ...stock,
+          count: stock.count - alive.filter((f) => f.species === stock.species).length,
+          first:
+            Math.max(
+              0,
+              ...fishRows
+                .filter((f) => f.species === stock.species)
+                .map((f) => Number(f.name.slice(stock.label.length + 1)) || 0),
+            ) + 1,
+        })).filter((stock) => stock.count > 0);
+        const added = wanted.length
+          ? await tx
+              .insert(schema.fish)
+              .values(stockRows(tank.id, nowMs, wanted))
+              .returning()
+          : [];
+        fishRows = [...fishRows, ...added];
+        changed ||= added.length > 0;
+      }
+
+      return { value: null, ticked: { ...ticked, tank }, fishRows, changed };
+    });
+  }
+
   async function quotaFor(user: SessionUser | null): Promise<CommunityQuota | null> {
     if (!user?.emailVerified) return null;
     return database.db.transaction(async (tx) =>
@@ -308,6 +431,7 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
       throw new HttpError(
         429,
         apiError('rate_limited', `Too many requests. Try again in ${wait} s.`),
+        { 'retry-after': String(wait) },
       );
     }
   }
@@ -318,7 +442,7 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
       const wait = limiter.consume(`community-view:${req.ip}`, config.view);
       if (wait > 0) return throttled(reply, wait);
       const user = await deps.currentUser(req);
-      const { state } = await transact(async (_tx, ticked) => ({ value: null, ticked }));
+      const state = await readState();
       return communityStateSchema.parse({ ...state, quota: await quotaFor(user) });
     }),
   );
@@ -356,7 +480,7 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
         }
       };
       const replayResponse = async () => {
-        const { state } = await transact(async (_tx, ticked) => ({ value: null, ticked }));
+        const state = await readState();
         return reply.code(200).send(
           communityFeedResponseSchema.parse({
             state: { ...state, quota: await quotaFor(user) },
@@ -517,9 +641,12 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
           );
       }
       req.raw.once('close', () => stream.destroy());
+      stream.once('close', () => {
+        if (!reply.raw.writableEnded) reply.raw.destroy();
+      });
       let first: string;
       try {
-        const { state } = await transact(async (_tx, ticked) => ({ value: null, ticked }));
+        const state = await readState();
         first = frame('state', state);
       } catch (err) {
         stream.destroy();
@@ -558,6 +685,11 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
       if (streams.size > 0) streams.broadcast('viewers', { viewers: streams.size });
     }, config.heartbeatMs);
     const ticker = setInterval(() => void tickWhileWatched(), config.tickMs);
+    const upkeep = setInterval(() => {
+      keepTank().catch((err: unknown) => app.log.error({ err }, 'community upkeep failed'));
+    }, config.upkeepMs);
+    upkeep.unref();
+    timers.push(upkeep);
     heartbeat.unref();
     ticker.unref();
     timers.push(heartbeat, ticker);
