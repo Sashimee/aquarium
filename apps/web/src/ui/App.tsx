@@ -175,6 +175,37 @@ function isOpen(panel: Panel): panel is OpenPanel {
   return panel !== 'none';
 }
 
+export function GuardedTrimDialog() {
+  const { interaction } = useBridge();
+  const [dismissed, setDismissed] = useState(false);
+  const [tapped, setTapped] = useState(false);
+
+  useEffect(() => {
+    if (!dismissed) return undefined;
+    return interaction.on('plant:picked', ({ pick }) => setTapped(pick !== null));
+  }, [dismissed, interaction]);
+
+  if (dismissed) {
+    return tapped ? (
+      <p role="status" className="hint">
+        The trim tool did not load. Reload the page to trim plants.
+      </p>
+    ) : null;
+  }
+  return (
+    <ErrorBoundary
+      what="the trim tool"
+      scope="app"
+      dismissible
+      onDismiss={() => setDismissed(true)}
+    >
+      <Suspense fallback={null}>
+        <TrimDialog />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
 export function App() {
   useRedirect();
   const route = useRoute();
@@ -348,6 +379,7 @@ function Shell() {
           <ErrorBoundary
             what="the collection book"
             scope="app"
+            dismissible
             onDismiss={() => setBookOpen(false)}
           >
             <Suspense fallback={null}>
@@ -356,11 +388,7 @@ function Shell() {
           </ErrorBoundary>
         )}
         <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-        <ErrorBoundary what="the trim tool" scope="app" onDismiss={() => undefined}>
-          <Suspense fallback={null}>
-            <TrimDialog />
-          </Suspense>
-        </ErrorBoundary>
+        <GuardedTrimDialog />
         <div className={home ? 'stage' : 'stage modal'}>
           <Screen />
         </div>

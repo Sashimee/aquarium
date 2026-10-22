@@ -82,6 +82,16 @@ describe('reloadHasStarted', () => {
     expect(reloadHasStarted()).toBe(true);
     resetReloadStartedForTests();
   });
+
+  it('stays false when the reload call throws', () => {
+    resetReloadStartedForTests();
+    const throwing = deps();
+    throwing.value.reload = () => {
+      throw new Error('blocked');
+    };
+    expect(reloadForNewBuild(throwing.value)).toBe(false);
+    expect(reloadHasStarted()).toBe(false);
+  });
 });
 
 describe('watchStalePreloads', () => {
