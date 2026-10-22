@@ -11,7 +11,7 @@ const session = {} as TankSession;
 const state = { ...INITIAL_STATE, tanks: [tankFixture()] };
 
 describe('tank type pickers', () => {
-  it('the new tank form offers freshwater, reef, cichlid and blackwater, not mangrove', () => {
+  it('the new tank form offers all five biomes', () => {
     const html = renderToStaticMarkup(
       createElement(NewTankForm, { session, state, initialBiome: 'freshwater' }),
     );
@@ -19,16 +19,16 @@ describe('tank type pickers', () => {
     expect(html).toContain('value="reef"');
     expect(html).toContain('value="cichlid"');
     expect(html).toContain('value="blackwater"');
-    expect(html).not.toContain('value="mangrove"');
+    expect(html).toContain('value="mangrove"');
   });
 
-  it('the quarantine form offers cichlid and blackwater, not mangrove', () => {
+  it('the quarantine form offers cichlid, blackwater and mangrove', () => {
     const tank = tankFixture();
     const html = renderToStaticMarkup(
       createElement(QuarantineSection, { session, state: { ...state, tanks: [tank] }, tank }),
     );
     expect(html).toContain('value="cichlid"');
     expect(html).toContain('value="blackwater"');
-    expect(html).not.toContain('value="mangrove"');
+    expect(html).toContain('value="mangrove"');
   });
 });
