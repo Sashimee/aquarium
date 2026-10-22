@@ -56,12 +56,13 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-type Layer = 'scene hulls' | 'decor boxes';
-const LAYERS: readonly Layer[] = ['scene hulls', 'decor boxes'];
+type Layer = 'scene hulls' | 'decor shelter parts';
+const LAYERS: readonly Layer[] = ['scene hulls', 'decor shelter parts'];
 
 /**
  * The hard colliders for a preset's rocks and shells: the scene's own fitted hulls, and the
- * rounded boxes the decor layer reports to the sim once it mounts, which replace them at runtime.
+ * colliders the decor layer reports to the sim once it mounts (shelter parts for shelters, boxes
+ * for other rocks), which replace them at runtime.
  */
 async function hardColliders(biome: Biome, layer: Layer): Promise<Collider[]> {
   const specs = specsFromCatalog(catalog.entries());
@@ -75,7 +76,7 @@ async function hardColliders(biome: Biome, layer: Layer): Promise<Collider[]> {
     if (spec) boxes.push(...collidersFor(`piece-${i}`, spec, item));
     hulls.push(...fitCollider(kind, await library.collisionGeometry(item.assetId), item));
   }
-  return layer === 'decor boxes' ? boxes : sceneCollidersToSim(hulls);
+  return layer === 'decor shelter parts' ? boxes : sceneCollidersToSim(hulls);
 }
 
 function clearanceTo(colliders: readonly Collider[]) {
@@ -92,7 +93,7 @@ describe('cave anchors against the decor layer colliders fish actually meet', ()
   it.each(SHELTERED)(
     '%s: every anchor is outside every collider, with room for a fish',
     async (b) => {
-      const clearance = clearanceTo(await hardColliders(b, 'decor boxes'));
+      const clearance = clearanceTo(await hardColliders(b, 'decor shelter parts'));
       const anchors = caveAnchors(loadPreset(b).decor);
       expect(anchors.length).toBeGreaterThan(0);
       for (const a of anchors) {
