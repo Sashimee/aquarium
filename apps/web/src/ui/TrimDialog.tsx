@@ -3,8 +3,10 @@ import type { Plant } from '@aquarium/shared';
 import {
   clampTrimSize,
   describePlantSize,
+  followTrimTarget,
   plantLabel,
   trimRange,
+  trimRefusalShown,
   type TrimRange,
 } from '../sync/plantTrim';
 import { useBridge } from './context';
@@ -73,9 +75,9 @@ export default function TrimDialog() {
 
   useEffect(
     () =>
-      interaction.on('plant:picked', ({ pick }) => {
+      followTrimTarget(interaction, (next) => {
         setRefusal(null);
-        setKey(pick?.key ?? null);
+        setKey(next);
       }),
     [interaction],
   );
@@ -98,13 +100,9 @@ export default function TrimDialog() {
           onCancel={close}
           onTrim={(size) =>
             void session.trimPlant(plant.key, size).then((outcome) => {
-              if (outcome.ok) close();
-              else
-                setRefusal(
-                  outcome.refusal ??
-                    session.getState().error ??
-                    'The trim did not go through. Try again.',
-                );
+              const shown = trimRefusalShown(outcome, session.getState().error);
+              if (shown === null) close();
+              else setRefusal(shown);
             })
           }
         />

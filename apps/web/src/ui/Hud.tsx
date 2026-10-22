@@ -1,4 +1,4 @@
-import type { Biome, PlayableBiome } from '@aquarium/shared';
+import type { Biome, CreatableBiome } from '@aquarium/shared';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { earnedText, euroText, pearlText } from '../sync/economy';
@@ -21,7 +21,7 @@ const BIOME_LABEL: Record<Biome, string> = {
   mangrove: 'Mangrove',
 };
 
-const TANK_TYPES: readonly { biome: PlayableBiome; label: string }[] = [
+const TANK_TYPES: readonly { biome: CreatableBiome; label: string }[] = [
   { biome: 'freshwater', label: 'Freshwater' },
   { biome: 'reef', label: 'Reef' },
 ];
@@ -209,14 +209,14 @@ export function CameraControls() {
   );
 }
 
-export function TankTypeSwitch({ onCreate }: { onCreate(biome: PlayableBiome): void }) {
+export function TankTypeSwitch({ onCreate }: { onCreate(biome: CreatableBiome): void }) {
   const { interaction } = useBridge();
   const session = useOptionalSession();
   const state = useSessionState();
   const demo = useDemoBiome();
   const shown = shownBiome(state, demo);
   const enabled = canSwitch(state);
-  const choose = (target: PlayableBiome) => {
+  const choose = (target: CreatableBiome) => {
     const plan = planSwitch(state, demo, target);
     switch (plan.kind) {
       case 'none':

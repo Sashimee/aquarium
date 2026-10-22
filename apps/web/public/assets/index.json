@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 96376067,
+  "totalBytes": 124517336,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -329,6 +329,328 @@
       }
     },
     {
+      "id": "apistogramma-hongsloi",
+      "kind": "fish",
+      "species": "apistogramma-hongsloi",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Female Apistogramma hongsloi painted procedurally by eye from CC-BY photographs (SamaelGMO); no pixels are reused",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.005512,
+          -0.008278,
+          -0.025893
+        ],
+        "max": [
+          0.005512,
+          0.007331,
+          0.015978
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/apistogramma-hongsloi/lod0.glb",
+          "bytes": 43048,
+          "sha256": "9799232858e1910ee7ba693952607dc63ac883a5c4d8fae7b2eb0b17384d4bff",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/lod1.glb",
+          "bytes": 23076,
+          "sha256": "a0c5c6288b06c28b43a96f40097530678ecff2c291016b47166944cb8deb9736",
+          "triangles": 1727,
+          "vertices": 968
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/lod2.glb",
+          "bytes": 11688,
+          "sha256": "cdee5b83405ac9fe04c39bb9685bf788234bbf22e339c389bd81fb054b155e4d",
+          "triangles": 647,
+          "vertices": 379
+        }
+      ],
+      "textures": [
+        {
+          "name": "apistogramma-hongsloi_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_1k.ktx2",
+              "bytes": 58939,
+              "sha256": "26c5f89c1b69c4aa9779b8df83dd601728377e23e5c81e655826a29002e2fa6a",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_2k.ktx2",
+              "bytes": 102233,
+              "sha256": "13bfec648f8f64c94f4bcfcf0c9fa3a207eb9ea4db58de8b366a98d3d9e8c780",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/apistogramma-hongsloi/impostor_albedo.ktx2",
+          "bytes": 115352,
+          "sha256": "2d636fe5b06c786b10bd899cb5698010f74f366a6ba2a0208e64549d7fc6954f"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/impostor_normal.ktx2",
+          "bytes": 313531,
+          "sha256": "5ef0091135a8c7db84ccae0d5ec5cd0744f2c7887ed8df0257d32e84814288c3"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/lod0.glb",
+          "bytes": 43048,
+          "sha256": "9799232858e1910ee7ba693952607dc63ac883a5c4d8fae7b2eb0b17384d4bff"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/lod1.glb",
+          "bytes": 23076,
+          "sha256": "a0c5c6288b06c28b43a96f40097530678ecff2c291016b47166944cb8deb9736"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/lod2.glb",
+          "bytes": 11688,
+          "sha256": "cdee5b83405ac9fe04c39bb9685bf788234bbf22e339c389bd81fb054b155e4d"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_1k.ktx2",
+          "bytes": 58939,
+          "sha256": "26c5f89c1b69c4aa9779b8df83dd601728377e23e5c81e655826a29002e2fa6a"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi/textures/apistogramma-hongsloi_basecolor_2k.ktx2",
+          "bytes": 102233,
+          "sha256": "13bfec648f8f64c94f4bcfcf0c9fa3a207eb9ea4db58de8b366a98d3d9e8c780"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.034,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/apistogramma-hongsloi.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          -0.000473,
+          -0.004957
+        ],
+        "radius": 0.022421,
+        "albedo": {
+          "file": "fish/apistogramma-hongsloi/impostor_albedo.ktx2",
+          "bytes": 115352,
+          "sha256": "2d636fe5b06c786b10bd899cb5698010f74f366a6ba2a0208e64549d7fc6954f",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/apistogramma-hongsloi/impostor_normal.ktx2",
+          "bytes": 313531,
+          "sha256": "5ef0091135a8c7db84ccae0d5ec5cd0744f2c7887ed8df0257d32e84814288c3",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "apistogramma-hongsloi-male",
+      "kind": "fish",
+      "species": "apistogramma-hongsloi",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-apistogramma-hongsloi-male"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Male Apistogramma hongsloi by SamaelGMO (CC-BY-4.0), side view projected onto the loft; fins painted as translucent membranes",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.008527,
+          -0.013936,
+          -0.038096
+        ],
+        "max": [
+          0.008527,
+          0.012335,
+          0.023478
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/apistogramma-hongsloi-male/lod0.glb",
+          "bytes": 44084,
+          "sha256": "cb49b579c5b1e36f060a2b959d708bfa75bdf576a65e1dc36fd1aa0441df2d73",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/lod1.glb",
+          "bytes": 23120,
+          "sha256": "98153b15df1d5adb460a2602d42ee74e9fa2eab7c6d12902221b434387567cdf",
+          "triangles": 1728,
+          "vertices": 965
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/lod2.glb",
+          "bytes": 11756,
+          "sha256": "207b088247bb38813c300ca56dfc119cf2e0220bab319d87ab99d0bcc2ac122e",
+          "triangles": 647,
+          "vertices": 375
+        }
+      ],
+      "textures": [
+        {
+          "name": "apistogramma-hongsloi-male_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/apistogramma-hongsloi-male/textures/apistogramma-hongsloi-male_basecolor_1k.ktx2",
+              "bytes": 108590,
+              "sha256": "61f63d416feb6334f407926bf58bfbd98751deb9fcb6fc2b107d57402340b772",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/apistogramma-hongsloi-male/textures/apistogramma-hongsloi-male_basecolor_2k.ktx2",
+              "bytes": 353758,
+              "sha256": "cae746fd54ed40fa88e926c0d75545d05850b40a2b1b55ed6a9e0ba6a59b0994",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/apistogramma-hongsloi-male/impostor_albedo.ktx2",
+          "bytes": 130910,
+          "sha256": "7aded68c6de45c776c254b4f5bdc8a0c09ec0d320bff23d4f9fb38f52f631181"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/impostor_normal.ktx2",
+          "bytes": 335656,
+          "sha256": "913554a58613b4ec84b1a8a003be2016a4f0e0bea695374ca58f8e1c77ac009d"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/lod0.glb",
+          "bytes": 44084,
+          "sha256": "cb49b579c5b1e36f060a2b959d708bfa75bdf576a65e1dc36fd1aa0441df2d73"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/lod1.glb",
+          "bytes": 23120,
+          "sha256": "98153b15df1d5adb460a2602d42ee74e9fa2eab7c6d12902221b434387567cdf"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/lod2.glb",
+          "bytes": 11756,
+          "sha256": "207b088247bb38813c300ca56dfc119cf2e0220bab319d87ab99d0bcc2ac122e"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/textures/apistogramma-hongsloi-male_basecolor_1k.ktx2",
+          "bytes": 108590,
+          "sha256": "61f63d416feb6334f407926bf58bfbd98751deb9fcb6fc2b107d57402340b772"
+        },
+        {
+          "file": "fish/apistogramma-hongsloi-male/textures/apistogramma-hongsloi-male_basecolor_2k.ktx2",
+          "bytes": 353758,
+          "sha256": "cae746fd54ed40fa88e926c0d75545d05850b40a2b1b55ed6a9e0ba6a59b0994"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.05,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/apistogramma-hongsloi-male.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          -0.000801,
+          -0.007309
+        ],
+        "radius": 0.032974,
+        "albedo": {
+          "file": "fish/apistogramma-hongsloi-male/impostor_albedo.ktx2",
+          "bytes": 130910,
+          "sha256": "7aded68c6de45c776c254b4f5bdc8a0c09ec0d320bff23d4f9fb38f52f631181",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/apistogramma-hongsloi-male/impostor_normal.ktx2",
+          "bytes": 335656,
+          "sha256": "913554a58613b4ec84b1a8a003be2016a4f0e0bea695374ca58f8e1c77ac009d",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
       "id": "aulonocara-baenschi",
       "kind": "fish",
       "species": "aulonocara-baenschi",
@@ -491,6 +813,166 @@
       }
     },
     {
+      "id": "banded-archerfish",
+      "kind": "fish",
+      "species": "banded-archerfish",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Toxotes jaculatrix: no model exists, so the body is a procedural loft; colour map painted from the species pattern; the reference photos set colours and layout only, no photo pixels are reused (Vassil CC0, Pericard CC-BY-4.0 for reference)",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.02911,
+          -0.038839,
+          -0.106089
+        ],
+        "max": [
+          0.02911,
+          0.031908,
+          0.064711
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/banded-archerfish/lod0.glb",
+          "bytes": 43192,
+          "sha256": "dd5a97c96917ef753a42db9fe13ff4303f13158e6bc85d403f572ddadbd4d9be",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/banded-archerfish/lod1.glb",
+          "bytes": 22388,
+          "sha256": "99836ce8fd4c5495ae990858abf31e9157a9497ed298f54654f16b04d8e645d4",
+          "triangles": 1727,
+          "vertices": 943
+        },
+        {
+          "file": "fish/banded-archerfish/lod2.glb",
+          "bytes": 11632,
+          "sha256": "d4204924ac4e40a263e2416bfc259665d923596e3495a5e9f766bbc73f54614a",
+          "triangles": 648,
+          "vertices": 370
+        }
+      ],
+      "textures": [
+        {
+          "name": "banded-archerfish_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_1k.ktx2",
+              "bytes": 37571,
+              "sha256": "53b82e05d3997b4cd0fa261a5e80089bda39948517d9ac194de8d8f1f9e31562",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_2k.ktx2",
+              "bytes": 37571,
+              "sha256": "53b82e05d3997b4cd0fa261a5e80089bda39948517d9ac194de8d8f1f9e31562",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/banded-archerfish/impostor_albedo.ktx2",
+          "bytes": 119549,
+          "sha256": "6ca7156103e4c3720560a95d122060eb31cb10ecb27f8ea41ee969ee82c90adb"
+        },
+        {
+          "file": "fish/banded-archerfish/impostor_normal.ktx2",
+          "bytes": 346549,
+          "sha256": "525462a563c132a65b00887f18c99488f89891a833d817504749909c5acd8d99"
+        },
+        {
+          "file": "fish/banded-archerfish/lod0.glb",
+          "bytes": 43192,
+          "sha256": "dd5a97c96917ef753a42db9fe13ff4303f13158e6bc85d403f572ddadbd4d9be"
+        },
+        {
+          "file": "fish/banded-archerfish/lod1.glb",
+          "bytes": 22388,
+          "sha256": "99836ce8fd4c5495ae990858abf31e9157a9497ed298f54654f16b04d8e645d4"
+        },
+        {
+          "file": "fish/banded-archerfish/lod2.glb",
+          "bytes": 11632,
+          "sha256": "d4204924ac4e40a263e2416bfc259665d923596e3495a5e9f766bbc73f54614a"
+        },
+        {
+          "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_1k.ktx2",
+          "bytes": 37571,
+          "sha256": "53b82e05d3997b4cd0fa261a5e80089bda39948517d9ac194de8d8f1f9e31562"
+        },
+        {
+          "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_2k.ktx2",
+          "bytes": 37571,
+          "sha256": "53b82e05d3997b4cd0fa261a5e80089bda39948517d9ac194de8d8f1f9e31562"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.14,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/banded-archerfish.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          -0.00004,
+          -0.00344,
+          -0.020689
+        ],
+        "radius": 0.091917,
+        "albedo": {
+          "file": "fish/banded-archerfish/impostor_albedo.ktx2",
+          "bytes": 119549,
+          "sha256": "6ca7156103e4c3720560a95d122060eb31cb10ecb27f8ea41ee969ee82c90adb",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/banded-archerfish/impostor_normal.ktx2",
+          "bytes": 346549,
+          "sha256": "525462a563c132a65b00887f18c99488f89891a833d817504749909c5acd8d99",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
       "id": "banggai-cardinalfish",
       "kind": "fish",
       "species": "banggai-cardinalfish",
@@ -648,6 +1130,168 @@
           "file": "fish/banggai-cardinalfish/impostor_normal.ktx2",
           "bytes": 399389,
           "sha256": "d1ad2329c09564540578b9813eb5f91b03195758aba0d4fe2dd45c34d9f148ed",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "barred-mudskipper",
+      "kind": "fish",
+      "species": "barred-mudskipper",
+      "origin": "model",
+      "sources": [
+        "sketchfab-c3bc5a29"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask, fin id and mouth mask vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "scan slate ('Material.001', 12 triangles) dropped; 217k triangles decimated to about 14k at LOD0, 4096 px colour map downscaled to the 1k and 2k tiers"
+      ],
+      "bounds": {
+        "min": [
+          -0.023338,
+          -0.013986,
+          -0.047419
+        ],
+        "max": [
+          0.023182,
+          0.019315,
+          0.064809
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/barred-mudskipper/lod0.glb",
+          "bytes": 362100,
+          "sha256": "a8d667a0dc8d4cf16d30d0d3fa54ab2ff20ad661782ca4a50f2a1e74e97dc605",
+          "triangles": 14083,
+          "vertices": 15925
+        },
+        {
+          "file": "fish/barred-mudskipper/lod1.glb",
+          "bytes": 133140,
+          "sha256": "8695d7861b206ddf43dbf3de3716c3ac8daa31df3665d903b268236328431576",
+          "triangles": 5403,
+          "vertices": 5333
+        },
+        {
+          "file": "fish/barred-mudskipper/lod2.glb",
+          "bytes": 63152,
+          "sha256": "f68782d40a42e622c93a71d4144e20b3bb2e09fa2209bfd0681996235e3f454b",
+          "triangles": 2163,
+          "vertices": 2213
+        }
+      ],
+      "textures": [
+        {
+          "name": "barred-mudskipper_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/barred-mudskipper/textures/barred-mudskipper_basecolor_1k.ktx2",
+              "bytes": 194419,
+              "sha256": "9e1bb04c4f0eee2531547699af7789e8f8293246b59b4d894e38e791048db41f",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/barred-mudskipper/textures/barred-mudskipper_basecolor_2k.ktx2",
+              "bytes": 730640,
+              "sha256": "935f98456a4257fd5da71bbd1bbbe075e69b94ea66bb7c72a08a787efcf2771f",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/barred-mudskipper/impostor_albedo.ktx2",
+          "bytes": 114305,
+          "sha256": "862fb739001d92079cea07576419e29fdbe2dfbff605ebcf75a391bbc1f4a1e2"
+        },
+        {
+          "file": "fish/barred-mudskipper/impostor_normal.ktx2",
+          "bytes": 325207,
+          "sha256": "3700e0fcf2dc44fb28f9bbde35cbbbf4f461831597f8ec9ca1f6bcec5adff943"
+        },
+        {
+          "file": "fish/barred-mudskipper/lod0.glb",
+          "bytes": 362100,
+          "sha256": "a8d667a0dc8d4cf16d30d0d3fa54ab2ff20ad661782ca4a50f2a1e74e97dc605"
+        },
+        {
+          "file": "fish/barred-mudskipper/lod1.glb",
+          "bytes": 133140,
+          "sha256": "8695d7861b206ddf43dbf3de3716c3ac8daa31df3665d903b268236328431576"
+        },
+        {
+          "file": "fish/barred-mudskipper/lod2.glb",
+          "bytes": 63152,
+          "sha256": "f68782d40a42e622c93a71d4144e20b3bb2e09fa2209bfd0681996235e3f454b"
+        },
+        {
+          "file": "fish/barred-mudskipper/textures/barred-mudskipper_basecolor_1k.ktx2",
+          "bytes": 194419,
+          "sha256": "9e1bb04c4f0eee2531547699af7789e8f8293246b59b4d894e38e791048db41f"
+        },
+        {
+          "file": "fish/barred-mudskipper/textures/barred-mudskipper_basecolor_2k.ktx2",
+          "bytes": 730640,
+          "sha256": "935f98456a4257fd5da71bbd1bbbe075e69b94ea66bb7c72a08a787efcf2771f"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.09,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/barred-mudskipper.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          -0.000078,
+          0.002599,
+          0.00875
+        ],
+        "radius": 0.060238,
+        "albedo": {
+          "file": "fish/barred-mudskipper/impostor_albedo.ktx2",
+          "bytes": 114305,
+          "sha256": "862fb739001d92079cea07576419e29fdbe2dfbff605ebcf75a391bbc1f4a1e2",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/barred-mudskipper/impostor_normal.ktx2",
+          "bytes": 325207,
+          "sha256": "3700e0fcf2dc44fb28f9bbde35cbbbf4f461831597f8ec9ca1f6bcec5adff943",
           "codec": "uastc"
         }
       }
@@ -840,6 +1484,168 @@
           "file": "fish/betta/impostor_normal.ktx2",
           "bytes": 414690,
           "sha256": "944cf2687c1e9f0e9d1108e7ae1f9c65ba78a854d50df5960e08c2baf61b930d",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "blue-spotted-mudskipper",
+      "kind": "fish",
+      "species": "blue-spotted-mudskipper",
+      "origin": "model",
+      "sources": [
+        "sketchfab-0fe8a8af"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask, fin id and mouth mask vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "scan slate ('Material.001', 12 triangles) dropped; 392k triangles decimated to about 14k at LOD0, 4096 px colour map downscaled to the 1k and 2k tiers"
+      ],
+      "bounds": {
+        "min": [
+          -0.021673,
+          -0.013223,
+          -0.055438
+        ],
+        "max": [
+          0.018649,
+          0.035645,
+          0.07808
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/blue-spotted-mudskipper/lod0.glb",
+          "bytes": 315904,
+          "sha256": "f8749ad8470cf1abbaf42c7c1f097edb51a19543c8fd3ed96ce9b19e8124bbb1",
+          "triangles": 14301,
+          "vertices": 13639
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/lod1.glb",
+          "bytes": 134664,
+          "sha256": "c620c2499e541b1703b5c2ee26547ad3b44f8a09f1e656461cf4c28eca9cd091",
+          "triangles": 5464,
+          "vertices": 5208
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/lod2.glb",
+          "bytes": 67816,
+          "sha256": "47492b228e7d42bc1ba22a473e06a79515ae121026760b6ee3b16f81d7be8a38",
+          "triangles": 2081,
+          "vertices": 2185
+        }
+      ],
+      "textures": [
+        {
+          "name": "blue-spotted-mudskipper_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/blue-spotted-mudskipper/textures/blue-spotted-mudskipper_basecolor_1k.ktx2",
+              "bytes": 199982,
+              "sha256": "3fbd4e2453a7824d173d44802f0fd9a6c386acd9e3da1bc9575ca269ae80e90d",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/blue-spotted-mudskipper/textures/blue-spotted-mudskipper_basecolor_2k.ktx2",
+              "bytes": 766202,
+              "sha256": "d5311c8be0d8f4c4b1f7e9f7f7cc2e5eb8ee384378e07336b0024751f6c83766",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/blue-spotted-mudskipper/impostor_albedo.ktx2",
+          "bytes": 109505,
+          "sha256": "59f05c9799290d31bdb4706491ef542c8144ad632f2edf736de020444397c19a"
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/impostor_normal.ktx2",
+          "bytes": 308980,
+          "sha256": "71486106d3c2883d35d61b84b8a28e14e4bc5df22a79a1818cee0ae8219a9611"
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/lod0.glb",
+          "bytes": 315904,
+          "sha256": "f8749ad8470cf1abbaf42c7c1f097edb51a19543c8fd3ed96ce9b19e8124bbb1"
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/lod1.glb",
+          "bytes": 134664,
+          "sha256": "c620c2499e541b1703b5c2ee26547ad3b44f8a09f1e656461cf4c28eca9cd091"
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/lod2.glb",
+          "bytes": 67816,
+          "sha256": "47492b228e7d42bc1ba22a473e06a79515ae121026760b6ee3b16f81d7be8a38"
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/textures/blue-spotted-mudskipper_basecolor_1k.ktx2",
+          "bytes": 199982,
+          "sha256": "3fbd4e2453a7824d173d44802f0fd9a6c386acd9e3da1bc9575ca269ae80e90d"
+        },
+        {
+          "file": "fish/blue-spotted-mudskipper/textures/blue-spotted-mudskipper_basecolor_2k.ktx2",
+          "bytes": 766202,
+          "sha256": "d5311c8be0d8f4c4b1f7e9f7f7cc2e5eb8ee384378e07336b0024751f6c83766"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.11,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/blue-spotted-mudskipper.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          -0.001557,
+          0.010729,
+          0.01095
+        ],
+        "radius": 0.071702,
+        "albedo": {
+          "file": "fish/blue-spotted-mudskipper/impostor_albedo.ktx2",
+          "bytes": 109505,
+          "sha256": "59f05c9799290d31bdb4706491ef542c8144ad632f2edf736de020444397c19a",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/blue-spotted-mudskipper/impostor_normal.ktx2",
+          "bytes": 308980,
+          "sha256": "71486106d3c2883d35d61b84b8a28e14e4bc5df22a79a1818cee0ae8219a9611",
           "codec": "uastc"
         }
       }
@@ -1427,6 +2233,326 @@
       }
     },
     {
+      "id": "bumblebee-goby",
+      "kind": "fish",
+      "species": "bumblebee-goby",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Brachygobius: no model exists, so the body is a procedural loft; colour map painted from the species pattern; the reference photos set colours and layout only, no photo pixels are reused (Lisitsyn CC-BY-4.0 for reference)",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.0061,
+          -0.005347,
+          -0.021039
+        ],
+        "max": [
+          0.0061,
+          0.005443,
+          0.012561
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/bumblebee-goby/lod0.glb",
+          "bytes": 45536,
+          "sha256": "bef57d3bffe7e2bf81be1bc1dc80c139e51aebef1b6ca60fcde94d8220c13b21",
+          "triangles": 4608,
+          "vertices": 2554
+        },
+        {
+          "file": "fish/bumblebee-goby/lod1.glb",
+          "bytes": 23536,
+          "sha256": "615cbba3a636b4159dd3a3b8a3654302e9c7c19b9ac29fba4bcf9f383842be27",
+          "triangles": 1843,
+          "vertices": 1038
+        },
+        {
+          "file": "fish/bumblebee-goby/lod2.glb",
+          "bytes": 12376,
+          "sha256": "a6e121abbb4a08d22bbfd1c67204128906998fe5499751368b26bd545cb53a6c",
+          "triangles": 690,
+          "vertices": 405
+        }
+      ],
+      "textures": [
+        {
+          "name": "bumblebee-goby_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_1k.ktx2",
+              "bytes": 7292,
+              "sha256": "c479f2b8fb27e0fb953009b3f1780fed7697e706a8c224502b32319560c571ab",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_2k.ktx2",
+              "bytes": 7292,
+              "sha256": "c479f2b8fb27e0fb953009b3f1780fed7697e706a8c224502b32319560c571ab",
+              "size": 512,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/bumblebee-goby/impostor_albedo.ktx2",
+          "bytes": 114256,
+          "sha256": "aa9092773ded40785a54d867258b7fb35eb41b4fdf7129d170d7b77f569e5ea5"
+        },
+        {
+          "file": "fish/bumblebee-goby/impostor_normal.ktx2",
+          "bytes": 285820,
+          "sha256": "d5c899f386a9b77682437373b7830363a60576d059d2c0f051bee3f8f2782f6e"
+        },
+        {
+          "file": "fish/bumblebee-goby/lod0.glb",
+          "bytes": 45536,
+          "sha256": "bef57d3bffe7e2bf81be1bc1dc80c139e51aebef1b6ca60fcde94d8220c13b21"
+        },
+        {
+          "file": "fish/bumblebee-goby/lod1.glb",
+          "bytes": 23536,
+          "sha256": "615cbba3a636b4159dd3a3b8a3654302e9c7c19b9ac29fba4bcf9f383842be27"
+        },
+        {
+          "file": "fish/bumblebee-goby/lod2.glb",
+          "bytes": 12376,
+          "sha256": "a6e121abbb4a08d22bbfd1c67204128906998fe5499751368b26bd545cb53a6c"
+        },
+        {
+          "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_1k.ktx2",
+          "bytes": 7292,
+          "sha256": "c479f2b8fb27e0fb953009b3f1780fed7697e706a8c224502b32319560c571ab"
+        },
+        {
+          "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_2k.ktx2",
+          "bytes": 7292,
+          "sha256": "c479f2b8fb27e0fb953009b3f1780fed7697e706a8c224502b32319560c571ab"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.028,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/bumblebee-goby.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          0.000048,
+          -0.004239
+        ],
+        "radius": 0.018042,
+        "albedo": {
+          "file": "fish/bumblebee-goby/impostor_albedo.ktx2",
+          "bytes": 114256,
+          "sha256": "aa9092773ded40785a54d867258b7fb35eb41b4fdf7129d170d7b77f569e5ea5",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/bumblebee-goby/impostor_normal.ktx2",
+          "bytes": 285820,
+          "sha256": "d5c899f386a9b77682437373b7830363a60576d059d2c0f051bee3f8f2782f6e",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "cardinal-tetra",
+      "kind": "fish",
+      "species": "cardinal-tetra",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Paracheirodon axelrodi colours painted procedurally by eye from a CC0 photograph (Henrique Pinto); no pixels are reused",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.004529,
+          -0.007707,
+          -0.025511
+        ],
+        "max": [
+          0.004529,
+          0.007659,
+          0.015719
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/cardinal-tetra/lod0.glb",
+          "bytes": 43812,
+          "sha256": "720887081df02445bc2493e6217277972816634c86f5926f22ae5ad7a9822a75",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/cardinal-tetra/lod1.glb",
+          "bytes": 23332,
+          "sha256": "f8cc95b16347358c854113889c4e8d6ba80eb651382fdcb2293f0b4408adca0f",
+          "triangles": 1728,
+          "vertices": 968
+        },
+        {
+          "file": "fish/cardinal-tetra/lod2.glb",
+          "bytes": 11692,
+          "sha256": "c24afe4fbdefae322a0842ec4b863171ea5fb5ea62d18f2f974ef21131861cca",
+          "triangles": 647,
+          "vertices": 383
+        }
+      ],
+      "textures": [
+        {
+          "name": "cardinal-tetra_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_1k.ktx2",
+              "bytes": 48424,
+              "sha256": "b2aacb980ab46650de83ba7d23324d52a137822f52e3992ee98244f88c94536d",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_2k.ktx2",
+              "bytes": 78102,
+              "sha256": "559c7d8954ab76b48d13fbaca9f2d858a16125e45dfaa570359cec2b18f1507b",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/cardinal-tetra/impostor_albedo.ktx2",
+          "bytes": 111177,
+          "sha256": "5b14338dbaf8d77c3c4d58ecedc1b643cf8d2d6333272fb1f859bc50f16ba97a"
+        },
+        {
+          "file": "fish/cardinal-tetra/impostor_normal.ktx2",
+          "bytes": 282995,
+          "sha256": "ddbac5308867e6f867de524b179556b58ef7c31593b2a994ef4d818a2988e58e"
+        },
+        {
+          "file": "fish/cardinal-tetra/lod0.glb",
+          "bytes": 43812,
+          "sha256": "720887081df02445bc2493e6217277972816634c86f5926f22ae5ad7a9822a75"
+        },
+        {
+          "file": "fish/cardinal-tetra/lod1.glb",
+          "bytes": 23332,
+          "sha256": "f8cc95b16347358c854113889c4e8d6ba80eb651382fdcb2293f0b4408adca0f"
+        },
+        {
+          "file": "fish/cardinal-tetra/lod2.glb",
+          "bytes": 11692,
+          "sha256": "c24afe4fbdefae322a0842ec4b863171ea5fb5ea62d18f2f974ef21131861cca"
+        },
+        {
+          "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_1k.ktx2",
+          "bytes": 48424,
+          "sha256": "b2aacb980ab46650de83ba7d23324d52a137822f52e3992ee98244f88c94536d"
+        },
+        {
+          "file": "fish/cardinal-tetra/textures/cardinal-tetra_basecolor_2k.ktx2",
+          "bytes": 78102,
+          "sha256": "559c7d8954ab76b48d13fbaca9f2d858a16125e45dfaa570359cec2b18f1507b"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.0342,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/cardinal-tetra.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          -0.000024,
+          -0.004896
+        ],
+        "radius": 0.022148,
+        "albedo": {
+          "file": "fish/cardinal-tetra/impostor_albedo.ktx2",
+          "bytes": 111177,
+          "sha256": "5b14338dbaf8d77c3c4d58ecedc1b643cf8d2d6333272fb1f859bc50f16ba97a",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/cardinal-tetra/impostor_normal.ktx2",
+          "bytes": 282995,
+          "sha256": "ddbac5308867e6f867de524b179556b58ef7c31593b2a994ef4d818a2988e58e",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
       "id": "cleaner-wrasse",
       "kind": "fish",
       "species": "cleaner-wrasse",
@@ -1807,6 +2933,490 @@
           "file": "fish/discus/impostor_normal.ktx2",
           "bytes": 524197,
           "sha256": "73ed1d4338d9b69c134628787fd526f43fd33f6b478005fd9c4c17a1f73b6d55",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "dwarf-pencilfish",
+      "kind": "fish",
+      "species": "dwarf-pencilfish",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-nannostomus-marginatus-female"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Female Nannostomus marginatus by D.W. (CC0), side view projected onto the loft with the photographed body fitted to the species proportions",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.003862,
+          -0.005992,
+          -0.020868
+        ],
+        "max": [
+          0.003862,
+          0.007235,
+          0.014194
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/dwarf-pencilfish/lod0.glb",
+          "bytes": 44128,
+          "sha256": "decafd6033849eb8fb0a41d5d8731d43178f5d40a5b3c28ff704dac79607000a",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/dwarf-pencilfish/lod1.glb",
+          "bytes": 23396,
+          "sha256": "b9e3cbda875978054b86787088bef0b3e6c4525c5110de7d4ab94bcfec9ef7ca",
+          "triangles": 1727,
+          "vertices": 966
+        },
+        {
+          "file": "fish/dwarf-pencilfish/lod2.glb",
+          "bytes": 11748,
+          "sha256": "7c18457183c269bca9a7f95d53ede7110b2d5d4ae513bcaf792f3bf8068024fd",
+          "triangles": 647,
+          "vertices": 383
+        }
+      ],
+      "textures": [
+        {
+          "name": "dwarf-pencilfish_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_1k.ktx2",
+              "bytes": 108491,
+              "sha256": "8d9bed5d6d4515329dde431285118fe8aaef6cd8265572bb9a31c29f845aab7c",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_2k.ktx2",
+              "bytes": 202797,
+              "sha256": "f30e7bf86d87fd35f67af7e6df61502247a94998b64573f1fb013d4c016e0b60",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/dwarf-pencilfish/impostor_albedo.ktx2",
+          "bytes": 117259,
+          "sha256": "45e33b16edd0b503c5bbab6baa5fdd8213fa370ce199231fa32b642004c05798"
+        },
+        {
+          "file": "fish/dwarf-pencilfish/impostor_normal.ktx2",
+          "bytes": 284136,
+          "sha256": "d88677cd41153c9e8ca69f6e44c9e0dad3fb93c4884d0934305f5253bb5be8ed"
+        },
+        {
+          "file": "fish/dwarf-pencilfish/lod0.glb",
+          "bytes": 44128,
+          "sha256": "decafd6033849eb8fb0a41d5d8731d43178f5d40a5b3c28ff704dac79607000a"
+        },
+        {
+          "file": "fish/dwarf-pencilfish/lod1.glb",
+          "bytes": 23396,
+          "sha256": "b9e3cbda875978054b86787088bef0b3e6c4525c5110de7d4ab94bcfec9ef7ca"
+        },
+        {
+          "file": "fish/dwarf-pencilfish/lod2.glb",
+          "bytes": 11748,
+          "sha256": "7c18457183c269bca9a7f95d53ede7110b2d5d4ae513bcaf792f3bf8068024fd"
+        },
+        {
+          "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_1k.ktx2",
+          "bytes": 108491,
+          "sha256": "8d9bed5d6d4515329dde431285118fe8aaef6cd8265572bb9a31c29f845aab7c"
+        },
+        {
+          "file": "fish/dwarf-pencilfish/textures/dwarf-pencilfish_basecolor_2k.ktx2",
+          "bytes": 202797,
+          "sha256": "f30e7bf86d87fd35f67af7e6df61502247a94998b64573f1fb013d4c016e0b60"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.0292,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/dwarf-pencilfish.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          0.000622,
+          -0.003337
+        ],
+        "radius": 0.018887,
+        "albedo": {
+          "file": "fish/dwarf-pencilfish/impostor_albedo.ktx2",
+          "bytes": 117259,
+          "sha256": "45e33b16edd0b503c5bbab6baa5fdd8213fa370ce199231fa32b642004c05798",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/dwarf-pencilfish/impostor_normal.ktx2",
+          "bytes": 284136,
+          "sha256": "d88677cd41153c9e8ca69f6e44c9e0dad3fb93c4884d0934305f5253bb5be8ed",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "dwarf-pencilfish-male",
+      "kind": "fish",
+      "species": "dwarf-pencilfish",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-nannostomus-marginatus-male"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Male Nannostomus marginatus by D.W. (CC0), side view projected onto the loft with the photographed body fitted to the species proportions",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.00342,
+          -0.005146,
+          -0.021102
+        ],
+        "max": [
+          0.00342,
+          0.005665,
+          0.01396
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/dwarf-pencilfish-male/lod0.glb",
+          "bytes": 44144,
+          "sha256": "12b29f6e4ad8895784fc491bf65576e2e78d698001677ee707523f9bc2e05742",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/lod1.glb",
+          "bytes": 23432,
+          "sha256": "50ea2256372ccbb435950ec049f27368f4f9b19d1d56603368dad64d59a39c5a",
+          "triangles": 1727,
+          "vertices": 974
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/lod2.glb",
+          "bytes": 11860,
+          "sha256": "c252d5e8644ebd74da91328274bad47a1e87f60b8e7d7aa4e82543c20edbab2d",
+          "triangles": 648,
+          "vertices": 384
+        }
+      ],
+      "textures": [
+        {
+          "name": "dwarf-pencilfish-male_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/dwarf-pencilfish-male/textures/dwarf-pencilfish-male_basecolor_1k.ktx2",
+              "bytes": 108047,
+              "sha256": "30a18b9d707ed2a80dba41bfcc98b9ab97a1b2eadfca5f77b3319e901ecdcdae",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/dwarf-pencilfish-male/textures/dwarf-pencilfish-male_basecolor_2k.ktx2",
+              "bytes": 369809,
+              "sha256": "039fcfd812e436a24fd1dcd6b5fa8c6e44d47d70dd4f1ef003f3d10308480842",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/dwarf-pencilfish-male/impostor_albedo.ktx2",
+          "bytes": 111366,
+          "sha256": "225ff25d0b5b7a427e46c458d880d808d94ce1e6cf4a0fb6ba2fc1030deb0868"
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/impostor_normal.ktx2",
+          "bytes": 258451,
+          "sha256": "44d71dd0bff2b6e8727e9c8b17d0eeee414cc5dcd7ab8831bfcba82702199979"
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/lod0.glb",
+          "bytes": 44144,
+          "sha256": "12b29f6e4ad8895784fc491bf65576e2e78d698001677ee707523f9bc2e05742"
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/lod1.glb",
+          "bytes": 23432,
+          "sha256": "50ea2256372ccbb435950ec049f27368f4f9b19d1d56603368dad64d59a39c5a"
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/lod2.glb",
+          "bytes": 11860,
+          "sha256": "c252d5e8644ebd74da91328274bad47a1e87f60b8e7d7aa4e82543c20edbab2d"
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/textures/dwarf-pencilfish-male_basecolor_1k.ktx2",
+          "bytes": 108047,
+          "sha256": "30a18b9d707ed2a80dba41bfcc98b9ab97a1b2eadfca5f77b3319e901ecdcdae"
+        },
+        {
+          "file": "fish/dwarf-pencilfish-male/textures/dwarf-pencilfish-male_basecolor_2k.ktx2",
+          "bytes": 369809,
+          "sha256": "039fcfd812e436a24fd1dcd6b5fa8c6e44d47d70dd4f1ef003f3d10308480842"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.0292,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/dwarf-pencilfish-male.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          0.000259,
+          -0.003571
+        ],
+        "radius": 0.018867,
+        "albedo": {
+          "file": "fish/dwarf-pencilfish-male/impostor_albedo.ktx2",
+          "bytes": 111366,
+          "sha256": "225ff25d0b5b7a427e46c458d880d808d94ce1e6cf4a0fb6ba2fc1030deb0868",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/dwarf-pencilfish-male/impostor_normal.ktx2",
+          "bytes": 258451,
+          "sha256": "44d71dd0bff2b6e8727e9c8b17d0eeee414cc5dcd7ab8831bfcba82702199979",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "figure-8-puffer",
+      "kind": "fish",
+      "species": "figure-8-puffer",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Tetraodon biocellatus: no model and no allowed photo, so the body is a procedural loft and the colour map is painted from the species description alone",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.015214,
+          -0.012813,
+          -0.043409
+        ],
+        "max": [
+          0.015214,
+          0.014247,
+          0.023141
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/figure-8-puffer/lod0.glb",
+          "bytes": 36644,
+          "sha256": "23edabd37aa1bc9cbfaad4d72a41aa578899b7e11d2128564cd8daea09bbfac3",
+          "triangles": 3744,
+          "vertices": 2029
+        },
+        {
+          "file": "fish/figure-8-puffer/lod1.glb",
+          "bytes": 19760,
+          "sha256": "072354ca9eb2c7a09fad00f430fdd462791c9675a964b5bcc0b342e136710496",
+          "triangles": 1498,
+          "vertices": 800
+        },
+        {
+          "file": "fish/figure-8-puffer/lod2.glb",
+          "bytes": 10320,
+          "sha256": "308c6717f42fcd3609ceed7a3bb77eb83f9599ad9ef1691e2ad21f4813656ccd",
+          "triangles": 562,
+          "vertices": 311
+        }
+      ],
+      "textures": [
+        {
+          "name": "figure-8-puffer_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_1k.ktx2",
+              "bytes": 34231,
+              "sha256": "8bf10a84fdbd2320fe996b7e4ae0168d99cde946a53beba7102c083e3c793fb8",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_2k.ktx2",
+              "bytes": 34231,
+              "sha256": "8bf10a84fdbd2320fe996b7e4ae0168d99cde946a53beba7102c083e3c793fb8",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/figure-8-puffer/impostor_albedo.ktx2",
+          "bytes": 125143,
+          "sha256": "d4c4d8360c977d059f7c8dd69693448db1d063479e78274099ac1e72155a9c65"
+        },
+        {
+          "file": "fish/figure-8-puffer/impostor_normal.ktx2",
+          "bytes": 368694,
+          "sha256": "0d8ac2830ea22b865600998c7ab90cbccdea587e21d23f94956d3330548e48ec"
+        },
+        {
+          "file": "fish/figure-8-puffer/lod0.glb",
+          "bytes": 36644,
+          "sha256": "23edabd37aa1bc9cbfaad4d72a41aa578899b7e11d2128564cd8daea09bbfac3"
+        },
+        {
+          "file": "fish/figure-8-puffer/lod1.glb",
+          "bytes": 19760,
+          "sha256": "072354ca9eb2c7a09fad00f430fdd462791c9675a964b5bcc0b342e136710496"
+        },
+        {
+          "file": "fish/figure-8-puffer/lod2.glb",
+          "bytes": 10320,
+          "sha256": "308c6717f42fcd3609ceed7a3bb77eb83f9599ad9ef1691e2ad21f4813656ccd"
+        },
+        {
+          "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_1k.ktx2",
+          "bytes": 34231,
+          "sha256": "8bf10a84fdbd2320fe996b7e4ae0168d99cde946a53beba7102c083e3c793fb8"
+        },
+        {
+          "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_2k.ktx2",
+          "bytes": 34231,
+          "sha256": "8bf10a84fdbd2320fe996b7e4ae0168d99cde946a53beba7102c083e3c793fb8"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.055,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/figure-8-puffer.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0.000009,
+          0.000721,
+          -0.010134
+        ],
+        "radius": 0.036,
+        "albedo": {
+          "file": "fish/figure-8-puffer/impostor_albedo.ktx2",
+          "bytes": 125143,
+          "sha256": "d4c4d8360c977d059f7c8dd69693448db1d063479e78274099ac1e72155a9c65",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/figure-8-puffer/impostor_normal.ktx2",
+          "bytes": 368694,
+          "sha256": "0d8ac2830ea22b865600998c7ab90cbccdea587e21d23f94956d3330548e48ec",
           "codec": "uastc"
         }
       }
@@ -3713,6 +5323,166 @@
       }
     },
     {
+      "id": "orange-chromide",
+      "kind": "fish",
+      "species": "orange-chromide",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Etroplus maculatus: no model and no allowed photo, so the body is a procedural loft and the colour map is painted from the species description alone",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.015984,
+          -0.027878,
+          -0.057032
+        ],
+        "max": [
+          0.015984,
+          0.026693,
+          0.034468
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/orange-chromide/lod0.glb",
+          "bytes": 43192,
+          "sha256": "d0d73d0ef6af7e54cf231fb2b811c169937ca5450c57a303ad51e11874452b01",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/orange-chromide/lod1.glb",
+          "bytes": 22664,
+          "sha256": "1c617a4b963493af5005cbe61eee205d35cf9807713471c4788055858a494621",
+          "triangles": 1728,
+          "vertices": 956
+        },
+        {
+          "file": "fish/orange-chromide/lod2.glb",
+          "bytes": 11572,
+          "sha256": "ae118774d82e878a269b888aca70e419c33be4e557af2160b970a5584562c809",
+          "triangles": 647,
+          "vertices": 372
+        }
+      ],
+      "textures": [
+        {
+          "name": "orange-chromide_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/orange-chromide/textures/orange-chromide_basecolor_1k.ktx2",
+              "bytes": 47814,
+              "sha256": "e65c0c28db66d7ed9176c41472b961417c4b319320066c7ca8cf60e16b492784",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/orange-chromide/textures/orange-chromide_basecolor_2k.ktx2",
+              "bytes": 47814,
+              "sha256": "e65c0c28db66d7ed9176c41472b961417c4b319320066c7ca8cf60e16b492784",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/orange-chromide/impostor_albedo.ktx2",
+          "bytes": 130864,
+          "sha256": "87b0d30ac9a65c9140e1da6d46793a755b773280a9130f98584e5d557c31a2a6"
+        },
+        {
+          "file": "fish/orange-chromide/impostor_normal.ktx2",
+          "bytes": 402446,
+          "sha256": "16366f3eb5e1e24713ae2169ed355d117eb676db82eded4f10bf723454f44115"
+        },
+        {
+          "file": "fish/orange-chromide/lod0.glb",
+          "bytes": 43192,
+          "sha256": "d0d73d0ef6af7e54cf231fb2b811c169937ca5450c57a303ad51e11874452b01"
+        },
+        {
+          "file": "fish/orange-chromide/lod1.glb",
+          "bytes": 22664,
+          "sha256": "1c617a4b963493af5005cbe61eee205d35cf9807713471c4788055858a494621"
+        },
+        {
+          "file": "fish/orange-chromide/lod2.glb",
+          "bytes": 11572,
+          "sha256": "ae118774d82e878a269b888aca70e419c33be4e557af2160b970a5584562c809"
+        },
+        {
+          "file": "fish/orange-chromide/textures/orange-chromide_basecolor_1k.ktx2",
+          "bytes": 47814,
+          "sha256": "e65c0c28db66d7ed9176c41472b961417c4b319320066c7ca8cf60e16b492784"
+        },
+        {
+          "file": "fish/orange-chromide/textures/orange-chromide_basecolor_2k.ktx2",
+          "bytes": 47814,
+          "sha256": "e65c0c28db66d7ed9176c41472b961417c4b319320066c7ca8cf60e16b492784"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.075,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/orange-chromide.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0.000008,
+          -0.000592,
+          -0.011282
+        ],
+        "radius": 0.04932,
+        "albedo": {
+          "file": "fish/orange-chromide/impostor_albedo.ktx2",
+          "bytes": 130864,
+          "sha256": "87b0d30ac9a65c9140e1da6d46793a755b773280a9130f98584e5d557c31a2a6",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/orange-chromide/impostor_normal.ktx2",
+          "bytes": 402446,
+          "sha256": "16366f3eb5e1e24713ae2169ed355d117eb676db82eded4f10bf723454f44115",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
       "id": "pseudotropheus-demasoni",
       "kind": "fish",
       "species": "pseudotropheus-demasoni",
@@ -4060,6 +5830,326 @@
           "file": "fish/royal-gramma/impostor_normal.ktx2",
           "bytes": 367381,
           "sha256": "bdc20fd5a806678c7421a05913587ba787f38b4385ad7b3d1f1b4ad7437344a4",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "rummy-nose-tetra",
+      "kind": "fish",
+      "species": "rummy-nose-tetra",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Petitella bleheri (sold as rummy-nose) painted procedurally by eye from a CC-BY photograph (Donar Reiskoffer); no pixels are reused",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.004767,
+          -0.007741,
+          -0.028827
+        ],
+        "max": [
+          0.004767,
+          0.007649,
+          0.016533
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/rummy-nose-tetra/lod0.glb",
+          "bytes": 43708,
+          "sha256": "ff2c9d4c3ab3a5dbcb3733659b0ecb8cc0ae699b914b6e4b546c9831c3ea5dfb",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/rummy-nose-tetra/lod1.glb",
+          "bytes": 23292,
+          "sha256": "ac41f7710e566f4e8f909ea4c920c382e26305c0f0fafc104b9ca27c8634f097",
+          "triangles": 1728,
+          "vertices": 971
+        },
+        {
+          "file": "fish/rummy-nose-tetra/lod2.glb",
+          "bytes": 11640,
+          "sha256": "364793323b14bde46e442d2f5bea3a5b5fc4b6e7f06d8dfc28ed5bc834a351e2",
+          "triangles": 647,
+          "vertices": 381
+        }
+      ],
+      "textures": [
+        {
+          "name": "rummy-nose-tetra_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_1k.ktx2",
+              "bytes": 45121,
+              "sha256": "ee97f6bff0ece83f7ec0b3d70bf619f47bd5312ab77cf2c274a2a4e8bee075f4",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_2k.ktx2",
+              "bytes": 72524,
+              "sha256": "14214fa305e757d68b93a8720f86761aa6e8cf02b07da1b63a400dcf1ebf4861",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/rummy-nose-tetra/impostor_albedo.ktx2",
+          "bytes": 105579,
+          "sha256": "fd7237946bc691e7ca4e434e4a49f6c391e2dfa1ba283338a8546b62ecf4387f"
+        },
+        {
+          "file": "fish/rummy-nose-tetra/impostor_normal.ktx2",
+          "bytes": 267315,
+          "sha256": "41d645c81140062fdd8a2c4529aaa94e30531c03cee43ff05f4f1712217445f8"
+        },
+        {
+          "file": "fish/rummy-nose-tetra/lod0.glb",
+          "bytes": 43708,
+          "sha256": "ff2c9d4c3ab3a5dbcb3733659b0ecb8cc0ae699b914b6e4b546c9831c3ea5dfb"
+        },
+        {
+          "file": "fish/rummy-nose-tetra/lod1.glb",
+          "bytes": 23292,
+          "sha256": "ac41f7710e566f4e8f909ea4c920c382e26305c0f0fafc104b9ca27c8634f097"
+        },
+        {
+          "file": "fish/rummy-nose-tetra/lod2.glb",
+          "bytes": 11640,
+          "sha256": "364793323b14bde46e442d2f5bea3a5b5fc4b6e7f06d8dfc28ed5bc834a351e2"
+        },
+        {
+          "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_1k.ktx2",
+          "bytes": 45121,
+          "sha256": "ee97f6bff0ece83f7ec0b3d70bf619f47bd5312ab77cf2c274a2a4e8bee075f4"
+        },
+        {
+          "file": "fish/rummy-nose-tetra/textures/rummy-nose-tetra_basecolor_2k.ktx2",
+          "bytes": 72524,
+          "sha256": "14214fa305e757d68b93a8720f86761aa6e8cf02b07da1b63a400dcf1ebf4861"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.036,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/rummy-nose-tetra.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          -0.000046,
+          -0.006147
+        ],
+        "radius": 0.024411,
+        "albedo": {
+          "file": "fish/rummy-nose-tetra/impostor_albedo.ktx2",
+          "bytes": 105579,
+          "sha256": "fd7237946bc691e7ca4e434e4a49f6c391e2dfa1ba283338a8546b62ecf4387f",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/rummy-nose-tetra/impostor_normal.ktx2",
+          "bytes": 267315,
+          "sha256": "41d645c81140062fdd8a2c4529aaa94e30531c03cee43ff05f4f1712217445f8",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "silver-mono",
+      "kind": "fish",
+      "species": "silver-mono",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Monodactylus argenteus: no model exists, so the body is a procedural loft; colour map painted from the species pattern; the reference photos set colours and layout only, no photo pixels are reused (Shetty CC0, Khauv CC-BY-4.0 for reference)",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.025285,
+          -0.093762,
+          -0.114074
+        ],
+        "max": [
+          0.025285,
+          0.095233,
+          0.063726
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/silver-mono/lod0.glb",
+          "bytes": 43304,
+          "sha256": "591c5b36b517cb6cc911f179cdbc161a90fefe39640b743041ec3cfe0098c103",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/silver-mono/lod1.glb",
+          "bytes": 22908,
+          "sha256": "e2cca93d4075d02e72e5a9da875225ab2aac6d1439da5774d0dd3c0d84d818a5",
+          "triangles": 1728,
+          "vertices": 956
+        },
+        {
+          "file": "fish/silver-mono/lod2.glb",
+          "bytes": 11540,
+          "sha256": "588bc2def208998e65ffb04e469d9fa8ffe52b5cf169ef73cd5d26d277acd614",
+          "triangles": 648,
+          "vertices": 376
+        }
+      ],
+      "textures": [
+        {
+          "name": "silver-mono_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/silver-mono/textures/silver-mono_basecolor_1k.ktx2",
+              "bytes": 45278,
+              "sha256": "b0da786983b2b387aa927220255a808e10aa0bdb6cd0f7ce24e99b6490964cc8",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/silver-mono/textures/silver-mono_basecolor_2k.ktx2",
+              "bytes": 74342,
+              "sha256": "b758247fccb57a0d3011ca5c3dccc00c9045d86bab651ceaf8b4cbaedbdb3c7a",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/silver-mono/impostor_albedo.ktx2",
+          "bytes": 146740,
+          "sha256": "7fe326cf19f4aedb1cec415d386b5c0f97bd9c7b1ad821924ce01bb8dc3beffb"
+        },
+        {
+          "file": "fish/silver-mono/impostor_normal.ktx2",
+          "bytes": 442876,
+          "sha256": "1e8ff91a33b349c14fe408cc775491cbefd06ec269a28ac82216d016339ba2d7"
+        },
+        {
+          "file": "fish/silver-mono/lod0.glb",
+          "bytes": 43304,
+          "sha256": "591c5b36b517cb6cc911f179cdbc161a90fefe39640b743041ec3cfe0098c103"
+        },
+        {
+          "file": "fish/silver-mono/lod1.glb",
+          "bytes": 22908,
+          "sha256": "e2cca93d4075d02e72e5a9da875225ab2aac6d1439da5774d0dd3c0d84d818a5"
+        },
+        {
+          "file": "fish/silver-mono/lod2.glb",
+          "bytes": 11540,
+          "sha256": "588bc2def208998e65ffb04e469d9fa8ffe52b5cf169ef73cd5d26d277acd614"
+        },
+        {
+          "file": "fish/silver-mono/textures/silver-mono_basecolor_1k.ktx2",
+          "bytes": 45278,
+          "sha256": "b0da786983b2b387aa927220255a808e10aa0bdb6cd0f7ce24e99b6490964cc8"
+        },
+        {
+          "file": "fish/silver-mono/textures/silver-mono_basecolor_2k.ktx2",
+          "bytes": 74342,
+          "sha256": "b758247fccb57a0d3011ca5c3dccc00c9045d86bab651ceaf8b4cbaedbdb3c7a"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.14,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/silver-mono.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          0.000736,
+          -0.025174
+        ],
+        "radius": 0.1017,
+        "albedo": {
+          "file": "fish/silver-mono/impostor_albedo.ktx2",
+          "bytes": 146740,
+          "sha256": "7fe326cf19f4aedb1cec415d386b5c0f97bd9c7b1ad821924ce01bb8dc3beffb",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/silver-mono/impostor_normal.ktx2",
+          "bytes": 442876,
+          "sha256": "1e8ff91a33b349c14fe408cc775491cbefd06ec269a28ac82216d016339ba2d7",
           "codec": "uastc"
         }
       }
@@ -6804,6 +8894,474 @@
       ]
     },
     {
+      "id": "driftwood-scan-a",
+      "kind": "driftwood",
+      "origin": "model",
+      "sources": [
+        "sketchfab-07422ed7"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.45 m",
+        "LOD0 capped at 10000 triangles, LOD1 and LOD2 simplified further",
+        "textures capped at 1024 px (normal 512 px) and re-encoded to KTX2",
+        "23.8k-triangle scan decimated, 4096 px textures downscaled to 1024 px (normal 512 px) so the 2k tier carries no more detail than the 1k tier"
+      ],
+      "bounds": {
+        "min": [
+          -0.225,
+          0,
+          -0.130398
+        ],
+        "max": [
+          0.225,
+          0.128824,
+          0.130398
+        ]
+      },
+      "lods": [
+        {
+          "file": "driftwood/driftwood-scan-a/lod0.glb",
+          "bytes": 99516,
+          "sha256": "e3e263a6251fdc88da7845009c64765f284672a4b8d40295da3747b658e8b118",
+          "triangles": 10000,
+          "vertices": 5292
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/lod1.glb",
+          "bytes": 39096,
+          "sha256": "0f07aa94de7afd86fa365b27cda7a2d14f729af45eac6051b49d38095d7b9ef2",
+          "triangles": 3500,
+          "vertices": 1908
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/lod2.glb",
+          "bytes": 16176,
+          "sha256": "1066dc6bb596210b270eac2c5ed4b669051b15319269b9cc338d9d3f06cd6044",
+          "triangles": 1198,
+          "vertices": 681
+        }
+      ],
+      "textures": [
+        {
+          "name": "driftwood-scan-a_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_basecolor_1k.ktx2",
+              "bytes": 88028,
+              "sha256": "146012395a915be7b3e067e77d0a66b84199b080e8eda9c4dd3c7cb40f2dd134",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_basecolor_2k.ktx2",
+              "bytes": 88028,
+              "sha256": "146012395a915be7b3e067e77d0a66b84199b080e8eda9c4dd3c7cb40f2dd134",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "driftwood-scan-a_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_1k.ktx2",
+              "bytes": 18291,
+              "sha256": "b4a72e26f14dd1fdca4059ba70ed634c1fa9ad193aac2fb6476c4645056328d7",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_2k.ktx2",
+              "bytes": 97840,
+              "sha256": "7b93450f1857b0c70878e0fdb2e7f65e1231f87797d35eff62e18cc5178c51fe",
+              "size": 512,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "driftwood/driftwood-scan-a/lod0.glb",
+          "bytes": 99516,
+          "sha256": "e3e263a6251fdc88da7845009c64765f284672a4b8d40295da3747b658e8b118"
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/lod1.glb",
+          "bytes": 39096,
+          "sha256": "0f07aa94de7afd86fa365b27cda7a2d14f729af45eac6051b49d38095d7b9ef2"
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/lod2.glb",
+          "bytes": 16176,
+          "sha256": "1066dc6bb596210b270eac2c5ed4b669051b15319269b9cc338d9d3f06cd6044"
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_basecolor_1k.ktx2",
+          "bytes": 88028,
+          "sha256": "146012395a915be7b3e067e77d0a66b84199b080e8eda9c4dd3c7cb40f2dd134"
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_basecolor_2k.ktx2",
+          "bytes": 88028,
+          "sha256": "146012395a915be7b3e067e77d0a66b84199b080e8eda9c4dd3c7cb40f2dd134"
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_1k.ktx2",
+          "bytes": 18291,
+          "sha256": "b4a72e26f14dd1fdca4059ba70ed634c1fa9ad193aac2fb6476c4645056328d7"
+        },
+        {
+          "file": "driftwood/driftwood-scan-a/textures/driftwood-scan-a_normal_2k.ktx2",
+          "bytes": 97840,
+          "sha256": "7b93450f1857b0c70878e0fdb2e7f65e1231f87797d35eff62e18cc5178c51fe"
+        }
+      ]
+    },
+    {
+      "id": "driftwood-scan-b",
+      "kind": "driftwood",
+      "origin": "model",
+      "sources": [
+        "sketchfab-mJUa0nux"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.5 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "68k-triangle scan decimated, 4096 px base colour downscaled, no normal map"
+      ],
+      "bounds": {
+        "min": [
+          -0.25,
+          0,
+          -0.243977
+        ],
+        "max": [
+          0.25,
+          0.217749,
+          0.243977
+        ]
+      },
+      "lods": [
+        {
+          "file": "driftwood/driftwood-scan-b/lod0.glb",
+          "bytes": 151316,
+          "sha256": "0e14e37ad47e9b45eff05eb7b193c3311c747cf1a424ad89fcf221811642e9eb",
+          "triangles": 11999,
+          "vertices": 8205
+        },
+        {
+          "file": "driftwood/driftwood-scan-b/lod1.glb",
+          "bytes": 64252,
+          "sha256": "a2632c98b4db6947d8ab0f3c5a1c3eb5491dc86e8166e35572138bdaed28c5be",
+          "triangles": 4310,
+          "vertices": 3292
+        },
+        {
+          "file": "driftwood/driftwood-scan-b/lod2.glb",
+          "bytes": 29124,
+          "sha256": "abd731ed6f244fcd4daf57b36070ec24fbfba44d307e9c2baa80434c39eca310",
+          "triangles": 1609,
+          "vertices": 1379
+        }
+      ],
+      "textures": [
+        {
+          "name": "driftwood-scan-b_texture-0_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "driftwood/driftwood-scan-b/textures/driftwood-scan-b_texture-0_basecolor_1k.ktx2",
+              "bytes": 108353,
+              "sha256": "6d243692ed787a90aac4351b24f77ac7edb091b464f3bbd94a542ab214c6ebf6",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "driftwood/driftwood-scan-b/textures/driftwood-scan-b_texture-0_basecolor_2k.ktx2",
+              "bytes": 356036,
+              "sha256": "8c02132602322c904ecd532d15dde67701b86c09c2bd1a84b0b8ea4a4986913b",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "driftwood/driftwood-scan-b/lod0.glb",
+          "bytes": 151316,
+          "sha256": "0e14e37ad47e9b45eff05eb7b193c3311c747cf1a424ad89fcf221811642e9eb"
+        },
+        {
+          "file": "driftwood/driftwood-scan-b/lod1.glb",
+          "bytes": 64252,
+          "sha256": "a2632c98b4db6947d8ab0f3c5a1c3eb5491dc86e8166e35572138bdaed28c5be"
+        },
+        {
+          "file": "driftwood/driftwood-scan-b/lod2.glb",
+          "bytes": 29124,
+          "sha256": "abd731ed6f244fcd4daf57b36070ec24fbfba44d307e9c2baa80434c39eca310"
+        },
+        {
+          "file": "driftwood/driftwood-scan-b/textures/driftwood-scan-b_texture-0_basecolor_1k.ktx2",
+          "bytes": 108353,
+          "sha256": "6d243692ed787a90aac4351b24f77ac7edb091b464f3bbd94a542ab214c6ebf6"
+        },
+        {
+          "file": "driftwood/driftwood-scan-b/textures/driftwood-scan-b_texture-0_basecolor_2k.ktx2",
+          "bytes": 356036,
+          "sha256": "8c02132602322c904ecd532d15dde67701b86c09c2bd1a84b0b8ea4a4986913b"
+        }
+      ]
+    },
+    {
+      "id": "dry-branches",
+      "kind": "driftwood",
+      "origin": "model",
+      "sources": [
+        "polyhaven-dry_branches_medium_01"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "16.8k-triangle twig cluster decimated"
+      ],
+      "bounds": {
+        "min": [
+          -0.122328,
+          0,
+          -0.15
+        ],
+        "max": [
+          0.122328,
+          0.07874,
+          0.15
+        ]
+      },
+      "lods": [
+        {
+          "file": "driftwood/dry-branches/lod0.glb",
+          "bytes": 57952,
+          "sha256": "3fa49fc273d2609fecf61fd835ade2349f1beaef44ff58b7265fdd9663c74313",
+          "triangles": 3998,
+          "vertices": 2791
+        },
+        {
+          "file": "driftwood/dry-branches/lod1.glb",
+          "bytes": 26356,
+          "sha256": "332769865c89f558ff548b3265af5484ea4797f8c2603f4f188c47898623daf1",
+          "triangles": 1400,
+          "vertices": 1064
+        },
+        {
+          "file": "driftwood/dry-branches/lod2.glb",
+          "bytes": 14688,
+          "sha256": "2c72bc0367d233999686ad9d26008bc6623f31dd0fcee3c8d7d344e340d61bd4",
+          "triangles": 596,
+          "vertices": 454
+        }
+      ],
+      "textures": [
+        {
+          "name": "dry-branches_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "driftwood/dry-branches/textures/dry-branches_basecolor_1k.ktx2",
+              "bytes": 182536,
+              "sha256": "2d51325ef5e236ea720b2de0c2768267ddc80b67a348bfd4ef86b5a6960a975b",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "driftwood/dry-branches/textures/dry-branches_basecolor_2k.ktx2",
+              "bytes": 680626,
+              "sha256": "7b817af2fcb1c3b7aa1479bcf6f968bcd4efe8c53be708ddd42cdca83c28e704",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "dry-branches_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "driftwood/dry-branches/textures/dry-branches_normal_1k.ktx2",
+              "bytes": 110414,
+              "sha256": "b2268fb5be85bda548b94c47f87ee1ff228272afb80e669a4fa89127d2d30a43",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "driftwood/dry-branches/textures/dry-branches_normal_2k.ktx2",
+              "bytes": 1342800,
+              "sha256": "38c1a0029d5b5db585102db2d1eaae0884f2a9e6ee977e483d9691f6e4413e24",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "driftwood/dry-branches/lod0.glb",
+          "bytes": 57952,
+          "sha256": "3fa49fc273d2609fecf61fd835ade2349f1beaef44ff58b7265fdd9663c74313"
+        },
+        {
+          "file": "driftwood/dry-branches/lod1.glb",
+          "bytes": 26356,
+          "sha256": "332769865c89f558ff548b3265af5484ea4797f8c2603f4f188c47898623daf1"
+        },
+        {
+          "file": "driftwood/dry-branches/lod2.glb",
+          "bytes": 14688,
+          "sha256": "2c72bc0367d233999686ad9d26008bc6623f31dd0fcee3c8d7d344e340d61bd4"
+        },
+        {
+          "file": "driftwood/dry-branches/textures/dry-branches_basecolor_1k.ktx2",
+          "bytes": 182536,
+          "sha256": "2d51325ef5e236ea720b2de0c2768267ddc80b67a348bfd4ef86b5a6960a975b"
+        },
+        {
+          "file": "driftwood/dry-branches/textures/dry-branches_basecolor_2k.ktx2",
+          "bytes": 680626,
+          "sha256": "7b817af2fcb1c3b7aa1479bcf6f968bcd4efe8c53be708ddd42cdca83c28e704"
+        },
+        {
+          "file": "driftwood/dry-branches/textures/dry-branches_normal_1k.ktx2",
+          "bytes": 110414,
+          "sha256": "b2268fb5be85bda548b94c47f87ee1ff228272afb80e669a4fa89127d2d30a43"
+        },
+        {
+          "file": "driftwood/dry-branches/textures/dry-branches_normal_2k.ktx2",
+          "bytes": 1342800,
+          "sha256": "38c1a0029d5b5db585102db2d1eaae0884f2a9e6ee977e483d9691f6e4413e24"
+        }
+      ]
+    },
+    {
+      "id": "mangrove-stump",
+      "kind": "driftwood",
+      "origin": "model",
+      "sources": [
+        "sketchfab-a221abc9"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.28 m",
+        "LOD0 capped at 18000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "scan ground slab clipped",
+        "decimated from 360k triangles",
+        "scaled to a 28 cm stump"
+      ],
+      "bounds": {
+        "min": [
+          -0.082357,
+          0,
+          -0.081255
+        ],
+        "max": [
+          0.082357,
+          0.28,
+          0.081255
+        ]
+      },
+      "lods": [
+        {
+          "file": "driftwood/mangrove-stump/lod0.glb",
+          "bytes": 278880,
+          "sha256": "296c7705a28736d16c41d4e835cfdd54ca3982dfe38e9b64089a7b9c2d3881fe",
+          "triangles": 17985,
+          "vertices": 14949
+        },
+        {
+          "file": "driftwood/mangrove-stump/lod1.glb",
+          "bytes": 115752,
+          "sha256": "8e448f69ebd8ad79f1b617d683891e9bd88668b2d634c4f116d39daaa8cb6aa1",
+          "triangles": 6296,
+          "vertices": 5786
+        },
+        {
+          "file": "driftwood/mangrove-stump/lod2.glb",
+          "bytes": 49564,
+          "sha256": "4c5d6f877eb2767997951483cb8ee7274ad0af1de940b4a9a3471e3c9ab207e9",
+          "triangles": 2233,
+          "vertices": 2213
+        }
+      ],
+      "textures": [
+        {
+          "name": "mangrove-stump_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "driftwood/mangrove-stump/textures/mangrove-stump_basecolor_1k.ktx2",
+              "bytes": 150825,
+              "sha256": "7b4fd40a7613645eb1c9b71cc4a6e352a91ca0efd8dc5b8e745a762bf95bcac1",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "driftwood/mangrove-stump/textures/mangrove-stump_basecolor_2k.ktx2",
+              "bytes": 504746,
+              "sha256": "8ef2023e53e5fd965ab335c7a869666db027cfac2a3a1e227c03c4c374a8a7ee",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "driftwood/mangrove-stump/lod0.glb",
+          "bytes": 278880,
+          "sha256": "296c7705a28736d16c41d4e835cfdd54ca3982dfe38e9b64089a7b9c2d3881fe"
+        },
+        {
+          "file": "driftwood/mangrove-stump/lod1.glb",
+          "bytes": 115752,
+          "sha256": "8e448f69ebd8ad79f1b617d683891e9bd88668b2d634c4f116d39daaa8cb6aa1"
+        },
+        {
+          "file": "driftwood/mangrove-stump/lod2.glb",
+          "bytes": 49564,
+          "sha256": "4c5d6f877eb2767997951483cb8ee7274ad0af1de940b4a9a3471e3c9ab207e9"
+        },
+        {
+          "file": "driftwood/mangrove-stump/textures/mangrove-stump_basecolor_1k.ktx2",
+          "bytes": 150825,
+          "sha256": "7b4fd40a7613645eb1c9b71cc4a6e352a91ca0efd8dc5b8e745a762bf95bcac1"
+        },
+        {
+          "file": "driftwood/mangrove-stump/textures/mangrove-stump_basecolor_2k.ktx2",
+          "bytes": 504746,
+          "sha256": "8ef2023e53e5fd965ab335c7a869666db027cfac2a3a1e227c03c4c374a8a7ee"
+        }
+      ]
+    },
+    {
       "id": "boulder-01",
       "kind": "rock",
       "origin": "model",
@@ -8124,6 +10682,242 @@
       ]
     },
     {
+      "id": "mangrove-prop-roots",
+      "kind": "decor",
+      "origin": "model",
+      "sources": [
+        "sketchfab-c32d977c"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "scaled to a 30 cm prop-root cluster",
+        "origin moved to the base centre"
+      ],
+      "bounds": {
+        "min": [
+          -0.085791,
+          0,
+          -0.068396
+        ],
+        "max": [
+          0.085791,
+          0.3,
+          0.068396
+        ]
+      },
+      "lods": [
+        {
+          "file": "decor/mangrove-prop-roots/lod0.glb",
+          "bytes": 58584,
+          "sha256": "38ebbf7107e186928aa741f02f77cc40c190297f8a35c496ca14f42191c81f0b",
+          "triangles": 3926,
+          "vertices": 2946
+        },
+        {
+          "file": "decor/mangrove-prop-roots/lod1.glb",
+          "bytes": 26808,
+          "sha256": "5be75cd59ff5139f4e9ea1a2b8aede442995848f893d0a44eb8819d76cb8c359",
+          "triangles": 1374,
+          "vertices": 1235
+        },
+        {
+          "file": "decor/mangrove-prop-roots/lod2.glb",
+          "bytes": 11700,
+          "sha256": "c633b76a7f5e9adf3ea6c1fc58cada1bf6929ebaf521d075d743311c9870ba37",
+          "triangles": 456,
+          "vertices": 444
+        }
+      ],
+      "textures": [
+        {
+          "name": "mangrove-prop-roots_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_basecolor_1k.ktx2",
+              "bytes": 171138,
+              "sha256": "9846b6428e1165186be070efc15c676c240d9113f43e81d8fd464a8763a95162",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_basecolor_2k.ktx2",
+              "bytes": 620035,
+              "sha256": "064115c1fbfe91c75196ca30ea73c6c998873e0b0c0701b855674faab4769ab7",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "mangrove-prop-roots_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_1k.ktx2",
+              "bytes": 108123,
+              "sha256": "87e46a6f23db32e2aa65c125fb84ececf3c04126919fe96fe286e6e14a2bf573",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_2k.ktx2",
+              "bytes": 336255,
+              "sha256": "5a45dc710c062672e4debed0ee5f700fc3e7d2e24b001c4b32d0d73e7b954e45",
+              "size": 512,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "decor/mangrove-prop-roots/lod0.glb",
+          "bytes": 58584,
+          "sha256": "38ebbf7107e186928aa741f02f77cc40c190297f8a35c496ca14f42191c81f0b"
+        },
+        {
+          "file": "decor/mangrove-prop-roots/lod1.glb",
+          "bytes": 26808,
+          "sha256": "5be75cd59ff5139f4e9ea1a2b8aede442995848f893d0a44eb8819d76cb8c359"
+        },
+        {
+          "file": "decor/mangrove-prop-roots/lod2.glb",
+          "bytes": 11700,
+          "sha256": "c633b76a7f5e9adf3ea6c1fc58cada1bf6929ebaf521d075d743311c9870ba37"
+        },
+        {
+          "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_basecolor_1k.ktx2",
+          "bytes": 171138,
+          "sha256": "9846b6428e1165186be070efc15c676c240d9113f43e81d8fd464a8763a95162"
+        },
+        {
+          "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_basecolor_2k.ktx2",
+          "bytes": 620035,
+          "sha256": "064115c1fbfe91c75196ca30ea73c6c998873e0b0c0701b855674faab4769ab7"
+        },
+        {
+          "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_1k.ktx2",
+          "bytes": 108123,
+          "sha256": "87e46a6f23db32e2aa65c125fb84ececf3c04126919fe96fe286e6e14a2bf573"
+        },
+        {
+          "file": "decor/mangrove-prop-roots/textures/mangrove-prop-roots_normal_2k.ktx2",
+          "bytes": 336255,
+          "sha256": "5a45dc710c062672e4debed0ee5f700fc3e7d2e24b001c4b32d0d73e7b954e45"
+        }
+      ]
+    },
+    {
+      "id": "mangrove-propagule",
+      "kind": "decor",
+      "origin": "model",
+      "sources": [
+        "sketchfab-2b81ff20"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.2 m",
+        "LOD0 capped at 2800 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "single propagule LOD variant kept, leaves and slate removed",
+        "decimated from 13.7k triangles",
+        "scaled to a 20 cm propagule"
+      ],
+      "bounds": {
+        "min": [
+          -0.018941,
+          0,
+          -0.016845
+        ],
+        "max": [
+          0.018941,
+          0.2,
+          0.016845
+        ]
+      },
+      "lods": [
+        {
+          "file": "decor/mangrove-propagule/lod0.glb",
+          "bytes": 95128,
+          "sha256": "e383406129a1cf8919f7bd6d94cd9ce62d8e356b89dfa8def1bbeca1a2046ed7",
+          "triangles": 2799,
+          "vertices": 5147
+        },
+        {
+          "file": "decor/mangrove-propagule/lod1.glb",
+          "bytes": 35704,
+          "sha256": "a033af39b6275f3db06fd849cc1da67b5ef68c055d43fc6694f7987d9fb68148",
+          "triangles": 980,
+          "vertices": 1792
+        },
+        {
+          "file": "decor/mangrove-propagule/lod2.glb",
+          "bytes": 14196,
+          "sha256": "6f9617aaac719aaee61283fbd6e043140acb2448453fec3dfc3cc9fd46f70938",
+          "triangles": 336,
+          "vertices": 611
+        }
+      ],
+      "textures": [
+        {
+          "name": "mangrove-propagule_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "decor/mangrove-propagule/textures/mangrove-propagule_basecolor_1k.ktx2",
+              "bytes": 140756,
+              "sha256": "046fe7510d6910c4e0e4058790ce00f2e1744062136ffe565179276433012e9a",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "decor/mangrove-propagule/textures/mangrove-propagule_basecolor_2k.ktx2",
+              "bytes": 448815,
+              "sha256": "aea6d0bec91d1b416454bd36d7ffd254bcf79b3fae12eef9aa97fcba137369c9",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "decor/mangrove-propagule/lod0.glb",
+          "bytes": 95128,
+          "sha256": "e383406129a1cf8919f7bd6d94cd9ce62d8e356b89dfa8def1bbeca1a2046ed7"
+        },
+        {
+          "file": "decor/mangrove-propagule/lod1.glb",
+          "bytes": 35704,
+          "sha256": "a033af39b6275f3db06fd849cc1da67b5ef68c055d43fc6694f7987d9fb68148"
+        },
+        {
+          "file": "decor/mangrove-propagule/lod2.glb",
+          "bytes": 14196,
+          "sha256": "6f9617aaac719aaee61283fbd6e043140acb2448453fec3dfc3cc9fd46f70938"
+        },
+        {
+          "file": "decor/mangrove-propagule/textures/mangrove-propagule_basecolor_1k.ktx2",
+          "bytes": 140756,
+          "sha256": "046fe7510d6910c4e0e4058790ce00f2e1744062136ffe565179276433012e9a"
+        },
+        {
+          "file": "decor/mangrove-propagule/textures/mangrove-propagule_basecolor_2k.ktx2",
+          "bytes": 448815,
+          "sha256": "aea6d0bec91d1b416454bd36d7ffd254bcf79b3fae12eef9aa97fcba137369c9"
+        }
+      ]
+    },
+    {
       "id": "neothauma-shell",
       "kind": "decor",
       "origin": "model",
@@ -8252,6 +11046,215 @@
           "file": "decor/neothauma-shell/textures/neothauma-shell_normal_2k.ktx2",
           "bytes": 285919,
           "sha256": "29e4a5a642d01f10d1db6e4fd07ba5657117f659f2091bf0ff6b0459d245bad1"
+        }
+      ]
+    },
+    {
+      "id": "oak-leaf-card",
+      "kind": "decor",
+      "origin": "procedural",
+      "sources": [
+        "ambientcg-LeafSet030"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "flat 0.3 m card carrying the leaf set, colour map and opacity map merged into one alpha-cutout texture",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.15,
+          0,
+          -0.15
+        ],
+        "max": [
+          0.15,
+          0,
+          0.15
+        ]
+      },
+      "lods": [
+        {
+          "file": "decor/oak-leaf-card/lod0.glb",
+          "bytes": 2756,
+          "sha256": "9640cdb171909f3eb9a1fbb7333fc99e41ccf0d4e77c26affc3682fd5e3877bf",
+          "triangles": 32,
+          "vertices": 25
+        },
+        {
+          "file": "decor/oak-leaf-card/lod1.glb",
+          "bytes": 2572,
+          "sha256": "7cbdc88fcf2c9b28267e19059dbe87c02f85592ebe14f0d5d6b10a3cb2f5b322",
+          "triangles": 8,
+          "vertices": 7
+        },
+        {
+          "file": "decor/oak-leaf-card/lod2.glb",
+          "bytes": 2532,
+          "sha256": "0d9ae678dc924d6b8995dbba6d90e7fb5667c50aea7452ea82a02c47d218181f",
+          "triangles": 2,
+          "vertices": 4
+        }
+      ],
+      "textures": [
+        {
+          "name": "oak-leaf-card_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "decor/oak-leaf-card/textures/oak-leaf-card_basecolor_1k.ktx2",
+              "bytes": 98776,
+              "sha256": "d11cbee507b4cdb67a6ea16400f99a89eb230c205d81bbb60ce33c6dc6050c28",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "decor/oak-leaf-card/textures/oak-leaf-card_basecolor_2k.ktx2",
+              "bytes": 409513,
+              "sha256": "f887a6f2840a6a802d3ca85bf811452223144997286c8613aa989b4906629440",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "decor/oak-leaf-card/lod0.glb",
+          "bytes": 2756,
+          "sha256": "9640cdb171909f3eb9a1fbb7333fc99e41ccf0d4e77c26affc3682fd5e3877bf"
+        },
+        {
+          "file": "decor/oak-leaf-card/lod1.glb",
+          "bytes": 2572,
+          "sha256": "7cbdc88fcf2c9b28267e19059dbe87c02f85592ebe14f0d5d6b10a3cb2f5b322"
+        },
+        {
+          "file": "decor/oak-leaf-card/lod2.glb",
+          "bytes": 2532,
+          "sha256": "0d9ae678dc924d6b8995dbba6d90e7fb5667c50aea7452ea82a02c47d218181f"
+        },
+        {
+          "file": "decor/oak-leaf-card/textures/oak-leaf-card_basecolor_1k.ktx2",
+          "bytes": 98776,
+          "sha256": "d11cbee507b4cdb67a6ea16400f99a89eb230c205d81bbb60ce33c6dc6050c28"
+        },
+        {
+          "file": "decor/oak-leaf-card/textures/oak-leaf-card_basecolor_2k.ktx2",
+          "bytes": 409513,
+          "sha256": "f887a6f2840a6a802d3ca85bf811452223144997286c8613aa989b4906629440"
+        }
+      ]
+    },
+    {
+      "id": "brown-mud-03",
+      "kind": "substrate",
+      "origin": "texture-set",
+      "sources": [
+        "polyhaven-brown_mud_03"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)",
+        "displacement and roughness maps not shipped"
+      ],
+      "lods": [],
+      "textures": [
+        {
+          "name": "brown-mud-03_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "substrate/brown-mud-03/textures/brown-mud-03_basecolor_1k.ktx2",
+              "bytes": 175780,
+              "sha256": "7dac303b53e300a48006e715fe9a9d65d4e948ee162add456d9fb212cd18800b",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/brown-mud-03/textures/brown-mud-03_basecolor_2k.ktx2",
+              "bytes": 680209,
+              "sha256": "a1f51503273dd6d51d1c2130c89ee656e5f43213a1bdbd029ec757527993bcb0",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "brown-mud-03_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/brown-mud-03/textures/brown-mud-03_normal_1k.ktx2",
+              "bytes": 112962,
+              "sha256": "a71dff1942a376ee3a1a5de034e55f93d9a4cdbaeb3ee67bc82082e2441d7826",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/brown-mud-03/textures/brown-mud-03_normal_2k.ktx2",
+              "bytes": 1363177,
+              "sha256": "3b94008063286d75901a302ea32026d798efd1fd9880b185c2655dfa8b428cdd",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        },
+        {
+          "name": "brown-mud-03_arm",
+          "role": "occlusionRoughnessMetal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/brown-mud-03/textures/brown-mud-03_arm_1k.ktx2",
+              "bytes": 168346,
+              "sha256": "30423e35c0af4964120389a58f87e8da2a5a4386c9e56c1b3de2254a999801fc",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/brown-mud-03/textures/brown-mud-03_arm_2k.ktx2",
+              "bytes": 712966,
+              "sha256": "6df83f45c4c0064d72e0baad3c3f45fc590bb6dfa51ac67dc23bcbe2b89a2d29",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "substrate/brown-mud-03/textures/brown-mud-03_arm_1k.ktx2",
+          "bytes": 168346,
+          "sha256": "30423e35c0af4964120389a58f87e8da2a5a4386c9e56c1b3de2254a999801fc"
+        },
+        {
+          "file": "substrate/brown-mud-03/textures/brown-mud-03_arm_2k.ktx2",
+          "bytes": 712966,
+          "sha256": "6df83f45c4c0064d72e0baad3c3f45fc590bb6dfa51ac67dc23bcbe2b89a2d29"
+        },
+        {
+          "file": "substrate/brown-mud-03/textures/brown-mud-03_basecolor_1k.ktx2",
+          "bytes": 175780,
+          "sha256": "7dac303b53e300a48006e715fe9a9d65d4e948ee162add456d9fb212cd18800b"
+        },
+        {
+          "file": "substrate/brown-mud-03/textures/brown-mud-03_basecolor_2k.ktx2",
+          "bytes": 680209,
+          "sha256": "a1f51503273dd6d51d1c2130c89ee656e5f43213a1bdbd029ec757527993bcb0"
+        },
+        {
+          "file": "substrate/brown-mud-03/textures/brown-mud-03_normal_1k.ktx2",
+          "bytes": 112962,
+          "sha256": "a71dff1942a376ee3a1a5de034e55f93d9a4cdbaeb3ee67bc82082e2441d7826"
+        },
+        {
+          "file": "substrate/brown-mud-03/textures/brown-mud-03_normal_2k.ktx2",
+          "bytes": 1363177,
+          "sha256": "3b94008063286d75901a302ea32026d798efd1fd9880b185c2655dfa8b428cdd"
         }
       ]
     },
@@ -8585,6 +11588,228 @@
           "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_2k.ktx2",
           "bytes": 1356319,
           "sha256": "00fbae6d20c23b0dd118e0dfeebe4a41fab3a511ebd9a2ba8caf96de95c3e544"
+        }
+      ]
+    },
+    {
+      "id": "dry-decay-leaves",
+      "kind": "substrate",
+      "origin": "texture-set",
+      "sources": [
+        "polyhaven-dry_decay_leaves"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)",
+        "displacement and roughness maps not shipped"
+      ],
+      "lods": [],
+      "textures": [
+        {
+          "name": "dry-decay-leaves_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_basecolor_1k.ktx2",
+              "bytes": 169998,
+              "sha256": "72820d8d762bf683a9afb735b7a45e784cee5447d02e3da098229a1ac017a80d",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_basecolor_2k.ktx2",
+              "bytes": 641269,
+              "sha256": "762f7d125aa10322760cf9dd183c949289c6257516a0fb7e48db72b8a3526f6b",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "dry-decay-leaves_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_normal_1k.ktx2",
+              "bytes": 105176,
+              "sha256": "db2ba2d265bb2e44df6d6bfe701345f1ea36490d2c2da211c78d80deabfe29ef",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_normal_2k.ktx2",
+              "bytes": 1348500,
+              "sha256": "b1155fdeb51d544f4eb937a9d5ff7f174f9a45935c0c4cc575f657a943d56f98",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        },
+        {
+          "name": "dry-decay-leaves_arm",
+          "role": "occlusionRoughnessMetal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_arm_1k.ktx2",
+              "bytes": 136753,
+              "sha256": "87dece9bb55537182f30f3f7cc26a684695801924988bbb7e310e90b8637267c",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_arm_2k.ktx2",
+              "bytes": 532805,
+              "sha256": "6663c0aeba44e38322a4e2a6957cacdfcb1e01dca42a2d95ef7feed437e8fe18",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_arm_1k.ktx2",
+          "bytes": 136753,
+          "sha256": "87dece9bb55537182f30f3f7cc26a684695801924988bbb7e310e90b8637267c"
+        },
+        {
+          "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_arm_2k.ktx2",
+          "bytes": 532805,
+          "sha256": "6663c0aeba44e38322a4e2a6957cacdfcb1e01dca42a2d95ef7feed437e8fe18"
+        },
+        {
+          "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_basecolor_1k.ktx2",
+          "bytes": 169998,
+          "sha256": "72820d8d762bf683a9afb735b7a45e784cee5447d02e3da098229a1ac017a80d"
+        },
+        {
+          "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_basecolor_2k.ktx2",
+          "bytes": 641269,
+          "sha256": "762f7d125aa10322760cf9dd183c949289c6257516a0fb7e48db72b8a3526f6b"
+        },
+        {
+          "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_normal_1k.ktx2",
+          "bytes": 105176,
+          "sha256": "db2ba2d265bb2e44df6d6bfe701345f1ea36490d2c2da211c78d80deabfe29ef"
+        },
+        {
+          "file": "substrate/dry-decay-leaves/textures/dry-decay-leaves_normal_2k.ktx2",
+          "bytes": 1348500,
+          "sha256": "b1155fdeb51d544f4eb937a9d5ff7f174f9a45935c0c4cc575f657a943d56f98"
+        }
+      ]
+    },
+    {
+      "id": "leaf-litter",
+      "kind": "substrate",
+      "origin": "texture-set",
+      "sources": [
+        "ambientcg-ScatteredLeaves009"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)",
+        "ARM packed from the separate occlusion and roughness maps; displacement map not shipped"
+      ],
+      "lods": [],
+      "textures": [
+        {
+          "name": "leaf-litter_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "substrate/leaf-litter/textures/leaf-litter_basecolor_1k.ktx2",
+              "bytes": 199125,
+              "sha256": "d0e2db2c65d5f5afde4747fcdc2923011222e2ab476db1c0a7bd61f2d811140d",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/leaf-litter/textures/leaf-litter_basecolor_2k.ktx2",
+              "bytes": 793965,
+              "sha256": "ff84619abac414e6402330c1321f9909a4ae96cf3f68fdd6e59a11a4ad9d9d1c",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "leaf-litter_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/leaf-litter/textures/leaf-litter_normal_1k.ktx2",
+              "bytes": 104629,
+              "sha256": "96d0858399467b0fe0988fdc5135af3734defaa9a0da63c49089daf26459118d",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/leaf-litter/textures/leaf-litter_normal_2k.ktx2",
+              "bytes": 1305688,
+              "sha256": "b5a1383ecc29157df57ba745ba1cbe17bc864c6a63a5d02716910cf1742f6a75",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        },
+        {
+          "name": "leaf-litter_arm",
+          "role": "occlusionRoughnessMetal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/leaf-litter/textures/leaf-litter_arm_1k.ktx2",
+              "bytes": 142622,
+              "sha256": "2101da7de66074e97ee10a8d970346041d1f2ddfeb63571d3edc9edc75069d7e",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "substrate/leaf-litter/textures/leaf-litter_arm_2k.ktx2",
+              "bytes": 566242,
+              "sha256": "d6edaca0cd972dd7ba841402ba209b8b340ad6c320693a2742144ccc39328088",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "substrate/leaf-litter/textures/leaf-litter_arm_1k.ktx2",
+          "bytes": 142622,
+          "sha256": "2101da7de66074e97ee10a8d970346041d1f2ddfeb63571d3edc9edc75069d7e"
+        },
+        {
+          "file": "substrate/leaf-litter/textures/leaf-litter_arm_2k.ktx2",
+          "bytes": 566242,
+          "sha256": "d6edaca0cd972dd7ba841402ba209b8b340ad6c320693a2742144ccc39328088"
+        },
+        {
+          "file": "substrate/leaf-litter/textures/leaf-litter_basecolor_1k.ktx2",
+          "bytes": 199125,
+          "sha256": "d0e2db2c65d5f5afde4747fcdc2923011222e2ab476db1c0a7bd61f2d811140d"
+        },
+        {
+          "file": "substrate/leaf-litter/textures/leaf-litter_basecolor_2k.ktx2",
+          "bytes": 793965,
+          "sha256": "ff84619abac414e6402330c1321f9909a4ae96cf3f68fdd6e59a11a4ad9d9d1c"
+        },
+        {
+          "file": "substrate/leaf-litter/textures/leaf-litter_normal_1k.ktx2",
+          "bytes": 104629,
+          "sha256": "96d0858399467b0fe0988fdc5135af3734defaa9a0da63c49089daf26459118d"
+        },
+        {
+          "file": "substrate/leaf-litter/textures/leaf-litter_normal_2k.ktx2",
+          "bytes": 1305688,
+          "sha256": "b5a1383ecc29157df57ba745ba1cbe17bc864c6a63a5d02716910cf1742f6a75"
         }
       ]
     },

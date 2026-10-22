@@ -8,7 +8,15 @@ import { SHRIMP_RECIPES, buildShrimp } from './shrimp.ts';
 import { NERITE_RECIPES, buildNerite } from './nerite.ts';
 import { HERMIT_RECIPES, buildHermit } from './hermit.ts';
 import { buildEnvironment, buildHdri, buildSubstrate } from './environment.ts';
+import { BLACKWATER_FISH_RECIPES } from './blackwater-fish.ts';
+import { LEAF_CARD_RECIPES, buildLeafCard } from './leaf-card.ts';
 import { LOFT_FISH_RECIPES, buildLoftFish } from './loft-fish.ts';
+import {
+  MANGROVE_ENVIRONMENT_RECIPES,
+  MANGROVE_FISH_RECIPES,
+  MANGROVE_LOFT_RECIPES,
+  MANGROVE_SUBSTRATE_RECIPES,
+} from './mangrove.ts';
 import {
   CUSTOM_ATTRIBUTES_NOTE,
   TEXTURE_VARIANTS_NOTE,
@@ -72,6 +80,11 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       id: recipe.id,
       run: (ctx: FishContext) => buildSourceFish(recipe, ctx),
     })),
+    ...MANGROVE_FISH_RECIPES.map((recipe) => ({
+      kind: 'fish' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildSourceFish(recipe, ctx),
+    })),
     ...SHRIMP_RECIPES.map((recipe) => ({
       kind: 'shrimp' as const,
       id: recipe.id,
@@ -93,11 +106,26 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       id: recipe.id,
       run: (ctx: FishContext) => buildEnvironment(recipe, ctx),
     })),
+    ...LEAF_CARD_RECIPES.map((recipe) => ({
+      kind: 'decor' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildLeafCard(recipe, ctx),
+    })),
     ...ROCK_PILE_RECIPES.map((recipe) => ({
       kind: 'rock' as const,
       id: recipe.id,
       run: (ctx: FishContext) =>
         buildRockPile(recipe, new Map(ENVIRONMENT_RECIPES.map((r) => [r.id, r])), ctx),
+    })),
+    ...MANGROVE_ENVIRONMENT_RECIPES.map((recipe) => ({
+      kind: recipe.kind,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildEnvironment(recipe, ctx),
+    })),
+    ...MANGROVE_SUBSTRATE_RECIPES.map((recipe) => ({
+      kind: 'substrate' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildSubstrate(recipe, ctx),
     })),
     ...SUBSTRATE_RECIPES.map((recipe) => ({
       kind: 'substrate' as const,
@@ -109,7 +137,12 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       id: recipe.id,
       run: (ctx: FishContext) => buildHdri(recipe, ctx),
     })),
-    ...LOFT_FISH_RECIPES.map((recipe) => ({
+    ...[...LOFT_FISH_RECIPES, ...BLACKWATER_FISH_RECIPES].map((recipe) => ({
+      kind: 'fish' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
+    })),
+    ...MANGROVE_LOFT_RECIPES.map((recipe) => ({
       kind: 'fish' as const,
       id: recipe.id,
       run: (ctx: FishContext) => buildLoftFish(recipe, ctx),

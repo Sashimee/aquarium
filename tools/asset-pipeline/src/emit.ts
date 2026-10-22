@@ -34,6 +34,7 @@ export interface LodPlan {
   ratios: [number, number, number];
   minTriangles: number;
   keepSeams?: boolean;
+  sloppyFallback?: boolean;
   /** Runs on each primitive of LOD `level` before simplification. */
   prepare?: (prim: Primitive, level: number) => void;
   /** Runs on each primitive of LOD `level` after simplification. */
@@ -266,6 +267,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
           ratio: plan.ratios[level]!,
           minTriangles: plan.minTriangles,
           ...(plan.keepSeams ? { keepSeams: true } : {}),
+          ...(plan.sloppyFallback ? { sloppyFallback: true } : {}),
         });
         plan.finish?.(prim, level);
       }

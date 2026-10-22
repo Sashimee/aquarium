@@ -134,7 +134,7 @@ describe('pickBackgroundId', () => {
   });
 
   it('gives no picture to a biome that has none yet', () => {
-    expect(pickBackgroundId('cichlid', null)).toBeNull();
+    expect(pickBackgroundId('blackwater', null)).toBeNull();
     expect(pickBackgroundId('mangrove', STREAM)).toBeNull();
   });
 });
@@ -326,7 +326,7 @@ describe('TankBackground', () => {
     const coral = loader.land(file(CORAL, 'high'));
     await shown;
     const coralGone = disposed(coral);
-    await background.show('cichlid', null);
+    await background.show('blackwater', null);
     expect(background.id).toBeNull();
     expect(background.map.value).toBe(film);
     expect(coralGone()).toBe(true);

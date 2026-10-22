@@ -1,7 +1,7 @@
 import type {
   AwaySummary,
   BackgroundId,
-  PlayableBiome,
+  CreatableBiome,
   CareAction,
   ConflictReason,
   DecorLayout,
@@ -83,6 +83,7 @@ export interface ShareOutcome {
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
+const TRIM_KEY_TTL_MS = 10 * 60_000;
 
 export class TankSession {
   private state: SessionState = INITIAL_STATE;
@@ -107,11 +108,13 @@ export class TankSession {
   private readonly now: () => number;
   private readonly sleep: Sleep;
   private readonly keys: IntentKeys;
+  private readonly trimKeys: IntentKeys;
 
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
     this.keys = new IntentKeys(deps.newKey);
+    this.trimKeys = new IntentKeys(deps.newKey, TRIM_KEY_TTL_MS, this.now);
     const saveStatus = new SaveStatusMerge((status, message, source, reported) =>
       deps.interaction.emit('decor:save-state', { status, message, source, reported }),
     );
@@ -350,7 +353,7 @@ export class TankSession {
 
   async createTank(
     name: string,
-    biome: PlayableBiome,
+    biome: CreatableBiome,
     size: TankSize = DEFAULT_TANK_SIZE,
     quarantine = false,
   ): Promise<boolean> {
@@ -506,7 +509,7 @@ export class TankSession {
     const label = plantLabel(plant.assetId);
     const gen = this.loadId;
     const intent = `trim:${tank.id}:${plantKey}:${size}`;
-    const key = this.keys.keyFor(intent);
+    const key = this.trimKeys.keyFor(intent);
     outcome.ok = await this.perform(async () => {
       let next;
       try {
@@ -517,12 +520,15 @@ export class TankSession {
         });
       } catch (error) {
         const refusal = trimRefusalText(error, label);
-        if (!outcomeUnknown(error)) this.keys.settle(intent);
+        if (!outcomeUnknown(error)) this.trimKeys.settle(intent);
         if (refusal === null) throw error;
         outcome.refusal = refusal;
+        if (error instanceof ApiRequestError && error.reason === 'plant_not_grown') {
+          await this.resyncTank(tank.id, gen);
+        }
         return;
       }
-      this.keys.settle(intent);
+      this.trimKeys.settle(intent);
       if (gen !== this.loadId) return;
       this.apply(next);
       this.patch({ notice: `The ${label} was trimmed.` });
@@ -670,6 +676,15 @@ export class TankSession {
     this.release(fishId);
   }
 
+  private async resyncTank(tankId: string, gen: number): Promise<void> {
+    try {
+      const next = await this.deps.api.tank(tankId);
+      if (gen === this.loadId) this.apply(next);
+    } catch (error) {
+      console.warn('could not refresh the tank after a refused trim; the next sync will', error);
+    }
+  }
+
   private async reset(phase: 'anonymous' | 'unverified'): Promise<void> {
     this.loadId++;
     this.switchId++;
@@ -678,6 +693,7 @@ export class TankSession {
     this.layoutSaver.reset();
     this.backgroundSaver.reset();
     this.keys.clear();
+    this.trimKeys.clear();
     this.shownLayout.clear();
     this.shownBackground.clear();
     this.deps.storage?.removeItem(ACTIVE_KEY);
