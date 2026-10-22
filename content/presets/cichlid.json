@@ -58,7 +58,7 @@
     },
     {
       "assetId": "neothauma-shell",
-      "position": [-0.15, 0.065, 0.18],
+      "position": [-0.15, 0.065, 0.19],
       "rotationY": 1.1708,
       "scale": 1.0
     },
@@ -100,7 +100,7 @@
     },
     {
       "assetId": "neothauma-shell",
-      "position": [0.5, 0.048, 0.18],
+      "position": [0.5, 0.048, 0.19],
       "rotationY": -1.0108,
       "scale": 1.0
     }
