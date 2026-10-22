@@ -26,6 +26,7 @@ export {
   type CatchUpResult,
 } from './catchup.ts';
 export {
+  blocked,
   layoutPlantKeys,
   obstaclesOf,
   reconcilePlants,
@@ -93,9 +94,11 @@ export {
   coralStress,
   fragCoral,
   reconcileCorals,
+  rehomeFrags,
   stepCorals,
   type CoralState,
   type CoralStepContext,
   type CoralTable,
   type FragResult,
+  type RootMove,
 } from './corals.ts';

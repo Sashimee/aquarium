@@ -33,6 +33,7 @@ describe('the coral section', () => {
   const fragCoral = vi.fn<(key: string) => Promise<{ ok: boolean; refusal: string | null }>>();
 
   beforeEach(() => {
+    vi.useFakeTimers();
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -42,6 +43,7 @@ describe('the coral section', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     act(() => root.unmount());
     container.remove();
   });
@@ -154,6 +156,11 @@ describe('the coral section', () => {
     expect(container.textContent).not.toContain('too bright');
   });
 
+  const status = () => container.querySelector('[role="status"]');
+  const pick = async (key: string | null) => {
+    await act(async () => interaction.emit('coral:picked', { key }));
+    await act(async () => vi.advanceTimersByTime(60));
+  };
   const rows = (): HTMLLIElement[] => Array.from(container.querySelectorAll('li'));
   const currentRows = (): HTMLLIElement[] =>
     rows().filter((row) => row.getAttribute('aria-current') === 'true');
@@ -166,12 +173,34 @@ describe('the coral section', () => {
       }),
     );
     expect(currentRows()).toHaveLength(0);
-    await act(async () => interaction.emit('coral:picked', { key: 's2' }));
+    await pick('s2');
     expect(currentRows()).toHaveLength(1);
     expect(currentRows()[0]?.textContent).toContain('brain coral');
-    expect(container.querySelector('[role="status"]')?.textContent).toBe(
-      'Selected the brain coral.',
-    );
+    expect(status()?.textContent).toBe('Selected the brain coral.');
+  });
+
+  it('keeps the status region mounted and empties it when nothing is picked', async () => {
+    await mount(tankFixture({ biome: 'reef', corals: [coral()] }));
+    expect(status()?.textContent).toBe('');
+    await pick('s1');
+    expect(status()?.textContent).toBe('Selected the acropora cytherea.');
+    await pick(null);
+    expect(status()?.textContent).toBe('');
+  });
+
+  it('scrolls the row into view and says it again on a repeat tap', async () => {
+    await mount(tankFixture({ biome: 'reef', corals: [coral(), coral({ key: 's2' })] }));
+    const scroll = vi.fn();
+    const row = rows()[1] as HTMLLIElement;
+    row.scrollIntoView = scroll;
+    await pick('s2');
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(status()?.textContent).toBe('Selected the acropora cytherea 2.');
+    await act(async () => interaction.emit('coral:picked', { key: 's2' }));
+    expect(status()?.textContent).toBe('');
+    expect(scroll).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(60));
+    expect(status()?.textContent).toBe('Selected the acropora cytherea 2.');
   });
 
   it('moves the mark with each tap and clears it when the tap hits no coral', async () => {
@@ -181,32 +210,32 @@ describe('the coral section', () => {
         corals: [coral(), coral({ key: 's2', assetId: 'brain-coral' })],
       }),
     );
-    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
-    await act(async () => interaction.emit('coral:picked', { key: 's2' }));
+    await pick('s1');
+    await pick('s2');
     expect(currentRows().map((r) => r.textContent)).toEqual([
       expect.stringContaining('brain coral'),
     ]);
-    await act(async () => interaction.emit('coral:picked', { key: null }));
+    await pick(null);
     expect(currentRows()).toHaveLength(0);
   });
 
   it("ignores a pick that is not one of this tank's corals", async () => {
     await mount(tankFixture({ biome: 'reef', corals: [coral()] }));
-    await act(async () => interaction.emit('coral:picked', { key: 'gone' }));
+    await pick('gone');
     expect(currentRows()).toHaveLength(0);
-    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(status()?.textContent).toBe('');
   });
 
-  it('forgets the pick when another tank loads', async () => {
+  it('does not carry the pick over to another tank', async () => {
     await mount(tankFixture({ id: TANK_A, biome: 'reef', corals: [coral()] }));
-    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+    await pick('s1');
     await mount(tankFixture({ id: TANK_B, biome: 'reef', corals: [coral()] }));
     expect(currentRows()).toHaveLength(0);
   });
 
   it('keeps cutting a picked coral on the same button', async () => {
     await mount(tankFixture({ biome: 'reef', corals: [coral()] }));
-    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+    await pick('s1');
     await click(cutButtons()[0]);
     expect(fragCoral).toHaveBeenCalledWith('s1');
   });

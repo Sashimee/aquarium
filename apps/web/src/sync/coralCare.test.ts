@@ -1,13 +1,11 @@
 import type { Coral, Equipment } from '@aquarium/shared';
-import { describe, expect, it, vi } from 'vitest';
-import { EventBus } from '../engine/events';
-import type { InteractionEvents } from '../interaction/events';
+import { describe, expect, it } from 'vitest';
 import { ApiRequestError } from '../ui/api';
 import { BUNDLED_CORALS } from './bundledCorals';
 import {
   bleachLevel,
+  coralLabel,
   describeBleach,
-  followCoralPick,
   fragChoices,
   fragRefusalText,
   fragWhy,
@@ -81,6 +79,25 @@ describe('fragging eligibility', () => {
 
   it('matches the limit the server reads from content', () => {
     expect(BUNDLED_CORALS.params.fragMaxBleach).toBe(0.3);
+  });
+});
+
+describe('coralLabel', () => {
+  it('names a euphyllia by kind, not by its seed', () => {
+    expect(coralLabel('euphyllia-hammer-3')).toBe('euphyllia hammer');
+    expect(coralLabel('euphyllia-torch-12')).toBe('euphyllia torch');
+  });
+
+  it('spaces a catalog id and falls back for an empty one', () => {
+    expect(coralLabel('acropora-cytherea')).toBe('acropora cytherea');
+    expect(coralLabel('')).toBe('coral');
+  });
+});
+
+describe('bundled coral content', () => {
+  it('keeps the thresholds and drops the citations', () => {
+    expect(BUNDLED_CORALS.params.fragMaxBleach).toBeGreaterThan(0);
+    expect(BUNDLED_CORALS.params.sources).toEqual({});
   });
 });
 
@@ -163,23 +180,5 @@ describe('fragRefusalText', () => {
   it('leaves other failures to the caller', () => {
     expect(fragRefusalText(new Error('boom'), 'brain coral')).toBeNull();
     expect(fragRefusalText(refused(500, null), 'brain coral')).toBeNull();
-  });
-});
-
-describe('followCoralPick', () => {
-  it('reports each tapped coral and the miss, and drops the pick when a tank loads', () => {
-    const bus = new EventBus<InteractionEvents>();
-    const set = vi.fn();
-    const stop = followCoralPick(bus, set);
-    bus.emit('coral:picked', { key: 's1' });
-    bus.emit('coral:picked', { key: null });
-    expect(set.mock.calls).toEqual([['s1'], [null]]);
-    set.mockClear();
-    bus.emit('tank:loaded', {} as InteractionEvents['tank:loaded']);
-    expect(set).toHaveBeenCalledWith(null);
-    stop();
-    set.mockClear();
-    bus.emit('coral:picked', { key: 's2' });
-    expect(set).not.toHaveBeenCalled();
   });
 });

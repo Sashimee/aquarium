@@ -1097,6 +1097,7 @@ describe('sharedKtx2Problems', () => {
     ]);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('rock/shared/t_2k.ktx2');
+    expect(problems[0]).toContain('as linear by rock/b/lod0.glb');
   });
 
   it('reports a 1k-only conflict once, not again under the derived 2k name', () => {
@@ -1105,7 +1106,8 @@ describe('sharedKtx2Problems', () => {
       glb('rock/b/lod0.glb', 'normalTexture', '../shared/t_1k.ktx2'),
     ]);
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('rock/shared/t_1k.ktx2');
+    expect(problems[0]).toContain('rock/shared/t_1k.ktx2 is read as');
+    expect(problems[0]).not.toContain('t_2k.ktx2');
   });
 
   it('reports a derived-vs-direct conflict hidden behind a derived first use', () => {

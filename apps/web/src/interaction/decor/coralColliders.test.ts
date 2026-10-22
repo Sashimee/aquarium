@@ -22,6 +22,13 @@ const bounds = new Map(
       : [],
   ),
 );
+const CALM = {
+  pumpMps: 0.3,
+  direction: [1, 0] as const,
+  speed: 0.04,
+  gustPeriodS: 9,
+  gustDepth: 0.4,
+};
 const EUPHYLLIA = 'euphyllia-hammer-12';
 const euphylliaBounds: { min: [number, number, number]; max: [number, number, number] } = {
   min: [-0.06, 0, -0.06],
@@ -49,6 +56,7 @@ function input(over: Partial<CoralColliderInput> = {}): CoralColliderInput {
     specs: SPECS,
     corals: [],
     dimensions: TANK_DIMENSIONS.standard,
+    current: CALM,
     ground: flat,
     boundsOf: (id) => (id === EUPHYLLIA ? euphylliaBounds : (bounds.get(id) ?? null)),
     ...over,
@@ -102,6 +110,26 @@ describe('growCorals', () => {
     const glassHalfLength = TANK_DIMENSIONS.standard.length / 2 - TANK_DIMENSIONS.standard.glass;
     const edge = 0.35 + must(bounds.get('acropora-cytherea')).max[0] * scale;
     expect(edge).toBeLessThanOrEqual(glassHalfLength);
+  });
+
+  it('holds a euphyllia further from the glass in a stronger current', () => {
+    const near = item(EUPHYLLIA, 0.3, 0, { tintSeed: 7 });
+    const scaleIn = (current: CoralColliderInput['current']): number => {
+      const { extra } = growCorals(
+        input({
+          pieces: [],
+          fixed: [near],
+          corals: [coral({ assetId: EUPHYLLIA, size: 3 })],
+          current,
+        }),
+      );
+      const capsule = must(extra.find((c) => c.id === 'decor:coral:s7'));
+      if (capsule.kind !== 'capsule') throw new Error('expected a capsule');
+      return capsule.radius;
+    };
+    const still = scaleIn({ ...CALM, speed: 0 });
+    const strong = scaleIn({ ...CALM, speed: 0.1, pumpMps: 0.6 });
+    expect(strong).toBeLessThan(still);
   });
 
   it('leaves a piece with no matching coral alone', () => {

@@ -570,4 +570,19 @@ describe('ModelLibrary shared model textures', () => {
     expect(library.load(MEMBER, 0, 1024)).toBe(second);
     await second;
   });
+
+  it('keeps a newer collision entry when dispose evicts an older load that then fails', async () => {
+    const fail = failFirstGltfLoad();
+    const first = library.collisionGeometry(MEMBER);
+    const firstResult = first.catch((error: unknown) => error);
+    const disposing = library.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = library.collisionGeometry(MEMBER);
+    fail();
+    expect(await firstResult).toBeInstanceOf(Error);
+    await disposing;
+
+    expect(library.collisionGeometry(MEMBER)).toBe(second);
+    await second;
+  });
 });
