@@ -48,7 +48,17 @@ import {
 import type { SpeciesCatalog } from './species.ts';
 import { loadCoralTable } from './corals.ts';
 import { loadPlantTable } from './plants.ts';
-import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
+import {
+  DEFAULT_CARE_LIMITS,
+  registerTankRoutes,
+  type CareLimits,
+  type TankRouteDeps,
+} from './tanks.ts';
+import {
+  DEFAULT_COMMUNITY_CONFIG,
+  registerCommunityRoutes,
+  type CommunityConfig,
+} from './community.ts';
 
 export interface AppOptions {
   indexable: boolean;
@@ -73,6 +83,7 @@ export interface AppOptions {
   collectionLimit?: Limit;
   publicLimits?: PublicLimits;
   galleryLimits?: GalleryLimits;
+  community?: Partial<CommunityConfig>;
   testHooks?: boolean;
   logger?: boolean;
   logStream?: { write(chunk: string): void };
@@ -643,7 +654,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
-  registerTankRoutes({
+  const tankDeps: TankRouteDeps = {
     app,
     database,
     species: opts.species,
@@ -656,6 +667,11 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
+  };
+  registerTankRoutes(tankDeps);
+  registerCommunityRoutes({
+    tank: tankDeps,
+    config: { ...DEFAULT_COMMUNITY_CONFIG, ...opts.community },
   });
 
   registerCollectionRoutes({
