@@ -16,7 +16,7 @@ case "$retention_days" in
 esac
 retention_days="$(printf '%s' "$retention_days" | sed 's/^0*\(.\)/\1/')"
 if [ "${#retention_days}" -gt 5 ]; then
-  echo "ASSET_RETENTION_DAYS must be at most 5 digits (99999), got '$retention_days'" >&2
+  echo "ASSET_RETENTION_DAYS must be at most 5 digits (99999), got '$ASSET_RETENTION_DAYS'" >&2
   exit 1
 fi
 if [ "$retention_days" -lt 1 ]; then

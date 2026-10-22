@@ -112,14 +112,18 @@ describe('docker/entrypoint.sh', () => {
       const r = run(v);
       assert.equal(r.status, 1);
       assert.match(r.stderr, /ASSET_RETENTION_DAYS/);
+      assert.ok(r.stderr.includes(`got '${v}'`), r.stderr);
       assert.ok(existsSync(old));
       assert.ok(!existsSync(join(root, 'assets', 'a.js')));
     });
   }
 
-  it('accepts ASSET_RETENTION_DAYS=99999, padded or not', () => {
+  it('accepts ASSET_RETENTION_DAYS=99999, padded or not, and prunes nothing recent', () => {
     for (const v of ['99999', '0000099999']) {
+      const old = addOldFile('old.js', 30);
       assert.equal(run(v).status, 0);
+      assert.ok(existsSync(old));
+      assert.ok(existsSync(join(root, 'assets', 'a.js')));
     }
   });
 });
