@@ -250,8 +250,9 @@ export type RebuildMaterials = () => boolean;
  * builds may still fail, except a scene material, which is reported if it fails without them too.
  * A material already reported is broken without the effects' help, so it never drops them. A
  * transient failure (a submit that bound a freed resource, reported by whichever async compile had
- * its error scope open) says nothing about the material, so outside the effects' own materials it
- * rebuilds the scene's materials instead, which three would otherwise skip for the session.
+ * its error scope open) says nothing about the material, so for a scene material, or one it cannot
+ * name, it rebuilds the scene's materials instead, which three would otherwise skip for the
+ * session. A transient failure outside the scene is answered like any other.
  *
  * The engine rebuilds dropped effects only after a transient failure, so under a temporal resolve
  * (ultra) one broken scene material costs the post effects for the session: only the plain render
@@ -293,7 +294,8 @@ export class PipelineFailureHandler {
   private rebuildsFor(failure: PipelineFailure, cause: Error): boolean {
     if (failure.kind !== 'render' || !isTransientFailure(cause)) return false;
     const id = failure.materialId;
-    if (id !== null && this.effects.ownsMaterial(id)) return false;
+    // Rebuilding releases only the scene's materials, so it cannot reach one outside it.
+    if (id !== null && (this.effects.ownsMaterial(id) || !this.inScene(id))) return false;
     return this.rebuild();
   }
 

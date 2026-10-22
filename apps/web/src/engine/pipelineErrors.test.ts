@@ -486,14 +486,28 @@ describe('PipelineFailureHandler', () => {
     expect(reports).toEqual([]);
   });
 
-  it('keeps the effects for a transient failure outside them, named or not', async () => {
+  it('rebuilds the scene and keeps the effects for a transient failure it cannot name', async () => {
     const { effects, reports, handler, rebuild } = setup(3);
-    handler.handle(failure(7, destroyedShadow));
     handler.handle(failure(null, destroyedShadow));
     await settle();
-    expect(rebuild.requested).toBe(2);
+    expect(rebuild.requested).toBe(1);
     expect(effects.failures).toEqual([]);
     expect(reports).toEqual([]);
+  });
+
+  it('never rebuilds the scene for a transient failure of a material outside it', async () => {
+    const { effects, reports, handler, rebuild } = setup(3);
+    handler.handle(failure(7, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(0);
+    expect(effects.failures).toEqual([new Error(destroyedShadow)]);
+    expect(reports).toEqual([]);
+
+    handler.handle(failure(8, destroyedShadow));
+    expect(rebuild.requested).toBe(0);
+    expect(reports.map((r) => r.message)).toEqual([
+      'A pass outside the scene failed to build and is skipped',
+    ]);
   });
 
   it('leaves a transient failure in the effects own passes to their recovery', async () => {
