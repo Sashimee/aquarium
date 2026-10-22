@@ -1,7 +1,8 @@
 import { newTankChemistry } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
-import { salinityNotice } from './salinityCare';
+import { BUNDLED_CHEMISTRY } from './bundledEconomy';
+import { FULL_STRESS_PPT, salinityNotice } from './salinityCare';
 
 const base = speciesFixture().chemistry;
 const brackish = speciesFixture({
@@ -36,11 +37,16 @@ describe('salinityNotice', () => {
     const n = salinityNotice(mangrove(6), [brackish]);
     expect(n).toMatchObject({ direction: 'low', severity: 'caution', speciesIds: ['mudskipper'] });
     expect(n?.text).toContain('too fresh for mudskipper');
-    expect(n?.text).toContain('6.0 ppt');
+    expect(n?.text).not.toMatch(/\d/);
   });
 
   it('raises danger once the gap reaches the full-stress deviation', () => {
-    expect(salinityNotice(mangrove(3), [brackish])?.severity).toBe('danger');
+    const danger = salinityNotice(mangrove(3), [brackish]);
+    const caution = salinityNotice(mangrove(6), [brackish]);
+    expect(danger?.severity).toBe('danger');
+    expect(danger?.text).toContain('Dangerously');
+    expect(caution?.text).not.toContain('Dangerously');
+    expect(FULL_STRESS_PPT).toBe(BUNDLED_CHEMISTRY.stress.fullStressDeviation.salinity);
     expect(salinityNotice(mangrove(25), [brackish])).toMatchObject({
       direction: 'high',
       severity: 'danger',
@@ -55,6 +61,23 @@ describe('salinityNotice', () => {
     const n = salinityNotice(tank, [brackish, hardy]);
     expect(n?.direction).toBe('high');
     expect(n?.speciesIds).toEqual(['molly']);
+  });
+
+  it('lists only the species named in the text when both directions occur', () => {
+    const fresh = speciesFixture({
+      id: 'puffer',
+      commonName: 'Puffer',
+      chemistry: { ...base, salinityPpt: [20, 30] },
+    });
+    const tank = mangrove(15, [
+      fishFixture(FISH_1, { species: 'molly' }),
+      fishFixture(FISH_2, { species: 'puffer' }),
+    ]);
+    const n = salinityNotice(tank, [hardy, fresh]);
+    expect(n?.direction).toBe('low');
+    expect(n?.text).toContain('puffer');
+    expect(n?.text).not.toContain('molly');
+    expect(n?.speciesIds).toEqual(['puffer']);
   });
 
   it('ignores dead fish, an empty tank and unknown species', () => {

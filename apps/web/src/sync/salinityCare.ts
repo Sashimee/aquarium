@@ -1,18 +1,18 @@
-import type { SpeciesSummary, Tank } from '@aquarium/shared';
-import { padsFor } from './waterTest';
+import type { Biome, SpeciesSummary, Tank } from '@aquarium/shared';
+import { BUNDLED_CHEMISTRY } from './bundledEconomy';
 
 export type SalinitySeverity = 'caution' | 'danger';
 
 export interface SalinityNotice {
   direction: 'low' | 'high';
   severity: SalinitySeverity;
-  ppt: number;
   speciesIds: string[];
   text: string;
 }
 
-/** Mirrors stress.fullStressDeviation.salinity in content/chemistry.json: the gap at which stress is total. */
-export const FULL_STRESS_PPT = 5;
+export const SALT_BIOMES: ReadonlySet<Biome> = new Set<Biome>(['reef', 'mangrove']);
+
+export const FULL_STRESS_PPT = BUNDLED_CHEMISTRY.stress.fullStressDeviation.salinity;
 
 function joinNames(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? '';
@@ -23,7 +23,7 @@ export function salinityNotice(
   tank: Tank,
   species: readonly SpeciesSummary[],
 ): SalinityNotice | null {
-  if (!padsFor(tank.biome).includes('salinity')) return null;
+  if (!SALT_BIOMES.has(tank.biome)) return null;
   const ppt = tank.chemistry.salinity;
   const byId = new Map(species.map((s) => [s.id, s]));
   const off = new Map<string, { gap: number; name: string; low: boolean }>();
@@ -42,16 +42,19 @@ export function salinityNotice(
     .filter(([, o]) => o.low === worst[1].low)
     .map(([, o]) => o.name.toLowerCase())
     .sort();
-  const reading = `${ppt.toFixed(1)} ppt`;
+  const severity = worst[1].gap >= FULL_STRESS_PPT ? 'danger' : 'caution';
+  const lead = severity === 'danger' ? 'Dangerously' : 'Somewhat';
   const text =
     direction === 'low'
-      ? `The water is too fresh for ${joinNames(names)} at ${reading}. Test the water and watch their health.`
-      : `The water is too salty for ${joinNames(names)} at ${reading}. Test the water and watch their health.`;
+      ? `${lead} too fresh for ${joinNames(names)}. Test the water and watch their health.`
+      : `${lead} too salty for ${joinNames(names)}. Test the water and watch their health.`;
   return {
     direction,
-    severity: worst[1].gap >= FULL_STRESS_PPT ? 'danger' : 'caution',
-    ppt,
-    speciesIds: entries.map(([id]) => id).sort(),
+    severity,
+    speciesIds: entries
+      .filter(([, o]) => o.low === worst[1].low)
+      .map(([id]) => id)
+      .sort(),
     text,
   };
 }
