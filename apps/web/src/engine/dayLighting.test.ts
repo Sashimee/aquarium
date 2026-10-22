@@ -185,6 +185,11 @@ describe('lampGain', () => {
     expect(lampGain(DEFAULT_LAMP_SCHEDULE.intensity)).toBeCloseTo(1, 12);
   });
 
+  it('leaves the default setting at exactly the tuned level', () => {
+    expect(DEFAULT_LAMP_SCHEDULE.intensity).toBe(0.8);
+    expect(lampGain(0.8)).toBe(1);
+  });
+
   it('rises with every step of the slider', () => {
     for (let step = 1; step <= 100; step++) {
       expect(lampGain(step / 100)).toBeGreaterThan(lampGain((step - 1) / 100));

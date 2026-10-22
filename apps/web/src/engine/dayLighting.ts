@@ -28,7 +28,7 @@ export function lampGain(intensity: number): number {
   if (!(intensity >= 0 && intensity <= 1)) {
     throw new RangeError(`lampGain: lamp intensity must be within 0..1, got ${intensity}`);
   }
-  return LAMP_GAIN_MIN * (LAMP_GAIN_MAX / LAMP_GAIN_MIN) ** intensity;
+  return 2 ** (2.5 * (intensity - 0.8));
 }
 
 /** What the photoperiod drives: uniforms and plain numbers only, so no shader is rebuilt. */
@@ -53,8 +53,9 @@ export interface DayLightingRig {
 
 /**
  * The hood colour and intensity are the daytime setting (a preset may change them); `day` (0..1)
- * fades them into the moonlight channel, and `rig.lampGain` scales the main channel only. `rig.roomDaylight` dims the room around the tank. The
- * room's level is in the environment node, so `scene.environmentIntensity` stays a plain gain.
+ * fades them into the moonlight channel, and `rig.lampGain` scales the main channel only.
+ * `rig.roomDaylight` dims the room around the tank. The room's level is in the environment node,
+ * so `scene.environmentIntensity` stays a plain gain.
  */
 export function applyDayLighting(rig: DayLightingRig, day: number): void {
   const { hood, caustics, interior, medium, scene } = rig;
