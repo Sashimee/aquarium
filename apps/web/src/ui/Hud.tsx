@@ -25,6 +25,7 @@ const TANK_TYPES: readonly { biome: CreatableBiome; label: string }[] = [
   { biome: 'freshwater', label: 'Freshwater' },
   { biome: 'reef', label: 'Reef' },
   { biome: 'cichlid', label: 'Cichlid' },
+  { biome: 'blackwater', label: 'Blackwater' },
 ];
 
 function useTimeOfDay(): TimeOfDay | null {
