@@ -12,6 +12,7 @@ import { uniform } from 'three/tsl';
 import type { DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
 import { createCoralGlowNode, Hardscape } from './hardscape';
+import { coralBleachColor } from '../engine/coralBleach';
 
 const entry: CatalogEntry = { id: 'brain-coral', kind: 'coral', lods: [{ file: 'x.glb' }] };
 
@@ -83,14 +84,20 @@ describe('Hardscape.add', () => {
     expect(keys.size).toBe(6);
   });
 
-  it('keeps a plain tinted clone in freshwater', () => {
+  it('keeps a tinted, glowless copy in freshwater', () => {
     const source = sourceMaterial();
     const hardscape = new Hardscape('freshwater', glow, uniform(0));
     hardscape.add(entry, model(source), item('brain-coral', 0));
     const material = materialOf(hardscape, 0);
-    expect(material).not.toBeInstanceOf(MeshStandardNodeMaterial);
+    if (!(material instanceof MeshStandardNodeMaterial))
+      throw new Error('expected a node material');
+    expect(material).not.toBe(source);
+    expect(material.emissiveNode).toBeNull();
+    expect(material.colorNode).toBe(coralBleachColor);
     expect(material.map).toBe(source.map);
+    expect(material.alphaTest).toBe(0.4);
     expect(material.emissive.getHex()).toBe(0);
+    expect(material.color.getHex()).not.toBe(source.color.getHex());
   });
 
   it('leaves untinted decor on the shared source material', () => {
@@ -108,46 +115,41 @@ describe('Hardscape.setBleach', () => {
     hardscape.add(entry, model(), { ...item(assetId, 0), tintSeed: 0 });
     return { hardscape, material: materialOf(hardscape, 0) };
   };
+  const bleachOf = (material: MeshStandardMaterial): unknown => material.userData.bleach;
 
-  it('drops the tint and the fluorescent glow when fully bleached', () => {
+  it('starts unbleached, with the live tint on the shared bleach colour node', () => {
+    const { material } = placed('brain-coral');
+    if (!(material instanceof MeshStandardNodeMaterial))
+      throw new Error('expected a node material');
+    expect(material.colorNode).toBe(coralBleachColor);
+    expect(bleachOf(material)).toBe(0);
+  });
+
+  it('drives the bleach amount and drops the fluorescent glow when fully bleached', () => {
     const { hardscape, material } = placed('brain-coral');
+    const live = material.color.clone();
     expect(material.emissive.getHex()).not.toBe(0);
-    const tinted = material.color.clone();
     hardscape.setBleach(0, 1);
-    const { r, g, b } = material.color;
-    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(
-      Math.max(tinted.r, tinted.g, tinted.b) - Math.min(tinted.r, tinted.g, tinted.b),
-    );
+    expect(bleachOf(material)).toBe(1);
+    expect(material.color.equals(live)).toBe(true);
     expect(material.emissive.getHex()).toBe(0);
   });
 
-  it('restores the live colour and glow when the coral recovers', () => {
+  it('restores the live glow when the coral recovers', () => {
     const { hardscape, material } = placed('brain-coral');
-    const live = material.color.clone();
     const glowing = material.emissive.clone();
     hardscape.setBleach(0, 1);
     hardscape.setBleach(0, 0);
-    expect(material.color.equals(live)).toBe(true);
+    expect(bleachOf(material)).toBe(0);
     expect(material.emissive.equals(glowing)).toBe(true);
-  });
-
-  it('never pushes a channel past the albedo it started with', () => {
-    const { hardscape, material } = placed('acropora-cytherea');
-    const live = material.color.clone();
-    for (const bleach of [0.2, 0.6, 1]) {
-      hardscape.setBleach(0, bleach);
-      expect(material.color.r).toBeGreaterThanOrEqual(live.r - 1e-9);
-      expect(Math.max(material.color.r, material.color.g, material.color.b)).toBeLessThanOrEqual(1);
-    }
   });
 
   it('clamps bleach outside 0..1 and ignores an index with no coral', () => {
     const { hardscape, material } = placed('brain-coral');
-    hardscape.setBleach(0, 1);
-    const full = material.color.clone();
     hardscape.setBleach(0, 5);
-    expect(material.color.equals(full)).toBe(true);
+    expect(bleachOf(material)).toBe(1);
     hardscape.setBleach(0, -3);
+    expect(bleachOf(material)).toBe(0);
     expect(material.emissive.getHex()).not.toBe(0);
     expect(() => hardscape.setBleach(7, 1)).not.toThrow();
   });
@@ -158,10 +160,10 @@ describe('Hardscape.setBleach', () => {
     const rock: CatalogEntry = { id: 'rock', kind: 'rock', lods: [{ file: 'r.glb' }] };
     const rockSource = sourceMaterial();
     hardscape.add(rock, model(rockSource), item('rock', 1));
-    const before = rockSource.color.clone();
     hardscape.setBleach(0, 1);
     hardscape.setBleach(1, 1);
-    expect(materialOf(hardscape, 1).color.equals(before)).toBe(true);
-    expect(materialOf(hardscape, 0).color.getHex()).toBe(0xffffff);
+    expect(materialOf(hardscape, 1)).toBe(rockSource);
+    expect(bleachOf(rockSource)).toBeUndefined();
+    expect(bleachOf(materialOf(hardscape, 0))).toBe(1);
   });
 });

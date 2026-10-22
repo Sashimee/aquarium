@@ -218,6 +218,7 @@ export class ModelLibrary {
     return `${this.lodFile(assetId, lod)}@${this.catalog.textureSizeFor(assetId, textureSize)}`;
   }
 
+  /** A model loaded after `dispose()` comes back already freed. */
   load(assetId: string, lod: ModelLod, requestedSize: 1024 | 2048): Promise<LoadedModel> {
     const file = this.lodFile(assetId, lod);
     const textureSize = this.catalog.textureSizeFor(assetId, requestedSize);
@@ -254,7 +255,10 @@ export class ModelLibrary {
           throw error;
         });
       this.cache.set(key, pending);
-      pending.catch(() => this.cache.delete(key));
+      const owned = pending;
+      owned.catch(() => {
+        if (this.cache.get(key) === owned) this.cache.delete(key);
+      });
     }
     return pending;
   }
@@ -335,7 +339,7 @@ export class ModelLibrary {
       const entry = this.catalog.get(assetId);
       const file = this.lodFile(assetId, Math.min(2, entry.lods.length - 1) as ModelLod);
       const model = this.finishedRenderModel(file);
-      pending = model
+      const source = model
         ? Promise.resolve(model.primitives.map((p) => p.geometry.clone()))
         : this.geometryGltf.loadAsync(`${ASSET_BASE}${file}`).then((gltf) => {
             gltf.scene.updateMatrixWorld(true);
@@ -349,8 +353,18 @@ export class ModelLibrary {
             if (geometries.length === 0) throw new Error(`${file} contains no meshes`);
             return geometries;
           });
+      const owned: Promise<readonly BufferGeometry[]> = source.then((geometries) => {
+        if (this.disposed && this.collision.get(assetId) === owned) {
+          this.collision.delete(assetId);
+          for (const geometry of geometries) geometry.dispose();
+        }
+        return geometries;
+      });
+      pending = owned;
       this.collision.set(assetId, pending);
-      pending.catch(() => this.collision.delete(assetId));
+      owned.catch(() => {
+        if (this.collision.get(assetId) === owned) this.collision.delete(assetId);
+      });
     }
     return pending;
   }
@@ -377,7 +391,8 @@ export class ModelLibrary {
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
       texture.anisotropy = anisotropy;
-      this.textures.push(texture);
+      if (this.disposed) texture.dispose();
+      else this.textures.push(texture);
       return texture;
     } finally {
       this.leave();
@@ -437,6 +452,8 @@ export class ModelLibrary {
     const pendingModels = [...this.cache.values()];
     this.cache.clear();
     this.finished.clear();
+    const pendingCollision = [...this.collision.values()];
+    this.collision.clear();
     const models = await Promise.allSettled(pendingModels);
     this.freeModels(models.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
     const shared = [...this.sharedTextures.values()];
@@ -444,11 +461,10 @@ export class ModelLibrary {
     await Promise.all(shared.map((entry) => this.freeShared(entry)));
     for (const texture of this.textures) texture.dispose();
     this.textures.length = 0;
-    const collision = await Promise.allSettled(this.collision.values());
+    const collision = await Promise.allSettled(pendingCollision);
     for (const result of collision) {
       if (result.status === 'fulfilled') for (const geometry of result.value) geometry.dispose();
     }
-    this.collision.clear();
   }
 
   /** The model's own geometry, materials and textures; shared textures are freed by reference count. */

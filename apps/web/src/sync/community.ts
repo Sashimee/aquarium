@@ -216,12 +216,7 @@ export function applyTankToScene(bus: SceneBus, held: Tank | null, next: Tank): 
     bus.emit('tank:water', { tankId: next.id, water: next.water });
     bus.emit('tank:plants', { tankId: next.id, plants: next.plants ?? [] });
     bus.emit('tank:wave-maker', { tankId: next.id, tier: next.equipment.waveMaker.tier });
-    bus.emit('tank:lamp', {
-      tankId: next.id,
-      intensity: next.equipment.light.intensity,
-      onHour: next.equipment.light.onHour,
-      offHour: next.equipment.light.offHour,
-    });
+    emitLamp(bus, next);
     return;
   }
   const tankId = next.id;
@@ -232,6 +227,19 @@ export function applyTankToScene(bus: SceneBus, held: Tank | null, next: Tank): 
   for (const fish of diff.died) bus.emit('tank:fish-died', { tankId, fish });
   if (diff.updated.length > 0) bus.emit('tank:fish-updated', { tankId, fish: diff.updated });
   if (held.water !== next.water) bus.emit('tank:water', { tankId, water: next.water });
+  const was = held.equipment.light;
+  const now = next.equipment.light;
+  if (was.intensity !== now.intensity || was.onHour !== now.onHour || was.offHour !== now.offHour)
+    emitLamp(bus, next);
+}
+
+function emitLamp(bus: SceneBus, tank: Tank): void {
+  bus.emit('tank:lamp', {
+    tankId: tank.id,
+    intensity: tank.equipment.light.intensity,
+    onHour: tank.equipment.light.onHour,
+    offHour: tank.equipment.light.offHour,
+  });
 }
 
 export interface CommunityControllerDeps {

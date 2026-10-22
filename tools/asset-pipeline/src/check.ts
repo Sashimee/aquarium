@@ -271,7 +271,6 @@ const SRGB_SLOTS = new Set([
   'emissiveTexture',
   'sheenColorTexture',
   'specularColorTexture',
-  'diffuseTexture',
 ]);
 
 function textureSlots(value: unknown, slot: string, out: [number, string][]): void {
@@ -282,12 +281,16 @@ function textureSlots(value: unknown, slot: string, out: [number, string][]): vo
   for (const [key, child] of Object.entries(record)) textureSlots(child, key, out);
 }
 
+const GL_REPEAT = 10497;
+const GL_LINEAR = 9729;
+const GL_LINEAR_MIPMAP_LINEAR = 9987;
+
 function samplerKey(json: GlbDocument['json'], textureIndex: number): string {
   const texture = json.textures?.[textureIndex];
   const sampler = texture?.sampler === undefined ? undefined : json.samplers?.[texture.sampler];
-  const wrapS = sampler?.wrapS ?? 10497;
-  const wrapT = sampler?.wrapT ?? 10497;
-  return `wrapS=${wrapS} wrapT=${wrapT} mag=${sampler?.magFilter ?? 'default'} min=${sampler?.minFilter ?? 'default'}`;
+  const wrapS = sampler?.wrapS ?? GL_REPEAT;
+  const wrapT = sampler?.wrapT ?? GL_REPEAT;
+  return `wrapS=${wrapS} wrapT=${wrapT} mag=${sampler?.magFilter ?? GL_LINEAR} min=${sampler?.minFilter ?? GL_LINEAR_MIPMAP_LINEAR}`;
 }
 
 export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
@@ -295,6 +298,7 @@ export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
     file: string;
     sampler: string;
     colour: 'sRGB' | 'linear';
+    derived: boolean;
   }
   const uses = new Map<string, Use[]>();
   for (const { file, json } of glbs) {
@@ -306,13 +310,19 @@ export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
       const uri = source === undefined ? undefined : json.images?.[source]?.uri;
       if (uri === undefined || !uri.endsWith('.ktx2')) continue;
       const target = posix.join(posix.dirname(file), safeDecodeUri(uri));
-      const list = uses.get(target) ?? [];
-      list.push({
+      const base = {
         file,
         sampler: samplerKey(json, textureIndex),
-        colour: SRGB_SLOTS.has(slot) ? 'sRGB' : 'linear',
-      });
-      uses.set(target, list);
+        colour: SRGB_SLOTS.has(slot) ? ('sRGB' as const) : ('linear' as const),
+      };
+      const twin = target.replace(/_1k\.ktx2$/, '_2k.ktx2');
+      const keys: [string, boolean][] = [[target, false]];
+      if (twin !== target) keys.push([twin, true]);
+      for (const [key, derived] of keys) {
+        const list = uses.get(key) ?? [];
+        list.push({ ...base, derived });
+        uses.set(key, list);
+      }
     }
   }
   const problems: string[] = [];
@@ -320,11 +330,13 @@ export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
     const [first, ...rest] = list;
     if (first === undefined) continue;
     for (const other of rest) {
+      if (first.derived && other.derived) continue;
       if (other.colour !== first.colour) {
         problems.push(
           `${uri} is read as ${first.colour} by ${first.file} but as ${other.colour} by ${other.file}; the web loader caches one texture per URL, so give each colour role its own file`,
         );
-      } else if (other.sampler !== first.sampler) {
+      }
+      if (other.sampler !== first.sampler) {
         problems.push(
           `${uri} has sampler (${first.sampler}) in ${first.file} but (${other.sampler}) in ${other.file}; the web loader caches one texture per URL, so make the samplers match`,
         );

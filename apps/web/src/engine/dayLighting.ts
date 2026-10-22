@@ -20,15 +20,20 @@ export const FRESHWATER_FILL_LEVEL = 0.28;
  * up stays within what AgX at exposure 1 rolls off on white sand. The default setting, 0.8, lands
  * on exactly 1, the level the scene is tuned at.
  */
-export const LAMP_GAIN_MIN = 0.25;
-export const LAMP_GAIN_MAX = Math.SQRT2;
+const LAMP_STOPS_MIN = -2;
+const LAMP_STOPS_MAX = 0.5;
+const LAMP_STOPS_SPAN = LAMP_STOPS_MAX - LAMP_STOPS_MIN;
+// Subtracting this setting rather than adding stops to LAMP_STOPS_MIN gives an exact 0 at 0.8.
+const LAMP_TUNED_SETTING = -LAMP_STOPS_MIN / LAMP_STOPS_SPAN;
+export const LAMP_GAIN_MIN = 2 ** LAMP_STOPS_MIN;
+export const LAMP_GAIN_MAX = 2 ** LAMP_STOPS_MAX;
 
 /** The hood's light relative to the tuned level for a lamp strength setting, 0..1. */
 export function lampGain(intensity: number): number {
   if (!(intensity >= 0 && intensity <= 1)) {
     throw new RangeError(`lampGain: lamp intensity must be within 0..1, got ${intensity}`);
   }
-  return LAMP_GAIN_MIN * (LAMP_GAIN_MAX / LAMP_GAIN_MIN) ** intensity;
+  return 2 ** (LAMP_STOPS_SPAN * (intensity - LAMP_TUNED_SETTING));
 }
 
 /** What the photoperiod drives: uniforms and plain numbers only, so no shader is rebuilt. */
@@ -53,8 +58,9 @@ export interface DayLightingRig {
 
 /**
  * The hood colour and intensity are the daytime setting (a preset may change them); `day` (0..1)
- * fades them into the moonlight channel, and `rig.lampGain` scales the main channel only. `rig.roomDaylight` dims the room around the tank. The
- * room's level is in the environment node, so `scene.environmentIntensity` stays a plain gain.
+ * fades them into the moonlight channel, and `rig.lampGain` scales the main channel only.
+ * `rig.roomDaylight` dims the room around the tank. The room's level is in the environment node,
+ * so `scene.environmentIntensity` stays a plain gain.
  */
 export function applyDayLighting(rig: DayLightingRig, day: number): void {
   const { hood, caustics, interior, medium, scene } = rig;
