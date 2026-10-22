@@ -175,7 +175,9 @@ function fitItem(
     }
   }
   if (perch && !standsClear(item.assetId, y, scale, waterTop)) {
-    return fitItem({ ...item, perch: undefined }, size, dimensions, boundsOf, false);
+    const ordinary: DecorItem = { ...item };
+    delete ordinary.perch;
+    return fitItem(ordinary, size, dimensions, boundsOf, false);
   }
   return {
     ...stretched,

@@ -12,8 +12,9 @@ export interface PresetFit {
  * How the presets, authored for the standard tank, stretch to another tank: positions with the
  * glass, sizes with the smaller of length and depth. The web scene fits x and z the same way and
  * also nudges items off the glass using each model's bounds, which the server does not have. A
- * perch is the exception: the web grows it toward the rim rather than shrinking it, so the server
- * keeps its authored scale, the nearest bounds-free estimate of what the web draws.
+ * perch is the exception: the server keeps its authored scale as a rough value only, since the web
+ * grows it toward the rim or drops it to ordinary wood by model bounds, and the server never reads
+ * a perch's scale for geometry.
  */
 export function presetFit(size: TankSize): PresetFit {
   const standard = TANK_SIZES.standard.dimensions;
