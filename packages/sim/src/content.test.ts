@@ -34,6 +34,12 @@ function load(from: string) {
 
 const roster = load(dir);
 
+function byId(id: string) {
+  const found = roster.find((r) => r.species.id === id)?.species;
+  if (!found) throw new Error(`no content/species/${id}.json`);
+  return found;
+}
+
 const MVP_ROSTER = [
   ['angelfish', 'Pterophyllum scalare', 'freshwater'],
   ['apistogramma-hongsloi', 'Apistogramma hongsloi', 'blackwater'],
@@ -93,6 +99,24 @@ function fishCount(species: ReturnType<typeof speciesContentSchema.parse>): numb
   return species.behaviour.territorial ? 2 : 6;
 }
 
+/** Male length over the species length, as apps/web/src/fish/profiles.ts draws and simulates it. */
+const MALE_LENGTH_FACTOR: Readonly<Record<string, number>> = {
+  'apistogramma-hongsloi': 0.05 / 0.03,
+};
+
+/** The species' fish, the last one a full-grown male where males outgrow the species length. */
+function spawnsOf(species: ReturnType<typeof speciesContentSchema.parse>, count: number) {
+  const fish = spawnMany(species.id, count);
+  const factor = MALE_LENGTH_FACTOR[species.id];
+  if (factor === undefined) return fish;
+  const male = {
+    id: `${species.id}-male`,
+    species: species.id,
+    bodyLengthM: species.lifecycle.maxSizeM * factor,
+  };
+  return [...fish.slice(0, -1), male];
+}
+
 /** Spine-chain clearance computed from the primitives directly, not through the world's grid. */
 function bruteClearance(w: World, tank: TankDimensions, decor: readonly Collider[]) {
   const tankSdf = new TankSdf(tank);
@@ -141,7 +165,7 @@ describe('every shipped species in its decorated tank', { timeout: LONG }, () =>
         species,
         decor,
         anchors: reef ? REEF_ANCHORS : [],
-        fish: spawnMany(s.id, fishCount(s)),
+        fish: spawnsOf(s, fishCount(s)),
       });
       const clearance = bruteClearance(w, tank, decor);
       for (let t = 0; t < 10_000; t++) {
@@ -176,7 +200,7 @@ describe('every shipped species in a full-power wave maker current', { timeout: 
       species,
       decor,
       anchors: reef ? REEF_ANCHORS : [],
-      fish: spawnMany(s.id, fishCount(s)),
+      fish: spawnsOf(s, fishCount(s)),
       waveMaker: {
         direction: [1, 0.3],
         speedMps: WAVE_MAKER.maxSpeedMps,
@@ -214,7 +238,7 @@ describe('a mixed community left alone', { timeout: LONG }, () => {
     ...spawnMany('cardinal-tetra', 10),
     ...spawnMany('rummy-nose-tetra', 10),
     ...spawnMany('dwarf-pencilfish', 6),
-    ...spawnMany('apistogramma-hongsloi', 2),
+    ...spawnsOf(byId('apistogramma-hongsloi'), 2),
   ];
 
   it.each([

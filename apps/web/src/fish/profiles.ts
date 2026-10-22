@@ -233,7 +233,8 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     finTransmission: 0.6,
     nightPaling: 0.5,
   },
-  // Apistogramma males grow about two thirds longer than females (FishBase: 7 cm vs ~4 cm TL).
+  // Apistogramma males grow about two thirds longer than females (7 cm TL in FishBase vs about
+  // 4 cm TL for females in SeriouslyFish).
   'apistogramma-hongsloi': {
     ...DEFAULTS,
     assetId: 'apistogramma-hongsloi',
