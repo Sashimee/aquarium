@@ -1,3 +1,4 @@
+import { posix } from 'node:path';
 import {
   Accessor,
   Document,
@@ -9,6 +10,7 @@ import {
 import { cloneDocument, prune } from '@gltf-transform/functions';
 import {
   bindKtx2Textures,
+  sha256,
   variantFileName,
   writeFileTracked,
   writeGlb,
@@ -43,6 +45,13 @@ export interface TextureEntry {
   source: TextureSource;
   colorSpace: 'srgb' | 'linear';
   variants?: Record<Tier, EncodedVariant>;
+  /** The KTX2 files already shipped by another asset; this asset references them instead of writing copies. */
+  shared?: { assetDir: string; name: string };
+}
+
+export interface SharedTexture {
+  assetDir: string;
+  prefix: string;
 }
 
 export interface BuiltDocument {
@@ -55,6 +64,14 @@ function slug(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+export function texturePrefix(
+  assetId: string,
+  materialCount: number,
+  materialName: string,
+): string {
+  return materialCount > 1 ? `${assetId}_${slug(materialName)}` : assetId;
 }
 
 function accessorFor(
@@ -73,6 +90,7 @@ export function buildDocument(
   assetId: string,
   parts: Part[],
   materialDefs: MaterialDef[],
+  shared: ReadonlyMap<string, SharedTexture> = new Map(),
 ): BuiltDocument {
   const doc = new Document().setLogger(new Logger(Logger.Verbosity.WARN));
   const buffer = doc.createBuffer();
@@ -89,11 +107,17 @@ export function buildDocument(
       .setAlphaMode(def.alphaMode)
       .setDoubleSided(def.doubleSided);
     if (def.alphaMode === 'MASK') material.setAlphaCutoff(0.5);
-    const prefix = materialDefs.length > 1 ? `${assetId}_${slug(def.name)}` : assetId;
+    const owner = shared.get(def.name);
+    const prefix = owner?.prefix ?? texturePrefix(assetId, materialDefs.length, def.name);
     const addTexture = (suffix: string, source: TextureSource | undefined): Texture | null => {
       if (!source) return null;
       const name = `${prefix}_${suffix}`;
-      textures.push({ name, source, colorSpace: source.role === 'baseColor' ? 'srgb' : 'linear' });
+      textures.push({
+        name,
+        source,
+        colorSpace: source.role === 'baseColor' ? 'srgb' : 'linear',
+        ...(owner ? { shared: { assetDir: owner.assetDir, name } } : {}),
+      });
       return doc.createTexture(name);
     };
     const base = addTexture('basecolor', def.baseColor);
@@ -172,6 +196,14 @@ function boundsOfDoc(doc: Document): {
   };
 }
 
+function sharedFile(shared: NonNullable<TextureEntry['shared']>, tier: Tier, bytes: Uint8Array) {
+  return {
+    file: `${shared.assetDir}/${variantFileName(shared.name, tier)}`,
+    bytes: bytes.byteLength,
+    sha256: sha256(bytes),
+  };
+}
+
 export async function writeTextureEntries(
   outRoot: string,
   dir: string,
@@ -189,12 +221,14 @@ export async function writeTextureEntries(
     });
     const written = {} as Record<Tier, WrittenFile & { size: number; codec: TextureCodec }>;
     for (const tier of ['1k', '2k'] as const) {
-      const file = writeFileTracked(
-        outRoot,
-        `${dir}/${variantFileName(entry.name, tier)}`,
-        variants[tier].bytes,
-      );
-      files.push(file);
+      const file = entry.shared
+        ? sharedFile(entry.shared, tier, variants[tier].bytes)
+        : writeFileTracked(
+            outRoot,
+            `${dir}/${variantFileName(entry.name, tier)}`,
+            variants[tier].bytes,
+          );
+      if (!entry.shared) files.push(file);
       written[tier] = { ...file, size: variants[tier].size, codec: variants[tier].codec };
     }
     textures.push({
@@ -272,7 +306,9 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
       doc,
       built.textures.map((t) => ({
         texture: textureByName.get(t.name)!,
-        uri: variantFileName(t.name, '1k'),
+        uri: t.shared
+          ? posix.relative(dir, `${t.shared.assetDir}/${variantFileName(t.shared.name, '1k')}`)
+          : variantFileName(t.name, '1k'),
       })),
     );
     let triangles = 0;

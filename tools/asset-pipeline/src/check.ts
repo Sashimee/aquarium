@@ -254,7 +254,12 @@ function mouthProblems(
     problems.push(`${at}: ${MOUTH_ATTRIBUTE} is 0 on every vertex; the mouth mask was not baked`);
 }
 
-function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
+function lodProblems(
+  asset: OutputAsset,
+  assetsDir: string,
+  shipped: ReadonlyMap<string, string>,
+  problems: string[],
+): void {
   const at = `${asset.kind} ${asset.id}`;
   const owned = new Set(asset.files.map((f) => f.file));
   if (asset.lods.length !== LOD_COUNT) {
@@ -280,9 +285,9 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
       for (const image of json.images ?? []) {
         if (image.uri === undefined) continue;
         const target = posix.join(posix.dirname(lod.file), safeDecodeUri(image.uri));
-        if (!owned.has(target)) {
+        if (!owned.has(target) && !shipped.has(target)) {
           problems.push(
-            `${at}: ${lod.file} references ${image.uri}, which is not in the asset's files (embedded data: URIs are not allowed either)`,
+            `${at}: ${lod.file} references ${image.uri}, which is not in the asset's files or any other asset's (embedded data: URIs are not allowed either)`,
           );
         }
       }
@@ -535,6 +540,23 @@ function snailProblems(asset: OutputAsset, repoRoot: string, problems: string[])
   }
 }
 
+export function duplicateTextureProblems(assets: readonly OutputAsset[]): string[] {
+  const first = new Map<string, { file: string; asset: string }>();
+  const problems: string[] = [];
+  for (const asset of assets)
+    for (const file of asset.files) {
+      if (!file.file.includes('/textures/') || !file.file.endsWith('.ktx2')) continue;
+      const key = `${asset.kind}/${asset.id}`;
+      const earlier = first.get(file.sha256);
+      if (earlier === undefined) first.set(file.sha256, { file: file.file, asset: key });
+      else if (earlier.asset !== key)
+        problems.push(
+          `${file.file} is byte-identical to ${earlier.file}; reference the existing texture instead of shipping a copy`,
+        );
+    }
+  return problems;
+}
+
 export function checkAssets(input: CheckInput): string[] {
   const { manifest, credits, index, assetsDir, repoRoot } = input;
   const problems = validateManifest(manifest, credits);
@@ -542,6 +564,10 @@ export function checkAssets(input: CheckInput): string[] {
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
 
   const listed = new Map<string, string>();
+  const shipped = new Map(
+    index.assets.flatMap((a) => a.files.map((f) => [f.file, f.sha256] as const)),
+  );
+  problems.push(...duplicateTextureProblems(index.assets));
   let audioBytes = 0;
   const seenAssets = new Set<string>();
   for (const asset of index.assets) {
@@ -549,7 +575,7 @@ export function checkAssets(input: CheckInput): string[] {
     if (seenAssets.has(key)) problems.push(`index lists ${key} twice`);
     seenAssets.add(key);
     effectiveLicenceProblems(asset, byId, problems);
-    if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, problems);
+    if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, shipped, problems);
     if (asset.kind === 'fish') {
       fishProblems(asset, repoRoot, problems);
       impostorProblems(asset, assetsDir, problems);
@@ -599,7 +625,13 @@ export function checkAssets(input: CheckInput): string[] {
     ];
     const owned = new Set(asset.files.map((f) => f.file));
     for (const file of referenced) {
-      if (!owned.has(file)) problems.push(`${key}: ${file} is referenced but not in files[]`);
+      if (!owned.has(file) && !shipped.has(file))
+        problems.push(`${key}: ${file} is referenced but not in files[]`);
+    }
+    for (const variant of asset.textures.flatMap((t) => [t.variants['1k'], t.variants['2k']])) {
+      const sha = shipped.get(variant.file);
+      if (!owned.has(variant.file) && sha !== undefined && sha !== variant.sha256)
+        problems.push(`${key}: ${variant.file} differs from the copy listed by its owner`);
     }
   }
 
