@@ -36,6 +36,34 @@ import {
 } from './rgbe.ts';
 import { decodeImage, encodeHdrKtx2, resizeImage, type Rgba } from './textures.ts';
 
+export interface LeafColourVariation {
+  /** Largest relative change of each linear channel, 0.15 is plus or minus 15 %. */
+  spread: number;
+  /** Extra weight of the red channel against blue, so older leaves read yellower; 0 keeps the hue. */
+  yellowing: number;
+}
+
+export function varyLeafColour(
+  base: readonly [number, number, number, number],
+  index: number,
+  variation: LeafColourVariation,
+): [number, number, number, number] {
+  const unit = (salt: number): number => {
+    let h = Math.imul(index + 1, 374761393) + Math.imul(salt, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const light = 1 + (unit(1) * 2 - 1) * variation.spread;
+  const age = unit(2) * variation.yellowing;
+  const clamp = (v: number): number => Math.min(1, Math.max(0, v));
+  return [
+    clamp(base[0] * light * (1 + age)),
+    clamp(base[1] * light),
+    clamp(base[2] * light * (1 - age)),
+    base[3],
+  ];
+}
+
 export interface EnvironmentRecipe {
   id: string;
   kind: Extract<AssetKind, 'plant' | 'coral' | 'driftwood' | 'rock' | 'decor'>;
@@ -51,6 +79,8 @@ export interface EnvironmentRecipe {
   maxTriangles: number;
   /** LOD1 triangle count as a fraction of LOD0, default 0.35; LOD2 is 0.3 of LOD1 when set, else 0.12 of LOD0. */
   lod1Fraction?: number;
+  /** Per-primitive triangle floor when simplifying, default 200; lower it for a model made of many small leaf meshes. */
+  minTriangles?: number;
   /** Removes triangles whose centroid lies in the lowest fraction of the height (a museum plinth, a scan base). */
   clipBelowFraction?: number;
   /** With `clipBelowFraction`, scales so `longestM` refers to the uncropped scan, keeping the metric scale the full scan would have had. */
@@ -58,6 +88,8 @@ export interface EnvironmentRecipe {
   material?: MaterialOptions;
   /** Paint a green leaf texture for sources that only carry a flat colour. */
   proceduralLeafTexture?: boolean;
+  /** Gives every flat-coloured material its own deterministic shade of the source colour, so the leaves of a flat-green model differ. */
+  leafColourVariation?: LeafColourVariation;
   /** Recolours the base colour map by luminance. */
   tint?: TintSpec;
   /** Adds procedural pores to the normal and colour maps; both are upscaled to 2048 px first. */
@@ -300,6 +332,16 @@ export async function loadEnvironment(
     assertTexcoordZero(doc, source, recipe.id);
     let def = await materialDefFrom(source, { metallic: 0, ...recipe.material });
     def = await finishMaterial(def, recipe);
+    if (recipe.leafColourVariation) {
+      def = {
+        ...def,
+        baseColorFactor: varyLeafColour(
+          def.baseColorFactor,
+          materials.length,
+          recipe.leafColourVariation,
+        ),
+      };
+    }
     if (recipe.proceduralLeafTexture && !def.baseColor) {
       materials.push({
         ...def,
@@ -324,7 +366,10 @@ export async function buildEnvironment(
   const lod0 = Math.min(1, recipe.maxTriangles / triangles);
   const lod1 = recipe.lod1Fraction ?? 0.35;
   const lod2 = recipe.lod1Fraction === undefined ? 0.12 : lod1 * 0.3;
-  const plan: LodPlan = { ratios: [lod0, lod0 * lod1, lod0 * lod2], minTriangles: 200 };
+  const plan: LodPlan = {
+    ratios: [lod0, lod0 * lod1, lod0 * lod2],
+    minTriangles: recipe.minTriangles ?? 200,
+  };
 
   const built = buildDocument(recipe.id, parts, materials);
   return emitAsset({
@@ -341,11 +386,15 @@ export async function buildEnvironment(
         'merged meshes, dropped unused attributes, skeleton and animation',
         `origin at the centre of the base, scaled so the longest edge is ${recipe.longestM} m${recipe.keepUncroppedScale ? ' before cropping' : ''}`,
         `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
-        recipe.maxTexturePx
-          ? `textures capped at ${recipe.maxTexturePx} px (normal ${recipe.maxTexturePx / 2} px) and re-encoded to KTX2`
-          : recipe.pores
-            ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
-            : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+        ...(materials.some((m) => m.baseColor)
+          ? [
+              recipe.maxTexturePx
+                ? `textures capped at ${recipe.maxTexturePx} px (normal ${recipe.maxTexturePx / 2} px) and re-encoded to KTX2`
+                : recipe.pores
+                  ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
+                  : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+            ]
+          : ['no textures: flat base colours kept as material factors, PBR metallic-roughness']),
         ...recipe.modifications,
       ],
     },

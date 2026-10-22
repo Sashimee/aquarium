@@ -14,6 +14,18 @@ export interface LeafCardRecipe {
   opacity: string;
   /** Edge of the square card in metres. */
   sizeM: number;
+  /** Colour multiplied into the atlas texels, 0..1 per channel. */
+  tint?: readonly [number, number, number];
+  /** Notes appended to the asset's recorded modifications. */
+  modifications?: string[];
+}
+
+export function tintRgb(image: Rgba, tint: readonly [number, number, number]): Rgba {
+  const data = new Uint8Array(image.data);
+  for (let i = 0; i < image.width * image.height; i++)
+    for (let c = 0; c < 3; c++)
+      data[i * 4 + c] = Math.round((data[i * 4 + c] ?? 0) * Math.min(1, Math.max(0, tint[c] ?? 1)));
+  return { width: image.width, height: image.height, data };
 }
 
 export function withOpacity(colour: Rgba, opacity: Rgba): Rgba {
@@ -52,8 +64,9 @@ export async function buildLeafCard(
 ): Promise<OutputAsset> {
   ctx.verifySource(recipe.sourceId);
   const dir = join(RAW_ROOT, recipe.sourceId);
+  const colour = await decodeImage(readFileSync(join(dir, recipe.colour)));
   const image = withOpacity(
-    await decodeImage(readFileSync(join(dir, recipe.colour))),
+    recipe.tint ? tintRgb(colour, recipe.tint) : colour,
     await decodeImage(readFileSync(join(dir, recipe.opacity))),
   );
   const material: MaterialDef = {
@@ -80,6 +93,7 @@ export async function buildLeafCard(
       modifications: [
         `flat ${recipe.sizeM} m card carrying the leaf set, colour map and opacity map merged into one alpha-cutout texture`,
         'colour map re-encoded to KTX2 at 1k and 2k',
+        ...(recipe.modifications ?? []),
       ],
     },
   });
@@ -92,5 +106,16 @@ export const LEAF_CARD_RECIPES: LeafCardRecipe[] = [
     colour: 'LeafSet030_2K-JPG_Color.jpg',
     opacity: 'LeafSet030_2K-JPG_Opacity.jpg',
     sizeM: 0.3,
+  },
+  {
+    id: 'catappa-leaf-card',
+    sourceId: 'ambientcg-LeafSet015',
+    colour: 'LeafSet015_2K-JPG_Color.jpg',
+    opacity: 'LeafSet015_2K-JPG_Opacity.jpg',
+    sizeM: 0.3,
+    tint: [1, 0.82, 0.58],
+    modifications: [
+      'leaf colours multiplied by a warm tannin-brown tint (red 1.0, green 0.82, blue 0.58) for blackwater',
+    ],
   },
 ];
