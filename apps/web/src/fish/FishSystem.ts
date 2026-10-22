@@ -58,8 +58,8 @@ import {
   type WalkerValues,
 } from './instances';
 import {
+  atlasDistance,
   drawsAsImpostor,
-  effectiveDistance,
   markNearest,
   mouthFade,
   selectLod,
@@ -226,7 +226,7 @@ interface FishRuntime {
   lod: number;
   /** Camera distance this frame, in metres. */
   cameraDistance: number;
-  /** Length-normalised camera distance this frame. */
+  /** `atlasDistance` this frame, for ranking against the tier's mesh limit. */
   distance: number;
   /** One of the tier's nearest fish, drawn as a mesh at any LOD short of lod2. */
   full: boolean;
@@ -1838,10 +1838,15 @@ export class FishSystem {
       rt.liveliness = liveliness;
       const distance = this.position.distanceTo(camera);
       rt.cameraDistance = distance;
-      rt.distance = effectiveDistance(distance, rt.length);
       rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, rt.batch.lods.length);
-      if (rt.batch.impostor !== null) ranked.push(rt);
-      else rt.full = true;
+      const { impostor } = rt.batch;
+      if (impostor !== null) {
+        const { frameSize, radius } = impostor.info;
+        rt.distance = atlasDistance(distance, frameSize, radius, rt.scale);
+        ranked.push(rt);
+      } else {
+        rt.full = true;
+      }
     }
     this.bags.end();
     if (impostors !== null) markNearest(ranked, impostors.fullMeshes);

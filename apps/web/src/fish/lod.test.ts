@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  atlasDistance,
   drawsAsImpostor,
   effectiveDistance,
   IMPOSTOR_LOD,
@@ -49,6 +50,39 @@ describe('selectLod', () => {
   it('rejects a non-positive length', () => {
     expect(() => effectiveDistance(1, 0)).toThrow(RangeError);
     expect(() => selectLod(1, -1, thresholds, 0)).toThrow(RangeError);
+  });
+});
+
+describe('atlasDistance', () => {
+  it('grows with the camera distance and the atlas texels per metre of fish', () => {
+    expect(atlasDistance(1, 64, 0.02, 1)).toBeCloseTo(1600);
+    expect(atlasDistance(2, 64, 0.02, 1)).toBeCloseTo(3200);
+    expect(atlasDistance(1, 128, 0.02, 1)).toBeCloseTo(3200);
+    expect(atlasDistance(1, 64, 0.02, 2)).toBeCloseTo(800);
+  });
+
+  it('rejects an atlas without area', () => {
+    expect(() => atlasDistance(1, 0, 0.02, 1)).toThrow(RangeError);
+    expect(() => atlasDistance(1, 64, 0, 1)).toThrow(RangeError);
+    expect(() => atlasDistance(1, 64, 0.02, 0)).toThrow(RangeError);
+  });
+
+  it('keeps a near 64 px small fish as a mesh before a further 128 px large one', () => {
+    const small = { distance: 0, full: false, rankKey: 0 };
+    const large = { distance: 0, full: false, rankKey: 0 };
+    small.distance = atlasDistance(0.3, 64, 0.02, 1);
+    large.distance = atlasDistance(0.5, 128, 0.06, 1);
+    markNearest([large, small], 1);
+    expect(small.full).toBe(true);
+    expect(large.full).toBe(false);
+  });
+
+  it('demotes the more distant of two fish with the same atlas', () => {
+    const near = { distance: atlasDistance(0.3, 64, 0.02, 1), full: false, rankKey: 0 };
+    const far = { distance: atlasDistance(1.2, 64, 0.02, 1), full: true, rankKey: 0 };
+    markNearest([far, near], 1);
+    expect(near.full).toBe(true);
+    expect(far.full).toBe(false);
   });
 });
 
