@@ -78,18 +78,18 @@ describe('persistence', () => {
 });
 
 describe('the label follows the lamp', () => {
-  const overnight = { intensity: 0.8, onHour: 14, offHour: 22 };
+  const afternoon = { intensity: 0.8, onHour: 14, offHour: 22 };
 
   it('says night at 13:00 when an afternoon lamp is still off', () => {
-    expect(initialMode('?clock=day', () => memoryStorage(), overnight)).toBe('night');
-    expect(initialMode('?clock=13:00', () => memoryStorage(), overnight)).toBe('night');
+    expect(initialMode('?clock=day', () => memoryStorage(), afternoon)).toBe('night');
+    expect(initialMode('?clock=13:00', () => memoryStorage(), afternoon)).toBe('night');
   });
 
   it('says day while the lamp is on, even in the small hours', () => {
     const late = { intensity: 0.8, onHour: 22, offHour: 6 };
     expect(initialMode('?clock=00:00', () => memoryStorage(), late)).toBe('day');
     expect(initialMode('?clock=night', () => memoryStorage(), late)).toBe('day');
-    expect(initialMode('?clock=15:00', () => memoryStorage(), overnight)).toBe('day');
+    expect(initialMode('?clock=15:00', () => memoryStorage(), afternoon)).toBe('day');
   });
 });
 

@@ -59,10 +59,7 @@ export function writeMode(
   }
 }
 
-/**
- * A valid `?clock=` pins the page and beats the saved choice; an invalid one is ignored. The
- * label follows the lamp, since that is the light the tank shows, not the sky behind it.
- */
+/** A valid `?clock=` pins the page and beats the saved choice; an invalid one is ignored. */
 function urlClock(search: string): number | null {
   const param = new URLSearchParams(search).get('clock');
   if (param === null) return null;
@@ -73,6 +70,7 @@ function urlClock(search: string): number | null {
   }
 }
 
+/** A pinned clock is labelled by the lamp, since that is the light the tank shows, not the sky behind it. */
 export function initialMode(
   search: string,
   store: () => Storage | null = browserStorage,

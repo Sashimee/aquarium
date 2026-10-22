@@ -61,7 +61,10 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
   const stopPreference = binding.preference.subscribe(sync);
   const stopSeed = binding.seed.subscribe(rebuild);
   const stopFrames = binding.onFrame(() => {
-    if (!light) return;
+    if (!light) {
+      binding.clock();
+      return;
+    }
     const nowMs = binding.now();
     light.update({
       nowMs,

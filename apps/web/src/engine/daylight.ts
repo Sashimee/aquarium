@@ -116,8 +116,9 @@ export class ClockPin {
   }
 
   /**
-   * The minute the room's sky is read at: the sun runs forward from the minute last shown to
-   * `target` over the same smoothstep as `blend`, so the sky and the tank light stay in step.
+   * The minute the room's sky is read at: the sun runs the shorter way round from the minute last
+   * shown to `target` over the same smoothstep as `blend`, so the sky and the tank light stay in
+   * step and a small correction never spins the sky through a whole day.
    */
   blendMinute(target: number, nowMs: number): number {
     const from = this.minuteFrom;
@@ -126,7 +127,9 @@ export class ClockPin {
       this.minuteFrom = null;
       this.shownMinute = target;
     } else {
-      this.shownMinute = wrapMinutes(from + wrapMinutes(target - from) * smoothstep(t));
+      const forward = wrapMinutes(target - from);
+      const arc = forward <= MINUTES_PER_DAY / 2 ? forward : forward - MINUTES_PER_DAY;
+      this.shownMinute = wrapMinutes(from + arc * smoothstep(t));
     }
     return this.shownMinute;
   }

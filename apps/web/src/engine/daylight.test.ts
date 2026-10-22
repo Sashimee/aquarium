@@ -2,6 +2,7 @@ import { DEFAULT_EQUIPMENT } from '@aquarium/shared';
 import { NIGHT } from '@aquarium/sim';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
+import { roomDaylightAt } from './room/timeOfDay';
 import { EventBus, type EngineEvents } from './events';
 import {
   CLOCK_EASE_MS,
@@ -401,15 +402,79 @@ describe('ClockPin room minute', () => {
     expect(pin.blendMinute(0, CLOCK_EASE_MS / 2)).toBeCloseTo(23.5 * 60);
   });
 
-  it('moves in step with the tank light', () => {
+  const STEPS = 20;
+  const samples = (pin: ClockPin, target: number, from: number): number[] =>
+    Array.from({ length: STEPS + 1 }, (_, i) =>
+      pin.blendMinute(target, from + (CLOCK_EASE_MS * i) / STEPS),
+    );
+  const steps = (values: number[]): number[] => values.slice(1).map((v, i) => v - (values[i] ?? v));
+
+  it('reaches night in the room and the tank together, neither going the wrong way', () => {
     const pin = new ClockPin(null);
     pin.blend({ hood: 1, room: 1 }, 0);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 0);
+    const hood: number[] = [];
+    const room: number[] = [];
+    for (let i = 0; i <= STEPS; i += 1) {
+      const nowMs = (CLOCK_EASE_MS * i) / STEPS;
+      hood.push(pin.blend({ hood: 0, room: 0 }, nowMs).hood);
+      room.push(roomDaylightAt(pin.blendMinute(0, nowMs)));
+    }
+    expect(hood.at(-1)).toBe(0);
+    expect(room.at(-1)).toBeCloseTo(roomDaylightAt(0));
+    expect(roomDaylightAt(0)).toBeLessThan(0.1);
+    expect(steps(hood).every((d) => d <= 1e-9)).toBe(true);
+    expect(steps(room).every((d) => d <= 1e-9)).toBe(true);
+    expect(room.some((v) => v > 0.1 && v < (room[0] ?? 0) - 0.1)).toBe(true);
+  });
+
+  it('goes back a little rather than round the day when the target is just behind', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(13 * 60 + 1, 0);
+    pin.set('day', 0);
+    const path = samples(pin, 13 * 60, 0);
+    expect(path.every((m) => m >= 13 * 60 && m <= 13 * 60 + 1)).toBe(true);
+    expect(path.at(-1)).toBe(13 * 60);
+  });
+
+  it('never passes through night going from the live afternoon to day', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(15 * 60, 0);
+    pin.set('day', 0);
+    const path = samples(pin, 13 * 60, 0);
+    expect(path.every((m) => m >= 13 * 60 && m <= 15 * 60)).toBe(true);
+    expect(Math.min(...path.map(roomDaylightAt))).toBeGreaterThan(0.5);
+    expect(steps(path).every((d) => d <= 1e-9)).toBe(true);
+  });
+
+  it('never passes through day going from night back to the live evening', () => {
+    const pin = new ClockPin('night');
     pin.blendMinute(0, 0);
-    pin.set(12 * 60, 0);
-    const levels = pin.blend({ hood: 0, room: 0 }, CLOCK_EASE_MS / 4);
-    const minute = pin.blendMinute(12 * 60, CLOCK_EASE_MS / 4);
-    const k = 1 - levels.hood;
-    expect(minute).toBeCloseTo(12 * 60 * k);
+    pin.set(null, 0);
+    const path = samples(pin, 23 * 60, 0);
+    expect(Math.max(...path.map(roomDaylightAt))).toBeLessThan(0.1);
+    expect(path.every((m) => m >= 23 * 60 || m === 0)).toBe(true);
+    expect(path.at(-1)).toBe(23 * 60);
+  });
+
+  it('restarts both the tank light and the sky from where they were on a second press', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 0);
+    const half = CLOCK_EASE_MS / 2;
+    const hoodBefore = pin.blend({ hood: 0, room: 0 }, half);
+    const minuteBefore = pin.blendMinute(0, half);
+    expect(minuteBefore).toBeGreaterThan(13 * 60);
+    pin.set('day', half);
+    expect(pin.blend({ hood: 1, room: 1 }, half)).toEqual(hoodBefore);
+    expect(pin.blendMinute(13 * 60, half)).toBeCloseTo(minuteBefore);
+    const later = pin.blend({ hood: 1, room: 1 }, half + CLOCK_EASE_MS / 2);
+    expect(later.hood).toBeGreaterThan(hoodBefore.hood);
+    expect(later.hood).toBeLessThan(1);
+    expect(pin.blendMinute(13 * 60, half + CLOCK_EASE_MS)).toBe(13 * 60);
+    expect(pin.blend({ hood: 1, room: 1 }, half + CLOCK_EASE_MS)).toEqual({ hood: 1, room: 1 });
   });
 });
 
