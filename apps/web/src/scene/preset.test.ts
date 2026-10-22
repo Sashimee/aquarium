@@ -373,17 +373,38 @@ describe('blackwater and mangrove composition', () => {
   it('keeps overlapping leaf cards at distinct heights so they cannot z-fight', () => {
     const bounds = catalog.assets.find((a) => a.id === 'oak-leaf-card')?.bounds;
     if (!bounds) throw new Error('oak-leaf-card has no bounds');
-    const radius =
-      Math.hypot(
-        (bounds.max[0] ?? 0) - (bounds.min[0] ?? 0),
-        (bounds.max[2] ?? 0) - (bounds.min[2] ?? 0),
-      ) / 2;
+    const half = ((bounds.max[0] ?? 0) - (bounds.min[0] ?? 0)) / 2;
+    type Card = ReturnType<typeof loadPreset>['decor'][number];
+    const overlap = (a: Card, b: Card): boolean => {
+      const dx = b.position[0] - a.position[0];
+      const dz = b.position[2] - a.position[2];
+      for (const angle of [a.rotationY, b.rotationY]) {
+        const ux = Math.cos(angle);
+        const uz = -Math.sin(angle);
+        for (const [axX, axZ] of [
+          [ux, uz],
+          [-uz, ux],
+        ] as const) {
+          const reach = (c: Card): number => {
+            const cos = Math.cos(c.rotationY);
+            const sin = Math.sin(c.rotationY);
+            return (
+              half * c.scale * (Math.abs(axX * cos - axZ * sin) + Math.abs(axX * sin + axZ * cos))
+            );
+          };
+          if (Math.abs(dx * axX + dz * axZ) >= reach(a) + reach(b)) return false;
+        }
+      }
+      return true;
+    };
     const cards = loadPreset('blackwater').decor.filter((d) => d.assetId === 'oak-leaf-card');
     for (const [i, a] of cards.entries()) {
       for (const b of cards.slice(i + 1)) {
-        const apart = Math.hypot(a.position[0] - b.position[0], a.position[2] - b.position[2]);
-        if (apart >= radius * Math.max(a.scale, b.scale)) continue;
-        expect(Math.abs(a.position[1] - b.position[1])).toBeGreaterThanOrEqual(0.004);
+        if (!overlap(a, b)) continue;
+        expect(
+          Math.abs(a.position[1] - b.position[1]),
+          `cards ${i} and ${cards.indexOf(b)}`,
+        ).toBeGreaterThanOrEqual(0.004);
       }
     }
   });
