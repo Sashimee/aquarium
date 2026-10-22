@@ -12,7 +12,8 @@ import {
 import { compileCollider, FishState, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
-import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
+import { demoTank, sceneAnchorsToSim, tankSpaceOf } from '../fish/demoStock';
+import { allSpeciesInputs } from '../fish/species';
 import { SimWorldSpec } from '../fish/simWorld';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { caveAnchors, waterReach } from './caves';
@@ -30,10 +31,6 @@ const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 const SEEDS = [1, 2, 3, 4];
 const STEPS_PER_PHASE = 9000;
 const CONTACTS_PER_FISH_STEP = 1e-3;
-// A nano keeps shelters at 0.6 of their size in a 0.25 m deep tank: the rock pile's mouth sits
-// closer to its own hull than at full size, and the water ends within two radii of it.
-const NANO_MOUTH_ROOM = 0.7;
-const NANO_WAY_OUT_RADII = 1;
 
 let library: ModelLibrary;
 let catalog: AssetCatalog;
@@ -69,6 +66,12 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
+// A reef-arch is as wide as a nano tank, so no fish a nano can hold would find free water to
+// spawn in next to one: the nano reef keeps no arch and so no cave.
+function hasNoNanoShelter(biome: Biome, size: TankSize): boolean {
+  return biome === 'reef' && size === 'nano30';
+}
+
 type Layer = 'scene hulls' | 'decor colliders';
 const LAYERS: readonly Layer[] = ['scene hulls', 'decor colliders'];
 
@@ -103,18 +106,13 @@ function clearanceTo(colliders: readonly Collider[]) {
     Math.min(...solids.map((p) => p.sample(x, y, z, normal)));
 }
 
-async function expectMouthsClear(
-  biome: Biome,
-  layer: Layer,
-  decor: readonly DecorItem[],
-  room = 0.9,
-) {
+async function expectMouthsClear(biome: Biome, layer: Layer, decor: readonly DecorItem[]) {
   const clearance = clearanceTo(await hardColliders(biome, layer, decor));
   const anchors = caveAnchors(decor);
   expect(anchors.length).toBeGreaterThan(0);
   for (const a of anchors) {
     const [x, y, z] = a.position;
-    expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(room * a.radius);
+    expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(0.9 * a.radius);
   }
 }
 
@@ -126,16 +124,16 @@ describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
 
     it.each(SIZES)('%s: every anchor has room for a fish', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
-      await expectMouthsClear(
-        biome,
-        layer,
-        fitted.decor,
-        size === 'nano30' ? NANO_MOUTH_ROOM : undefined,
-      );
+      if (hasNoNanoShelter(biome, size)) {
+        expect(caveAnchors(fitted.decor)).toEqual([]);
+        return;
+      }
+      await expectMouthsClear(biome, layer, fitted.decor);
     });
 
     it.each(SIZES)('%s: every anchor has a clear way out along its facing', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
+      if (hasNoNanoShelter(biome, size)) return;
       const clearance = clearanceTo(await hardColliders(biome, layer, fitted.decor));
       const reach = waterReach(TANK_DIMENSIONS[size]);
       const anchors = caveAnchors(fitted.decor, reach);
@@ -145,7 +143,7 @@ describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
       for (const a of anchors) {
         const [x, y, z] = a.position;
         const [fx = 0, , fz = 0] = a.facing ?? [];
-        for (const k of size === 'nano30' ? [NANO_WAY_OUT_RADII] : [1, 2, 3]) {
+        for (const k of [1, 2, 3]) {
           const px = x + fx * k * a.radius;
           const pz = z + fz * k * a.radius;
           const at = `${a.id} ${k} r along facing`;
@@ -199,6 +197,55 @@ describe('the sim at boot', () => {
       expect(sent.filter((a) => a.kind === 'cave')).toHaveLength(caves.length);
       expect(spec.setDecor(hulls)).toBeNull();
       expect(spec.anchors).toBe(sent);
+    },
+  );
+});
+
+const NANO_SPAWN_SPECIES: Readonly<Record<'freshwater' | 'reef' | 'cichlid', string>> = {
+  freshwater: 'angelfish',
+  reef: 'cleaner-wrasse',
+  cichlid: 'altolamprologus-calvus',
+};
+const SPAWN_SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
+
+describe.each(LAYERS)('a nano tank with the fitted decor and %s', (layer) => {
+  describe.each(Object.keys(NANO_SPAWN_SPECIES) as (keyof typeof NANO_SPAWN_SPECIES)[])(
+    '%s',
+    (biome) => {
+      it('has free water to spawn a single adult in, for every seed', async () => {
+        const dimensions = TANK_DIMENSIONS.nano30;
+        const fitted = fitPresetToCatalog(loadPreset(biome), 'nano30', dimensions, catalog);
+        const decor = await hardColliders(biome, layer, fitted.decor);
+        const id = NANO_SPAWN_SPECIES[biome];
+        const species = allSpeciesInputs();
+        const input = species.find((s) => s.id === id);
+        if (!input) throw new Error(`no content for ${id}`);
+        const failed: string[] = [];
+        for (const seed of SPAWN_SEEDS) {
+          try {
+            new World({
+              seed,
+              space: tankSpaceOf(dimensions),
+              species,
+              fish: [{ id: `${id}-0`, species: id, bodyLengthM: input.locomotion.bodyLengthM }],
+              decor,
+            });
+          } catch (error) {
+            failed.push(`seed ${seed}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+        expect(failed, `${id} could not spawn`).toEqual([]);
+      });
+
+      it('boots the nano demo stock', async () => {
+        const dimensions = TANK_DIMENSIONS.nano30;
+        const fitted = fitPresetToCatalog(loadPreset(biome), 'nano30', dimensions, catalog);
+        const decor = await hardColliders(biome, layer, fitted.decor);
+        for (const seed of [1, 2, 3, 4]) {
+          const { config } = demoTank(dimensions, seed, biome);
+          expect(() => new World({ ...config, decor }), `seed ${seed}`).not.toThrow();
+        }
+      });
     },
   );
 });

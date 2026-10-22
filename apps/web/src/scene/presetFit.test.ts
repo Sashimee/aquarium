@@ -126,7 +126,7 @@ describe('the decor a preset keeps on the nano tank', () => {
   const kindOfId = (id: string) => (catalog.has(id) ? catalog.get(id).kind : 'coral');
   const genus = (item: DecorItem) => item.assetId.split('-')[0];
 
-  it.each(BIOMES)('%s keeps every kind of shelter, its anemone and every coral genus', (biome) => {
+  it.each(BIOMES)('%s keeps its anemone and every coral genus', (biome) => {
     const { decor } = loadPreset(biome);
     const kept = keptPresetDecor(decor, 'nano30');
     expect(kept.length).toBe(presetDecorCount(decor.length, 'nano30'));
@@ -135,7 +135,6 @@ describe('the decor a preset keeps on the nano tank', () => {
       key: (item: DecorItem) => string | undefined,
     ) => new Set(decor.filter(pick).map(key));
     for (const [what, pick, key] of [
-      ['shelter', (i: DecorItem) => offersShelter(i.assetId), (i: DecorItem) => i.assetId],
       ['anemone', (i: DecorItem) => kindOf(i) === 'anemone', (i: DecorItem) => i.assetId],
       ['coral', (i: DecorItem) => kindOf(i) === 'coral', genus],
     ] as const) {
@@ -143,6 +142,15 @@ describe('the decor a preset keeps on the nano tank', () => {
       const keptKinds = new Set(kept.filter(pick).map(key));
       expect([...keptKinds].sort(), `${biome} ${what}`).toEqual([...wanted].sort());
     }
+  });
+
+  it('keeps only the shelters a nano fish can still spawn beside', () => {
+    const shelters = (biome: Biome) =>
+      keptPresetDecor(loadPreset(biome).decor, 'nano30')
+        .filter((item) => offersShelter(item.assetId))
+        .map((item) => item.assetId);
+    expect(new Set(shelters('cichlid'))).toEqual(new Set(['neothauma-shell']));
+    expect(shelters('reef')).toEqual([]);
   });
 
   it('keeps a coral on the reef and a fern on the freshwater tank', () => {

@@ -22,12 +22,6 @@
       "scale": 0.7
     },
     {
-      "assetId": "boulder-01",
-      "position": [0.3, 0.086, -0.04],
-      "rotationY": 1,
-      "scale": 0.85
-    },
-    {
       "assetId": "java-fern",
       "position": [-0.3, 0.17, -0.05],
       "rotationY": 0.6,
@@ -38,6 +32,12 @@
       "position": [0.46, 0.068, 0.08],
       "rotationY": -0.6,
       "scale": 0.55
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.3, 0.086, -0.04],
+      "rotationY": 1,
+      "scale": 0.85
     },
     {
       "assetId": "driftwood-branch",

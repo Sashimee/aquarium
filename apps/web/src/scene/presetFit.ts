@@ -234,9 +234,11 @@ function fitPatch(
 }
 
 /**
- * Presets are authored for the standard tank. Positions stretch with the glass, sizes shrink with
- * the smaller of its length and depth, and anything that would still cross the glass or break the
- * waterline is scaled or nudged back inside.
+ * Presets are authored for the standard tank. Positions stretch with the glass and decor scales
+ * with the smaller of its length and depth, held at `DECOR_MIN_SCALE`; a tank too small for all of
+ * it keeps the head of the preset and drops the tail (`keptPresetDecor`). Anything that would
+ * still cross the glass or break the waterline is scaled or nudged back inside. Plant patches
+ * shrink in count and radius with the floor instead of being dropped.
  */
 export function fitPresetToTank(
   preset: PresetLayout,
@@ -249,7 +251,11 @@ export function fitPresetToTank(
   const stretched = fitPresetDecor(preset.decor, size);
   return {
     ...preset,
-    decor: kept.map((item, i) => fitItem(item, stretched[i] ?? item, size, dimensions, boundsOf)),
+    decor: kept.map((item, i) => {
+      const fitted = stretched[i];
+      if (!fitted) throw new Error(`${item.assetId} is missing from the server decor fit`);
+      return fitItem(item, fitted, size, dimensions, boundsOf);
+    }),
     plantPatches:
       size === 'standard'
         ? preset.plantPatches
