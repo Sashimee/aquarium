@@ -1,10 +1,12 @@
 import { legacyTintSeed, type Collider, type DecorItem, type Plant } from '@aquarium/shared';
+import { Euler, Vector3 } from 'three';
 import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import {
   grownItem,
   offsetEntries,
   type GrowthContext,
   type LayoutPlantRef,
+  type OffsetEntry,
 } from '../../scene/plantGrowth';
 import { collidersFor } from './colliders';
 import type { Piece } from './layout';
@@ -23,6 +25,12 @@ export interface GrownPlants {
   readonly pieces: readonly Piece[];
   /** One collider per offset (runner or carpet daughter), which the pieces do not carry. */
   readonly extra: readonly Collider[];
+}
+
+/** The offset's stem direction, tilted the way the scene writes its instance matrix (Euler YXZ). */
+function standingUp(entry: OffsetEntry): [number, number, number] {
+  const up = new Vector3(0, 1, 0).applyEuler(new Euler(entry.tiltX, entry.yaw, entry.tiltZ, 'YXZ'));
+  return [up.x, up.y, up.z];
 }
 
 /**
@@ -73,15 +81,15 @@ export function growPlants(input: PlantColliderInput): GrownPlants {
   for (const [assetId, entries] of offsetEntries(refs, context)) {
     const spec = specs.get(assetId);
     if (!spec) continue;
-    entries.forEach((entry, n) => {
+    for (const entry of entries) {
       const item: DecorItem = {
         assetId,
         position: [entry.x, entry.y, entry.z],
         rotationY: 0,
         scale: entry.scale,
       };
-      extra.push(...collidersFor(`plant:${assetId}:${n}`, spec, item));
-    });
+      extra.push(...collidersFor(`plant:${entry.key}`, spec, item, standingUp(entry)));
+    }
   }
   return { pieces: grownPieces, extra };
 }
