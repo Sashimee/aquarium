@@ -11,9 +11,9 @@ interface CaveMouth {
 }
 
 /**
- * Where the opening sits and which way it looks out. A shelter is solid to the sim: the scene fits
- * one convex hull to it, and the decor layer replaces that with a rounded box over its whole
- * footprint. The mouth is set outside both along `facing`, at least its own `radius` clear, where
+ * Where the opening sits and which way it looks out. A shelter is solid to the sim as a few convex
+ * parts that leave the opening clear, the same parts in the scene's own colliders and in the decor
+ * layer's. The mouth is set outside them along `facing`, at least its own `radius` clear, where
  * a fish can reach it.
  */
 export const CAVE_MOUTHS: Readonly<Record<string, CaveMouth>> = {
