@@ -1066,6 +1066,23 @@ describe('pH, KH, temperature and salinity', () => {
       return r.value;
     };
 
+    it('dose and water-change target equal each salt biome default', () => {
+      for (const biome of ['reef', 'mangrove'] as const) {
+        const mixLevel = newTankChemistry(biome).salinity;
+        expect(chemistryParams.salinity.target[biome]).toBe(mixLevel);
+        const atDefault = {
+          ...tank([]),
+          chemistry: newTankChemistry(biome),
+        };
+        const changed = applyCare(atDefault, { type: 'water_change' }, biome, chemistryParams, T0);
+        if (!changed.ok) throw new Error(changed.reason);
+        expect(changed.value.chemistry.salinity).toBe(mixLevel);
+        const dosed = applyCare(atDefault, { type: 'salt_dose' }, biome, chemistryParams, T0);
+        if (!dosed.ok) throw new Error(dosed.reason);
+        expect(dosed.value.chemistry.salinity).toBe(mixLevel);
+      }
+    });
+
     it('moves salinity a fixed fraction of the gap towards the salt-mix level', () => {
       const { saltDoseFraction } = chemistryParams.salinity;
       expect(dose(reefAt(20)).chemistry.salinity).toBeCloseTo(20 + (mix - 20) * saltDoseFraction);
