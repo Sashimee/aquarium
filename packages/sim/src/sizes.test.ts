@@ -266,7 +266,8 @@ const AWAITING_CONTENT: Record<
     maxSlM: 0.036,
     maxTlM: 0.036 * 1.25,
     source:
-      'Seriously Fish (Megalamphodus megalopterus): 30-36 mm standard length. No FishBase ' +
+      'Seriously Fish (listed as Megalamphodus megalopterus; accepted name Hyphessobrycon ' +
+      'megalopterus): 30-36 mm standard length. No FishBase ' +
       'length-length relationship was checked, so TL = 1.25 SL, a typical characin proportion ' +
       'with a forked caudal; it is an assumption, not a literature value.',
   },
