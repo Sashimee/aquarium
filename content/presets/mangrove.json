@@ -1,0 +1,104 @@
+{
+  "id": "mangrove",
+  "name": "Brackish mangrove aquarium",
+  "biome": "mangrove",
+  "substrate": {
+    "assetId": "brown-mud-03",
+    "accentAssetId": "coast-sand-04",
+    "tint": [0.7, 0.62, 0.52],
+    "tileMeters": 0.4
+  },
+  "decor": [
+    {
+      "assetId": "mangrove-stump",
+      "position": [-0.4, 0.087, -0.08],
+      "rotationY": 0.4,
+      "scale": 1.1
+    },
+    {
+      "assetId": "mangrove-stump",
+      "position": [0.36, 0.09, -0.12],
+      "rotationY": 2.0,
+      "scale": 1.0
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [-0.12, 0.086, -0.1],
+      "rotationY": 0.8,
+      "scale": 1.1
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [0.1, 0.065, 0.04],
+      "rotationY": 2.6,
+      "scale": 1.0
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [-0.46, 0.057, 0.08],
+      "rotationY": 1.7,
+      "scale": 0.9
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [0.46, 0.059, 0.05],
+      "rotationY": -0.7,
+      "scale": 1.0
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [-0.26, 0.051, 0.12],
+      "rotationY": 3.5,
+      "scale": 0.8
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [0.26, 0.089, -0.12],
+      "rotationY": 4.4,
+      "scale": 1.1
+    },
+    {
+      "assetId": "driftwood-branch",
+      "position": [0.0, 0.054, 0.1],
+      "rotationY": 0.0,
+      "scale": 0.9
+    },
+    {
+      "assetId": "coast-rocks-05",
+      "position": [0.34, 0.076, 0.03],
+      "rotationY": 0.6,
+      "scale": 0.7
+    },
+    {
+      "assetId": "coast-rocks-05",
+      "position": [-0.05, 0.067, 0.07],
+      "rotationY": 2.1,
+      "scale": 0.55
+    },
+    {
+      "assetId": "mangrove-propagule",
+      "position": [-0.3, 0.074, 0.02],
+      "rotationY": 1.2,
+      "scale": 1.0
+    },
+    {
+      "assetId": "mangrove-propagule",
+      "position": [0.2, 0.051, 0.17],
+      "rotationY": 4.0,
+      "scale": 1.0
+    },
+    {
+      "assetId": "mangrove-propagule",
+      "position": [0.02, 0.087, -0.04],
+      "rotationY": 2.7,
+      "scale": 1.1
+    }
+  ],
+  "plantPatches": [],
+  "current": {
+    "direction": [1, 0.1],
+    "speed": 0.06,
+    "gustPeriodS": 20,
+    "gustDepth": 0.4
+  }
+}

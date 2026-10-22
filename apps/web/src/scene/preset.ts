@@ -2,8 +2,16 @@ import { presetLayoutSchema, type Biome, type PresetLayout } from '@aquarium/sha
 import freshwater from '../../../../content/presets/freshwater.json';
 import reef from '../../../../content/presets/reef.json';
 import cichlid from '../../../../content/presets/cichlid.json';
+import blackwater from '../../../../content/presets/blackwater.json';
+import mangrove from '../../../../content/presets/mangrove.json';
 
-const SOURCES: Readonly<Partial<Record<Biome, unknown>>> = { freshwater, reef, cichlid };
+const SOURCES: Readonly<Partial<Record<Biome, unknown>>> = {
+  freshwater,
+  reef,
+  cichlid,
+  blackwater,
+  mangrove,
+};
 
 export function parsePreset(source: unknown, label: string): PresetLayout {
   const result = presetLayoutSchema.safeParse(source);
