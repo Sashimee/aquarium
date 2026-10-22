@@ -253,8 +253,6 @@ interface Echo {
   until: number;
   /** The food of this feed is already in the water, whichever of the stream frame and the reply came first. */
   dropped: boolean;
-  /** undefined when the handle could not be loaded: match on food and portion only. */
-  by: string | null | undefined;
 }
 
 /** The client side of the shared tank: one live stream, the player's quota, and feeding with retry-safe keys. */
@@ -270,8 +268,7 @@ export class CommunityController {
   private quotaTimer: ReturnType<typeof setTimeout> | null = null;
   private uploader: AteUploader | null = null;
   private started = false;
-  private handle: string | null | undefined = null;
-  private handleLoaded: Promise<void> = Promise.resolve();
+  private handle: string | null | undefined = undefined;
 
   constructor(private readonly deps: CommunityControllerDeps) {
     this.now = deps.now ?? Date.now;
@@ -289,7 +286,7 @@ export class CommunityController {
     if (this.started) return;
     this.started = true;
     void this.refreshQuota();
-    this.handleLoaded = this.loadHandle();
+    void this.loadHandle();
     void this.runStream();
   }
 
@@ -309,13 +306,11 @@ export class CommunityController {
     if (problem && secondsLeft(problem.retryAt, this.now()) > 0) return;
     const intent = `${food}:${portion}`;
     this.patch({ feeding: true, problem: null, notice: null });
-    await this.handleLoaded;
     const echo: Echo = {
       food,
       portion,
       until: this.now() + ECHO_WINDOW_MS,
       dropped: false,
-      by: this.handle,
     };
     this.echoes.push(echo);
     try {
@@ -369,7 +364,7 @@ export class CommunityController {
       const handle = await this.deps.api.myHandle?.();
       if (handle !== undefined && !this.lifetime.signal.aborted) this.handle = handle;
     } catch (error) {
-      this.handle = undefined;
+      if (error instanceof ApiRequestError && error.status === 401) return;
       console.warn(
         'could not load your handle; matching own feeds on food and portion only',
         error,
@@ -502,7 +497,8 @@ export class CommunityController {
     this.echoes = this.echoes.filter((e) => e.until > now);
     const echo = this.echoes.find(
       (e) =>
-        (e.by === undefined || e.by === event.by) &&
+        // Before the handle is known (or when it never loads) an own feed can only be told by food and portion.
+        (this.handle === undefined || this.handle === event.by) &&
         e.food === event.food &&
         Math.abs(e.portion - event.portion) < PORTION_EPSILON,
     );
