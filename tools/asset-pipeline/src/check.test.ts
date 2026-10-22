@@ -896,6 +896,16 @@ describe('checkAssets', () => {
       expect(problemsFor(unscaled)).toContain('differs from content/species');
     });
 
+    it('applies the lengthFactor of a loft recipe (aulonocara-baenschi male is 1.33 of the female)', () => {
+      speciesFile(SPECIES_LENGTH);
+      const asset = (standardLengthM: number): OutputAsset => ({
+        ...guppy({ lengthSource: 'species-json', standardLengthM }, 'aulonocara-baenschi'),
+        species: 'guppy',
+      });
+      expect(problemsFor(asset(SPECIES_LENGTH * 1.33))).not.toContain('bodyLengthM');
+      expect(problemsFor(asset(SPECIES_LENGTH))).toContain('differs from content/species');
+    });
+
     it('fails a species-json fish whose species file lost bodyLengthM', () => {
       speciesFile(null);
       const asset = guppy({ lengthSource: 'species-json', standardLengthM: SPECIES_LENGTH });

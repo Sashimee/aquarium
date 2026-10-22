@@ -5,9 +5,9 @@ import { backgroundFileSchema } from '@aquarium/shared';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { speciesLengthM } from './fish.ts';
 import { readKtx2Info } from './textures.ts';
-import { FISH_RECIPES } from './recipes.ts';
 import { BLACKWATER_FISH_RECIPES } from './blackwater-fish.ts';
 import { LOFT_FISH_RECIPES } from './loft-fish.ts';
+import { FISH_RECIPES } from './recipes.ts';
 import { shrimpLength } from './shrimp.ts';
 import {
   backgroundContentProblems,

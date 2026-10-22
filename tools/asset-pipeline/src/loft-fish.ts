@@ -64,7 +64,7 @@ export interface LoftFishRecipe {
   id: string;
   species: string;
   fallbackLengthM: number;
-  /** Multiplies the species-JSON length, for a sex that grows larger or smaller than the species value. */
+  /** Multiplies the species-JSON length, for sexes that differ from the species value. */
   lengthFactor?: number;
   spec: Omit<LoftSpec, 'standardLengthM'>;
   texture: PhotoSource | SyntheticSource;
