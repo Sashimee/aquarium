@@ -13,6 +13,7 @@ import {
 import { boundsFromCatalog, maxScaleAt, type FitModel } from './presetFit';
 
 const MAX_ANCESTORS = 64;
+const MIN_FRAGMENT_SCALE_FRACTION = 0.25;
 
 export interface CoralSlot {
   readonly assetId: string;
@@ -44,7 +45,10 @@ function clampedSize(coral: Coral): number {
   return Math.min(coral.maxSize, Math.max(coral.minSize, coral.size));
 }
 
-/** Largest scale an item can take where it stands; the glass and the surface are the limit. */
+/**
+ * Largest scale an item can take where it stands; the glass and the surface are the limit.
+ * A fragment of a swaying coral is floored above it, so its sway can cross the glass.
+ */
 export type ScaleCap = (item: DecorItem) => number;
 
 /**
@@ -109,7 +113,12 @@ export function placeFragments(
       position: [x, ground(x, z), z],
       rotationY: mulberry32(hashKey(coral.key))() * Math.PI * 2,
     };
-    const scale = Math.min(root.item.scale * clampedSize(coral), cap(standing));
+    const wanted = root.item.scale * clampedSize(coral);
+    const capped = Math.min(wanted, cap(standing));
+    const scale =
+      parseEuphylliaId(root.assetId) === null
+        ? capped
+        : Math.max(capped, Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION));
     placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;

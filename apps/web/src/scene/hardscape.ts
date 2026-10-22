@@ -143,6 +143,8 @@ export function swelledPosition(
   return position.add(normal.mul(extension.mul(POLYP_SWELL_METRES * gain)).div(scale));
 }
 
+// Every coral carries a colour node, so none shares a shader program with rocks: sharing would need a
+// material swap on the first bleach, which misses the Engine.ts prewarm and stalls a WebGL2 compile mid-session.
 function coralMaterial(source: MeshStandardMaterial, tint: Color | null): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
   // NodeMaterial.copy skips the private-backed accessors (alphaTest), which Material.copy handles.

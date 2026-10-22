@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Coral, DecorItem } from '@aquarium/shared';
+import { euphylliaId } from './euphyllia';
 import { grownCoralItem, matchLayoutCorals, placeFragments, type CoralSlot } from './coralGrowth';
 
 const item = (tintSeed: number, x = 0, scale = 1): DecorItem => ({
@@ -87,6 +88,34 @@ describe('grownCoralItem', () => {
 describe('placeFragments', () => {
   const root = coral('s5', { size: 1.6 });
   const frag = coral('s5.1', { parentKey: 's5', position: [0.1, 0.05], size: 0.3 });
+  const hammer = euphylliaId('hammer', 3);
+  const sway = (tintSeed: number, scale: number): DecorItem => ({
+    ...item(tintSeed, 0, scale),
+    assetId: hammer,
+  });
+  const swayRoot = coral('s5', { assetId: hammer, size: 1.6 });
+  const swayFrag = { ...frag, assetId: hammer };
+
+  it('holds a rigid fragment to a zero cap', () => {
+    const [placed] = placeFragments([slot(item(5, 0, 0.8))], [root, frag], flat, () => 0);
+    expect(placed?.item.scale).toBe(0);
+  });
+
+  it('floors a swaying fragment at a quarter of the root scale when the cap is zero', () => {
+    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, swayFrag], flat, () => 0);
+    expect(placed?.item.scale).toBeCloseTo(0.2);
+  });
+
+  it('lets a cap above the floor win for a swaying fragment', () => {
+    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, swayFrag], flat, () => 0.22);
+    expect(placed?.item.scale).toBeCloseTo(0.22);
+  });
+
+  it('never floors a swaying fragment above the size it wants', () => {
+    const small = { ...swayFrag, minSize: 0.05, size: 0.05 };
+    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, small], flat, () => 0);
+    expect(placed?.item.scale).toBeCloseTo(0.04);
+  });
 
   it('places nothing when there are no fragments or no state', () => {
     expect(placeFragments([slot(item(5))], [root], flat)).toEqual([]);

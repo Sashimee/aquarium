@@ -9,6 +9,7 @@ import {
   type Plant,
   type PlantPatch,
   type PresetLayout,
+  type TankSize,
 } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { TankDimensions } from '../engine/tank/dimensions';
@@ -34,6 +35,7 @@ import {
   type EuphylliaDetail,
   type EuphylliaVariant,
 } from './euphyllia';
+import { trailingCall } from './trailingCall';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
 import type { FlowField } from '@aquarium/sim';
 import { CurrentField, reachCurrent, type CurrentParameters } from './current';
@@ -91,6 +93,8 @@ import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
 const FALLBACK_PLANT_HEIGHT = 0.2;
 const MIN_OFFSET_CAPACITY = 16;
+
+const COLLIDER_REFIT_DEBOUNCE_MS = 150;
 
 export function offsetCapacity(count: number): number {
   return Math.max(MIN_OFFSET_CAPACITY, 2 ** Math.ceil(Math.log2(Math.max(1, count))));
@@ -283,7 +287,7 @@ export class TankScene {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
     const dimensions = engine.tank.dimensions;
-    const preset = fitPresetToCatalog(authored, dimensions, catalog);
+    const preset = fitPresetToCatalog(authored, engine.tankSize, dimensions, catalog);
 
     const routed = routeDecor(preset.decor, (assetId) => catalog.get(assetId).kind);
     const { hardItems, layoutPlants, anemoneItems } = routed;
@@ -637,10 +641,26 @@ export class TankScene {
     return grown;
   }
 
-  private syncCorals(): void {
-    if (this.disposed) return;
+  private readonly refitSoon = trailingCall(() => this.refitCorals(), COLLIDER_REFIT_DEBOUNCE_MS);
+
+  private matchedCorals(): {
+    slots: CoralSlot[];
+    origins: CoralOrigin[];
+    matched: Map<number, Coral>;
+  } {
     const { slots, origins } = this.coralLayout(this.hardItems);
-    const matched = matchLayoutCorals(slots, this.coralState);
+    return { slots, origins, matched: matchLayoutCorals(slots, this.coralState) };
+  }
+
+  private refitCorals(): void {
+    if (this.disposed) return;
+    const { slots, origins, matched } = this.matchedCorals();
+    this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
+  }
+
+  private syncCorals(deferRefit = false): void {
+    if (this.disposed) return;
+    const { slots, origins, matched } = this.matchedCorals();
     slots.forEach((slot, s) => {
       const origin = origins[s];
       const coral = matched.get(s);
@@ -657,7 +677,12 @@ export class TankScene {
         group?.setBleach(bleach);
       }
     });
-    this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
+    if (deferRefit) {
+      this.refitSoon.schedule();
+    } else {
+      this.refitSoon.cancel();
+      this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
+    }
     this.report(this.syncFragments(slots), 'fragments');
   }
 
@@ -805,7 +830,7 @@ export class TankScene {
     this.hardItems = this.hardItems.map((h, i) => (i === index ? { item, kind: h.kind } : h));
     if (target.kind === 'hardscape') {
       this.hardscape?.setItem(target.index, item);
-      if (this.coralState.length > 0) this.syncCorals();
+      if (this.coralState.length > 0) this.syncCorals(true);
       return;
     }
     const group = this.plantGroups.find((g) => g.assetId === target.assetId);
@@ -1068,6 +1093,7 @@ export class TankScene {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.refitSoon.cancel();
     for (const release of this.releases) release();
     this.releases.length = 0;
     this.polyps.dispose();
@@ -1092,12 +1118,18 @@ export class TankScene {
 
 export function fitPresetToCatalog(
   preset: PresetLayout,
+  size: TankSize,
   dimensions: TankDimensions,
   catalog: Pick<AssetCatalog, 'get'>,
 ): PresetLayout {
   const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
-  return fitPresetToTank(preset, dimensions, boundsFromCatalog(catalog, current), (patch, axis) =>
-    plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
+  return fitPresetToTank(
+    preset,
+    size,
+    dimensions,
+    boundsFromCatalog(catalog, current),
+    (patch, axis) =>
+      plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
   );
 }
 

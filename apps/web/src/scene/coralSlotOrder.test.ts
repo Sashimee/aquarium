@@ -47,7 +47,8 @@ const orderOf = (decor: readonly DecorItem[], edited = decor) => {
 
 const isHardCoral = (assetId: string) => !isEuphyllia(assetId) && kindOf(assetId) === 'coral';
 
-const reef = () => fitPresetToCatalog(loadPreset('reef'), TANK_DIMENSIONS.standard, catalog);
+const reef = () =>
+  fitPresetToCatalog(loadPreset('reef'), 'standard', TANK_DIMENSIONS.standard, catalog);
 
 describe('coralSlotOrder', () => {
   it('follows the preset order across hard corals, repeated assets and euphyllia', () => {

@@ -1,8 +1,10 @@
 import {
-  legacyTintSeed,
+  fitPresetItem,
+  presetFit,
   type DecorItem,
   type PlantPatch,
   type PresetLayout,
+  type TankSize,
 } from '@aquarium/shared';
 import { DEFAULT_TANK, sameTank, type TankDimensions } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
@@ -47,15 +49,6 @@ export function boundsFromCatalog(
       swayReach: entry.kind === 'anemone' ? (item) => anemoneReach(entry, item, current) : null,
     };
   };
-}
-
-/** How the standard-tank layouts the presets are authored in shrink to fit a smaller tank. */
-export function layoutScale(dimensions: TankDimensions): number {
-  return Math.min(
-    1,
-    dimensions.length / DEFAULT_TANK.length,
-    dimensions.depth / DEFAULT_TANK.depth,
-  );
 }
 
 function rotatedReach(bounds: Footprint, rotationY: number): { x: number; z: number } {
@@ -112,20 +105,24 @@ export function maxScaleAt(
   );
 }
 
-function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf): DecorItem {
-  const lenR = dimensions.length / DEFAULT_TANK.length;
-  const depR = dimensions.depth / DEFAULT_TANK.depth;
-  const k = layoutScale(dimensions);
+function fitItem(
+  item: DecorItem,
+  size: TankSize,
+  dimensions: TankDimensions,
+  boundsOf: BoundsOf,
+): DecorItem {
+  const stretched = fitPresetItem(item, size);
+  const { scale: k } = presetFit(size);
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const waterTop = dimensions.height - dimensions.freeboard;
 
-  let x = item.position[0] * lenR;
-  let z = item.position[2] * depR;
+  let x = stretched.position[0];
+  let z = stretched.position[2];
   const seatOffset =
     item.position[1] - substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
   let y = substrateHeight(dimensions, x, z) + seatOffset * k;
-  let scale = item.scale * k;
+  let scale = stretched.scale;
 
   const model = boundsOf(item.assetId);
   if (model) {
@@ -155,8 +152,7 @@ function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf
     if (height > 0) scale = Math.min(scale, (waterTop - SURFACE_MARGIN - y) / height);
   }
   return {
-    ...item,
-    tintSeed: item.tintSeed ?? legacyTintSeed(item),
+    ...stretched,
     position: [x, y, z],
     scale: Math.max(scale, MIN_PLANT_SCALE),
   };
@@ -164,10 +160,11 @@ function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf
 
 function fitPatch(
   patch: PlantPatch,
+  size: TankSize,
   dimensions: TankDimensions,
   reachOf: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PlantPatch {
-  const k = layoutScale(dimensions);
+  const { lengthRatio, depthRatio, scale: k } = presetFit(size);
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const scale: [number, number] = [
@@ -179,8 +176,8 @@ function fitPatch(
   const smallestPatch = { ...fitted, scale: [smallest, smallest] as [number, number] };
   const limitX = Math.max(0, halfL - reachOf(smallestPatch, 'x'));
   const limitZ = Math.max(0, halfD - reachOf(smallestPatch, 'z'));
-  const x = (patch.center[0] * dimensions.length) / DEFAULT_TANK.length;
-  const z = (patch.center[1] * dimensions.depth) / DEFAULT_TANK.depth;
+  const x = patch.center[0] * lengthRatio;
+  const z = patch.center[1] * depthRatio;
   return {
     ...fitted,
     center: [Math.max(-limitX, Math.min(limitX, x)), Math.max(-limitZ, Math.min(limitZ, z))],
@@ -194,15 +191,16 @@ function fitPatch(
  */
 export function fitPresetToTank(
   preset: PresetLayout,
+  size: TankSize,
   dimensions: TankDimensions,
   boundsOf: BoundsOf,
   patchReach: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PresetLayout {
   return {
     ...preset,
-    decor: preset.decor.map((item) => fitItem(item, dimensions, boundsOf)),
+    decor: preset.decor.map((item) => fitItem(item, size, dimensions, boundsOf)),
     plantPatches: sameTank(dimensions, DEFAULT_TANK)
       ? preset.plantPatches
-      : preset.plantPatches.map((patch) => fitPatch(patch, dimensions, patchReach)),
+      : preset.plantPatches.map((patch) => fitPatch(patch, size, dimensions, patchReach)),
   };
 }

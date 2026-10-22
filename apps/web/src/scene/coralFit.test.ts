@@ -7,7 +7,7 @@ import { AssetCatalog } from './assets';
 import { grownCoralItem, placeFragments } from './coralGrowth';
 import { SURFACE_MARGIN } from './plants';
 import { boundsFromCatalog, fitPresetToTank, maxScaleAt, type FitModel } from './presetFit';
-import { parseEuphylliaId } from './euphyllia';
+import { euphylliaId, parseEuphylliaId } from './euphyllia';
 import { loadPreset } from './preset';
 import { reachCurrent } from './current';
 import { DEFAULT_CURRENT, fitPresetToCatalog } from './TankScene';
@@ -55,7 +55,7 @@ const isCoral = (item: DecorItem) =>
   parseEuphylliaId(item.assetId) !== null || catalog.get(item.assetId).kind === 'coral';
 
 function reefCorals(): DecorItem[] {
-  const fitted = fitPresetToCatalog(loadPreset('reef'), dimensions, catalog);
+  const fitted = fitPresetToCatalog(loadPreset('reef'), 'standard', dimensions, catalog);
   return fitted.decor.filter((item) => isCoral(item));
 }
 
@@ -147,6 +147,59 @@ describe('the default reef at full growth', () => {
   });
 });
 
+describe('a fragment beside the glass', () => {
+  it('stays inside it for a scale-1 root at the server edge margin', () => {
+    const [template] = reefCorals().filter((i) => i.assetId === 'acropora-cytherea');
+    if (!template) throw new Error('no cytherea');
+    const root: DecorItem = { ...template, scale: 1, rotationY: 0, tintSeed: 1 };
+    const colony = coralAt(root, 1);
+    const frag: Coral = {
+      ...colony,
+      key: 's1.1',
+      parentKey: 's1',
+      position: [0, halfD - 0.03],
+      size: 0.3,
+    };
+    const [placed] = placeFragments(
+      [{ assetId: root.assetId, item: root }],
+      [colony, frag],
+      () => 0.05,
+      cap,
+    );
+    if (!placed) throw new Error('fragment not placed');
+    expect(placed.item.scale).toBeGreaterThan(0);
+    expect(Math.abs(placed.item.position[2]) + extentOf(placed.item).z).toBeLessThanOrEqual(halfD);
+  });
+});
+
+describe('a swaying fragment beside the glass', () => {
+  it('is no smaller 7 cm from the glass than at the server edge margin', () => {
+    const assetId = euphylliaId('hammer', 3);
+    const root: DecorItem = {
+      assetId,
+      position: [0, 0.05, 0],
+      rotationY: 0,
+      scale: 1,
+      tintSeed: 1,
+    };
+    const colony: Coral = { ...coralAt(root, 1), assetId };
+    const scaleAt = (offGlass: number) => {
+      const frag: Coral = {
+        ...colony,
+        key: 's1.1',
+        parentKey: 's1',
+        position: [0, halfD - offGlass],
+        size: 0.3,
+      };
+      const [placed] = placeFragments([{ assetId, item: root }], [colony, frag], () => 0.05, cap);
+      if (!placed) throw new Error('fragment not placed');
+      return placed.item.scale;
+    };
+    expect(scaleAt(0.07)).toBeGreaterThanOrEqual(0.25 - 1e-9);
+    expect(scaleAt(0.07)).toBeGreaterThanOrEqual(scaleAt(0.03));
+  });
+});
+
 describe('maxScaleAt', () => {
   it('is unbounded for an item with no model', () => {
     const [item] = reefCorals();
@@ -162,7 +215,7 @@ describe('maxScaleAt', () => {
   });
 
   it('agrees with the fit: a fitted preset item sits at or under its cap', () => {
-    const fitted = fitPresetToTank(loadPreset('reef'), dimensions, modelOf, () => 0);
+    const fitted = fitPresetToTank(loadPreset('reef'), 'standard', dimensions, modelOf, () => 0);
     for (const item of fitted.decor.filter((i) => isCoral(i))) {
       expect(cap(item)).toBeGreaterThanOrEqual(item.scale - 1e-6);
     }
