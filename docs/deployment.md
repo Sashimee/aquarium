@@ -52,7 +52,7 @@ hashed chunks. The image keeps its own `assets/` at `/app/assets-current`, and `
 it into `/app/web/assets` at every start (only when that path is a mount point; unchanged files are touched,
 changed ones are copied to a temp name and renamed, so a running container never sees a half-written file),
 then deletes files not refreshed within `ASSET_RETENTION_DAYS` (default 7, exact to the minute). A
-non-numeric value, or one below 1 (`0` would prune the build just copied in), makes the container exit with an error at start. On the Aquarium Dev app, `/app/web/assets` is a Dokploy volume mount (`aquarium-dev-assets`),
+non-numeric value, one below 1 (`0` would prune the build just copied in), or one above 99999 (more than 5 digits after leading zeros) makes the container exit with an error at start. On the Aquarium Dev app, `/app/web/assets` is a Dokploy volume mount (`aquarium-dev-assets`),
 so earlier builds' files are still there. Without the mount (prod, local, CI) the script does nothing and the
 image's own `/app/web/assets` is served.
 

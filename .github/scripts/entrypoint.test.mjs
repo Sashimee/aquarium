@@ -105,4 +105,21 @@ describe('docker/entrypoint.sh', () => {
       assert.match(r.stderr, /ASSET_RETENTION_DAYS/);
     });
   }
+
+  for (const v of ['100000', '99999999999999999999', '000000000000001000000']) {
+    it(`rejects ASSET_RETENTION_DAYS=${v} before copying or pruning`, () => {
+      const old = addOldFile('old.js', 30);
+      const r = run(v);
+      assert.equal(r.status, 1);
+      assert.match(r.stderr, /ASSET_RETENTION_DAYS/);
+      assert.ok(existsSync(old));
+      assert.ok(!existsSync(join(root, 'assets', 'a.js')));
+    });
+  }
+
+  it('accepts ASSET_RETENTION_DAYS=99999, padded or not', () => {
+    for (const v of ['99999', '0000099999']) {
+      assert.equal(run(v).status, 0);
+    }
+  });
 });
