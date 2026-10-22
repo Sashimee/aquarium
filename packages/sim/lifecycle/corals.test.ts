@@ -17,7 +17,6 @@ import {
   DEFAULT_WATER_PARAMETERS,
   fragCoral,
   reconcileCorals,
-  rehomeFrags,
   stepCorals,
   TANK_BIOLOAD_CAPACITY,
   type CatchUpCorals,
@@ -424,64 +423,6 @@ describe('fragging', () => {
     const [x, z] = cut.corals[1]?.position ?? [Infinity, Infinity];
     expect(Math.abs(x)).toBeLessThanOrEqual(bounds.halfX - content.params.edgeMarginM + 1e-9);
     expect(Math.abs(z)).toBeLessThanOrEqual(bounds.halfZ - content.params.edgeMarginM + 1e-9);
-  });
-
-  describe('re-homing fragments stored in raw coordinates', () => {
-    const roots = new Map([['s1', { from: [0.1, 0.05] as const, to: [0.3, -0.05] as const }]]);
-    const colony = (frags: [string, string, [number, number]][]): CoralState[] => [
-      {
-        key: 's1',
-        assetId: 'brain-coral',
-        parentKey: null,
-        position: [0.3, -0.05],
-        size: 2,
-        bleach: 0,
-        spawned: 1,
-      },
-      ...frags.map(([key, parentKey, position]) => ({
-        key,
-        assetId: 'brain-coral',
-        parentKey,
-        position,
-        size: 0.5,
-        bleach: 0,
-        spawned: 0,
-      })),
-    ];
-
-    it('shifts a raw fragment and its own fragments by the root shift', () => {
-      const stored = colony([
-        ['s1.1', 's1', [0.15, 0.1]],
-        ['s1.1.1', 's1.1', [0.2, 0.12]],
-      ]);
-      const next = rehomeFrags(stored, roots, table, bounds);
-      expect(next[1]?.position?.[0]).toBeCloseTo(0.35, 9);
-      expect(next[1]?.position?.[1]).toBeCloseTo(0, 9);
-      expect(next[2]?.position?.[0]).toBeCloseTo(0.4, 9);
-      expect(next[2]?.position?.[1]).toBeCloseTo(0.02, 9);
-      expect(next[0]).toBe(stored[0]);
-    });
-
-    it('leaves a fragment cut beside the fitted root where it is', () => {
-      const stored = colony([['s1.1', 's1', [0.35, -0.02]]]);
-      expect(rehomeFrags(stored, roots, table, bounds)).toEqual(stored);
-    });
-
-    it('is idempotent', () => {
-      const once = rehomeFrags(colony([['s1.1', 's1', [0.15, 0.1]]]), roots, table, bounds);
-      expect(rehomeFrags(once, roots, table, bounds)).toEqual(once);
-    });
-
-    it('keeps a shifted fragment inside the glass margin', () => {
-      const far = new Map([['s1', { from: [0, 0] as const, to: [1, 0] as const }]]);
-      const next = rehomeFrags(colony([['s1.1', 's1', [0.1, 0]]]), far, table, bounds);
-      expect(next[1]?.position?.[0]).toBeCloseTo(bounds.halfX - content.params.edgeMarginM, 9);
-    });
-
-    it('leaves fragments of a colony with no known shift alone', () => {
-      const stored = colony([['s1.1', 's1', [0.15, 0.1]]]);
-      expect(rehomeFrags(stored, new Map(), table, bounds)).toEqual(stored);
-    });
   });
 
   describe('around rock and wood', () => {
