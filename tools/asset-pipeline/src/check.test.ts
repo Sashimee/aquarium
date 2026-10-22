@@ -1099,6 +1099,26 @@ describe('sharedKtx2Problems', () => {
     expect(problems[0]).toContain('rock/shared/t_2k.ktx2');
   });
 
+  it('reports a 1k-only conflict once, not again under the derived 2k name', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t_1k.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t_1k.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/shared/t_1k.ktx2');
+  });
+
+  it('does not treat diffuseTexture as sRGB', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'diffuseTexture', '../shared/t.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(
+      'read as sRGB by rock/a/lod0.glb but as linear by rock/b/lod0.glb',
+    );
+  });
+
   it('reports both the colour role and the sampler when both differ', () => {
     const problems = sharedKtx2Problems([
       glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
