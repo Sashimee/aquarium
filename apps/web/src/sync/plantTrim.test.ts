@@ -1,7 +1,11 @@
-import type { Plant } from '@aquarium/shared';
+import { DEFAULT_BACKGROUND_ID, type Plant } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
+import { EventBus } from '../engine/events';
+import type { InteractionEvents } from '../interaction/events';
+import type { PlantPick } from '../scene/plantGrowth';
 import { ApiRequestError } from '../ui/api';
 import {
+  followTrimTarget,
   clampTrimSize,
   describePlantSize,
   plantLabel,
@@ -117,5 +121,27 @@ describe('trimRefusalText', () => {
   it('leaves other failures to the generic handler', () => {
     expect(trimRefusalText(refusal(500, 'internal'), 'fern')).toBeNull();
     expect(trimRefusalText(new Error('x'), 'fern')).toBeNull();
+  });
+});
+
+describe('followTrimTarget', () => {
+  it('follows picks and drops the target when a tank loads', () => {
+    const bus = new EventBus<InteractionEvents>();
+    const seen: (string | null)[] = [];
+    const off = followTrimTarget(bus, (key) => seen.push(key));
+    bus.emit('plant:picked', { pick: { key: 's7' } as PlantPick });
+    bus.emit('tank:loaded', {
+      tankId: 'b',
+      biome: 'freshwater',
+      size: 'nano30',
+      fish: [],
+      decorLayout: [],
+      decorEdited: false,
+      backgroundId: DEFAULT_BACKGROUND_ID.freshwater,
+    });
+    bus.emit('plant:picked', { pick: null });
+    off();
+    bus.emit('plant:picked', { pick: { key: 's9' } as PlantPick });
+    expect(seen).toEqual(['s7', null, null]);
   });
 });

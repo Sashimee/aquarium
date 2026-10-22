@@ -534,6 +534,10 @@ Every render: no EXIF or other metadata, no fish, no text, no people. 2:1, at le
 
 The manifest biome will be `blackwater`. `content/backgrounds/blackwater.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `blackwater`, so the file would fail validation. Add both in the PR that makes the biome playable.
 
+### Background photo re-survey (2026-10-22)
+
+Re-searched Wikimedia Commons for real behind-the-glass photos (CC0 and CC-BY 3.0/4.0, at least 3000 px wide). Nothing is usable, so the five render slots above stand and no photo entry was added to the manifest. Blackwater: the only hits are above-water igapo and Rio Negro shots (`FLOODED AREA - FLORESTA INUNDAVEL DE IGAPO - panoramio.jpg`, a 360 degree panorama; `Serrapilheria - panoramio.jpg`, a floating lodge; `Floresta inundada iranduba amazonas - panoramio (7).jpg`, a stormy sky and a building; all CC BY 3.0). No underwater tannin, root or leaf-litter photo exists under an allowed licence.
+
 ### CC-BY-SA and other gaps for Alex
 
 Nothing in this survey ships as CC-BY-SA. Decisions needed:
@@ -656,6 +660,10 @@ Every render: no EXIF or other metadata, no fish, no text and no people. 2:1, at
 For the thicket and stump renders, `source_url` and `author_url` should point to the CC-BY component that sets the licence (`https://sketchfab.com/3d-models/mangrove-tree-roots-c32d977c14e04e5ebc1fbef9b6111957` and `https://sketchfab.com/lucq22`; `https://sketchfab.com/3d-models/petrified-mangrove-beach-debris-4-scaniverse-a221abc90fb345b69aa0886af7711187` and `https://sketchfab.com/db4`), and their CREDITS rows should link the same source. The other three slots credit the CC0 sources.
 
 The manifest biome will be `mangrove`. `content/backgrounds/mangrove.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `mangrove`, so the file would fail validation. Add both in the PR that makes the biome playable.
+
+### Background photo re-survey (2026-10-22)
+
+Re-searched Commons for underwater or waterline mangrove photos (CC0 and CC-BY 3.0/4.0, at least 3000 px wide). None is an underwater scene. Closest: `Mangroves in the Restinga Lagoon.jpg` (CC0, 4288x2379), a clean red-mangrove root curtain over dark reflective water with no people, but it is shot above the waterline with a bright sky patch of reflections, so it would read as a photo of a shore, not water behind glass. Rejected: Sundarban High Tide 01 to 04 (CC BY 4.0, mostly sky), Sungei Buloh (CC BY 4.0, foliage and grass), Havelock Island (CC BY 4.0, beach with swimmers and boats), Withlacoochee (CC BY 4.0, cypress swamp, not mangrove), Roots of the mangrove swamp (CC0, birds and branches). Mangrove snapper and `They're used by the mangroves to breathe...` are public domain and CC BY-SA 2.0 respectively and were not considered. The renders above stand.
 
 ### Handoff to asset-pipeline-engineer
 

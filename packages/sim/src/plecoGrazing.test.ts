@@ -4,6 +4,7 @@ import {
   chemistryParametersSchema,
   DEFAULT_EQUIPMENT,
   newTankChemistry,
+  type FoodType,
   speciesContentSchema,
   type Water,
 } from '@aquarium/shared';
@@ -24,10 +25,12 @@ import {
   crewCleanup,
   grazesWhenNoFood,
   isScavenger,
+  scavengeSweepPerHour,
   type CleanupInput,
   type CrewTally,
 } from './crew.ts';
 import { FoodRain, SHOW_TANK, spawnMany } from './fixtures.ts';
+import { FOOD_PARTICLES } from './food.ts';
 import { FishState } from './snapshot.ts';
 import { toSimSpecies, type SimSpecies, type SpeciesInput } from './species.ts';
 import { STEP_DT, World } from './world.ts';
@@ -41,6 +44,7 @@ function content(id: string): ReturnType<typeof speciesContentSchema.parse> {
 }
 
 const PLECO = content('bristlenose-pleco');
+const CORY = content('bronze-corydoras');
 const DAY_PLECO: SpeciesInput = {
   ...PLECO,
   id: 'day-pleco',
@@ -159,6 +163,74 @@ describe('a pleco in a running world', { timeout: LONG }, () => {
     expect(watch.grazing).toBeGreaterThan(0);
   });
 
+  it('keeps grazing beside settled food that is off its diet', () => {
+    const w = tankOf(PLECO.id, 1, 0);
+    run(w, 30 * 60);
+    const rain = new FoodRain(SHOW_TANK);
+    rain.place('bloodworms', 0.3, w.basin.ground(0.3, 0) + 0.004, 0);
+    rain.place('brine-shrimp', -0.3, w.basin.ground(-0.3, 0) + 0.004, 0);
+    const watch = run(w, 30 * 120, rain);
+    expect(rain.eaten).toBe(0);
+    expect(watch.grazing).toBeGreaterThan(0.3 * watch.steps);
+  });
+
+  it('keeps grazing beside food lodged inside rock', () => {
+    const w = new World({
+      seed: 4,
+      tank: SHOW_TANK,
+      species: [PLECO],
+      decor: [
+        {
+          id: 'rock',
+          hard: true,
+          kind: 'box',
+          center: [0.3, 0.05, 0],
+          halfExtents: [0.05, 0.05, 0.05],
+          rotationY: 0,
+          rounding: 0,
+        },
+      ],
+      fish: spawnMany(PLECO.id, 1),
+      light: 0,
+    });
+    w.settleLight();
+    w.setAlgae(1);
+    run(w, 30 * 60);
+    const rain = new FoodRain(SHOW_TANK);
+    rain.place('pellets', 0.3, 0.05, 0);
+    const watch = run(w, 30 * 120, rain);
+    expect(rain.eaten).toBe(0);
+    expect(watch.grazing).toBeGreaterThan(0.3 * watch.steps);
+  });
+
+  it('settles back onto a surface before grazing again once the food is eaten', () => {
+    const w = tankOf(PLECO.id, 1, 0);
+    run(w, 30 * 60);
+    for (let t = 0; t < 30 * 60 && w.state[0] !== FishState.Graze; t++) run(w, 1);
+    expect(w.state[0]).toBe(FishState.Graze);
+    const px = w.position[0] ?? 0;
+    const x = px > 0 ? -0.5 : 0.5;
+    const rain = new FoodRain(SHOW_TANK);
+    rain.place('pellets', x, w.basin.ground(x, 0) + 0.004, 0);
+    const states: number[] = [];
+    for (let t = 0; t < 30 * 600 && rain.count > 0; t++) {
+      run(w, 1, rain);
+      states.push(w.state[0] ?? -1);
+    }
+    expect(rain.count).toBe(0);
+    expect(states).toContain(FishState.Forage);
+    for (let t = 0; t < 30 * 60; t++) {
+      run(w, 1, rain);
+      states.push(w.state[0] ?? -1);
+    }
+    const lastFed = Math.max(
+      states.lastIndexOf(FishState.Feed),
+      states.lastIndexOf(FishState.Forage),
+    );
+    const next = states.indexOf(FishState.Graze, lastFed);
+    expect(next).toBeGreaterThan(lastFed + 1);
+  });
+
   it('grazes only in its active hours: a nocturnal one in the dark, a diurnal one by day', () => {
     for (const [species, active, idle] of [
       [PLECO.id, 0, 1],
@@ -223,6 +295,47 @@ describe('a pleco in the offline crew model', () => {
     expect(step.foodEaten).toBeGreaterThan(0.45);
     expect(step.algaeGrazed).toBeGreaterThan(0);
     expect(step.algaeGrazed).toBeLessThan(cleanup({}).algaeGrazed);
+  });
+
+  it('grazes the whole step beside food that is off its diet', () => {
+    const offDiet = cleanup({ uneatenFood: 2, uneatenFoodTypes: ['bloodworms', 'brine-shrimp'] });
+    expect(offDiet.foodEaten).toBe(0);
+    expect(offDiet.algaeGrazed).toBeCloseTo(cleanup({}).algaeGrazed, 12);
+    const mixed = cleanup({ uneatenFood: 2, uneatenFoodTypes: ['bloodworms', 'pellets'] });
+    expect(mixed.foodEaten).toBeGreaterThan(0);
+    expect(cleanup({ uneatenFood: 2 }).foodEaten).toBe(mixed.foodEaten);
+    expect(cleanup({ uneatenFood: 2, uneatenFoodTypes: [] })).toEqual(cleanup({}));
+  });
+
+  it('rejects an unknown uneaten food type', () => {
+    const uneatenFoodTypes = JSON.parse('["kibble"]') as FoodType[];
+    expect(() => cleanup({ uneatenFood: 2, uneatenFoodTypes })).toThrow(
+      /unknown food type "kibble"/,
+    );
+  });
+
+  it('grazes the whole step when less than the smallest particle of food is left', () => {
+    for (const uneatenFood of [0, 0.01, 0.02]) {
+      const scraps = cleanup({ uneatenFood });
+      expect(scraps.foodEaten, `${uneatenFood}`).toBe(0);
+      expect(scraps.algaeGrazed, `${uneatenFood}`).toBeCloseTo(cleanup({}).algaeGrazed, 12);
+    }
+  });
+
+  it('leaves the food still found after it turned to the glass to the other scavengers', () => {
+    const species = new Map([...SIM, [CORY.id, toSimSpecies(CORY)]]);
+    const crew = [
+      { id: 'p', species: PLECO.id, alive: true, hunger: 1 },
+      { id: 'c', species: CORY.id, alive: true, hunger: 1 },
+    ];
+    const r = cleanup({ crew, species, uneatenFood: 0.5, dtHours: 2, litFraction: 0.5 });
+    const pleco = scavengeSweepPerHour(sim(PLECO.id));
+    const cory = scavengeSweepPerHour(toSimSpecies(CORY));
+    const found = 0.5 - Math.min(...Object.values(FOOD_PARTICLES).map((p) => p.portion));
+    const share = (id: string) => r.perFish.find((e) => e.id === id)?.food ?? 0;
+    expect(share('p')).toBeCloseTo((found * pleco) / (pleco + cory), 12);
+    expect(share('c')).toBeGreaterThan((found * cory) / (pleco + cory));
+    expect(r.algaeGrazed).toBeGreaterThan(0);
   });
 
   it('grazes the whole step beside food once it is sated', () => {

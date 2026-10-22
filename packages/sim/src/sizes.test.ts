@@ -239,10 +239,15 @@ const AWAITING_CONTENT: Record<
       'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
   },
   'aulonocara-baenschi': {
-    model: 'aulonocara-baenschi',
-    maxSlM: 0.13 / 1.2725,
-    maxTlM: 0.13,
-    source: 'FishBase: 13 cm TL (Ref. 4975); TL = 1.2725 SL',
+    model: 'aulonocara-baenschi-female',
+    maxSlM: (0.13 * 0.75) / 1.2725,
+    maxTlM: 0.13 * 0.75,
+    source:
+      'Female model. FishBase v25.04 has no female maximum (LengthFemale is empty), only 13 cm TL ' +
+      'male/unsexed (Ref. 4975). Seriously Fish gives males 120 mm SL and females 90 mm SL, so the ' +
+      "female is taken as 0.75 of the FishBase male: 9.75 cm TL. TL = 1.2725 SL is FishBase's " +
+      'length-length relationship measured on a male picture; applying it to the female is an ' +
+      'assumption. The male model is sized in MALE_MODEL_SIZES.',
   },
   'banded-archerfish': {
     model: 'banded-archerfish',
@@ -363,6 +368,7 @@ const AWAITING_CONTENT: Record<
  */
 const MALE_MODELS: Readonly<Record<string, string>> = {
   'apistogramma-hongsloi-male': 'apistogramma-hongsloi',
+  'aulonocara-baenschi': 'aulonocara-baenschi',
   'dwarf-pencilfish-male': 'dwarf-pencilfish',
   'guppy-male': 'guppy',
   'melanochromis-auratus-male': 'melanochromis-auratus',
@@ -381,6 +387,13 @@ const MALE_MODEL_SIZES: Readonly<
     source:
       'FishBase: 7.0 cm TL maximum (Ref. 12251); catalog male 6.5 cm TL; Seriously Fish: males ' +
       '55-60 mm. 5 cm SL x 1.231 draws 6.2 cm TL',
+  },
+  'aulonocara-baenschi': {
+    standardLengthM: 0.1,
+    maxTlM: 0.13,
+    source:
+      'FishBase: 13 cm TL male/unsexed (Ref. 4975); TL = 1.2725 SL, measured on a male picture. ' +
+      '10 cm SL x 1.27 draws 12.7 cm TL',
   },
 };
 
@@ -418,6 +431,15 @@ describe('species sizes are standard lengths', () => {
       ).toBeDefined();
       const built = models.get(model);
       if (built !== undefined) expect(built.species, model).toBe(id);
+    }
+  });
+
+  it('sizes only male models listed in MALE_MODELS', () => {
+    for (const model of Object.keys(MALE_MODEL_SIZES)) {
+      expect(
+        MALE_MODELS[model],
+        `MALE_MODEL_SIZES "${model}" has no MALE_MODELS entry`,
+      ).toBeDefined();
     }
   });
 
