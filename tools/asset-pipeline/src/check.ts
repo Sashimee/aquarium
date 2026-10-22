@@ -299,9 +299,10 @@ function conflictingPairs<T extends { derived: boolean }>(
 ): [T, T][] {
   const groups = new Map<string, T[]>();
   for (const use of list) {
-    const group = groups.get(keyOf(use)) ?? [];
+    const key = keyOf(use);
+    const group = groups.get(key) ?? [];
     group.push(use);
-    groups.set(keyOf(use), group);
+    groups.set(key, group);
   }
   const all = [...groups.values()];
   const pairs: [T, T][] = [];
@@ -318,10 +319,12 @@ function firstDirectPair<T extends { derived: boolean }>(
   left: readonly T[],
   right: readonly T[],
 ): [T, T] | undefined {
-  for (const a of left) {
-    for (const b of right) if (!(a.derived && b.derived)) return [a, b];
-  }
-  return undefined;
+  const [leftFirst, rightFirst] = [left[0], right[0]];
+  if (!leftFirst || !rightFirst) return undefined;
+  const direct = left.find((use) => !use.derived);
+  if (direct) return [direct, rightFirst];
+  const rightDirect = right.find((use) => !use.derived);
+  return rightDirect ? [leftFirst, rightDirect] : undefined;
 }
 
 export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
