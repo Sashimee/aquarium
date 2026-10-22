@@ -14,6 +14,7 @@ import {
   WATER_CHANGE_FRACTION,
 } from './params.ts';
 import { diluteMedicine, syncTreatment } from './disease.ts';
+import { FOOD_PARTICLES } from '../src/food.ts';
 import type { LifecycleState } from './types.ts';
 
 const FRESHWATER_FOODS: readonly FoodType[] = ['flakes', 'pellets', 'bloodworms', 'algae-wafer'];
@@ -45,6 +46,15 @@ function accept(
   };
 }
 
+const SETTLED_FOOD_MIN_PORTIONS = Math.min(...Object.values(FOOD_PARTICLES).map((p) => p.portion));
+
+function withFoodType(water: Water, food: FoodType): FoodType[] | undefined {
+  if (water.uneatenFood < SETTLED_FOOD_MIN_PORTIONS) return [food];
+  if (water.uneatenFoodTypes === undefined) return undefined;
+  const kept = water.uneatenFoodTypes ?? [];
+  return kept.includes(food) ? kept : [...kept, food];
+}
+
 export function applyCare(
   state: LifecycleState,
   action: CareAction,
@@ -64,7 +74,10 @@ export function applyCare(
           reason: 'There is already too much uneaten food in the tank. Vacuum the gravel first.',
         };
       }
-      return accept(state, { uneatenFood: water.uneatenFood + action.portion });
+      return accept(state, {
+        uneatenFood: water.uneatenFood + action.portion,
+        uneatenFoodTypes: withFoodType(water, action.food),
+      });
     }
     case 'water_change':
       return accept(
@@ -110,7 +123,7 @@ export function applyCare(
       );
     }
     case 'gravel_vacuum':
-      return accept(state, { uneatenFood: 0 });
+      return accept(state, { uneatenFood: 0, uneatenFoodTypes: [] });
     case 'algae_scrape':
       return accept(state, { algae: 0 });
   }
