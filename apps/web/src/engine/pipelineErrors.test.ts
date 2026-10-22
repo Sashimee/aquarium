@@ -329,15 +329,23 @@ describe('PipelineFailureHandler', () => {
     }
   }
 
-  function setup() {
+  /** `rebuilds` is how many scene rebuilds are left to try. */
+  function setup(rebuilds = 0) {
     const effects = new FakeEffects();
     const reports: { message: string; cause: unknown }[] = [];
+    const rebuild = { left: rebuilds, requested: 0 };
     const handler = new PipelineFailureHandler(
       effects,
       (id) => id === 2,
       (message, cause) => reports.push({ message, cause }),
+      () => {
+        if (rebuild.left === 0) return false;
+        rebuild.left--;
+        rebuild.requested++;
+        return true;
+      },
     );
-    return { effects, reports, handler };
+    return { effects, reports, handler, rebuild };
   }
 
   const failure = (materialId: number | null, message = 'failed'): PipelineFailure => ({
@@ -463,6 +471,55 @@ describe('PipelineFailureHandler', () => {
       new Error('post link failed'),
     ]);
     expect(reports).toEqual([]);
+  });
+
+  const destroyedShadow =
+    'WebGPURenderer: Async render pipeline creation failed (renderPipeline_fish:angelfish_2): ' +
+    'Destroyed texture [Texture "ShadowDepthTexture"] used in a submit.';
+
+  it('rebuilds a scene material hit by a transient failure instead of hiding or reporting it', async () => {
+    const { effects, reports, handler, rebuild } = setup(3);
+    handler.handle(failure(2, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(1);
+    expect(effects.failures).toEqual([]);
+    expect(reports).toEqual([]);
+  });
+
+  it('keeps the effects for a transient failure outside them, named or not', async () => {
+    const { effects, reports, handler, rebuild } = setup(3);
+    handler.handle(failure(7, destroyedShadow));
+    handler.handle(failure(null, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(2);
+    expect(effects.failures).toEqual([]);
+    expect(reports).toEqual([]);
+  });
+
+  it('leaves a transient failure in the effects own passes to their recovery', async () => {
+    const { effects, handler, rebuild } = setup(3);
+    handler.handle(failure(1, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(0);
+    expect(effects.failures).toEqual([new Error(destroyedShadow)]);
+  });
+
+  it('reports a scene material once rebuilding stops helping', async () => {
+    const { effects, reports, handler, rebuild } = setup(1);
+    handler.handle(failure(2, destroyedShadow));
+    handler.handle(failure(2, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(1);
+    expect(effects.active).toBe(true);
+    expect(reports.map((r) => r.message)).toEqual(['A material failed to build and is not drawn']);
+  });
+
+  it('never rebuilds for a real shader error', async () => {
+    const { reports, handler, rebuild } = setup(3);
+    handler.handle(failure(2, 'error: unresolved identifier'));
+    await settle();
+    expect(rebuild.requested).toBe(0);
+    expect(reports).toHaveLength(1);
   });
 
   it('reports a compute failure once by its message', () => {
