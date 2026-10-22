@@ -394,6 +394,52 @@ describe('api client sharing', () => {
     expect(JSON.parse(init.body as string)).toEqual(request);
   });
 
+  it('patches acceptsGifts on the tank', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture({ acceptsGifts: true })));
+    await createApiClient(fetcher).setAcceptsGifts(TANK_A, true);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ acceptsGifts: true });
+  });
+
+  it('carries the gifts_closed reason of a refused offer and posts to the gifts route', async () => {
+    const refusal = new Response(
+      JSON.stringify({ error: { code: 'conflict', message: 'Closed.', reason: 'gifts_closed' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = {
+      fromTankId: TANK_A,
+      fishId: '10000000-0000-4000-8000-000000000001',
+      toHandle: 'reef_fan',
+      idempotencyKey: 'gift-key-0001',
+    };
+    await expect(createApiClient(fetcher).createGift(request)).rejects.toMatchObject({
+      status: 409,
+      reason: 'gifts_closed',
+    });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/gifts');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      toHandle: 'reef_fan',
+      wantsReturn: false,
+    });
+  });
+
+  it('refuses a bad handle before sending anything', async () => {
+    const fetcher = vi.fn();
+    await expect(
+      createApiClient(fetcher).createGift({
+        fromTankId: TANK_A,
+        fishId: '10000000-0000-4000-8000-000000000001',
+        toHandle: 'X',
+        idempotencyKey: 'gift-key-0001',
+      }),
+    ).rejects.toBeInstanceOf(ClientValidationError);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('posts a trim to the plants route and refuses a size the server would not read', async () => {
     const refusal = new Response(
       JSON.stringify({

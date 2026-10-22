@@ -7,7 +7,7 @@
     "perceptionRangeM": 0.5,
     "preferredZone": "mid",
     "territorial": false,
-    "traits": ["cave-dweller"]
+    "traits": ["cave-dweller", "cleaner"]
   },
   "biome": "reef",
   "chemistry": {
