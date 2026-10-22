@@ -48,7 +48,8 @@ import {
   HARDSCAPE_KINDS,
   PLANT_KIND,
 } from './hardscape';
-import { boundsFromCatalog, fitPresetToTank, maxScaleAt, type FitModel } from './presetFit';
+import { routeDecor } from './decorRouting';
+import { boundsFromCatalog, fitPresetToTank } from './presetFit';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
@@ -78,9 +79,12 @@ import {
 } from './plantGrowth';
 import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import {
+  coralScaleCap,
+  coralSlotOrder,
   grownCoralItem,
   matchLayoutCorals,
   placeFragments,
+  type CoralOrigin,
   type CoralSlot,
   type ScaleCap,
   type PlacedFragment,
@@ -114,8 +118,6 @@ interface SubstrateInstall {
   readonly textures: readonly Texture[];
   readonly textureSize: 1024 | 2048;
 }
-
-type CoralOrigin = { readonly hard: number } | { readonly euphyllia: number };
 
 interface EuphylliaItem {
   readonly item: DecorItem;
@@ -195,7 +197,6 @@ export class TankScene {
   private fragLayout = '';
   private fragRun = 0;
   private coralFit = '';
-  private readonly fitModels = new Map<string, FitModel | null>();
   private coralFitRun = 0;
   private installedKey: VisualKey | null = null;
   private readonly queue: RebuildQueue<VisualKey>;
@@ -288,22 +289,9 @@ export class TankScene {
     const dimensions = engine.tank.dimensions;
     const preset = fitPresetToCatalog(authored, engine.tankSize, dimensions, catalog);
 
-    const hardItems: { item: DecorItem; kind: string }[] = [];
-    const layoutPlants: DecorItem[] = [];
-    const anemoneItems: DecorItem[] = [];
-    const euphylliaItems: EuphylliaItem[] = [];
-    for (const item of preset.decor) {
-      const procedural = parseEuphylliaId(item.assetId);
-      if (procedural) {
-        euphylliaItems.push({ item, ...procedural });
-        continue;
-      }
-      const kind = catalog.get(item.assetId).kind;
-      if (HARDSCAPE_KINDS.has(kind)) hardItems.push({ item, kind });
-      else if (kind === PLANT_KIND) layoutPlants.push(item);
-      else if (kind === 'anemone') anemoneItems.push(item);
-      else throw new Error(`Preset item "${item.assetId}" is a ${kind}, which a tank cannot hold`);
-    }
+    const routed = routeDecor(preset.decor, (assetId) => catalog.get(assetId).kind);
+    const { hardItems, layoutPlants, anemoneItems } = routed;
+    const euphylliaItems: EuphylliaItem[] = routed.euphylliaItems;
     for (const patch of preset.plantPatches) {
       if (catalog.get(patch.assetId).kind !== 'plant') {
         throw new Error(`Plant patch "${patch.id}" uses ${patch.assetId}, which is not a plant`);
@@ -612,42 +600,28 @@ export class TankScene {
     slots: CoralSlot[];
     origins: CoralOrigin[];
   } {
-    const hard = items.flatMap(({ kind }, index) => (kind === 'coral' ? [index] : []));
-    const slots: CoralSlot[] = [];
-    const origins: CoralOrigin[] = [];
-    let nextHard = 0;
-    let nextEuphyllia = 0;
-    const takeHard = () => {
-      const index = hard[nextHard++];
-      const entry = index === undefined ? undefined : items[index];
-      if (index === undefined || !entry) return;
-      slots.push({ assetId: entry.item.assetId, item: entry.item });
-      origins.push({ hard: index });
+    const order = coralSlotOrder(
+      this.preset.decor,
+      (assetId) => this.library.catalog.get(assetId).kind,
+      items,
+      this.euphylliaItems.map((entry) => entry.item),
+    );
+    return {
+      slots: order.map(({ assetId, item }) => ({ assetId, item })),
+      origins: order.map(({ origin }) => origin),
     };
-    for (const decor of this.preset.decor) {
-      if (parseEuphylliaId(decor.assetId)) {
-        const euphyllia = this.euphylliaItems[nextEuphyllia];
-        if (!euphyllia) continue;
-        slots.push({ assetId: euphyllia.item.assetId, item: euphyllia.item });
-        origins.push({ euphyllia: nextEuphyllia++ });
-      } else if (this.library.catalog.get(decor.assetId).kind === 'coral') {
-        takeHard();
-      }
-    }
-    while (nextHard < hard.length) takeHard();
-    return { slots, origins };
   }
 
-  private fitModel(assetId: string): FitModel | null {
-    if (!this.fitModels.has(assetId)) {
-      const current = reachCurrent(this.preset.current ?? DEFAULT_CURRENT, this.preset.biome);
-      this.fitModels.set(assetId, boundsFromCatalog(this.library.catalog, current)(assetId));
-    }
-    return this.fitModels.get(assetId) ?? null;
-  }
+  private coralCapCache: ScaleCap | null = null;
 
-  private readonly coralCap: ScaleCap = (item) =>
-    maxScaleAt(item, this.engine.tank.dimensions, this.fitModel(item.assetId));
+  private get coralCap(): ScaleCap {
+    this.coralCapCache ??= coralScaleCap(
+      this.library.catalog,
+      this.engine.tank.dimensions,
+      reachCurrent(this.preset.current ?? DEFAULT_CURRENT, this.preset.biome),
+    );
+    return this.coralCapCache;
+  }
 
   private withGrownCorals(
     items: readonly { item: DecorItem; kind: string }[],

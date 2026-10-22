@@ -1,7 +1,16 @@
 import { legacyTintSeed, type Coral, type DecorItem } from '@aquarium/shared';
 import { hashKey } from './plantGrowth';
 import { mulberry32 } from './placement';
-import { parseEuphylliaId } from './euphyllia';
+import type { AssetCatalog } from './assets';
+import type { CurrentParameters } from './current';
+import type { TankDimensions } from '../engine/tank/dimensions';
+import {
+  euphylliaCapsule,
+  parseEuphylliaId,
+  type EuphylliaCapsule,
+  type EuphylliaMesh,
+} from './euphyllia';
+import { boundsFromCatalog, maxScaleAt, type FitModel } from './presetFit';
 
 const MAX_ANCESTORS = 64;
 const MIN_FRAGMENT_SCALE_FRACTION = 0.25;
@@ -113,4 +122,72 @@ export function placeFragments(
     placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;
+}
+
+export type CoralOrigin = { readonly hard: number } | { readonly euphyllia: number };
+
+export interface CoralLayoutSlot extends CoralSlot {
+  readonly origin: CoralOrigin;
+}
+
+/**
+ * The single coral slot order: the preset's own order, with edited pieces taking the place of the
+ * preset piece before them and any extra after. `hardCorals` are the layout's hard corals in layout
+ * order, each with its index in the hardscape list; `euphyllias` the procedural colonies in preset
+ * order. This is the order the server numbers repeated tint seeds in, so a slot index is what
+ * `matchLayoutCorals` returns.
+ */
+export function coralSlotOrder(
+  presetDecor: readonly DecorItem[],
+  kindOf: (assetId: string) => string,
+  hardItems: readonly { readonly item: DecorItem; readonly kind: string }[],
+  euphyllias: readonly DecorItem[],
+): CoralLayoutSlot[] {
+  const hardCorals = hardItems.flatMap(({ item, kind }, index) =>
+    kind === 'coral' ? [{ index, item }] : [],
+  );
+  const slots: CoralLayoutSlot[] = [];
+  let nextHard = 0;
+  let nextEuphyllia = 0;
+  const takeHard = () => {
+    const entry = hardCorals[nextHard++];
+    if (entry) {
+      slots.push({ assetId: entry.item.assetId, item: entry.item, origin: { hard: entry.index } });
+    }
+  };
+  for (const decor of presetDecor) {
+    if (parseEuphylliaId(decor.assetId)) {
+      const item = euphyllias[nextEuphyllia];
+      if (!item) continue;
+      slots.push({ assetId: item.assetId, item, origin: { euphyllia: nextEuphyllia++ } });
+    } else if (kindOf(decor.assetId) === 'coral') {
+      takeHard();
+    }
+  }
+  while (nextHard < hardCorals.length) takeHard();
+  return slots;
+}
+
+/** The euphyllia capsule at the colony's grown size, with its lean, as `setCorals` fits it. */
+export function grownEuphylliaCapsule(
+  bounds: EuphylliaMesh['bounds'],
+  item: DecorItem,
+  coral: Coral | undefined,
+  cap: ScaleCap,
+): EuphylliaCapsule {
+  return euphylliaCapsule(bounds, grownCoralItem(item, coral, cap));
+}
+
+/** The one scale cap the scene fits corals with, including a swaying colony's reach in the current. */
+export function coralScaleCap(
+  catalog: Pick<AssetCatalog, 'get'>,
+  dimensions: TankDimensions,
+  current: CurrentParameters,
+): ScaleCap {
+  const modelOf = boundsFromCatalog(catalog, current);
+  const models = new Map<string, FitModel | null>();
+  return (item) => {
+    if (!models.has(item.assetId)) models.set(item.assetId, modelOf(item.assetId));
+    return maxScaleAt(item, dimensions, models.get(item.assetId) ?? null);
+  };
 }

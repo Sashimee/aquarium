@@ -435,15 +435,50 @@ function footprint(bounds: EuphylliaMesh['bounds']): number {
   );
 }
 
+export interface EuphylliaCapsule {
+  /** Midpoint of the capsule axis, world metres. */
+  readonly centre: Vec3;
+  readonly radius: number;
+  /** Axis length from the lower to the upper sphere centre. */
+  readonly height: number;
+  /** Horizontal drift [x, z] of the upper sphere centre from the lower one, following the colony's own lean. */
+  readonly lean: readonly [number, number];
+}
+
+export function euphylliaCapsule(
+  bounds: EuphylliaMesh['bounds'],
+  item: DecorItem,
+): EuphylliaCapsule {
+  const [x, y, z] = item.position;
+  const radius = footprint(bounds) * item.scale * 0.6;
+  const top = Math.max(radius, bounds.max[1] * item.scale * 0.85);
+  const localX = ((bounds.min[0] + bounds.max[0]) / 2) * item.scale;
+  const localZ = ((bounds.min[2] + bounds.max[2]) / 2) * item.scale;
+  const cos = Math.cos(item.rotationY);
+  const sin = Math.sin(item.rotationY);
+  const lean: [number, number] = [localX * cos + localZ * sin, -localX * sin + localZ * cos];
+  const height = top - radius;
+  return {
+    centre: [x + lean[0] / 2, y + radius + height / 2, z + lean[1] / 2],
+    radius,
+    height,
+    lean,
+  };
+}
+
 /** Soft, like the anemone: fish may brush the tentacles but steering still avoids the colony. */
 export function euphylliaCollider(
   bounds: EuphylliaMesh['bounds'],
   item: DecorItem,
 ): CapsuleCollider {
-  const [x, y, z] = item.position;
-  const radius = footprint(bounds) * item.scale * 0.6;
-  const top = Math.max(radius, bounds.max[1] * item.scale * 0.85);
-  return { kind: 'capsule', hard: false, a: [x, y + radius, z], b: [x, y + top, z], radius };
+  const { centre, radius, height, lean } = euphylliaCapsule(bounds, item);
+  return {
+    kind: 'capsule',
+    hard: false,
+    a: [centre[0] - lean[0] / 2, centre[1] - height / 2, centre[2] - lean[1] / 2],
+    b: [centre[0] + lean[0] / 2, centre[1] + height / 2, centre[2] + lean[1] / 2],
+    radius,
+  };
 }
 
 /** Furthest a tentacle tip strays horizontally from the item's position over the whole gust cycle. */
