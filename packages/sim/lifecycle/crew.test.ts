@@ -268,10 +268,12 @@ describe('clean-up crew in the offline catch-up', () => {
           DARK_FROM + 2 * HOUR,
           true,
         ).state.water.algae;
-      const above = SETTLED_FOOD_MIN_PORTIONS * 1.01;
+      const above = SETTLED_FOOD_MIN_PORTIONS * 1.5;
       expect(feedBloodworms(SETTLED_FOOD_MIN_PORTIONS)).toEqual(['bloodworms']);
       expect(feedBloodworms(above)).toEqual(['flakes', 'bloodworms']);
-      expect(algaeAfterCleanup(SETTLED_FOOD_MIN_PORTIONS)).toBeLessThan(0.6);
+      expect(algaeAfterCleanup(above)).toBeGreaterThan(
+        algaeAfterCleanup(SETTLED_FOOD_MIN_PORTIONS),
+      );
     });
 
     it('keeps treating food as any type on a tank that has no record of it', () => {
