@@ -176,6 +176,16 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
         'FishBase: 13.7 cm SL; no length-length relationship was looked up, so TL = 1.2 SL is an ' +
         'assumption (the model draws 1.201)',
     },
+    'figure-8-puffer': {
+      model: 'figure-8-puffer',
+      maxSlM: 0.08 / 1.21,
+      maxTlM: 0.08,
+      source:
+        'FishBase (as Dichotomyctere ocellatus, of which Tetraodon biocellatus is a junior ' +
+        'synonym): 8 cm TL (Ref. 12693); FishBase has no length-length relationship, so TL = 1.21 ' +
+        'SL, the proportion of the lofted model. Seriously Fish gives 80 mm SL; FishBase is kept ' +
+        'as the measured record, and both exceed the 6-7 cm hobby size in docs/assets/catalog.md',
+    },
     firefish: {
       model: 'firefish',
       maxSlM: 0.09 / 1.225,
@@ -360,15 +370,6 @@ const AWAITING_CONTENT: Record<
       'megalopterus): 30-36 mm standard length. No FishBase ' +
       'length-length relationship was checked, so TL = 1.25 SL, a typical characin proportion ' +
       'with a forked caudal; it is an assumption, not a literature value.',
-  },
-  'figure-8-puffer': {
-    model: 'figure-8-puffer',
-    maxSlM: 0.08 / 1.21,
-    maxTlM: 0.08,
-    source:
-      'FishBase (as Dichotomyctere ocellatus, of which Tetraodon biocellatus is a junior synonym): ' +
-      '8 cm TL (Ref. 12693); FishBase has no length-length relationship, so TL = 1.21 SL, the ' +
-      'proportion of the lofted model',
   },
 };
 

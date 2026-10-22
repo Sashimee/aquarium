@@ -434,11 +434,23 @@ chemistry, salinity included, is in each content file's `chemistry.sources`.
 | Orange chromide, cichlid shoal      | Shoals in mid-water and sculls with the pectorals like the other cichlids here           | Ward & Wyman 1977 (Environ Biol Fishes 2:137, _Etroplus_ shoal outside breeding, pair as substrate spawners)                           | `schooling.minGroup 8`, `gait hover`, `swimmingMode labriform`, `breeding substrate-spawner` |
 | Silver mono, schooling              | Tight mid-water school that closes up when startled                                      | FishBase _Monodactylus argenteus_ (Ref. 1672, forms schools in estuaries and mangrove creeks)                                          | `schooling.minGroup 5`, `topologicalNeighbours 6`, `tightenWhenStartled`                     |
 
+## Figure-8 puffer
+
+_Dichotomyctere ocellatus_ is built from the existing gaits and traits. Water chemistry is in
+`content/species/figure-8-puffer.json`.
+
+| Behaviour               | What the content does                                                                                                                         | Source                                                                                                                | Parameter                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Slow fin-driven hover   | Holds a station with its fins at low speed; tetraodontiforms swim with the median and pectoral fins, which `labriform` is the closest mode to | FishBase _D. ocellatus_ (demersal); Seriously Fish profile (active, needs open swimming space). Speeds **heuristic**. | `gait hover`, `swimmingMode labriform`, `cruiseSpeedMps 0.04`, `maxSpeedMps 0.25` |
+| Fin-nipper, territorial | Charges conspecifics and similar-sized tankmates of other species around its station; the charge stands in for fin nipping                    | FishBase (aggressive against conspecifics); Seriously Fish (nips the fins of slow or long-finned fish)                | `territorial`, `boldness 0.7`, `curiosity 0.9`                                    |
+| Snail eater             | Eats the meaty foods there are; there is no snail food type, so bloodworms and brine shrimp stand in for snails and benthic invertebrates     | FishBase (feeds on snails and other benthic organisms); Seriously Fish (needs snails to wear down its teeth)          | `diet [bloodworms, brine-shrimp, pellets]`                                        |
+
 ## Not yet modelled
 
 Archerfish do not spit at prey above the water and mudskippers never leave it: the tank has no
 emergent mud bank or overhanging insects. Bumblebee gobies do not breed, since there is no cave
-anchor in the mangrove preset for the male to guard.
+anchor in the mangrove preset for the male to guard. A figure-8 puffer does not hunt
+live snails.
 
 Clownfish tend at the same rate through development, though both parents tend more as the eggs
 mature (Green & McCormick 2005; Pacaro et al. 2023), and the night-only vigorous fanning, vigorous
