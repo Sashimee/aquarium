@@ -121,7 +121,9 @@ describe('docker/entrypoint.sh', () => {
   it('accepts ASSET_RETENTION_DAYS=99999, padded or not, and prunes nothing recent', () => {
     for (const v of ['99999', '0000099999']) {
       const old = addOldFile('old.js', 30);
-      assert.equal(run(v).status, 0);
+      const r = run(v);
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout.trim(), 'started');
       assert.ok(existsSync(old));
       assert.ok(existsSync(join(root, 'assets', 'a.js')));
     }

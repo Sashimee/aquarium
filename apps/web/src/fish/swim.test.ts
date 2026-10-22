@@ -473,8 +473,8 @@ describe('cleaning station motion', () => {
     const midFrame = wrasse();
     midFrame.bite();
     const frameS = 1 / 30;
-    for (let t = 0; t < PECK_FIRST_S; t += frameS)
-      midFrame.advance(frameS, sample(FishState.Clean, 0));
+    const framesPastPeck = Math.ceil(PECK_FIRST_S / frameS);
+    for (let i = 0; i < framesPastPeck; i++) midFrame.advance(frameS, sample(FishState.Clean, 0));
     const pastPeck = midFrame.sincePeck;
     expect(pastPeck).toBeGreaterThan(0.01);
     atBoundary.advance(pastPeck, sample(FishState.Clean, 0));

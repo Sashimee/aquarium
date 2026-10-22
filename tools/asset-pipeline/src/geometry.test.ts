@@ -125,6 +125,42 @@ describe('classifyFins', () => {
   });
 });
 
+describe('classifyFins ahead of the snout', () => {
+  const fish = join(
+    ellipsoid([0.12, 0.16, 0.5]),
+    box([-0.006, -0.02, 0.45], [0.006, 0.02, 0.62]),
+    box([-0.006, 0.1, -0.2], [0.006, 0.42, 0.1]),
+  );
+  const result = classifyFins(fish.positions, fish.indices, { resolution: 140, rigidSnout: true });
+
+  it('gives no fin id to a spike that sticks out ahead of the rigid body', () => {
+    let tip = 0;
+    for (let i = 0; i < fish.positions.length / 3; i++) {
+      if (fish.positions[i * 3 + 2]! < 0.58) continue;
+      tip++;
+      expect(result.id[i]).toBe(0);
+      expect(result.mask[i]).toBe(0);
+    }
+    expect(tip).toBeGreaterThan(0);
+  });
+
+  it('leaves the spike as it was without the hint', () => {
+    const plain = classifyFins(fish.positions, fish.indices, { resolution: 140 });
+    const finTip = Array.from(plain.id).some(
+      (id, i) => id !== 0 && fish.positions[i * 3 + 2]! > 0.58,
+    );
+    expect(finTip).toBe(true);
+  });
+
+  it('still classifies the dorsal plate', () => {
+    const plate = Array.from({ length: fish.positions.length / 3 }, (_, i) => i).filter(
+      (i) => fish.positions[i * 3 + 1]! > 0.4 && fish.positions[i * 3 + 2]! < 0.1,
+    );
+    expect(plate.length).toBeGreaterThan(0);
+    for (const i of plate) expect(result.id[i]).toBe(FIN_IDS.dorsal);
+  });
+});
+
 describe('classifyFins with shellPectorals', () => {
   const body = ellipsoid([0.12, 0.16, 0.5]);
   const bodyVertices = body.positions.length / 3;
