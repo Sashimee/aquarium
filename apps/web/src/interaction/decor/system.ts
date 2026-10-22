@@ -7,6 +7,7 @@ import type { DecorMode } from './mode';
 import type { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
 import type { CoralFeed } from '../../sync/coralFeed';
+import type { PlantFeed } from '../../sync/plantFeed';
 import type { ScaleCap } from '../../scene/coralGrowth';
 import { generateEuphyllia, parseEuphylliaId } from '../../scene/euphyllia';
 
@@ -28,6 +29,7 @@ export function createDecorSystem(
   initial: SavedTank | null,
   feeders: FeederLayer,
   corals?: CoralFeed,
+  plants?: PlantFeed,
 ): DecorSystem {
   const saved = new SavedDecor(
     interaction,
@@ -54,6 +56,8 @@ export function createDecorSystem(
     interaction.emit('coral:picked', { key: world.coralAt(ray)?.key ?? null });
   });
   const detachCorals = corals?.attach({ setCorals: (state) => world.setCorals(state) });
+
+  const detachPlants = plants?.attach({ setPlants: (state) => world.setPlants(state) });
 
   let reduced = false;
   const stopMotion = watchReducedMotion((value) => {
@@ -104,6 +108,7 @@ export function createDecorSystem(
       stopRequests();
       stopTaps();
       detachCorals?.();
+      detachPlants?.();
       stopMotion();
       mode?.dispose();
       saved.dispose();

@@ -49,7 +49,11 @@ function clampedSize(coral: Coral): number {
  * Largest scale an item can take where it stands; the glass and the surface are the limit.
  * A fragment of a swaying coral is floored above it, so its sway can cross the glass.
  */
-export type ScaleCap = (item: DecorItem) => number;
+export interface ScaleCap {
+  (item: DecorItem): number;
+  /** Whether the item sways in the current. A cap that omits it treats only euphyllia as swaying. */
+  readonly sways?: (item: DecorItem) => boolean;
+}
 
 /**
  * The item at the colony's grown size, held to `cap` so it never crosses the glass or the
@@ -115,10 +119,10 @@ export function placeFragments(
     };
     const wanted = root.item.scale * clampedSize(coral);
     const capped = Math.min(wanted, cap(standing));
-    const scale =
-      parseEuphylliaId(root.assetId) === null
-        ? capped
-        : Math.max(capped, Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION));
+    const sways = cap.sways?.(standing) ?? parseEuphylliaId(root.assetId) !== null;
+    const scale = sways
+      ? Math.max(capped, Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION))
+      : capped;
     placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;
@@ -186,8 +190,11 @@ export function coralScaleCap(
 ): ScaleCap {
   const modelOf = boundsFromCatalog(catalog, current);
   const models = new Map<string, FitModel | null>();
-  return (item) => {
+  const modelFor = (item: DecorItem) => {
     if (!models.has(item.assetId)) models.set(item.assetId, modelOf(item.assetId));
-    return maxScaleAt(item, dimensions, models.get(item.assetId) ?? null);
+    return models.get(item.assetId) ?? null;
   };
+  return Object.assign((item: DecorItem) => maxScaleAt(item, dimensions, modelFor(item)), {
+    sways: (item: DecorItem) => modelFor(item)?.swayReach != null,
+  });
 }

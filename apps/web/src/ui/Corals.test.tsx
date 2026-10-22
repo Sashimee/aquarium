@@ -219,25 +219,28 @@ describe('the coral section', () => {
     const own = document.createElement('div');
     document.body.append(own);
     const ownRoot = createRoot(own);
-    await act(async () => {
-      ownRoot.render(
-        <CoralSection
-          interaction={interaction}
-          session={{ fragCoral } as unknown as TankSession}
-          state={INITIAL_STATE}
-          tank={tankFixture({ biome: 'reef', corals: [coral()] })}
-        />,
-      );
-    });
-    await act(async () => interaction.emit('coral:picked', { key: 's1' }));
-    expect(vi.getTimerCount()).toBe(1);
-    await act(async () => ownRoot.unmount());
-    expect(vi.getTimerCount()).toBe(0);
-    await act(async () => vi.advanceTimersByTime(100));
-    expect(own.textContent).toBe('');
-    expect(errors).not.toHaveBeenCalled();
-    errors.mockRestore();
-    own.remove();
+    try {
+      await act(async () => {
+        ownRoot.render(
+          <CoralSection
+            interaction={interaction}
+            session={{ fragCoral } as unknown as TankSession}
+            state={INITIAL_STATE}
+            tank={tankFixture({ biome: 'reef', corals: [coral()] })}
+          />,
+        );
+      });
+      await act(async () => interaction.emit('coral:picked', { key: 's1' }));
+      expect(vi.getTimerCount()).toBe(1);
+      await act(async () => ownRoot.unmount());
+      expect(vi.getTimerCount()).toBe(0);
+      await act(async () => vi.advanceTimersByTime(100));
+      expect(own.textContent).toBe('');
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      own.remove();
+    }
   });
 
   it('moves the mark with each tap and clears it when the tap hits no coral', async () => {

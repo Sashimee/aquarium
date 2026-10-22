@@ -8,14 +8,15 @@ export interface PlantSink {
 }
 
 /**
- * Carries the active tank's growing plants to the scene. Created before the scene exists, so
+ * Carries the active tank's growing plants to everything that draws or collides with them: the scene
+ * and the decor layer's sim colliders. Created before the scene exists, so
  * `attach` hands over what is held so far. A tank switch keeps the old plants until the next tank
  * announces its own, so the garden never flashes bare in between; signing out, having no tank or
  * showing a public tank (which has no growth state) returns the scene to the plants as drawn.
  */
 export class PlantFeed {
   private plants: readonly Plant[] | undefined;
-  private sink: PlantSink | null = null;
+  private readonly sinks = new Set<PlantSink>();
   private activeTankId: string | null = null;
   private readonly unsubscribe: (() => void)[];
 
@@ -36,18 +37,18 @@ export class PlantFeed {
     ];
   }
 
-  attach(sink: PlantSink): void {
-    this.sink = sink;
+  /** Hands the sink what is held so far; the returned function detaches it. */
+  attach(sink: PlantSink): () => void {
+    this.sinks.add(sink);
     sink.setPlants(this.plants);
-  }
-
-  detach(): void {
-    this.sink = null;
+    return () => {
+      this.sinks.delete(sink);
+    };
   }
 
   stop(): void {
     for (const off of this.unsubscribe) off();
-    this.sink = null;
+    this.sinks.clear();
   }
 
   private reset(): void {
@@ -57,6 +58,6 @@ export class PlantFeed {
 
   private set(plants: readonly Plant[] | undefined): void {
     this.plants = plants;
-    this.sink?.setPlants(plants);
+    for (const sink of this.sinks) sink.setPlants(plants);
   }
 }
