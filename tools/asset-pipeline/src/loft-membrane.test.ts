@@ -23,8 +23,8 @@ const finTexture: FinTexture = (fin, u, v, variant) => [
 ];
 
 describe('membrane lofts', () => {
-  it('covers the six roster lofts', () => {
-    expect(recipes).toHaveLength(6);
+  it('covers the nine roster lofts', () => {
+    expect(recipes).toHaveLength(9);
   });
 
   for (const recipe of recipes) {
