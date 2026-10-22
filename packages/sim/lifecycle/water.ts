@@ -190,6 +190,7 @@ export function stepWater(
 
   return {
     water: {
+      ...water,
       ammonia,
       nitrate,
       algae: Math.min(

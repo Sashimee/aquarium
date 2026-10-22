@@ -45,6 +45,12 @@ function accept(
   };
 }
 
+function withFoodType(water: Water, food: FoodType): FoodType[] | undefined {
+  if (water.uneatenFood > 0 && water.uneatenFoodTypes === undefined) return undefined;
+  const kept = water.uneatenFoodTypes ?? [];
+  return kept.includes(food) ? kept : [...kept, food];
+}
+
 export function applyCare(
   state: LifecycleState,
   action: CareAction,
@@ -64,7 +70,10 @@ export function applyCare(
           reason: 'There is already too much uneaten food in the tank. Vacuum the gravel first.',
         };
       }
-      return accept(state, { uneatenFood: water.uneatenFood + action.portion });
+      return accept(state, {
+        uneatenFood: water.uneatenFood + action.portion,
+        uneatenFoodTypes: withFoodType(water, action.food),
+      });
     }
     case 'water_change':
       return accept(
@@ -110,7 +119,7 @@ export function applyCare(
       );
     }
     case 'gravel_vacuum':
-      return accept(state, { uneatenFood: 0 });
+      return accept(state, { uneatenFood: 0, uneatenFoodTypes: [] });
     case 'algae_scrape':
       return accept(state, { algae: 0 });
   }

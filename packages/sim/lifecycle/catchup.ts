@@ -196,6 +196,7 @@ function cleanStep(state: LifecycleState, input: CatchUpInput, nowMs: number): L
     species: crew.species,
     algae: state.water.algae,
     uneatenFood: state.water.uneatenFood,
+    ...(state.water.uneatenFoodTypes ? { uneatenFoodTypes: state.water.uneatenFoodTypes } : {}),
     dtHours: STEP_MINUTES / 60,
     litFraction: lampIsOn(nowMs, STEP_MINUTES / 60, light.onHour, light.offHour) ? 1 : 0,
     surfaces: crew.surfaces,
