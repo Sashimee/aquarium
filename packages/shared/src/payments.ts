@@ -29,7 +29,7 @@ export const checkoutConsentSchema = z
 export type CheckoutConsent = z.infer<typeof checkoutConsentSchema>;
 
 export const packCheckoutRequestSchema = z.strictObject({
-  packId: packSchema.shape.id,
+  packId: packSchema.shape.id.max(64),
   consent: checkoutConsentSchema,
 });
 export type PackCheckoutRequest = z.infer<typeof packCheckoutRequestSchema>;
@@ -40,7 +40,9 @@ export const subscriptionCheckoutRequestSchema = z.strictObject({
 export type SubscriptionCheckoutRequest = z.infer<typeof subscriptionCheckoutRequestSchema>;
 
 export const checkoutResponseSchema = z.strictObject({
-  url: z.url().describe('Stripe-hosted Checkout page to send the browser to'),
+  url: z
+    .url({ protocol: /^https$/ })
+    .describe('Stripe-hosted Checkout page to send the browser to'),
 });
 export type CheckoutResponse = z.infer<typeof checkoutResponseSchema>;
 

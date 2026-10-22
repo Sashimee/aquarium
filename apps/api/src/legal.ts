@@ -14,6 +14,7 @@ import { storedFishSchema } from './gifts.ts';
 import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
+import { describeProviderError, type PaymentProvider } from './payments/provider.ts';
 
 export interface LegalLimits {
   export: Limit;
@@ -40,6 +41,7 @@ export interface LegalDeps {
   limiter: RateLimiter;
   limits: LegalLimits;
   currentSession: (req: FastifyRequest) => Promise<CurrentSession | null>;
+  payments?: PaymentProvider | null;
 }
 
 export function registerLegalRoutes(deps: LegalDeps): void {
@@ -381,6 +383,65 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .send(
           apiError('forbidden', 'Sign in again with your passkey, then retry within 5 minutes.'),
         );
+    }
+
+    // A subscription left running would keep billing an account that no longer exists, so a failed
+    // cancel, or payments being switched off while one still runs, stops the deletion.
+    const candidates = await db
+      .select({
+        id: schema.clubSubscriptions.id,
+        status: schema.clubSubscriptions.status,
+        createdAt: schema.clubSubscriptions.createdAt,
+      })
+      .from(schema.clubSubscriptions)
+      .where(
+        and(
+          eq(schema.clubSubscriptions.userId, userId),
+          inArray(schema.clubSubscriptions.status, [
+            'active',
+            'past_due',
+            'unpaid',
+            'trialing',
+            'incomplete',
+          ]),
+        ),
+      );
+    // Stripe expires an unpaid checkout subscription after 24 h, but with payments off the webhook
+    // that would record it never arrives, so an old incomplete row must not block deletion forever.
+    const running = candidates.filter(
+      (row) =>
+        Boolean(deps.payments) ||
+        row.status !== 'incomplete' ||
+        Date.now() - row.createdAt.getTime() < 24 * 3_600_000,
+    );
+    if (running.length > 0) {
+      if (!deps.payments) {
+        app.log.error('account deletion refused: a subscription runs but payments are off');
+        return reply
+          .code(503)
+          .send(
+            apiError(
+              'payments_disabled',
+              'Your subscription cannot be cancelled while payments are unavailable, so nothing was deleted. Try again later.',
+            ),
+          );
+      }
+      try {
+        for (const { id } of running) await deps.payments.cancelSubscriptionNow(id);
+      } catch (error) {
+        app.log.error(
+          describeProviderError(error),
+          'subscription could not be cancelled for account deletion',
+        );
+        return reply
+          .code(502)
+          .send(
+            apiError(
+              'internal',
+              'Your subscription could not be cancelled with the payment provider, so nothing was deleted. Try again in a minute.',
+            ),
+          );
+      }
     }
 
     const orphaned = await db.transaction(async (tx) => {

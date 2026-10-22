@@ -17,6 +17,8 @@ import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
 import type { PushSender } from './push.ts';
+import type { PaymentProvider } from './payments/provider.ts';
+import type { PaymentsLimits } from './payments/routes.ts';
 import type { ReminderLimits } from './reminders.ts';
 import type { PublicLimits } from './public.ts';
 import type { GalleryLimits } from './gallery.ts';
@@ -90,6 +92,7 @@ export interface HarnessOptions {
   signInThrottle?: Limit;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  paymentsLimits?: PaymentsLimits;
   handleLimit?: Limit;
   collectionLimit?: Limit;
   publicLimits?: PublicLimits;
@@ -97,6 +100,7 @@ export interface HarnessOptions {
   community?: Partial<CommunityConfig>;
   testHooks?: boolean;
   push?: PushSender | null;
+  payments?: PaymentProvider | null;
   reminderLimits?: ReminderLimits;
   mailDelayMs?: number;
   appOrigin?: string;
@@ -232,9 +236,11 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     testHooks: opts.testHooks ?? true,
     authSecret: TEST_SECRET,
     push: opts.push ?? null,
+    payments: opts.payments ?? null,
     ...(opts.reminderLimits ? { reminderLimits: opts.reminderLimits } : {}),
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
+    ...(opts.paymentsLimits ? { paymentsLimits: opts.paymentsLimits } : {}),
     ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),
     ...(opts.collectionLimit ? { collectionLimit: opts.collectionLimit } : {}),
     ...(opts.publicLimits ? { publicLimits: opts.publicLimits } : {}),
