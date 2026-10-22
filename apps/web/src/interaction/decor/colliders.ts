@@ -1,6 +1,7 @@
 import type { Collider, DecorItem } from '@aquarium/shared';
 import { footprintOf } from './footprint';
-import { hasShelterParts, shelterColliders } from './shelterColliders';
+import { hasShelterParts } from '../../scene/shelterParts';
+import { shelterColliders } from './shelterColliders';
 import type { DecorSpec } from './spec';
 
 export const COLLIDER_PREFIX = 'decor:';

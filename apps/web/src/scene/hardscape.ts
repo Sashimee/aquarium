@@ -30,6 +30,7 @@ import type { CatalogEntry, LoadedModel } from './assets';
 import { clamp01, coralGlow, coralTint, heightScale } from './coralStyle';
 import { coralBleachColor, setMaterialBleach } from '../engine/coralBleach';
 import { polypGain } from './polyps';
+import { hasShelterParts, placedShelterParts } from './shelterParts';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
 export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([
@@ -66,12 +67,18 @@ function mergedPositions(geometries: readonly BufferGeometry[], matrix: Matrix4)
   return out;
 }
 
-/** Driftwood is long and thin, so a capsule chain hugs it; stone and shells use a convex hull. */
+/**
+ * Driftwood is long and thin, so a capsule chain hugs it; stone and shells use a convex hull. A
+ * shelter gets one hull per convex part, the same parts the decor layer reports to the sim.
+ */
 export function fitCollider(
   kind: string,
   geometries: readonly BufferGeometry[],
   item: DecorItem,
 ): Collider[] {
+  if (hasShelterParts(item.assetId)) {
+    return placedShelterParts(item).map((corners) => fitHull(corners.flat()));
+  }
   const points = mergedPositions(geometries, decorMatrix(item));
   return kind === 'driftwood' ? fitCapsuleChain(points, WOOD_SEGMENTS) : [fitHull(points)];
 }
