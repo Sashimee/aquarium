@@ -50,6 +50,9 @@ export function createDecorSystem(
   });
   engine.scene.add(feeders.group);
   saved.attach(world);
+  const stopTaps = interaction.on('play:tapped', ({ ray }) => {
+    interaction.emit('coral:picked', { key: world.coralAt(ray)?.key ?? null });
+  });
   const detachCorals = corals?.attach({ setCorals: (state) => world.setCorals(state) });
 
   let reduced = false;
@@ -99,6 +102,7 @@ export function createDecorSystem(
     dispose() {
       disposed = true;
       stopRequests();
+      stopTaps();
       detachCorals?.();
       stopMotion();
       mode?.dispose();

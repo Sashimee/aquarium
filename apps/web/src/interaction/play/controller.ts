@@ -250,6 +250,7 @@ export class PlayController {
   tap(x: number, y: number): void {
     const ray = this.deps.rayAt(x, y);
     if (!ray) return;
+    this.deps.events.emit('play:tapped', { ray });
     if (this.activeTool === 'feed') {
       const hit = pickPlaneY(ray.origin, ray.dir, this.deps.max.y);
       const { min, max } = this.deps;

@@ -1,13 +1,12 @@
 import type { Collider, Coral, DecorItem } from '@aquarium/shared';
 import {
   grownCoralItem,
-  grownEuphylliaCapsule,
   matchLayoutCorals,
   placeFragments,
   type CoralSlot,
   type ScaleCap,
 } from '../../scene/coralGrowth';
-import { parseEuphylliaId, type EuphylliaCapsule, type EuphylliaMesh } from '../../scene/euphyllia';
+import { euphylliaCollider, parseEuphylliaId, type EuphylliaMesh } from '../../scene/euphyllia';
 import { collidersFor } from './colliders';
 import type { Piece } from './layout';
 import type { DecorSpec } from './spec';
@@ -32,19 +31,20 @@ export interface GrownCorals {
   readonly pieces: readonly Piece[];
   /** Grown procedural corals and every fragment, which the pieces do not carry. */
   readonly extra: readonly Collider[];
+  /** Every coral that has a place in the tank, at the size and spot it is drawn. */
+  readonly placed: readonly PlacedCoral[];
+}
+
+export interface PlacedCoral {
+  readonly coral: Coral;
+  readonly item: DecorItem;
 }
 
 type Origin = { readonly piece: number } | { readonly fixed: number };
 
-function softCapsule(id: string, { centre, radius, height, lean }: EuphylliaCapsule): Collider {
-  return {
-    id,
-    kind: 'capsule',
-    hard: false,
-    a: [centre[0] - lean[0] / 2, centre[1] - height / 2, centre[2] - lean[1] / 2],
-    b: [centre[0] + lean[0] / 2, centre[1] + height / 2, centre[2] + lean[1] / 2],
-    radius,
-  };
+function softCapsule(id: string, bounds: CoralBounds, item: DecorItem): Collider {
+  const { kind, a, b, radius } = euphylliaCollider(bounds, item);
+  return { id, kind, hard: false, a: [...a], b: [...b], radius };
 }
 
 /**
@@ -55,7 +55,7 @@ function softCapsule(id: string, { centre, radius, height, lean }: EuphylliaCaps
  */
 export function growCorals(input: CoralColliderInput): GrownCorals {
   const { pieces, fixed, specs, corals, cap, ground, boundsOf } = input;
-  if (corals.length === 0) return { pieces, extra: [] };
+  if (corals.length === 0) return { pieces, extra: [], placed: [] };
 
   const slots: CoralSlot[] = [];
   const origins: Origin[] = [];
@@ -73,11 +73,13 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
   const matched = matchLayoutCorals(slots, corals);
   const grownPieces = [...pieces];
   const extra: Collider[] = [];
+  const placed: PlacedCoral[] = [];
   slots.forEach((slot, s) => {
     const origin = origins[s];
     const coral = matched.get(s);
     if (!origin || !coral) return;
     const grown = grownCoralItem(slot.item, coral, cap);
+    placed.push({ coral, item: grown });
     if ('piece' in origin) {
       const piece = pieces[origin.piece];
       if (piece) grownPieces[origin.piece] = { ...piece, item: grown };
@@ -85,29 +87,19 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
     }
     const bounds = boundsOf(slot.assetId);
     if (grown.scale !== slot.item.scale && bounds) {
-      extra.push(
-        softCapsule(
-          `decor:coral:${coral.key}`,
-          grownEuphylliaCapsule(bounds, slot.item, coral, cap),
-        ),
-      );
+      extra.push(softCapsule(`decor:coral:${coral.key}`, bounds, grown));
     }
   });
 
   for (const { coral, item } of placeFragments(slots, corals, ground, cap)) {
+    placed.push({ coral, item });
     const spec = specs.get(item.assetId);
     if (spec) {
       extra.push(...collidersFor(`coral:${coral.key}`, spec, item));
       continue;
     }
     const bounds = parseEuphylliaId(item.assetId) ? boundsOf(item.assetId) : null;
-    if (bounds)
-      extra.push(
-        softCapsule(
-          `decor:coral:${coral.key}`,
-          grownEuphylliaCapsule(bounds, item, undefined, cap),
-        ),
-      );
+    if (bounds) extra.push(softCapsule(`decor:coral:${coral.key}`, bounds, item));
   }
-  return { pieces: grownPieces, extra };
+  return { pieces: grownPieces, extra, placed };
 }

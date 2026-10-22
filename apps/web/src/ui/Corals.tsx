@@ -1,23 +1,52 @@
 import type { Tank } from '@aquarium/shared';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { EventBus } from '../engine/events';
+import type { InteractionEvents } from '../interaction/events';
 import { BUNDLED_CORALS } from '../sync/bundledCorals';
 import { describeBleach, fragChoices, lampWarning, reefIsBleaching } from '../sync/coralCare';
 import type { SessionState, TankSession } from '../sync/session';
+
+const REANNOUNCE_MS = 50;
 
 export function CoralSection(props: CoralSectionProps) {
   return <CoralSectionBody key={props.tank.id} {...props} />;
 }
 
 interface CoralSectionProps {
+  interaction: EventBus<InteractionEvents>;
   session: TankSession;
   state: SessionState;
   tank: Tank;
 }
 
-function CoralSectionBody({ session, state, tank }: CoralSectionProps) {
+function CoralSectionBody({ interaction, session, state, tank }: CoralSectionProps) {
   const id = useId();
+  const [picked, setPicked] = useState<{ key: string; seq: number } | null>(null);
+  const [said, setSaid] = useState('');
+  const rows = useRef(new Map<string, HTMLLIElement>());
+  const seq = useRef(0);
   const [refusal, setRefusal] = useState<{ key: string; text: string } | null>(null);
   const choices = fragChoices(tank.corals, BUNDLED_CORALS.params.fragMaxBleach);
+  const pickedLabel = choices.find((c) => c.coral.key === picked?.key)?.label ?? null;
+
+  useEffect(
+    () =>
+      interaction.on('coral:picked', ({ key }) => {
+        seq.current += 1;
+        setPicked(key === null ? null : { key, seq: seq.current });
+      }),
+    [interaction],
+  );
+
+  useEffect(() => {
+    setSaid('');
+    if (!picked || pickedLabel === null) return undefined;
+    rows.current.get(picked.key)?.scrollIntoView?.({ block: 'nearest' });
+    // A live region only speaks on a change, so a repeat tap empties it first.
+    const timer = setTimeout(() => setSaid(`Selected the ${pickedLabel}.`), REANNOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [picked, pickedLabel]);
+
   if (choices.length === 0) return null;
   const warning = lampWarning(tank.corals, tank.equipment.light, BUNDLED_CORALS);
   const bleaching = reefIsBleaching(tank.corals);
@@ -37,7 +66,14 @@ function CoralSectionBody({ session, state, tank }: CoralSectionProps) {
       )}
       <ul className="shop">
         {choices.map(({ coral, label, enabled, why }) => (
-          <li key={coral.key}>
+          <li
+            key={coral.key}
+            aria-current={picked?.key === coral.key ? 'true' : undefined}
+            ref={(row) => {
+              if (row) rows.current.set(coral.key, row);
+              else rows.current.delete(coral.key);
+            }}
+          >
             <span>
               {label}: {Math.round(coral.size * 100)}% size, {describeBleach(coral.bleach)}
               {why && <span className="hint"> {why}</span>}
@@ -64,9 +100,12 @@ function CoralSectionBody({ session, state, tank }: CoralSectionProps) {
           </li>
         ))}
       </ul>
+      <p role="status" className="hint">
+        {said}
+      </p>
       <p className="hint">
-        A fragment starts small on the substrate nearby and grows on its own. Cutting takes size
-        from the colony.
+        Tap a coral in the tank to find it here. A fragment starts small on the substrate nearby and
+        grows on its own. Cutting takes size from the colony.
       </p>
     </section>
   );
