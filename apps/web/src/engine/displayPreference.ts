@@ -116,3 +116,26 @@ export function displayLimits(defaults: DisplayLimits, choice: DisplayChoice): D
 
 /** One choice for the whole page: a settings screen writes it, the engine reads it. */
 export const displayPreference = new DisplayPreference(browserDisplayStorage());
+
+let coarse: boolean | undefined;
+
+/** Read once, so the engine and the settings screen agree for the whole session. */
+export function hasCoarsePointer(): boolean {
+  coarse ??= typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  return coarse;
+}
+
+export function resetCoarsePointerForTests(): void {
+  coarse = undefined;
+}
+
+/** What `?fps=` and `?dpr=` force, ignoring values the engine would reject. */
+export function urlDisplayOverrides(search: string): Partial<DisplayChoice> {
+  const params = new URLSearchParams(search);
+  const frameRate = params.get('fps');
+  const pixelRatio = params.get('dpr');
+  return {
+    ...(isFrameRateChoice(frameRate) ? { frameRate } : {}),
+    ...(isPixelRatioChoice(pixelRatio) ? { pixelRatio } : {}),
+  };
+}

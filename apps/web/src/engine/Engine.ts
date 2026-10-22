@@ -35,6 +35,7 @@ import { showDeviceNotice } from './deviceNotice';
 import {
   displayLimits,
   displayPreference,
+  hasCoarsePointer,
   type DisplayChoice,
   type DisplayLimits,
   type DisplayPreference,
@@ -94,10 +95,6 @@ const CAPTURE_EFFECTS_WAIT_MS = 15000;
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
 /** At the water surface; the hood's spread leaves about three quarters of it on average below. */
 const HOOD_INTENSITY = 4;
-
-function hasCoarsePointer(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-}
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
 export interface StartableRenderer extends LossSource {

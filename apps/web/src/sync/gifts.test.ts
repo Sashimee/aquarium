@@ -393,6 +393,39 @@ describe('GiftBook', () => {
     expect(book.getState().notice).toContain('getting used to the water');
   });
 
+  it('drops the notice of a send that finishes after the messages were cleared', async () => {
+    let finish: (value: { offer: GiftOffer; tank: Tank }) => void = () => undefined;
+    const { book } = setup({
+      createGift: vi.fn().mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      ),
+    });
+    const sent = book.create(createInput);
+    book.clearMessages();
+    finish({ offer: offer({ role: 'sender' }), tank: sender });
+    await sent;
+    expect(book.getState().notice).toBeNull();
+    expect(book.getState().busy).toBeNull();
+  });
+
+  it('drops the error of a send that fails after the messages were cleared', async () => {
+    let fail: (reason: Error) => void = () => undefined;
+    const { book } = setup({
+      createGift: vi.fn().mockReturnValue(
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+      ),
+    });
+    const sent = book.create(createInput);
+    book.clearMessages();
+    fail(new Error('boom'));
+    await sent;
+    expect(book.getState().error).toBeNull();
+  });
+
   it('sends the pledged fish when countering and expects no arrival yet', async () => {
     const { api, onTank, book } = setup({
       acceptGift: vi.fn().mockResolvedValue({ offer: offer(), tank: sender, arrival: null }),
