@@ -1,6 +1,7 @@
 import { legacyTintSeed } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { coralGlow, coralTint, fluorescenceLevel, heightScale } from './coralStyle';
+import { Color } from 'three/webgpu';
+import { bleachedColor, coralGlow, coralTint, fluorescenceLevel, heightScale } from './coralStyle';
 import { loadPreset } from './preset';
 
 describe('coral style', () => {
@@ -75,5 +76,28 @@ describe('coral fluorescence', () => {
     expect(night).toBeGreaterThan(0);
     expect(day).toBeGreaterThan(night);
     expect(day / night).toBeLessThan(3 / 0.3);
+  });
+});
+
+describe('bleachedColor', () => {
+  const live = new Color(0.4, 0.22, 1);
+
+  it('leaves a healthy coral at its live colour', () => {
+    expect(bleachedColor(live, 0).equals(live)).toBe(true);
+  });
+
+  it('reaches a chalky near-white, brighter than any live tint, when fully bleached', () => {
+    const white = bleachedColor(live, 1);
+    expect(white.r).toBeGreaterThan(1.7);
+    expect(Math.abs(white.r - white.g)).toBeLessThan(0.15);
+  });
+
+  it('moves monotonically toward white', () => {
+    expect(bleachedColor(live, 0.6).g).toBeGreaterThan(bleachedColor(live, 0.3).g);
+  });
+
+  it('clamps out-of-range bleach', () => {
+    expect(bleachedColor(live, 2).equals(bleachedColor(live, 1))).toBe(true);
+    expect(bleachedColor(live, -1).equals(live)).toBe(true);
   });
 });

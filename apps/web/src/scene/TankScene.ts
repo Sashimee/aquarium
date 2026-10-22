@@ -4,6 +4,7 @@ import { uniform } from 'three/tsl';
 import {
   legacyTintSeed,
   type Biome,
+  type Coral,
   type DecorItem,
   type Plant,
   type PlantPatch,
@@ -74,6 +75,13 @@ import {
   type PlantPick,
 } from './plantGrowth';
 import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
+import {
+  grownCoralItem,
+  matchLayoutCorals,
+  placeFragments,
+  type CoralSlot,
+  type PlacedFragment,
+} from './coralGrowth';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
 const FALLBACK_PLANT_HEIGHT = 0.2;
@@ -174,6 +182,13 @@ export class TankScene {
   private plantGroups: PlantGroup[] = [];
   private offsetGroups = new Map<string, PlantGroup>();
   private plantState: ReadonlyMap<string, Plant> = new Map();
+  private coralState: readonly Coral[] = [];
+  private fragHardscape: Hardscape | null = null;
+  private fragEuphyllias: EuphylliaGroup[] = [];
+  private fragLayout = '';
+  private fragRun = 0;
+  private coralFit = '';
+  private coralFitRun = 0;
   private installedKey: VisualKey | null = null;
   private readonly queue: RebuildQueue<VisualKey>;
   private substrate: SubstrateInstall | null = null;
@@ -436,7 +451,7 @@ export class TankScene {
           hardscape.add(catalog.get(item.assetId), model, item);
         }
         built = await this.buildPlantGroups(key, next, this.plantGroups);
-        const movable = await movableColliders(this.library, next, waterTop);
+        const movable = await movableColliders(this.library, this.withGrownCorals(next), waterTop);
         if (this.disposed || this.installedKey !== key) {
           hardscape.dispose();
           for (const group of built.created) group.dispose();
@@ -568,6 +583,168 @@ export class TankScene {
         context,
       ),
     );
+    this.syncCorals();
+  }
+
+  /**
+   * Shows the coral state: colonies at their grown size and bleached colour, and fragments as
+   * extra pieces on the substrate. Absent or empty `corals` is the layout as drawn. Colliders
+   * follow the grown size.
+   */
+  setCorals(corals: readonly Coral[] | undefined): void {
+    this.coralState = corals ?? [];
+    this.syncCorals();
+  }
+
+  private coralSlots(): { slots: CoralSlot[]; hardIndex: Map<number, number> } {
+    const slots: CoralSlot[] = [];
+    const hardIndex = new Map<number, number>();
+    this.hardItems.forEach(({ item, kind }, index) => {
+      if (kind !== 'coral') return;
+      hardIndex.set(slots.length, index);
+      slots.push({ assetId: item.assetId, item });
+    });
+    for (const { item } of this.euphylliaItems) slots.push({ assetId: item.assetId, item });
+    return { slots, hardIndex };
+  }
+
+  private withGrownCorals(
+    items: readonly { item: DecorItem; kind: string }[],
+  ): { item: DecorItem; kind: string }[] {
+    const indexes: number[] = [];
+    const slots: CoralSlot[] = [];
+    items.forEach(({ item, kind }, i) => {
+      if (kind !== 'coral') return;
+      indexes.push(i);
+      slots.push({ assetId: item.assetId, item });
+    });
+    const matched = matchLayoutCorals(slots, this.coralState);
+    return items.map((h, i) => {
+      const slot = indexes.indexOf(i);
+      return slot < 0 ? h : { ...h, item: grownCoralItem(h.item, matched.get(slot)) };
+    });
+  }
+
+  private syncCorals(): void {
+    if (this.disposed) return;
+    const { slots, hardIndex } = this.coralSlots();
+    const matched = matchLayoutCorals(slots, this.coralState);
+    slots.forEach((slot, s) => {
+      const coral = matched.get(s);
+      const grown = grownCoralItem(slot.item, coral);
+      const bleach = coral?.bleach ?? 0;
+      const hard = hardIndex.get(s);
+      if (hard !== undefined) {
+        const target = locateMovable(this.hardItems, hard);
+        if (target?.kind !== 'hardscape') return;
+        this.hardscape?.setItem(target.index, grown);
+        this.hardscape?.setBleach(target.index, bleach);
+        return;
+      }
+      const group = this.euphyllias[s - hardIndex.size];
+      group?.setItem(grown);
+      group?.setBleach(bleach);
+    });
+    void this.refitCoralColliders(slots, matched, hardIndex);
+    void this.syncFragments(slots);
+  }
+
+  private async refitCoralColliders(
+    slots: readonly CoralSlot[],
+    matched: ReadonlyMap<number, Coral>,
+    hardIndex: ReadonlyMap<number, number>,
+  ): Promise<void> {
+    const fit = slots.map((slot, s) => grownCoralItem(slot.item, matched.get(s)).scale).join(',');
+    if (fit === this.coralFit) return;
+    this.coralFit = fit;
+    const run = ++this.coralFitRun;
+    const version = this.layoutVersion;
+    const movable = await movableColliders(
+      this.library,
+      this.withGrownCorals(this.hardItems),
+      this.waterTop,
+    );
+    if (this.disposed || run !== this.coralFitRun || version !== this.layoutVersion) return;
+    this.plantSlots = new Map(movable.plantSlots);
+    this.replaceMovableColliders(movable.colliders);
+    const first = this.colliderData.length - this.euphylliaItems.length;
+    const colliders = [...this.colliderData];
+    this.euphylliaItems.forEach(({ fullDetail }, i) => {
+      const slot = slots[hardIndex.size + i];
+      if (!fullDetail || !slot) return;
+      colliders[first + i] = euphylliaCollider(
+        fullDetail.bounds,
+        grownCoralItem(slot.item, matched.get(hardIndex.size + i)),
+      );
+    });
+    this.colliderData = colliders;
+    this.colliderField = new ColliderField(this.colliderData);
+    this.overlay.setColliders(this.colliderData);
+  }
+
+  private async syncFragments(slots: readonly CoralSlot[]): Promise<void> {
+    const key = this.installedKey;
+    const placed = placeFragments(slots, this.coralState, (x, z) => this.groundHeight(x, z));
+    const layout = placed
+      .map((f) => `${f.coral.key}:${f.coral.assetId}:${f.item.position.join(',')}`)
+      .join('|');
+    if (layout === this.fragLayout && (placed.length === 0 || key)) {
+      this.updateFragments(placed);
+      return;
+    }
+    if (!key) return;
+    const run = ++this.fragRun;
+    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode, this.polyps.node);
+    const euphyllias: EuphylliaGroup[] = [];
+    try {
+      for (const frag of placed) {
+        const procedural = parseEuphylliaId(frag.item.assetId);
+        if (procedural) {
+          const mesh = generateEuphyllia(procedural.variant, procedural.seed, key.euphylliaDetail);
+          euphyllias.push(new EuphylliaGroup(mesh, frag.item, this.current, this.polyps.node));
+        } else {
+          const entry = this.library.catalog.get(frag.item.assetId);
+          const model = await this.library.load(
+            frag.item.assetId,
+            key.hardscapeLod,
+            key.textureSize,
+          );
+          hardscape.add(entry, model, frag.item);
+        }
+      }
+    } catch (error) {
+      hardscape.dispose();
+      for (const coral of euphyllias) coral.dispose();
+      throw error;
+    }
+    if (this.disposed || run !== this.fragRun || this.installedKey !== key) {
+      hardscape.dispose();
+      for (const coral of euphyllias) coral.dispose();
+      return;
+    }
+    this.fragHardscape?.dispose();
+    for (const coral of this.fragEuphyllias) coral.dispose();
+    this.fragHardscape = hardscape;
+    this.fragEuphyllias = euphyllias;
+    this.fragLayout = layout;
+    this.engine.scene.add(hardscape.group);
+    for (const coral of euphyllias) this.engine.scene.add(coral.object);
+    this.updateFragments(placed);
+  }
+
+  private updateFragments(placed: readonly PlacedFragment[]): void {
+    let hard = 0;
+    let soft = 0;
+    for (const { item, coral } of placed) {
+      if (parseEuphylliaId(item.assetId)) {
+        const group = this.fragEuphyllias[soft++];
+        group?.setItem(item);
+        group?.setBleach(coral.bleach);
+      } else {
+        this.fragHardscape?.setItem(hard, item);
+        this.fragHardscape?.setBleach(hard++, coral.bleach);
+      }
+    }
   }
 
   private syncOffsets(entries: ReadonlyMap<string, readonly PlantEntry[]>): void {
@@ -600,6 +777,7 @@ export class TankScene {
     this.hardItems = this.hardItems.map((h, i) => (i === index ? { item, kind: h.kind } : h));
     if (target.kind === 'hardscape') {
       this.hardscape?.setItem(target.index, item);
+      if (this.coralState.length > 0) this.syncCorals();
       return;
     }
     const group = this.plantGroups.find((g) => g.assetId === target.assetId);
@@ -836,6 +1014,8 @@ export class TankScene {
       if (previous) this.discardSubstrate(previous);
     }
     this.installedKey = key;
+    this.fragLayout = '';
+    this.syncCorals();
     await this.evictUnused();
     return true;
   }
@@ -870,6 +1050,8 @@ export class TankScene {
     this.offsetGroups.clear();
     for (const anemone of this.anemones) anemone.dispose();
     for (const coral of this.euphyllias) coral.dispose();
+    this.fragHardscape?.dispose();
+    for (const coral of this.fragEuphyllias) coral.dispose();
     this.overlay.dispose();
     if (this.substrate) {
       this.engine.tank.substrate.material = this.placeholderSubstrate;

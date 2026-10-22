@@ -27,7 +27,7 @@ import {
 } from 'three/tsl';
 import { legacyTintSeed, type Biome, type DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
-import { coralGlow, coralTint, heightScale } from './coralStyle';
+import { bleachedColor, clamp01, coralGlow, coralTint, heightScale } from './coralStyle';
 import { polypGain } from './polyps';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
@@ -161,10 +161,21 @@ function fluorescentMaterial(
   return material;
 }
 
+function isStandard(material: Material): material is MeshStandardMaterial {
+  return 'emissive' in material && 'color' in material;
+}
+
+interface BleachableMaterial {
+  readonly material: MeshStandardMaterial;
+  readonly color: Color;
+  readonly emissive: Color;
+}
+
 export class Hardscape {
   readonly group = new Group();
   private readonly meshesByItem: Mesh[][] = [];
   private readonly tintedMaterials: Material[] = [];
+  private readonly bleachables: BleachableMaterial[][] = [];
   private readonly swellNodes = new Map<number, Node<'vec3'>>();
 
   constructor(
@@ -179,6 +190,8 @@ export class Hardscape {
     const matrix = decorMatrix(item);
     const meshes: Mesh[] = [];
     this.meshesByItem.push(meshes);
+    const bleachables: BleachableMaterial[] = [];
+    this.bleachables.push(bleachables);
     const key = item.tintSeed ?? legacyTintSeed(item);
     const tint = coralTint(item.assetId, key);
     for (const primitive of model.primitives) {
@@ -198,6 +211,16 @@ export class Hardscape {
           (material as MeshStandardMaterial).color.multiply(tint);
         }
         this.tintedMaterials.push(material);
+      } else if (entry.kind === 'coral') {
+        material = primitive.material.clone();
+        this.tintedMaterials.push(material);
+      }
+      if (entry.kind === 'coral' && isStandard(material)) {
+        bleachables.push({
+          material,
+          color: material.color.clone(),
+          emissive: material.emissive.clone(),
+        });
       }
       const mesh = new Mesh(primitive.geometry, material);
       meshes.push(mesh);
@@ -231,6 +254,13 @@ export class Hardscape {
   setItem(index: number, item: DecorItem): void {
     const matrix = decorMatrix(item);
     for (const mesh of this.meshesByItem[index] ?? []) mesh.matrix.copy(matrix);
+  }
+
+  setBleach(index: number, bleach: number): void {
+    for (const { material, color, emissive } of this.bleachables[index] ?? []) {
+      material.color.copy(bleachedColor(color, bleach));
+      material.emissive.copy(emissive).multiplyScalar(1 - clamp01(bleach));
+    }
   }
 
   dispose(): void {

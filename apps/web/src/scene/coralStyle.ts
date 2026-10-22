@@ -86,3 +86,21 @@ export function coralGlow(biome: Biome, assetId: string, key: number): Color | n
 export function fluorescenceLevel(excitation: number): number {
   return FLUORESCENCE_YIELD * Math.max(excitation, 0) ** 0.4;
 }
+
+export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
+
+/**
+ * Bleached tissue has lost its zooxanthellae, leaving the white skeleton showing through. The
+ * colour multiplies a dull scan map, so the white target sits above 1 to brighten it; it is
+ * applied only to the live colour and never to a healthy coral.
+ */
+const BLEACHED_WHITE: Rgb = [1.9, 1.9, 1.8];
+
+export function bleachedColor(live: Color, bleach: number): Color {
+  const t = clamp01(bleach);
+  return new Color(
+    live.r + (BLEACHED_WHITE[0] - live.r) * t,
+    live.g + (BLEACHED_WHITE[1] - live.g) * t,
+    live.b + (BLEACHED_WHITE[2] - live.b) * t,
+  );
+}
