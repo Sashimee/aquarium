@@ -125,9 +125,22 @@ describe('effect text', () => {
     expect(effectText('co2', 2, cp)).toMatch(/Lowers the pH by 1 /);
   });
 
-  it('is honest that a stronger heater changes nothing the fish can feel', () => {
+  it('says a stronger heater warms a cold tank faster but settles on the same temperature', () => {
     expect(effectText('heater', 1, cp)).toContain('31');
-    expect(effectText('heater', 3, cp)).toMatch(/adds headroom and nothing else/);
+    expect(effectText('heater', 2, cp)).toMatch(/2 times as fast as tier 1.*same temperature/);
+    expect(effectText('heater', 3, cp)).toMatch(/3 times as fast as tier 1.*same temperature/);
+    expect(effectText('heater', 3, cp)).not.toMatch(/nothing else/);
+  });
+
+  it('follows the content warm-up rate: no extra rate, no speed-up', () => {
+    const slow = {
+      ...cp,
+      temperature: {
+        ...cp.temperature,
+        heaterWarmupRatePerHourPerTier: 0,
+      },
+    };
+    expect(effectText('heater', 3, slow)).toMatch(/1 times as fast/);
   });
 
   it('gives the filter media share of a full colony, capped at all of it', () => {
