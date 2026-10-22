@@ -20,6 +20,7 @@ import {
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { priceOrFree, priceText, tankPrice } from '../sync/economy';
 import { checkTankName, suggestTankName } from '../sync/naming';
+import { salinityNotice, type SalinityNotice } from '../sync/salinityCare';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth, useBridge } from './context';
 import { CoralSection } from './Corals';
@@ -149,7 +150,12 @@ function CareSections({ session, state, tank }: Ready) {
   const water = waterReport(tank.water, tank, state.species);
   return (
     <>
-      <Care session={session} state={state} water={water} />
+      <Care
+        session={session}
+        state={state}
+        water={water}
+        salinity={salinityNotice(tank, state.species)}
+      />
       <WaterTest
         tank={tank}
         species={state.species}
@@ -378,10 +384,12 @@ function Care({
   session,
   state,
   water,
+  salinity,
 }: {
   session: TankSession;
   state: SessionState;
   water: ReturnType<typeof waterReport>;
+  salinity: SalinityNotice | null;
 }) {
   const id = useId();
   return (
@@ -393,6 +401,11 @@ function Care({
         <li>Algae: {QUALITY_LABEL[water.algae]}</li>
         <li>Leftover food: {QUALITY_LABEL[water.leftoverFood]}</li>
       </ul>
+      {salinity && (
+        <p className={salinity.severity === 'danger' ? 'field-error' : 'hint'} role="status">
+          {salinity.text}
+        </p>
+      )}
       <div className="care-actions">
         <button
           type="button"

@@ -35,6 +35,7 @@ export const waterSchema = z.object({
   ammonia: z.number().nonnegative(),
   nitrate: z.number().nonnegative(),
   algae: unitSchema,
+  tannin: unitSchema.default(0).describe('tea-coloured humic water, 0 clear to 1 black'),
   uneatenFood: z.number().nonnegative().describe('portions of food on the substrate or drifting'),
   uneatenFoodTypes: z
     .array(foodTypeSchema)

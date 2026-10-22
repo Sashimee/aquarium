@@ -24,6 +24,7 @@ import {
   speciesSchema,
   tankSchema,
   updateTankRequestSchema,
+  waterSchema,
   userSchema,
 } from './index.js';
 
@@ -244,6 +245,31 @@ describe('tank and fish', () => {
 });
 
 describe('care events', () => {
+  it('accepts a bare salt_dose action and event and rejects extra fields', () => {
+    expect(careActionSchema.safeParse({ type: 'salt_dose' }).success).toBe(true);
+    expect(careActionSchema.safeParse({ type: 'salt_dose', amount: 3 }).success).toBe(false);
+    const event = { id, tankId: id2, at: '2026-01-01T00:00:00.000Z', kind: 'salt_dose' };
+    expect(careEventSchema.safeParse({ ...event, payload: {} }).success).toBe(true);
+    expect(careEventSchema.safeParse({ ...event, payload: { grams: 1 } }).success).toBe(false);
+  });
+
+  it('requires an idempotency key on buffer_dose and add_botanicals and logs bare events', () => {
+    for (const type of ['buffer_dose', 'add_botanicals'] as const) {
+      expect(careActionSchema.safeParse({ type }).success).toBe(false);
+      expect(careActionSchema.safeParse({ type, idempotencyKey: 'abcdefgh1' }).success).toBe(true);
+      const event = { id, tankId: id2, at: ts, kind: type };
+      expect(careEventSchema.safeParse({ ...event, payload: {} }).success).toBe(true);
+    }
+  });
+
+  it('defaults water tannin to 0 so saved tanks still parse', () => {
+    expect(waterSchema.parse({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 }).tannin).toBe(0);
+    expect(
+      waterSchema.safeParse({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0, tannin: 2 })
+        .success,
+    ).toBe(false);
+  });
+
   it('discriminates on type', () => {
     expect(careActionSchema.safeParse({ type: 'feed', food: 'flakes', portion: 1 }).success).toBe(
       true,

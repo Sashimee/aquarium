@@ -10,8 +10,11 @@ export interface PresetFit {
 
 /**
  * How the presets, authored for the standard tank, stretch to another tank: positions with the
- * glass, sizes with the smaller of length and depth. The web scene fits x, z and scale the same
- * way; it also nudges items off the glass using each model's bounds, which the server does not have.
+ * glass, sizes with the smaller of length and depth. The web scene fits x and z the same way and
+ * also nudges items off the glass using each model's bounds, which the server does not have. A
+ * perch is the exception: the server keeps its authored scale as a rough value only, since the web
+ * grows it toward the rim or drops it to ordinary wood by model bounds, and the server never reads
+ * a perch's scale for geometry.
  */
 export function presetFit(size: TankSize): PresetFit {
   const standard = TANK_SIZES.standard.dimensions;
@@ -32,6 +35,6 @@ export function fitPresetItem(item: DecorItem, size: TankSize): DecorItem {
     ...item,
     tintSeed: item.tintSeed ?? legacyTintSeed(item),
     position: [item.position[0] * lengthRatio, item.position[1], item.position[2] * depthRatio],
-    scale: item.scale * scale,
+    scale: item.perch ? item.scale : item.scale * scale,
   };
 }

@@ -53,7 +53,7 @@ const chemistryEnv = {
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2026, 0, 1);
-const cleanWater = { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 };
+const cleanWater = { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 };
 
 function env(over: Partial<BreedingEnvironment> = {}): BreedingEnvironment {
   let n = 0;

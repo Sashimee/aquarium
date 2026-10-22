@@ -8,8 +8,7 @@ import {
 } from '@aquarium/shared';
 import { useEffect, useId, useState } from 'react';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
-import { territoryWarning } from '../sync/cichlid';
-import { euroText, heaterWarning, priceText, speciesPrice } from '../sync/economy';
+import { euroText, priceText, purchaseWarning, speciesPrice } from '../sync/economy';
 import { chooseEquipment, deviceOffers, equipmentRef, type DeviceOffer } from '../sync/equipment';
 import { checkLamp, clockText, hourOptions, lampSummary, localOffsetMinutes } from '../sync/lamp';
 import { canBuy, tankCapacity } from '../sync/life';
@@ -75,12 +74,7 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
   const suggestion = suggestFishName(taken, tank.fish.length);
 
   const warningFor = (s: SpeciesSummary) =>
-    [
-      heaterWarning(tank, s, BUNDLED_CHEMISTRY.temperature.roomC),
-      territoryWarning(tank, s, state.species),
-    ]
-      .filter((w) => w !== null)
-      .join(' ') || null;
+    purchaseWarning(tank, s, state.species, BUNDLED_CHEMISTRY.temperature.roomC);
 
   useEffect(() => setProblem(null), [name]);
   useEffect(() => setConfirming(null), [stage, tank.id, tank.equipment.heater.tier]);

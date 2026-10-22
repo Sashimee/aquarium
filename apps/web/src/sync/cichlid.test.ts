@@ -2,6 +2,7 @@ import { newTankChemistry, speciesChemistrySchema, type DecorItem } from '@aquar
 import { describe, expect, it } from 'vitest';
 import { CAVE_MOUTHS } from '../scene/caves';
 import { FISH_1, fishFixture, speciesFixture, tankFixture } from './fixtures';
+import { purchaseWarning } from './economy';
 import {
   SHELTER_ASSET_IDS,
   isShelterAsset,
@@ -207,5 +208,26 @@ describe('territoryWarning', () => {
 
   it('stays quiet when an empty roomy tank gets its first territorial fish', () => {
     expect(territoryWarning(lakeTank([]), peacock, all)).toBeNull();
+  });
+});
+
+describe('purchaseWarning', () => {
+  const hotRival = speciesFixture({ ...peacock, warmWater: true });
+  const cold = (fish: string[]) => {
+    const tank = lakeTank(fish);
+    return { ...tank, equipment: { ...tank.equipment, heater: { tier: 0 } } };
+  };
+
+  it('shows the heater and the territory warning together', () => {
+    const text = purchaseWarning(cold(['pseudotropheus-demasoni']), hotRival, all, 21);
+    expect(text).toContain('no heater');
+    expect(text).toContain('defends a territory');
+  });
+
+  it('shows just the one that applies', () => {
+    expect(purchaseWarning(cold([]), hotRival, all, 21)).not.toContain('defends a territory');
+    const heated = lakeTank(['pseudotropheus-demasoni']);
+    expect(purchaseWarning(heated, hotRival, all, 21)).not.toContain('no heater');
+    expect(purchaseWarning(lakeTank([]), hotRival, all, 21)).toBeNull();
   });
 });

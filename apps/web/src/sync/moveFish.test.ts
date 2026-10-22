@@ -13,11 +13,14 @@ const quarantine = tankFixture({
 
 describe('moveTargets', () => {
   it('sends a display tank fish to the quarantine tank only', () => {
-    expect(moveTargets(display, [display, other, quarantine])).toEqual([quarantine]);
+    expect(moveTargets(display, [display, other, quarantine], 'neon-tetra')).toEqual([quarantine]);
   });
 
   it('sends a quarantine fish back to the display tanks', () => {
-    expect(moveTargets(quarantine, [display, other, quarantine])).toEqual([display, other]);
+    expect(moveTargets(quarantine, [display, other, quarantine], 'neon-tetra')).toEqual([
+      display,
+      other,
+    ]);
   });
 
   it('skips tanks of the other kind of water', () => {
@@ -27,11 +30,41 @@ describe('moveTargets', () => {
       biome: 'reef',
       quarantine: true,
     });
-    expect(moveTargets(display, [display, reef, quarantine])).toEqual([quarantine]);
+    expect(moveTargets(display, [display, reef, quarantine], 'neon-tetra')).toEqual([quarantine]);
+  });
+
+  describe('tank length gate', () => {
+    const home = tankFixture({ id: '00000000-0000-4000-8000-0000000000c8', quarantine: true });
+    const standard = tankFixture({ id: '00000000-0000-4000-8000-0000000000c4', size: 'standard' });
+    const long = tankFixture({ id: '00000000-0000-4000-8000-0000000000c5', size: 'long300' });
+
+    it('drops tanks shorter than the species minimum', () => {
+      expect(moveTargets(home, [home, standard, long], 'silver-mono')).toEqual([long]);
+    });
+
+    it('keeps a tank exactly at the minimum length', () => {
+      expect(moveTargets(home, [home, long], 'silver-mono')).toEqual([long]);
+    });
+
+    it('does not gate species without a minimum', () => {
+      expect(moveTargets(home, [home, standard], 'neon-tetra')).toEqual([standard]);
+    });
+
+    it('lets a gated fish into a short quarantine tank', () => {
+      const longHome = tankFixture({ id: '00000000-0000-4000-8000-0000000000c7', size: 'long300' });
+      const shortQuarantine = tankFixture({
+        id: '00000000-0000-4000-8000-0000000000c6',
+        size: 'nano30',
+        quarantine: true,
+      });
+      expect(moveTargets(longHome, [longHome, shortQuarantine], 'silver-mono')).toEqual([
+        shortQuarantine,
+      ]);
+    });
   });
 
   it('has no target without a quarantine tank', () => {
-    expect(moveTargets(display, [display, other])).toEqual([]);
+    expect(moveTargets(display, [display, other], 'neon-tetra')).toEqual([]);
   });
 });
 

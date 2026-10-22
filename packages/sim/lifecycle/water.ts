@@ -181,7 +181,8 @@ export function stepWater(
   const phTarget =
     cp.ph.target[ctx.biome] -
     atTier(cp.equipment.co2.phDropPerTier, equipment.co2.tier) -
-    (cp.ph.acidificationPerNitrate * nitrate) / Math.max(kh, cp.ph.minBufferKh);
+    (cp.ph.acidificationPerNitrate * nitrate) / Math.max(kh, cp.ph.minBufferKh) -
+    cp.tannin.phDropAtFull * water.tannin;
 
   const heater = ctx.equipment.heater.tier;
   const heatedTo = Math.min(
@@ -207,6 +208,7 @@ export function stepWater(
           params.algaePerHour * algaeMultiplier(equipment, cp, ctx.nowMs, dtHours) * dtHours,
       ),
       uneatenFood: Math.max(0, water.uneatenFood - decayed),
+      tannin: water.tannin * Math.exp(-cp.tannin.decayPerHour * dtHours),
     },
     chemistry: {
       nitrite,
