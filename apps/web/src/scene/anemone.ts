@@ -41,7 +41,7 @@ const TWO_PI = Math.PI * 2;
  */
 export interface SceneAnchor {
   readonly id: string;
-  readonly kind: 'anemone' | 'cave';
+  readonly kind: 'anemone' | 'cave' | 'bank';
   readonly position: readonly [number, number, number];
   readonly radius: number;
   /** Outward direction of a cave mouth. */

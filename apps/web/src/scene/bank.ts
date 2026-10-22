@@ -5,8 +5,8 @@ import type { WaterReach } from './caves';
 
 /**
  * A point above the water an amphibious fish can cling to or climb toward, not a flat area to rest
- * on: the one scanned stump offers a spike tip about 1.2 x 1.4 cm across. Not a `SceneAnchor`, since
- * the sim rejects kinds other than anemone and cave, so these travel on their own list.
+ * on: the one scanned stump offers a spike tip about 1.2 x 1.4 cm across. Banks are `SceneAnchor`s of kind
+ * `bank`; the scene keeps them on their own list so a bank is sent only with the decor that makes it.
  */
 export interface SceneBank {
   readonly id: string;
