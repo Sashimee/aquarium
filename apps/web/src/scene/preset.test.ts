@@ -367,16 +367,20 @@ describe.each(['blackwater', 'mangrove'] as const)('%s preset', (biome) => {
 });
 
 describe('blackwater and mangrove composition', () => {
-  it('blackwater is wood and leaf litter with no rock', () => {
-    const ids = loadPreset('blackwater').decor.map((d) => d.assetId);
+  it('blackwater is wood and leaf litter with no rock and only a few Amazon swords', () => {
+    const preset = loadPreset('blackwater');
+    const ids = preset.decor.map((d) => d.assetId);
+    expect(preset.plantPatches.length).toBeGreaterThan(0);
+    for (const patch of preset.plantPatches) expect(patch.assetId).toBe('amazon-sword');
+    expect(ids).not.toContain('oak-leaf-card');
     expect(ids.filter((id) => kinds.get(id) === 'driftwood').length).toBeGreaterThanOrEqual(4);
-    expect(ids.filter((id) => id === 'oak-leaf-card').length).toBeGreaterThanOrEqual(8);
+    expect(ids.filter((id) => id === 'catappa-leaf-card').length).toBeGreaterThanOrEqual(8);
     expect(ids.some((id) => kinds.get(id) === 'rock')).toBe(false);
   });
 
   it('keeps overlapping leaf cards at distinct heights so they cannot z-fight', () => {
-    const bounds = catalog.assets.find((a) => a.id === 'oak-leaf-card')?.bounds;
-    if (!bounds) throw new Error('oak-leaf-card has no bounds');
+    const bounds = catalog.assets.find((a) => a.id === 'catappa-leaf-card')?.bounds;
+    if (!bounds) throw new Error('catappa-leaf-card has no bounds');
     const half = ((bounds.max[0] ?? 0) - (bounds.min[0] ?? 0)) / 2;
     type Card = ReturnType<typeof loadPreset>['decor'][number];
     const overlap = (a: Card, b: Card): boolean => {
@@ -401,7 +405,7 @@ describe('blackwater and mangrove composition', () => {
       }
       return true;
     };
-    const cards = loadPreset('blackwater').decor.filter((d) => d.assetId === 'oak-leaf-card');
+    const cards = loadPreset('blackwater').decor.filter((d) => d.assetId === 'catappa-leaf-card');
     for (const card of cards) {
       const ground = substrateHeight(DEFAULT_TANK, card.position[0], card.position[2]);
       expect(card.position[1], 'leaf card centre must sit above the sand').toBeGreaterThan(ground);
