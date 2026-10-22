@@ -9,6 +9,8 @@ import {
   duplicateTextureProblems,
   intraAssetDuplicateTextureProblems,
   loadCheckInput,
+  sharedKtx2Problems,
+  type GlbDocument,
   type CheckInput,
 } from './check.ts';
 import { packGlb, sha256 } from './glb.ts';
@@ -1012,5 +1014,68 @@ describe('intraAssetDuplicateTextureProblems', () => {
 describe('the committed assets', () => {
   it('pass assets:check', () => {
     expect(checkAssets(loadCheckInput(REPO_ROOT))).toEqual([]);
+  });
+});
+
+describe('sharedKtx2Problems', () => {
+  function glb(
+    file: string,
+    slot: string,
+    uri: string,
+    sampler: Record<string, number> = { wrapS: 10497, wrapT: 10497 },
+  ): GlbDocument {
+    return {
+      file,
+      json: {
+        materials: [{ pbrMetallicRoughness: { [slot]: { index: 0 } } }],
+        textures: [{ sampler: 0, extensions: { KHR_texture_basisu: { source: 0 } } }],
+        samplers: [sampler],
+        images: [{ uri }],
+      },
+    };
+  }
+
+  it('accepts a shared URI with matching sampler and colour role', () => {
+    expect(
+      sharedKtx2Problems([
+        glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+        glb('rock/b/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('flags a shared URI with different samplers, naming both files', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'baseColorTexture', '../shared/t.ktx2', {
+        wrapS: 33071,
+        wrapT: 10497,
+      }),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/shared/t.ktx2');
+    expect(problems[0]).toContain('rock/a/lod0.glb');
+    expect(problems[0]).toContain('rock/b/lod0.glb');
+  });
+
+  it('flags a shared URI read as sRGB in one GLB and linear in another', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('sRGB');
+    expect(problems[0]).toContain('linear');
+    expect(problems[0]).toContain('rock/a/lod0.glb');
+    expect(problems[0]).toContain('rock/b/lod0.glb');
+  });
+
+  it('ignores a URI used by only one GLB', () => {
+    expect(
+      sharedKtx2Problems([
+        glb('rock/a/lod0.glb', 'baseColorTexture', 'textures/a.ktx2'),
+        glb('rock/b/lod0.glb', 'normalTexture', 'textures/b.ktx2'),
+      ]),
+    ).toEqual([]);
   });
 });

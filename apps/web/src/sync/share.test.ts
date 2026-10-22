@@ -5,7 +5,7 @@ import {
   type PublicTank,
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import type { LampHours } from '../engine/daylight';
+import type { LampSchedule } from '../engine/daylight';
 import { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import { ApiRequestError } from '../ui/api';
@@ -191,18 +191,18 @@ describe('public tank to scene', () => {
   it('points the hood at the shared tank own lamp hours, not the viewer last tank', () => {
     const bus = new EventBus<InteractionEvents>();
     const feed = new LampFeed(bus);
-    const seen: LampHours[] = [];
+    const seen: LampSchedule[] = [];
     feed.attach({ setLampSchedule: (h) => seen.push(h) });
     bus.emit('tank:loaded', { ...publicTankLoaded(tank()), tankId: 'mine' });
-    bus.emit('tank:lamp', { tankId: 'mine', onHour: 5, offHour: 9 });
+    bus.emit('tank:lamp', { tankId: 'mine', intensity: 1, onHour: 5, offHour: 9 });
     const shared = tank({
       equipment: {
         ...tank().equipment,
-        light: { ...tank().equipment.light, onHour: 14, offHour: 23 },
+        light: { ...tank().equipment.light, intensity: 0.4, onHour: 14, offHour: 23 },
       },
     });
     announcePublicTank(bus, shared);
-    expect(seen.at(-1)).toEqual({ onHour: 14, offHour: 23 });
+    expect(seen.at(-1)).toEqual({ intensity: 0.4, onHour: 14, offHour: 23 });
   });
 
   it('keeps an emptied layout empty instead of showing the preset', () => {

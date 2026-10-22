@@ -939,6 +939,7 @@ export class TankSession {
     }
     const lamp = held.equipment.light;
     if (
+      lamp.intensity !== tank.equipment.light.intensity ||
       lamp.onHour !== tank.equipment.light.onHour ||
       lamp.offHour !== tank.equipment.light.offHour
     )
@@ -946,8 +947,8 @@ export class TankSession {
   }
 
   private emitLamp(tank: Tank): void {
-    const { onHour, offHour } = tank.equipment.light;
-    this.deps.interaction.emit('tank:lamp', { tankId: tank.id, onHour, offHour });
+    const { intensity, onHour, offHour } = tank.equipment.light;
+    this.deps.interaction.emit('tank:lamp', { tankId: tank.id, intensity, onHour, offHour });
   }
 
   private bag(tankId: string, fishId: string, name: string): void {

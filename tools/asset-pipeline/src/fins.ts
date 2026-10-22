@@ -35,7 +35,7 @@ export interface FinHints {
   caudalScale?: number;
   /** Non-uniform scale of the whole mesh across the body (x) and top to bottom (y), for sources drawn far deeper or rounder than the species. */
   bodyScale?: { width: number; depth: number };
-  /** Vertices ahead of the opened body core are the snout, never a fin, for sources whose snout tip is too thin to survive the opening. */
+  /** Exempts only vertices beyond the far edge of the last core slice (z > coreMaxZ) from fin classification, for sources whose snout tip is too thin to survive the opening. */
   rigidSnout?: boolean;
   /** Fins to leave unclassified, for species whose fin is part of the body mesh. */
   skip?: FinName[];

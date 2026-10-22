@@ -1,8 +1,8 @@
 import { readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CompressedTexture, LoaderUtils } from 'three';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CompressedTexture, LoaderUtils, Texture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { WebGPURenderer } from 'three/webgpu';
 import { DEFAULT_HDRI_URL } from '../engine/environment';
@@ -13,6 +13,7 @@ import {
   AssetCatalog,
   type CatalogEntry,
   collapseDotSegments,
+  type LoadedModel,
   ModelLibrary,
 } from './assets';
 
@@ -296,5 +297,177 @@ describe('the shared KTX2 loader', () => {
     expect(fishTextures.length).toBeGreaterThan(0);
     for (const url of rockTextures) expect(url).toMatch(/\/textures\/[^/]+_2k\.ktx2$/);
     for (const url of fishTextures) expect(url).toMatch(/_1k\.ktx2$/);
+  });
+});
+
+describe('ModelLibrary shared model textures', () => {
+  const PILE = 'rock-pile-cave';
+  const MEMBER = 'malawi-boulder-03';
+  const MEMBER_MAP = `${ASSET_BASE}rock/${MEMBER}/textures/${MEMBER}_basecolor_1k.ktx2`;
+
+  let ktx2Urls: string[];
+  let failing: Set<string>;
+  let disposed: Set<Texture>;
+  let library: ModelLibrary;
+
+  beforeEach(async () => {
+    const index = JSON.parse(await readFile(join(PUBLIC_ASSETS, 'index.json'), 'utf8')) as {
+      assets: CatalogEntry[];
+    };
+    vi.stubGlobal('ProgressEvent', Event);
+    vi.stubGlobal('self', globalThis);
+    vi.stubGlobal(
+      'Request',
+      class {
+        constructor(readonly url: string) {}
+      },
+    );
+    vi.stubGlobal('fetch', async (input: { url: string } | string) => {
+      const url = typeof input === 'string' ? input : input.url;
+      const bytes = await readFile(join(PUBLIC_ASSETS, '..', new URL(url, 'http://x').pathname));
+      return new Response(new Uint8Array(bytes));
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    ktx2Urls = [];
+    failing = new Set();
+    disposed = new Set();
+    vi.spyOn(KTX2Loader.prototype, 'load').mockImplementation(function (
+      this: KTX2Loader,
+      url,
+      onLoad,
+      _onProgress,
+      onError,
+    ) {
+      ktx2Urls.push(url);
+      if (failing.has(url)) {
+        onError?.(new Error(`${url}: 404`));
+        return;
+      }
+      const texture = new CompressedTexture([], 1, 1);
+      texture.addEventListener('dispose', () => disposed.add(texture));
+      onLoad(texture);
+    });
+    library = new ModelLibrary(
+      createSharedKtx2({
+        isWebGPURenderer: true,
+        hasFeature: () => false,
+      } as unknown as WebGPURenderer).loader,
+      new AssetCatalog(index.assets),
+    );
+  });
+
+  afterEach(async () => {
+    await library.dispose();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function textures(model: LoadedModel): Set<Texture> {
+    const out = new Set<Texture>();
+    for (const { material } of model.primitives) {
+      for (const value of Object.values(material)) if (value instanceof Texture) out.add(value);
+    }
+    return out;
+  }
+
+  it('loads a map a pile borrows from its member rock once, as one texture', async () => {
+    const [pile, member] = await Promise.all([
+      library.load(PILE, 0, 1024),
+      library.load(MEMBER, 0, 1024),
+    ]);
+
+    expect(ktx2Urls.filter((url) => url === MEMBER_MAP)).toHaveLength(1);
+    expect(new Set(ktx2Urls).size).toBe(ktx2Urls.length);
+    const memberTextures = textures(member);
+    expect(memberTextures.size).toBe(2);
+    for (const texture of memberTextures) expect(textures(pile)).toContain(texture);
+  });
+
+  it('keeps a shared map alive while another model still uses it', async () => {
+    const pile = await library.load(PILE, 0, 1024);
+    const member = await library.load(MEMBER, 0, 1024);
+    const memberTextures = textures(member);
+    const pileOnly = [...textures(pile)].filter((t) => !memberTextures.has(t));
+    expect(pileOnly.length).toBeGreaterThan(0);
+
+    await library.retainOnly(new Set([library.modelKey(MEMBER, 0, 1024)]));
+    for (const texture of memberTextures) expect(disposed).not.toContain(texture);
+    for (const texture of pileOnly) expect(disposed).toContain(texture);
+
+    const loadsBefore = ktx2Urls.length;
+    const again = await library.load(PILE, 0, 1024);
+    for (const texture of memberTextures) expect(textures(again)).toContain(texture);
+    expect(ktx2Urls.slice(loadsBefore)).not.toContain(MEMBER_MAP);
+
+    await library.retainOnly(new Set());
+    for (const texture of textures(again)) expect(disposed).toContain(texture);
+  });
+
+  it('frees a shared map once its last user goes, and loads it afresh after', async () => {
+    const member = await library.load(MEMBER, 0, 1024);
+    await library.retainOnly(new Set());
+    for (const texture of textures(member)) expect(disposed).toContain(texture);
+
+    const reloaded = await library.load(MEMBER, 0, 1024);
+    expect(ktx2Urls.filter((url) => url === MEMBER_MAP)).toHaveLength(2);
+    for (const texture of textures(reloaded)) expect(disposed).not.toContain(texture);
+  });
+
+  it('keeps distinct URLs distinct, including the 1k and 2k of one map', async () => {
+    const small = await library.load(MEMBER, 0, 1024);
+    const large = await library.load(MEMBER, 0, 2048);
+
+    const smallTextures = textures(small);
+    expect(smallTextures.size).toBe(2);
+    for (const texture of textures(large)) expect(smallTextures).not.toContain(texture);
+    expect(ktx2Urls).toContain(MEMBER_MAP);
+    expect(ktx2Urls).toContain(MEMBER_MAP.replace('_1k.ktx2', '_2k.ktx2'));
+  });
+
+  it('does not cache a map that failed to load', async () => {
+    failing.add(MEMBER_MAP);
+    const broken = await library.load(MEMBER, 0, 1024);
+    expect(textures(broken).size).toBe(1);
+
+    failing.clear();
+    await library.retainOnly(new Set());
+    const fixed = await library.load(MEMBER, 0, 1024);
+    expect(textures(fixed).size).toBe(2);
+    expect(ktx2Urls.filter((url) => url === MEMBER_MAP)).toHaveLength(2);
+  });
+
+  it('disposes each shared texture once when dispose runs during retainOnly', async () => {
+    const counts = new Map<Texture, number>();
+    const original = Texture.prototype.dispose;
+    vi.spyOn(Texture.prototype, 'dispose').mockImplementation(function (this: Texture) {
+      counts.set(this, (counts.get(this) ?? 0) + 1);
+      original.call(this);
+    });
+    const model = await library.load(MEMBER, 0, 1024);
+
+    const retaining = library.retainOnly(new Set());
+    const disposing = library.dispose();
+    await Promise.all([retaining, disposing]);
+
+    expect(textures(model).size).toBeGreaterThan(0);
+    for (const texture of textures(model)) expect(counts.get(texture)).toBe(1);
+  });
+
+  it('frees a model whose load resolves while dispose is running', async () => {
+    const loading = library.load(MEMBER, 0, 1024);
+    const disposing = library.dispose();
+    const model = await loading;
+    await disposing;
+
+    expect(textures(model).size).toBeGreaterThan(0);
+    for (const texture of textures(model)) expect(disposed).toContain(texture);
+  });
+
+  it('frees a model whose load starts while dispose is running', async () => {
+    const disposing = library.dispose();
+    const model = await library.load(MEMBER, 0, 1024);
+    await disposing;
+
+    for (const texture of textures(model)) expect(disposed).toContain(texture);
   });
 });
