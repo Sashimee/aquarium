@@ -207,6 +207,48 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxTlM: 0.2,
       source: 'FishBase: 20 cm TL (Ref. 9710); TL = 1.163 SL',
     },
+    'banded-archerfish': {
+      model: 'banded-archerfish',
+      maxSlM: 0.3 * 0.8595,
+      maxTlM: 0.3,
+      source: 'FishBase (Toxotes jaculatrix): 30 cm TL (Ref. 4833); SL = 0.8595 TL',
+    },
+    'barred-mudskipper': {
+      model: 'barred-mudskipper',
+      maxSlM: 0.19 * 0.8241,
+      maxTlM: 0.19,
+      source: 'FishBase (Periophthalmus argentilineatus): 19 cm TL (Ref. 4756); SL = 0.8241 TL',
+    },
+    'blue-spotted-mudskipper': {
+      model: 'blue-spotted-mudskipper',
+      maxSlM: 0.22 / 1.1773,
+      maxTlM: 0.22,
+      source:
+        'FishBase (Boleophthalmus pectinirostris): female 22 cm, male 17.5 cm TL (Ref. 125930); the ' +
+        'female length type is blank, so it is read as TL like the male; TL = 1.1773 SL',
+    },
+    'bumblebee-goby': {
+      model: 'bumblebee-goby',
+      maxSlM: 0.042 / 1.2338,
+      maxTlM: 0.042,
+      source:
+        'FishBase (Brachygobius doriae, the species of the reference photos): 4.2 cm TL (Ref. 7050); ' +
+        'TL = 1.2338 SL',
+    },
+    'orange-chromide': {
+      model: 'orange-chromide',
+      maxSlM: 0.095 / 1.2321,
+      maxTlM: 0.095,
+      source: 'FishBase (as Pseudetroplus maculatus): 9.5 cm TL (Ref. 115177); TL = 1.2321 SL',
+    },
+    'silver-mono': {
+      model: 'silver-mono',
+      maxSlM: 0.27,
+      maxTlM: 0.27 * 1.3455,
+      source:
+        'FishBase (Monodactylus argenteus): 27 cm SL (Ref. 44894); TL = 1.3455 SL, from two fish of ' +
+        '9.1 to 11.8 cm TL (FishBase also lists an older photo estimate, SL = 0.8131 TL)',
+    },
   };
 
 /**
@@ -249,18 +291,6 @@ const AWAITING_CONTENT: Record<
       'length-length relationship measured on a male picture; applying it to the female is an ' +
       'assumption. The male model is sized in MALE_MODEL_SIZES.',
   },
-  'banded-archerfish': {
-    model: 'banded-archerfish',
-    maxSlM: 0.3 * 0.8595,
-    maxTlM: 0.3,
-    source: 'FishBase (Toxotes jaculatrix): 30 cm TL (Ref. 4833); SL = 0.8595 TL',
-  },
-  'barred-mudskipper': {
-    model: 'barred-mudskipper',
-    maxSlM: 0.19 * 0.8241,
-    maxTlM: 0.19,
-    source: 'FishBase (Periophthalmus argentilineatus): 19 cm TL (Ref. 4756); SL = 0.8241 TL',
-  },
   'black-phantom-tetra': {
     model: 'black-phantom-tetra',
     maxSlM: 0.036,
@@ -270,22 +300,6 @@ const AWAITING_CONTENT: Record<
       'megalopterus): 30-36 mm standard length. No FishBase ' +
       'length-length relationship was checked, so TL = 1.25 SL, a typical characin proportion ' +
       'with a forked caudal; it is an assumption, not a literature value.',
-  },
-  'blue-spotted-mudskipper': {
-    model: 'blue-spotted-mudskipper',
-    maxSlM: 0.22 / 1.1773,
-    maxTlM: 0.22,
-    source:
-      'FishBase (Boleophthalmus pectinirostris): female 22 cm, male 17.5 cm TL (Ref. 125930); the ' +
-      'female length type is blank, so it is read as TL like the male; TL = 1.1773 SL',
-  },
-  'bumblebee-goby': {
-    model: 'bumblebee-goby',
-    maxSlM: 0.042 / 1.2338,
-    maxTlM: 0.042,
-    source:
-      'FishBase (Brachygobius doriae, the species of the reference photos): 4.2 cm TL (Ref. 7050); ' +
-      'TL = 1.2338 SL',
   },
   'cardinal-tetra': {
     model: 'cardinal-tetra',
@@ -341,12 +355,6 @@ const AWAITING_CONTENT: Record<
       'FishBase: 4 cm TL (Ref. 5667); FishBase has no length-length relationship, so TL = 1.25 SL ' +
       'is an assumption for cichlids',
   },
-  'orange-chromide': {
-    model: 'orange-chromide',
-    maxSlM: 0.095 / 1.2321,
-    maxTlM: 0.095,
-    source: 'FishBase (as Pseudetroplus maculatus): 9.5 cm TL (Ref. 115177); TL = 1.2321 SL',
-  },
   'pseudotropheus-demasoni': {
     model: 'pseudotropheus-demasoni',
     maxSlM: 0.063,
@@ -361,14 +369,6 @@ const AWAITING_CONTENT: Record<
     maxTlM: 0.036 * 1.2506,
     source:
       'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
-  },
-  'silver-mono': {
-    model: 'silver-mono',
-    maxSlM: 0.27,
-    maxTlM: 0.27 * 1.3455,
-    source:
-      'FishBase (Monodactylus argenteus): 27 cm SL (Ref. 44894); TL = 1.3455 SL, from two fish of ' +
-      '9.1 to 11.8 cm TL (FishBase also lists an older photo estimate, SL = 0.8131 TL)',
   },
 };
 

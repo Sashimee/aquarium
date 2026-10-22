@@ -205,6 +205,25 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     nightPaling: 0.1,
     tintVariation: 0.08,
   },
+  'banded-archerfish': { ...DEFAULTS, assetId: 'banded-archerfish', iridescence: 0.3 },
+  'silver-mono': { ...DEFAULTS, assetId: 'silver-mono', iridescence: 0.6, roughness: 0.3 },
+  'orange-chromide': { ...DEFAULTS, assetId: 'orange-chromide', iridescence: 0.2 },
+  'bumblebee-goby': { ...DEFAULTS, assetId: 'bumblebee-goby', iridescence: 0.05 },
+  // Mudskippers have a thick, mucus-covered skin built for air, without a guanine sheen.
+  'barred-mudskipper': {
+    ...DEFAULTS,
+    assetId: 'barred-mudskipper',
+    iridescence: 0,
+    roughness: 0.5,
+    nightPaling: 0.2,
+  },
+  'blue-spotted-mudskipper': {
+    ...DEFAULTS,
+    assetId: 'blue-spotted-mudskipper',
+    iridescence: 0,
+    roughness: 0.5,
+    nightPaling: 0.2,
+  },
 };
 
 export function renderProfile(speciesId: string): FishRenderProfile {

@@ -20,7 +20,13 @@
     "cherry-shrimp": { "juvenile": 20, "adult": 50 },
     "cleaner-shrimp": { "juvenile": 150, "adult": 375 },
     "nerite-snail": { "juvenile": 15, "adult": 38 },
-    "hermit-crab": { "juvenile": 40, "adult": 100 }
+    "hermit-crab": { "juvenile": 40, "adult": 100 },
+    "bumblebee-goby": { "juvenile": 30, "adult": 75 },
+    "orange-chromide": { "juvenile": 50, "adult": 125 },
+    "barred-mudskipper": { "juvenile": 80, "adult": 200 },
+    "blue-spotted-mudskipper": { "juvenile": 100, "adult": 250 },
+    "silver-mono": { "juvenile": 100, "adult": 250 },
+    "banded-archerfish": { "juvenile": 150, "adult": 375 }
   },
   "items": {
     "plant": {

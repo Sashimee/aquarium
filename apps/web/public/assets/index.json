@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 125421280,
+  "totalBytes": 125416006,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -818,37 +818,37 @@
       ],
       "bounds": {
         "min": [
-          -0.02911,
-          -0.038839,
-          -0.106089
+          -0.024951,
+          -0.03329,
+          -0.090934
         ],
         "max": [
-          0.02911,
-          0.031908,
-          0.064711
+          0.024951,
+          0.02735,
+          0.055466
         ]
       },
       "lods": [
         {
           "file": "fish/banded-archerfish/lod0.glb",
-          "bytes": 43192,
-          "sha256": "dd5a97c96917ef753a42db9fe13ff4303f13158e6bc85d403f572ddadbd4d9be",
+          "bytes": 43184,
+          "sha256": "5d5969207ff581ac55d2d6f36959bcd5e9ae137dddb5c1b7cb52033f6bb95be5",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/banded-archerfish/lod1.glb",
-          "bytes": 22388,
-          "sha256": "99836ce8fd4c5495ae990858abf31e9157a9497ed298f54654f16b04d8e645d4",
-          "triangles": 1727,
-          "vertices": 943
+          "bytes": 22528,
+          "sha256": "3dc7c1d580d38c573b725fc2bae6f5bacff7611d1eada0dd5ddb90310f96b8e8",
+          "triangles": 1728,
+          "vertices": 942
         },
         {
           "file": "fish/banded-archerfish/lod2.glb",
-          "bytes": 11632,
-          "sha256": "d4204924ac4e40a263e2416bfc259665d923596e3495a5e9f766bbc73f54614a",
+          "bytes": 11572,
+          "sha256": "0299da755dbeb1fdc6864fb15210e2b730411694c87fa98f6e04e86b9b2cfbb1",
           "triangles": 648,
-          "vertices": 370
+          "vertices": 368
         }
       ],
       "textures": [
@@ -877,28 +877,28 @@
       "files": [
         {
           "file": "fish/banded-archerfish/impostor_albedo.ktx2",
-          "bytes": 119549,
-          "sha256": "6ca7156103e4c3720560a95d122060eb31cb10ecb27f8ea41ee969ee82c90adb"
+          "bytes": 119600,
+          "sha256": "ec54e8d29d70ac027652a1a111f5b07240cccdbb5f3d89431ba3e7cc74969fb2"
         },
         {
           "file": "fish/banded-archerfish/impostor_normal.ktx2",
-          "bytes": 346549,
-          "sha256": "525462a563c132a65b00887f18c99488f89891a833d817504749909c5acd8d99"
+          "bytes": 340841,
+          "sha256": "005b5ddd6b7c0d348e5d0e47919c80b12ca8b862d0da8c3e44f7ef2f76c23d5e"
         },
         {
           "file": "fish/banded-archerfish/lod0.glb",
-          "bytes": 43192,
-          "sha256": "dd5a97c96917ef753a42db9fe13ff4303f13158e6bc85d403f572ddadbd4d9be"
+          "bytes": 43184,
+          "sha256": "5d5969207ff581ac55d2d6f36959bcd5e9ae137dddb5c1b7cb52033f6bb95be5"
         },
         {
           "file": "fish/banded-archerfish/lod1.glb",
-          "bytes": 22388,
-          "sha256": "99836ce8fd4c5495ae990858abf31e9157a9497ed298f54654f16b04d8e645d4"
+          "bytes": 22528,
+          "sha256": "3dc7c1d580d38c573b725fc2bae6f5bacff7611d1eada0dd5ddb90310f96b8e8"
         },
         {
           "file": "fish/banded-archerfish/lod2.glb",
-          "bytes": 11632,
-          "sha256": "d4204924ac4e40a263e2416bfc259665d923596e3495a5e9f766bbc73f54614a"
+          "bytes": 11572,
+          "sha256": "0299da755dbeb1fdc6864fb15210e2b730411694c87fa98f6e04e86b9b2cfbb1"
         },
         {
           "file": "fish/banded-archerfish/textures/banded-archerfish_basecolor_1k.ktx2",
@@ -907,8 +907,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.14,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.12,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -938,21 +938,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          -0.00004,
-          -0.00344,
-          -0.020689
+          0,
+          -0.00297,
+          -0.017734
         ],
-        "radius": 0.091917,
+        "radius": 0.078789,
         "albedo": {
           "file": "fish/banded-archerfish/impostor_albedo.ktx2",
-          "bytes": 119549,
-          "sha256": "6ca7156103e4c3720560a95d122060eb31cb10ecb27f8ea41ee969ee82c90adb",
+          "bytes": 119600,
+          "sha256": "ec54e8d29d70ac027652a1a111f5b07240cccdbb5f3d89431ba3e7cc74969fb2",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/banded-archerfish/impostor_normal.ktx2",
-          "bytes": 346549,
-          "sha256": "525462a563c132a65b00887f18c99488f89891a833d817504749909c5acd8d99",
+          "bytes": 340841,
+          "sha256": "005b5ddd6b7c0d348e5d0e47919c80b12ca8b862d0da8c3e44f7ef2f76c23d5e",
           "codec": "uastc"
         }
       }
@@ -1132,37 +1132,37 @@
       ],
       "bounds": {
         "min": [
-          -0.023338,
-          -0.013986,
-          -0.047419
+          -0.019448,
+          -0.011655,
+          -0.039516
         ],
         "max": [
-          0.023182,
-          0.019315,
-          0.064809
+          0.019318,
+          0.016096,
+          0.054007
         ]
       },
       "lods": [
         {
           "file": "fish/barred-mudskipper/lod0.glb",
-          "bytes": 362100,
-          "sha256": "a8d667a0dc8d4cf16d30d0d3fa54ab2ff20ad661782ca4a50f2a1e74e97dc605",
-          "triangles": 14083,
-          "vertices": 15925
+          "bytes": 362256,
+          "sha256": "4633bf849d439d4ac20a060d924daf31995d427951633e3498983f2ea606b231",
+          "triangles": 14087,
+          "vertices": 15933
         },
         {
           "file": "fish/barred-mudskipper/lod1.glb",
-          "bytes": 133140,
-          "sha256": "8695d7861b206ddf43dbf3de3716c3ac8daa31df3665d903b268236328431576",
-          "triangles": 5403,
-          "vertices": 5333
+          "bytes": 133192,
+          "sha256": "c923cdf061727ff5de8b0dc8baee8d9b919fc84cb0415e54d7067f353ea6e5ba",
+          "triangles": 5414,
+          "vertices": 5327
         },
         {
           "file": "fish/barred-mudskipper/lod2.glb",
-          "bytes": 63152,
-          "sha256": "f68782d40a42e622c93a71d4144e20b3bb2e09fa2209bfd0681996235e3f454b",
-          "triangles": 2163,
-          "vertices": 2213
+          "bytes": 63156,
+          "sha256": "1dfffac1a69896c86ebf046a67b36837ae1aee789617c031550fda818d3aed7e",
+          "triangles": 2175,
+          "vertices": 2220
         }
       ],
       "textures": [
@@ -1191,28 +1191,28 @@
       "files": [
         {
           "file": "fish/barred-mudskipper/impostor_albedo.ktx2",
-          "bytes": 114305,
-          "sha256": "862fb739001d92079cea07576419e29fdbe2dfbff605ebcf75a391bbc1f4a1e2"
+          "bytes": 115573,
+          "sha256": "abb9e27cc10e993e311849ca40082c0737c6f32d84480a9a39c9a01aa9e65b9e"
         },
         {
           "file": "fish/barred-mudskipper/impostor_normal.ktx2",
-          "bytes": 325207,
-          "sha256": "3700e0fcf2dc44fb28f9bbde35cbbbf4f461831597f8ec9ca1f6bcec5adff943"
+          "bytes": 325410,
+          "sha256": "0428974b28eeb7feb1ba0c4ef9fb0ea92a1b20b7e151ab1e76b1c25676be216d"
         },
         {
           "file": "fish/barred-mudskipper/lod0.glb",
-          "bytes": 362100,
-          "sha256": "a8d667a0dc8d4cf16d30d0d3fa54ab2ff20ad661782ca4a50f2a1e74e97dc605"
+          "bytes": 362256,
+          "sha256": "4633bf849d439d4ac20a060d924daf31995d427951633e3498983f2ea606b231"
         },
         {
           "file": "fish/barred-mudskipper/lod1.glb",
-          "bytes": 133140,
-          "sha256": "8695d7861b206ddf43dbf3de3716c3ac8daa31df3665d903b268236328431576"
+          "bytes": 133192,
+          "sha256": "c923cdf061727ff5de8b0dc8baee8d9b919fc84cb0415e54d7067f353ea6e5ba"
         },
         {
           "file": "fish/barred-mudskipper/lod2.glb",
-          "bytes": 63152,
-          "sha256": "f68782d40a42e622c93a71d4144e20b3bb2e09fa2209bfd0681996235e3f454b"
+          "bytes": 63156,
+          "sha256": "1dfffac1a69896c86ebf046a67b36837ae1aee789617c031550fda818d3aed7e"
         },
         {
           "file": "fish/barred-mudskipper/textures/barred-mudskipper_basecolor_1k.ktx2",
@@ -1226,8 +1226,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.09,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.075,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -1257,21 +1257,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          -0.000078,
-          0.002599,
-          0.00875
+          -0.000065,
+          0.002166,
+          0.007292
         ],
-        "radius": 0.060238,
+        "radius": 0.050198,
         "albedo": {
           "file": "fish/barred-mudskipper/impostor_albedo.ktx2",
-          "bytes": 114305,
-          "sha256": "862fb739001d92079cea07576419e29fdbe2dfbff605ebcf75a391bbc1f4a1e2",
+          "bytes": 115573,
+          "sha256": "abb9e27cc10e993e311849ca40082c0737c6f32d84480a9a39c9a01aa9e65b9e",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/barred-mudskipper/impostor_normal.ktx2",
-          "bytes": 325207,
-          "sha256": "3700e0fcf2dc44fb28f9bbde35cbbbf4f461831597f8ec9ca1f6bcec5adff943",
+          "bytes": 325410,
+          "sha256": "0428974b28eeb7feb1ba0c4ef9fb0ea92a1b20b7e151ab1e76b1c25676be216d",
           "codec": "uastc"
         }
       }
@@ -1646,37 +1646,37 @@
       ],
       "bounds": {
         "min": [
-          -0.021673,
-          -0.013223,
-          -0.055438
+          -0.019703,
+          -0.012021,
+          -0.050398
         ],
         "max": [
-          0.018649,
-          0.035645,
-          0.07808
+          0.016953,
+          0.032404,
+          0.070982
         ]
       },
       "lods": [
         {
           "file": "fish/blue-spotted-mudskipper/lod0.glb",
-          "bytes": 315904,
-          "sha256": "f8749ad8470cf1abbaf42c7c1f097edb51a19543c8fd3ed96ce9b19e8124bbb1",
-          "triangles": 14301,
-          "vertices": 13639
+          "bytes": 316324,
+          "sha256": "74e6baeb0cfe6c8b469dd13ebcfd56e00a3c7355a7d4b3781a1237a9b71bbed4",
+          "triangles": 14349,
+          "vertices": 13671
         },
         {
           "file": "fish/blue-spotted-mudskipper/lod1.glb",
-          "bytes": 134664,
-          "sha256": "c620c2499e541b1703b5c2ee26547ad3b44f8a09f1e656461cf4c28eca9cd091",
-          "triangles": 5464,
-          "vertices": 5208
+          "bytes": 133928,
+          "sha256": "700724ebe099bd32294a2231acb1eb7bccb3877f522dae54d2b2f6b7755c3f69",
+          "triangles": 5431,
+          "vertices": 5168
         },
         {
           "file": "fish/blue-spotted-mudskipper/lod2.glb",
-          "bytes": 67816,
-          "sha256": "47492b228e7d42bc1ba22a473e06a79515ae121026760b6ee3b16f81d7be8a38",
+          "bytes": 67364,
+          "sha256": "096a96b9afb9a5458fc5f93f3b5cd859a633e67b33ae565a840a1af34ca93d82",
           "triangles": 2081,
-          "vertices": 2185
+          "vertices": 2169
         }
       ],
       "textures": [
@@ -1705,28 +1705,28 @@
       "files": [
         {
           "file": "fish/blue-spotted-mudskipper/impostor_albedo.ktx2",
-          "bytes": 109505,
-          "sha256": "59f05c9799290d31bdb4706491ef542c8144ad632f2edf736de020444397c19a"
+          "bytes": 110147,
+          "sha256": "8aa5bb96da5d553d95549c51cf12226f5128870e3abb9ce5521c770475cd9976"
         },
         {
           "file": "fish/blue-spotted-mudskipper/impostor_normal.ktx2",
-          "bytes": 308980,
-          "sha256": "71486106d3c2883d35d61b84b8a28e14e4bc5df22a79a1818cee0ae8219a9611"
+          "bytes": 309529,
+          "sha256": "cfc871989201c23b4b76c87c287e5e6db179b42d13ae40bd1ca8a75bc107f23d"
         },
         {
           "file": "fish/blue-spotted-mudskipper/lod0.glb",
-          "bytes": 315904,
-          "sha256": "f8749ad8470cf1abbaf42c7c1f097edb51a19543c8fd3ed96ce9b19e8124bbb1"
+          "bytes": 316324,
+          "sha256": "74e6baeb0cfe6c8b469dd13ebcfd56e00a3c7355a7d4b3781a1237a9b71bbed4"
         },
         {
           "file": "fish/blue-spotted-mudskipper/lod1.glb",
-          "bytes": 134664,
-          "sha256": "c620c2499e541b1703b5c2ee26547ad3b44f8a09f1e656461cf4c28eca9cd091"
+          "bytes": 133928,
+          "sha256": "700724ebe099bd32294a2231acb1eb7bccb3877f522dae54d2b2f6b7755c3f69"
         },
         {
           "file": "fish/blue-spotted-mudskipper/lod2.glb",
-          "bytes": 67816,
-          "sha256": "47492b228e7d42bc1ba22a473e06a79515ae121026760b6ee3b16f81d7be8a38"
+          "bytes": 67364,
+          "sha256": "096a96b9afb9a5458fc5f93f3b5cd859a633e67b33ae565a840a1af34ca93d82"
         },
         {
           "file": "fish/blue-spotted-mudskipper/textures/blue-spotted-mudskipper_basecolor_1k.ktx2",
@@ -1740,8 +1740,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.11,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.1,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -1771,21 +1771,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          -0.001557,
-          0.010729,
-          0.01095
+          -0.001415,
+          0.009554,
+          0.009837
         ],
-        "radius": 0.071702,
+        "radius": 0.065195,
         "albedo": {
           "file": "fish/blue-spotted-mudskipper/impostor_albedo.ktx2",
-          "bytes": 109505,
-          "sha256": "59f05c9799290d31bdb4706491ef542c8144ad632f2edf736de020444397c19a",
+          "bytes": 110147,
+          "sha256": "8aa5bb96da5d553d95549c51cf12226f5128870e3abb9ce5521c770475cd9976",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/blue-spotted-mudskipper/impostor_normal.ktx2",
-          "bytes": 308980,
-          "sha256": "71486106d3c2883d35d61b84b8a28e14e4bc5df22a79a1818cee0ae8219a9611",
+          "bytes": 309529,
+          "sha256": "cfc871989201c23b4b76c87c287e5e6db179b42d13ae40bd1ca8a75bc107f23d",
           "codec": "uastc"
         }
       }
@@ -2378,37 +2378,37 @@
       ],
       "bounds": {
         "min": [
-          -0.0061,
-          -0.005347,
-          -0.021039
+          -0.005446,
+          -0.004774,
+          -0.018785
         ],
         "max": [
-          0.0061,
-          0.005443,
-          0.012561
+          0.005446,
+          0.00486,
+          0.011215
         ]
       },
       "lods": [
         {
           "file": "fish/bumblebee-goby/lod0.glb",
-          "bytes": 45536,
-          "sha256": "bef57d3bffe7e2bf81be1bc1dc80c139e51aebef1b6ca60fcde94d8220c13b21",
+          "bytes": 45552,
+          "sha256": "d096ecd57a1fa7f68457088ebbfbca230cfcc3ec8284f75a8b2a35996a731fe9",
           "triangles": 4608,
           "vertices": 2554
         },
         {
           "file": "fish/bumblebee-goby/lod1.glb",
-          "bytes": 23536,
-          "sha256": "615cbba3a636b4159dd3a3b8a3654302e9c7c19b9ac29fba4bcf9f383842be27",
+          "bytes": 23944,
+          "sha256": "2aa7fb439e94781597c543e430725e4e834f629e9c7c3f566df636b2e1445fa8",
           "triangles": 1843,
-          "vertices": 1038
+          "vertices": 1037
         },
         {
           "file": "fish/bumblebee-goby/lod2.glb",
-          "bytes": 12376,
-          "sha256": "a6e121abbb4a08d22bbfd1c67204128906998fe5499751368b26bd545cb53a6c",
-          "triangles": 690,
-          "vertices": 405
+          "bytes": 12236,
+          "sha256": "b0ef1030b566367400f6e84383ceb7ea0fd9f65c099ff93e7314e6bb68b00c73",
+          "triangles": 691,
+          "vertices": 404
         }
       ],
       "textures": [
@@ -2437,28 +2437,28 @@
       "files": [
         {
           "file": "fish/bumblebee-goby/impostor_albedo.ktx2",
-          "bytes": 114256,
-          "sha256": "aa9092773ded40785a54d867258b7fb35eb41b4fdf7129d170d7b77f569e5ea5"
+          "bytes": 113712,
+          "sha256": "2f824026e1e3fccf048026dccf309f29514bfc882b8299c333b1db2fef9012d8"
         },
         {
           "file": "fish/bumblebee-goby/impostor_normal.ktx2",
-          "bytes": 285820,
-          "sha256": "d5c899f386a9b77682437373b7830363a60576d059d2c0f051bee3f8f2782f6e"
+          "bytes": 285607,
+          "sha256": "1841ce584e59b6a58774bcc3d6f4d2697b93677a62fdec6ac34c60242c68ffa7"
         },
         {
           "file": "fish/bumblebee-goby/lod0.glb",
-          "bytes": 45536,
-          "sha256": "bef57d3bffe7e2bf81be1bc1dc80c139e51aebef1b6ca60fcde94d8220c13b21"
+          "bytes": 45552,
+          "sha256": "d096ecd57a1fa7f68457088ebbfbca230cfcc3ec8284f75a8b2a35996a731fe9"
         },
         {
           "file": "fish/bumblebee-goby/lod1.glb",
-          "bytes": 23536,
-          "sha256": "615cbba3a636b4159dd3a3b8a3654302e9c7c19b9ac29fba4bcf9f383842be27"
+          "bytes": 23944,
+          "sha256": "2aa7fb439e94781597c543e430725e4e834f629e9c7c3f566df636b2e1445fa8"
         },
         {
           "file": "fish/bumblebee-goby/lod2.glb",
-          "bytes": 12376,
-          "sha256": "a6e121abbb4a08d22bbfd1c67204128906998fe5499751368b26bd545cb53a6c"
+          "bytes": 12236,
+          "sha256": "b0ef1030b566367400f6e84383ceb7ea0fd9f65c099ff93e7314e6bb68b00c73"
         },
         {
           "file": "fish/bumblebee-goby/textures/bumblebee-goby_basecolor_1k.ktx2",
@@ -2467,8 +2467,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.028,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.025,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -2499,20 +2499,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          0.000048,
-          -0.004239
+          0.000043,
+          -0.003785
         ],
-        "radius": 0.018042,
+        "radius": 0.016109,
         "albedo": {
           "file": "fish/bumblebee-goby/impostor_albedo.ktx2",
-          "bytes": 114256,
-          "sha256": "aa9092773ded40785a54d867258b7fb35eb41b4fdf7129d170d7b77f569e5ea5",
+          "bytes": 113712,
+          "sha256": "2f824026e1e3fccf048026dccf309f29514bfc882b8299c333b1db2fef9012d8",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/bumblebee-goby/impostor_normal.ktx2",
-          "bytes": 285820,
-          "sha256": "d5c899f386a9b77682437373b7830363a60576d059d2c0f051bee3f8f2782f6e",
+          "bytes": 285607,
+          "sha256": "1841ce584e59b6a58774bcc3d6f4d2697b93677a62fdec6ac34c60242c68ffa7",
           "codec": "uastc"
         }
       }
@@ -5418,37 +5418,37 @@
       ],
       "bounds": {
         "min": [
-          -0.015984,
-          -0.027878,
-          -0.057032
+          -0.012787,
+          -0.022302,
+          -0.045625
         ],
         "max": [
-          0.015984,
-          0.026693,
-          0.034468
+          0.012787,
+          0.021355,
+          0.027575
         ]
       },
       "lods": [
         {
           "file": "fish/orange-chromide/lod0.glb",
-          "bytes": 43192,
-          "sha256": "d0d73d0ef6af7e54cf231fb2b811c169937ca5450c57a303ad51e11874452b01",
+          "bytes": 43296,
+          "sha256": "d76b59372dbc49bca3213384d1440234ffee8b7da56edd0529e76925c9078ba1",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/orange-chromide/lod1.glb",
-          "bytes": 22664,
-          "sha256": "1c617a4b963493af5005cbe61eee205d35cf9807713471c4788055858a494621",
+          "bytes": 22956,
+          "sha256": "7b3366db3ce37e5c2158160951edbc8c967fab90e4b17c53fe974df4824a1abc",
           "triangles": 1728,
-          "vertices": 956
+          "vertices": 958
         },
         {
           "file": "fish/orange-chromide/lod2.glb",
-          "bytes": 11572,
-          "sha256": "ae118774d82e878a269b888aca70e419c33be4e557af2160b970a5584562c809",
-          "triangles": 647,
-          "vertices": 372
+          "bytes": 11720,
+          "sha256": "bffb5102e446f3bd31e0067809c1319d954ed7ca39300cf84938c97457e7ea8b",
+          "triangles": 648,
+          "vertices": 375
         }
       ],
       "textures": [
@@ -5477,28 +5477,28 @@
       "files": [
         {
           "file": "fish/orange-chromide/impostor_albedo.ktx2",
-          "bytes": 130864,
-          "sha256": "87b0d30ac9a65c9140e1da6d46793a755b773280a9130f98584e5d557c31a2a6"
+          "bytes": 130916,
+          "sha256": "d5a71f488d4510f6fc7d6b7a7a1f0dccf3341a29535c25ee76e3833d5308065b"
         },
         {
           "file": "fish/orange-chromide/impostor_normal.ktx2",
-          "bytes": 402446,
-          "sha256": "16366f3eb5e1e24713ae2169ed355d117eb676db82eded4f10bf723454f44115"
+          "bytes": 398996,
+          "sha256": "e4731525a01f6b3342c319e8175a7054fddbccd1b54c3c7e098f47989586fd41"
         },
         {
           "file": "fish/orange-chromide/lod0.glb",
-          "bytes": 43192,
-          "sha256": "d0d73d0ef6af7e54cf231fb2b811c169937ca5450c57a303ad51e11874452b01"
+          "bytes": 43296,
+          "sha256": "d76b59372dbc49bca3213384d1440234ffee8b7da56edd0529e76925c9078ba1"
         },
         {
           "file": "fish/orange-chromide/lod1.glb",
-          "bytes": 22664,
-          "sha256": "1c617a4b963493af5005cbe61eee205d35cf9807713471c4788055858a494621"
+          "bytes": 22956,
+          "sha256": "7b3366db3ce37e5c2158160951edbc8c967fab90e4b17c53fe974df4824a1abc"
         },
         {
           "file": "fish/orange-chromide/lod2.glb",
-          "bytes": 11572,
-          "sha256": "ae118774d82e878a269b888aca70e419c33be4e557af2160b970a5584562c809"
+          "bytes": 11720,
+          "sha256": "bffb5102e446f3bd31e0067809c1319d954ed7ca39300cf84938c97457e7ea8b"
         },
         {
           "file": "fish/orange-chromide/textures/orange-chromide_basecolor_1k.ktx2",
@@ -5507,8 +5507,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.075,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.06,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -5538,21 +5538,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          0.000008,
-          -0.000592,
-          -0.011282
+          0,
+          -0.000474,
+          -0.009025
         ],
-        "radius": 0.04932,
+        "radius": 0.039456,
         "albedo": {
           "file": "fish/orange-chromide/impostor_albedo.ktx2",
-          "bytes": 130864,
-          "sha256": "87b0d30ac9a65c9140e1da6d46793a755b773280a9130f98584e5d557c31a2a6",
+          "bytes": 130916,
+          "sha256": "d5a71f488d4510f6fc7d6b7a7a1f0dccf3341a29535c25ee76e3833d5308065b",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/orange-chromide/impostor_normal.ktx2",
-          "bytes": 402446,
-          "sha256": "16366f3eb5e1e24713ae2169ed355d117eb676db82eded4f10bf723454f44115",
+          "bytes": 398996,
+          "sha256": "e4731525a01f6b3342c319e8175a7054fddbccd1b54c3c7e098f47989586fd41",
           "codec": "uastc"
         }
       }
@@ -6075,37 +6075,37 @@
       ],
       "bounds": {
         "min": [
-          -0.025285,
-          -0.093762,
-          -0.114074
+          -0.019867,
+          -0.07367,
+          -0.08963
         ],
         "max": [
-          0.025285,
-          0.095233,
-          0.063726
+          0.019867,
+          0.074826,
+          0.05007
         ]
       },
       "lods": [
         {
           "file": "fish/silver-mono/lod0.glb",
           "bytes": 43304,
-          "sha256": "591c5b36b517cb6cc911f179cdbc161a90fefe39640b743041ec3cfe0098c103",
+          "sha256": "7594cca648ae90b1c194911e9fba0e9c955f72f133612eecf3d58a12d71a8136",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/silver-mono/lod1.glb",
-          "bytes": 22908,
-          "sha256": "e2cca93d4075d02e72e5a9da875225ab2aac6d1439da5774d0dd3c0d84d818a5",
+          "bytes": 23088,
+          "sha256": "5b8bcabd2719f7d6f122a0cb6fd1eed0edddfa9cf9d3863f888d63c5fe1cadd0",
           "triangles": 1728,
-          "vertices": 956
+          "vertices": 962
         },
         {
           "file": "fish/silver-mono/lod2.glb",
-          "bytes": 11540,
-          "sha256": "588bc2def208998e65ffb04e469d9fa8ffe52b5cf169ef73cd5d26d277acd614",
+          "bytes": 11608,
+          "sha256": "3299023230536747b34d949ecd67f3be431406c46a3d84f4765a405cbd51d938",
           "triangles": 648,
-          "vertices": 376
+          "vertices": 378
         }
       ],
       "textures": [
@@ -6134,28 +6134,28 @@
       "files": [
         {
           "file": "fish/silver-mono/impostor_albedo.ktx2",
-          "bytes": 146740,
-          "sha256": "7fe326cf19f4aedb1cec415d386b5c0f97bd9c7b1ad821924ce01bb8dc3beffb"
+          "bytes": 146614,
+          "sha256": "9aaebcbb38ab36b7285ff9a3fe76f015dce6ab5fc89e7dd3f28adae891002c56"
         },
         {
           "file": "fish/silver-mono/impostor_normal.ktx2",
-          "bytes": 442876,
-          "sha256": "1e8ff91a33b349c14fe408cc775491cbefd06ec269a28ac82216d016339ba2d7"
+          "bytes": 444286,
+          "sha256": "cfbb05efb3b6cc215313d21a0c03b0ea3824401f6a5ac6fd28ea65f633a90111"
         },
         {
           "file": "fish/silver-mono/lod0.glb",
           "bytes": 43304,
-          "sha256": "591c5b36b517cb6cc911f179cdbc161a90fefe39640b743041ec3cfe0098c103"
+          "sha256": "7594cca648ae90b1c194911e9fba0e9c955f72f133612eecf3d58a12d71a8136"
         },
         {
           "file": "fish/silver-mono/lod1.glb",
-          "bytes": 22908,
-          "sha256": "e2cca93d4075d02e72e5a9da875225ab2aac6d1439da5774d0dd3c0d84d818a5"
+          "bytes": 23088,
+          "sha256": "5b8bcabd2719f7d6f122a0cb6fd1eed0edddfa9cf9d3863f888d63c5fe1cadd0"
         },
         {
           "file": "fish/silver-mono/lod2.glb",
-          "bytes": 11540,
-          "sha256": "588bc2def208998e65ffb04e469d9fa8ffe52b5cf169ef73cd5d26d277acd614"
+          "bytes": 11608,
+          "sha256": "3299023230536747b34d949ecd67f3be431406c46a3d84f4765a405cbd51d938"
         },
         {
           "file": "fish/silver-mono/textures/silver-mono_basecolor_1k.ktx2",
@@ -6164,8 +6164,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.14,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.11,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -6195,21 +6195,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          0,
-          0.000736,
-          -0.025174
+          0.000001,
+          0.000578,
+          -0.019743
         ],
-        "radius": 0.1017,
+        "radius": 0.079912,
         "albedo": {
           "file": "fish/silver-mono/impostor_albedo.ktx2",
-          "bytes": 146740,
-          "sha256": "7fe326cf19f4aedb1cec415d386b5c0f97bd9c7b1ad821924ce01bb8dc3beffb",
+          "bytes": 146614,
+          "sha256": "9aaebcbb38ab36b7285ff9a3fe76f015dce6ab5fc89e7dd3f28adae891002c56",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/silver-mono/impostor_normal.ktx2",
-          "bytes": 442876,
-          "sha256": "1e8ff91a33b349c14fe408cc775491cbefd06ec269a28ac82216d016339ba2d7",
+          "bytes": 444286,
+          "sha256": "cfbb05efb3b6cc215313d21a0c03b0ea3824401f6a5ac6fd28ea65f633a90111",
           "codec": "uastc"
         }
       }

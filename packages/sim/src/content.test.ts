@@ -36,11 +36,15 @@ const roster = load(dir);
 
 const MVP_ROSTER = [
   ['angelfish', 'Pterophyllum scalare', 'freshwater'],
+  ['banded-archerfish', 'Toxotes jaculatrix', 'mangrove'],
   ['banggai-cardinalfish', 'Pterapogon kauderni', 'reef'],
+  ['barred-mudskipper', 'Periophthalmus argentilineatus', 'mangrove'],
   ['betta', 'Betta splendens', 'freshwater'],
+  ['blue-spotted-mudskipper', 'Boleophthalmus pectinirostris', 'mangrove'],
   ['blue-tang', 'Paracanthurus hepatus', 'reef'],
   ['bristlenose-pleco', 'Ancistrus cirrhosus', 'freshwater'],
   ['bronze-corydoras', 'Corydoras aeneus', 'freshwater'],
+  ['bumblebee-goby', 'Brachygobius doriae', 'mangrove'],
   ['cherry-shrimp', 'Neocaridina davidi', 'freshwater'],
   ['cleaner-shrimp', 'Lysmata amboinensis', 'reef'],
   ['cleaner-wrasse', 'Labroides dimidiatus', 'reef'],
@@ -52,7 +56,9 @@ const MVP_ROSTER = [
   ['neon-tetra', 'Paracheirodon innesi', 'freshwater'],
   ['nerite-snail', 'Neritina natalensis', 'freshwater'],
   ['ocellaris-clownfish', 'Amphiprion ocellaris', 'reef'],
+  ['orange-chromide', 'Pseudetroplus maculatus', 'mangrove'],
   ['royal-gramma', 'Gramma loreto', 'reef'],
+  ['silver-mono', 'Monodactylus argenteus', 'mangrove'],
   ['six-line-wrasse', 'Pseudocheilinus hexataenia', 'reef'],
   ['yellow-tang', 'Zebrasoma flavescens', 'reef'],
 ] as const;

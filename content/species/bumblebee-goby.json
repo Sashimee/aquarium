@@ -1,0 +1,56 @@
+{
+  "behaviour": {
+    "boldness": 0.3,
+    "curiosity": 0.3,
+    "depthBand": [0, 0.15],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.15,
+    "preferredZone": "bottom",
+    "territorial": true,
+    "traits": []
+  },
+  "biome": "mangrove",
+  "breeding": {
+    "mode": "none"
+  },
+  "chemistry": {
+    "khMin": 4,
+    "nitriteTolerance": 0.3,
+    "phRange": [7, 8.5],
+    "salinityPpt": [0, 15],
+    "sources": [
+      "FishBase (fishbase.se) species summary: freshwater and brackish, demersal, 22 to 29 C (Ref. 1672)",
+      "SeriouslyFish species profile (seriouslyfish.com): 22 to 28 C, pH 7.0 to 8.5, fresh and brackish lowland mangrove swamps, estuaries and tidal streams",
+      "The salinity ceiling of 15 ppt is hobby brackish practice, not a measured tolerance"
+    ],
+    "temperatureC": [22, 28]
+  },
+  "commonName": "Bumblebee goby",
+  "id": "bumblebee-goby",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.25,
+    "bioload": 0.15,
+    "birthSizeM": 0.012,
+    "diet": ["bloodworms", "brine-shrimp"],
+    "growthPerDay": 8e-5,
+    "healthLossPerHourStarving": 0.0078,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0075,
+    "lifespanDays": 1095,
+    "maxSizeM": 0.034,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.025,
+    "cruiseSpeedMps": 0.03,
+    "gait": "forage",
+    "massKg": 0.0003,
+    "maxPitchDeg": 60,
+    "maxSpeedMps": 0.3,
+    "maxTurnRateDegPerS": 540,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Brachygobius doriae"
+}
