@@ -1,4 +1,5 @@
-import { TANK_SIZES } from '@aquarium/shared';
+import { tankLengthRefusal, TANK_SIZES, type Economy } from '@aquarium/shared';
+import { BUNDLED_ECONOMY } from './bundledEconomy';
 import type {
   AwaySummary,
   CauseOfDeath,
@@ -200,10 +201,13 @@ export function canBuy(
   tank: Tank,
   candidate: SpeciesSummary,
   all: readonly SpeciesSummary[],
+  economy: Economy = BUNDLED_ECONOMY,
 ): ShopVerdict {
   if (candidate.biome !== tank.biome) {
     return { ok: false, reason: `${candidate.commonName} needs a ${candidate.biome} tank.` };
   }
+  const tooShort = tankLengthRefusal(economy, candidate.id, tank, candidate.commonName);
+  if (tooShort !== undefined) return { ok: false, reason: tooShort };
   const bioload = new Map(all.map((s) => [s.id, s.lifecycle.bioload]));
   const existing = tank.fish.map((f) => ({
     alive: f.status === 'alive',
