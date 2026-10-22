@@ -170,6 +170,7 @@ interface SharedTexture {
   readonly url: string;
   readonly texture: Promise<CompressedTexture>;
   users: number;
+  freed: boolean;
 }
 
 /** The shared textures one model load holds; closed once the load failed and gave them back. */
@@ -190,6 +191,8 @@ export class ModelLibrary {
   private readonly sharedTextures = new Map<string, SharedTexture>();
   private readonly sharedTextureObjects = new WeakSet<Texture>();
   private readonly holds = new WeakMap<LoadedModel, TextureHold>();
+  private readonly freedModels = new WeakSet<LoadedModel>();
+  private disposed = false;
   private inflight = 0;
   private idleWaiters: (() => void)[] = [];
 
@@ -239,7 +242,10 @@ export class ModelLibrary {
           if (primitives.length === 0) throw new Error(`${file} contains no meshes`);
           const model = { primitives };
           this.holds.set(model, hold);
-          if (this.cache.get(key) === pending) this.finished.set(key, model);
+          if (this.disposed) {
+            this.freeModels([model]);
+            if (this.cache.get(key) === pending) this.cache.delete(key);
+          } else if (this.cache.get(key) === pending) this.finished.set(key, model);
           return model;
         })
         .catch((error: unknown) => {
@@ -271,7 +277,7 @@ export class ModelLibrary {
           this.sharedTextureObjects.add(loaded);
           return loaded;
         });
-        const created: SharedTexture = { url: resolved, texture, users: 0 };
+        const created: SharedTexture = { url: resolved, texture, users: 0, freed: false };
         texture.catch(() => {
           if (this.sharedTextures.get(resolved) === created) this.sharedTextures.delete(resolved);
         });
@@ -295,12 +301,31 @@ export class ModelLibrary {
     for (const entry of entries) {
       if (--entry.users > 0) continue;
       if (this.sharedTextures.get(entry.url) === entry) this.sharedTextures.delete(entry.url);
-      entry.texture.then(
-        (texture) => texture.dispose(),
-        // A failed load was already reported to every model that requested it.
-        () => undefined,
-      );
+      this.freeShared(entry);
     }
+  }
+
+  private freeShared(entry: SharedTexture): Promise<void> {
+    if (entry.freed) return Promise.resolve();
+    entry.freed = true;
+    return entry.texture.then(
+      (texture) => texture.dispose(),
+      // A failed load was already reported to every model that requested it.
+      () => undefined,
+    );
+  }
+
+  /** Idempotent per model: retainOnly, dispose and a late-resolving load may all reach the same one. */
+  private freeModels(models: Iterable<LoadedModel>): void {
+    const resources = new Set<Texture | Material | BufferGeometry>();
+    for (const model of models) {
+      if (this.freedModels.has(model)) continue;
+      this.freedModels.add(model);
+      this.collectOwned(model, resources);
+      const hold = this.holds.get(model);
+      if (hold) this.releaseShared(hold.entries);
+    }
+    for (const resource of resources) resource.dispose();
   }
 
   /** Geometry of the cheapest LOD, so every client fits identical colliders whatever its tier. Fetches no textures. */
@@ -383,14 +408,7 @@ export class ModelLibrary {
       this.finished.delete(key);
     }
     const settled = await Promise.allSettled(stale.map(([, pending]) => pending));
-    const resources = new Set<Texture | Material | BufferGeometry>();
-    for (const result of settled) {
-      if (result.status !== 'fulfilled') continue;
-      this.collectOwned(result.value, resources);
-      const hold = this.holds.get(result.value);
-      if (hold) this.releaseShared(hold.entries);
-    }
-    for (const resource of resources) resource.dispose();
+    this.freeModels(settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
     await this.pruneCollision(keep);
   }
 
@@ -415,21 +433,17 @@ export class ModelLibrary {
   }
 
   async dispose(): Promise<void> {
-    const models = await Promise.allSettled(this.cache.values());
-    const seen = new Set<Texture | Material | BufferGeometry>();
-    for (const result of models) {
-      if (result.status === 'fulfilled') this.collectOwned(result.value, seen);
-    }
-    for (const item of seen) item.dispose();
-    const shared = [...this.sharedTextures.values()];
-    this.sharedTextures.clear();
-    for (const result of await Promise.allSettled(shared.map((entry) => entry.texture))) {
-      if (result.status === 'fulfilled') result.value.dispose();
-    }
-    for (const texture of this.textures) texture.dispose();
-    this.textures.length = 0;
+    this.disposed = true;
+    const pendingModels = [...this.cache.values()];
     this.cache.clear();
     this.finished.clear();
+    const models = await Promise.allSettled(pendingModels);
+    this.freeModels(models.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
+    const shared = [...this.sharedTextures.values()];
+    this.sharedTextures.clear();
+    await Promise.all(shared.map((entry) => this.freeShared(entry)));
+    for (const texture of this.textures) texture.dispose();
+    this.textures.length = 0;
     const collision = await Promise.allSettled(this.collision.values());
     for (const result of collision) {
       if (result.status === 'fulfilled') for (const geometry of result.value) geometry.dispose();

@@ -435,4 +435,39 @@ describe('ModelLibrary shared model textures', () => {
     expect(textures(fixed).size).toBe(2);
     expect(ktx2Urls.filter((url) => url === MEMBER_MAP)).toHaveLength(2);
   });
+
+  it('disposes each shared texture once when dispose runs during retainOnly', async () => {
+    const counts = new Map<Texture, number>();
+    const original = Texture.prototype.dispose;
+    vi.spyOn(Texture.prototype, 'dispose').mockImplementation(function (this: Texture) {
+      counts.set(this, (counts.get(this) ?? 0) + 1);
+      original.call(this);
+    });
+    const model = await library.load(MEMBER, 0, 1024);
+
+    const retaining = library.retainOnly(new Set());
+    const disposing = library.dispose();
+    await Promise.all([retaining, disposing]);
+
+    expect(textures(model).size).toBeGreaterThan(0);
+    for (const texture of textures(model)) expect(counts.get(texture)).toBe(1);
+  });
+
+  it('frees a model whose load resolves while dispose is running', async () => {
+    const loading = library.load(MEMBER, 0, 1024);
+    const disposing = library.dispose();
+    const model = await loading;
+    await disposing;
+
+    expect(textures(model).size).toBeGreaterThan(0);
+    for (const texture of textures(model)) expect(disposed).toContain(texture);
+  });
+
+  it('frees a model whose load starts while dispose is running', async () => {
+    const disposing = library.dispose();
+    const model = await library.load(MEMBER, 0, 1024);
+    await disposing;
+
+    for (const texture of textures(model)) expect(disposed).toContain(texture);
+  });
 });
