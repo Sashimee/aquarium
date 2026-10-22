@@ -966,9 +966,36 @@ describe('pH, KH, temperature and salinity', () => {
       expect(three).toBeGreaterThan(two);
     });
 
-    it('every tier settles on the same setpoint, never past it', () => {
+    it('tier 1 follows the plain drift curve toward the setpoint', () => {
+      const { target, driftPerHour } = chemistryParams.temperature;
+      const goal = target.freshwater;
+      for (const hours of [1, 3, 6, 12, 24]) {
+        const expected = goal - (goal - roomC) * Math.exp(-driftPerHour * hours);
+        expect(after(1, hours * HOUR)).toBeCloseTo(expected, 6);
+      }
+    });
+
+    it('every tier settles on the setpoint and never rises past it', () => {
+      const goal = chemistryParams.temperature.target.freshwater;
       for (const tier of [1, 2, 3]) {
-        expect(after(tier, 5 * DAY)).toBeCloseTo(chemistryParams.temperature.target.freshwater, 1);
+        for (const hours of [1, 2, 4, 8, 16, 24, 48]) {
+          expect(after(tier, hours * HOUR)).toBeLessThanOrEqual(goal);
+        }
+        expect(after(tier, 5 * DAY)).toBeCloseTo(goal, 1);
+      }
+    });
+
+    it('an overheated tank cools at the same rate whatever the tier', () => {
+      const hot = {
+        ...tank([]),
+        chemistry: { ...newTankChemistry('freshwater'), temperatureC: 35 },
+      };
+      const cooled = (tier: number, hours: number) =>
+        run(hot, hours * HOUR, { equipment: { ...DEFAULT_EQUIPMENT, heater: { tier } } }).state
+          .chemistry.temperatureC;
+      for (const hours of [1, 4, 12]) {
+        expect(cooled(3, hours)).toBe(cooled(1, hours));
+        expect(cooled(1, hours)).toBeLessThan(35);
       }
     });
 
