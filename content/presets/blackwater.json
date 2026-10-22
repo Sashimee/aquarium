@@ -71,7 +71,7 @@
     },
     {
       "assetId": "oak-leaf-card",
-      "position": [0.08, 0.073, 0.1],
+      "position": [0.08, 0.075, 0.1],
       "rotationY": 0.9,
       "scale": 0.6
     },
@@ -107,7 +107,7 @@
     },
     {
       "assetId": "oak-leaf-card",
-      "position": [-0.15, 0.098, -0.08],
+      "position": [-0.15, 0.105, -0.08],
       "rotationY": 0.2,
       "scale": 0.6
     },

@@ -18,6 +18,8 @@ describe('tank type pickers', () => {
     expect(html).toContain('value="freshwater"');
     expect(html).toContain('value="reef"');
     expect(html).not.toContain('value="cichlid"');
+    expect(html).not.toContain('value="blackwater"');
+    expect(html).not.toContain('value="mangrove"');
   });
 
   it('the quarantine form offers freshwater and reef, not cichlid', () => {
@@ -26,5 +28,7 @@ describe('tank type pickers', () => {
       createElement(QuarantineSection, { session, state: { ...state, tanks: [tank] }, tank }),
     );
     expect(html).not.toContain('value="cichlid"');
+    expect(html).not.toContain('value="blackwater"');
+    expect(html).not.toContain('value="mangrove"');
   });
 });
