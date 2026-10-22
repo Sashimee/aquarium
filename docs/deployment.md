@@ -49,14 +49,16 @@ The `HEALTHCHECK` hits `/api/health`.
 
 `/assets/*` is served `immutable`, so tabs opened before a deploy still request the previous build's
 hashed chunks. The image keeps its own `assets/` at `/app/assets-current`, and `docker/entrypoint.sh` copies
-it into `/app/web/assets` at every start, then deletes files not refreshed within `ASSET_RETENTION_DAYS`
-(default 7). On the Aquarium Dev app, `/app/web/assets` is a Dokploy volume mount (`aquarium-dev-assets`),
-so earlier builds' files are still there. Without the mount (prod, local, CI) the same script runs against
-the in-image directory and nothing is retained.
+it into `/app/web/assets` at every start (only when that path is a mount point; unchanged files are touched,
+changed ones are copied to a temp name and renamed, so a running container never sees a half-written file),
+then deletes files not refreshed within `ASSET_RETENTION_DAYS` (default 7, exact to the minute). A
+non-numeric value makes the container exit with an error at start. On the Aquarium Dev app, `/app/web/assets` is a Dokploy volume mount (`aquarium-dev-assets`),
+so earlier builds' files are still there. Without the mount (prod, local, CI) the script does nothing and the
+image's own `/app/web/assets` is served.
 
 Create the mount only once the entrypoint is on the deployed branch: a mount over an image without the
 copy step hides every asset. Dokploy API: `POST /api/mounts.create` with `type: "volume"`,
-`volumeName: "aquarium-dev-assets"`, `mountPath: "/app/web/assets"`, `serviceId`/`applicationId` of the Dev app,
+`volumeName: "aquarium-dev-assets"`, `mountPath: "/app/web/assets"`, `serviceId` set to the Dev app's `applicationId`,
 `serviceType: "application"`, then redeploy. Never add it to Aquarium Prod without Alex's go.
 
 ## Indexing

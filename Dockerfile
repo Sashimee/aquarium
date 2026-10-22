@@ -9,7 +9,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 COPY . .
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --offline
 RUN pnpm build && pnpm --filter @aquarium/api compress:web
-RUN mkdir -p apps/web/dist/assets /out/assets-current && mv apps/web/dist/assets/* /out/assets-current/
+RUN mkdir -p apps/web/dist/assets /out/assets-current && cp -R apps/web/dist/assets/. /out/assets-current/
 RUN pnpm --filter @aquarium/api --prod deploy /out/api
 
 FROM node:24-slim AS runtime
