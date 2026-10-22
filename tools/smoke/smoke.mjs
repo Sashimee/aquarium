@@ -27,8 +27,12 @@ function watch(page) {
   );
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
-    // A signed-out visitor is expected to get 401 from the session endpoints.
-    if (/Failed to load resource: .*status of 401/.test(msg.text())) return;
+    // Chromium logs the expected 401 from /api/me while signed out; nothing else is exempt.
+    const signedOutMe =
+      stage === 'signed out' &&
+      /status of 401/.test(msg.text()) &&
+      new URL(msg.location().url || origin).pathname === '/api/me';
+    if (signedOutMe) return;
     record('console.error', `[${stage}] ${msg.text()}`);
   });
   page.on('response', (res) => {
