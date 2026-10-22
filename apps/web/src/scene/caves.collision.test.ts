@@ -1,8 +1,10 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { WebGPURenderer } from 'three/webgpu';
 import {
+  isPlayableBiome,
   TANK_SIZES,
   type Biome,
   type Collider,
@@ -201,51 +203,109 @@ describe('the sim at boot', () => {
   );
 });
 
-const NANO_SPAWN_SPECIES: Readonly<Record<'freshwater' | 'reef' | 'cichlid', string>> = {
-  freshwater: 'angelfish',
-  reef: 'cleaner-wrasse',
-  cichlid: 'altolamprologus-calvus',
-};
 const SPAWN_SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
+const SPAWN_BIOMES: readonly Biome[] = ['freshwater', 'reef', 'cichlid', 'mangrove', 'blackwater'];
+
+// Fish that find no free water in a nano even with no decor at all (#1392), so decor cannot be
+// blamed for them.
+const NO_ROOM_IN_EMPTY_NANO: ReadonlySet<string> = new Set([
+  'discus',
+  'banded-archerfish',
+  'silver-mono',
+  'blue-tang',
+  'yellow-tang',
+  'blue-spotted-mudskipper',
+]);
+// Fish whose largest size leaves no free water in a nano once any hardscape stands in it (#1392).
+const NO_ROOM_AT_MAX_SIZE: ReadonlySet<string> = new Set([
+  'angelfish',
+  'altolamprologus-calvus',
+  'cleaner-wrasse',
+  'barred-mudskipper',
+]);
+// The blackwater nano preset builds invalid colliders, so no world starts with it (#1392).
+const BROKEN_NANO_PRESETS: ReadonlySet<Biome> = new Set(['blackwater']);
+
+interface ContentFish {
+  readonly id: string;
+  readonly biome: Biome;
+  readonly lengths: readonly number[];
+}
+
+function contentFish(): ContentFish[] {
+  const dir = join(__dirname, '../../../../content/species');
+  const byId = new Map(allSpeciesInputs().map((s) => [s.id, s]));
+  return readdirSync(dir)
+    .filter((file) => file.endsWith('.json'))
+    .map((file) => {
+      const raw = JSON.parse(readFileSync(join(dir, file), 'utf8')) as {
+        id: string;
+        biome: Biome;
+        lifecycle: { maxSizeM: number };
+      };
+      const input = byId.get(raw.id);
+      if (!input) throw new Error(`no sim species for ${raw.id}`);
+      return {
+        id: raw.id,
+        biome: raw.biome,
+        lengths: [input.locomotion.bodyLengthM, raw.lifecycle.maxSizeM],
+      };
+    });
+}
+
+function failedSeeds(id: string, length: number, decor: readonly Collider[]): string[] {
+  const species = allSpeciesInputs();
+  const failed: string[] = [];
+  for (const seed of SPAWN_SEEDS) {
+    try {
+      new World({
+        seed,
+        space: tankSpaceOf(TANK_DIMENSIONS.nano30),
+        species,
+        fish: [{ id: `${id}-0`, species: id, bodyLengthM: length }],
+        decor,
+      });
+    } catch (error) {
+      failed.push(`seed ${seed}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return failed;
+}
 
 describe.each(LAYERS)('a nano tank with the fitted decor and %s', (layer) => {
-  describe.each(Object.keys(NANO_SPAWN_SPECIES) as (keyof typeof NANO_SPAWN_SPECIES)[])(
-    '%s',
-    (biome) => {
-      it('has free water to spawn a single adult in, for every seed', async () => {
-        const dimensions = TANK_DIMENSIONS.nano30;
-        const fitted = fitPresetToCatalog(loadPreset(biome), 'nano30', dimensions, catalog);
-        const decor = await hardColliders(biome, layer, fitted.decor);
-        const id = NANO_SPAWN_SPECIES[biome];
-        const species = allSpeciesInputs();
-        const input = species.find((s) => s.id === id);
-        if (!input) throw new Error(`no content for ${id}`);
-        const failed: string[] = [];
-        for (const seed of SPAWN_SEEDS) {
-          try {
-            new World({
-              seed,
-              space: tankSpaceOf(dimensions),
-              species,
-              fish: [{ id: `${id}-0`, species: id, bodyLengthM: input.locomotion.bodyLengthM }],
-              decor,
-            });
-          } catch (error) {
-            failed.push(`seed ${seed}: ${error instanceof Error ? error.message : String(error)}`);
-          }
+  describe.each(SPAWN_BIOMES.filter((b) => !BROKEN_NANO_PRESETS.has(b)))('%s', (biome) => {
+    it('spawns every fish that spawns in an empty nano, at its adult and its largest size', async () => {
+      const fitted = fitPresetToCatalog(
+        loadPreset(biome),
+        'nano30',
+        TANK_DIMENSIONS.nano30,
+        catalog,
+      );
+      const decor = await hardColliders(biome, layer, fitted.decor);
+      const fish = contentFish().filter((f) => f.biome === biome);
+      expect(fish.length).toBeGreaterThan(0);
+      const worse: string[] = [];
+      for (const { id, lengths } of fish) {
+        if (NO_ROOM_IN_EMPTY_NANO.has(id)) continue;
+        for (const [i, length] of lengths.entries()) {
+          if (i === 1 && NO_ROOM_AT_MAX_SIZE.has(id)) continue;
+          const empty = failedSeeds(id, length, []);
+          if (empty.length > 0) continue;
+          const failed = failedSeeds(id, length, decor);
+          if (failed.length > 0) worse.push(`${id} ${length} m: ${failed.length}/20, ${failed[0]}`);
         }
-        expect(failed, `${id} could not spawn`).toEqual([]);
-      });
+      }
+      expect(worse, 'fish the fitted nano decor keeps from spawning').toEqual([]);
+    });
 
-      it('boots the nano demo stock', async () => {
-        const dimensions = TANK_DIMENSIONS.nano30;
-        const fitted = fitPresetToCatalog(loadPreset(biome), 'nano30', dimensions, catalog);
-        const decor = await hardColliders(biome, layer, fitted.decor);
-        for (const seed of [1, 2, 3, 4]) {
-          const { config } = demoTank(dimensions, seed, biome);
-          expect(() => new World({ ...config, decor }), `seed ${seed}`).not.toThrow();
-        }
-      });
-    },
-  );
+    it.runIf(isPlayableBiome(biome))('boots the nano demo stock', async () => {
+      const dimensions = TANK_DIMENSIONS.nano30;
+      const fitted = fitPresetToCatalog(loadPreset(biome), 'nano30', dimensions, catalog);
+      const decor = await hardColliders(biome, layer, fitted.decor);
+      for (const seed of [1, 2, 3, 4]) {
+        const { config } = demoTank(dimensions, seed, biome);
+        expect(() => new World({ ...config, decor }), `seed ${seed}`).not.toThrow();
+      }
+    });
+  });
 });
