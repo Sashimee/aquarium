@@ -121,6 +121,8 @@ describe('checkWaveMaker', () => {
     ['a string period', { periodS: '8' }],
     ['a string direction entry', { direction: ['1', 0] }],
     ['a null direction entry', { direction: [null, 1] }],
+    ['a null direction', { direction: null }],
+    ['a missing direction', { direction: undefined }],
   ])('rejects %s from an untyped sender', (_, change) => {
     const settings = JSON.parse(JSON.stringify({ ...MAX, ...change })) as WaveMakerSettings;
     expect(() => checkWaveMaker(settings)).toThrow(RangeError);
@@ -246,7 +248,8 @@ describe('a wave maker in the world', { timeout: 120_000 }, () => {
     const none = run(reef(7, community, null), steps);
     const zero = run(reef(7, community, { ...MAX, speedMps: 0 }), steps);
     // All three take the same no-current branch, so only a pinned trajectory catches a change to
-    // that branch itself. A deliberate change to still-water behaviour updates the pin.
+    // that branch itself. The pin covers every species' movement, so any change to sim behaviour,
+    // fixtures or the RNG needs a new one; two sim PRs that each pass alone can still turn dev red.
     expect(bitDigest(base.position)).toBe('0855d268');
     expect(none.position).toEqual(base.position);
     expect(zero.position).toEqual(base.position);

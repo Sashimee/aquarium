@@ -75,7 +75,12 @@ export function checkWaveMaker(settings: WaveMakerSettings): WaveMakerSettings {
   const { direction, speedMps, mode, periodS } = settings;
   const [dx, dz] = Array.isArray(direction) ? direction : [NaN, NaN];
   const length = isNumber(dx) && isNumber(dz) ? Math.hypot(dx, dz) : NaN;
-  if (direction.length !== 2 || !Number.isFinite(length) || length === 0) {
+  if (
+    !Array.isArray(direction) ||
+    direction.length !== 2 ||
+    !Number.isFinite(length) ||
+    length === 0
+  ) {
     throw new RangeError(
       `wave maker direction must be a finite, non-zero [x, z], got ${JSON.stringify(direction)}`,
     );
@@ -219,7 +224,7 @@ export interface CurrentsHost {
  * The wave maker's effect on each fish: the water velocity where it is, after the shelter of
  * nearby surfaces and of rock upstream; how hard that is for it to hold against; and whether it
  * has had enough and makes for a refuge. Walkers cling to their surface and feel none of it, nor
- * does a fish lying on sand or rock or clinging to the glass, which holds station by pressing
+ * does a fish lying on sand or rock or touching the glass, which holds station by pressing
  * against it (Arnold & Weihs 1978; Geerinckx et al. 2007).
  */
 export class Currents {
