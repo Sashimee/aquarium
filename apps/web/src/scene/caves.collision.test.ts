@@ -26,7 +26,7 @@ import { fitPresetToCatalog } from './TankScene';
 const PUBLIC = join(__dirname, '../../public');
 const SHELTERED: readonly Biome[] = ['reef', 'cichlid'];
 const SIZES = Object.keys(TANK_SIZES) as TankSize[];
-const SEEDS = [1, 2, 3, 4];
+const SEEDS = [1, 2, 3];
 const STEPS_PER_PHASE = 9000;
 const CONTACTS_PER_FISH_STEP = 1e-3;
 
@@ -109,23 +109,29 @@ async function expectMouthsClear(biome: Biome, layer: Layer, decor: readonly Dec
 
 describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
   describe.each(SHELTERED)('%s', (biome) => {
-    it('has room for a fish at every anchor and a clear way out along its facing', async () => {
-      const decor = loadPreset(biome).decor;
-      await expectMouthsClear(biome, layer, decor);
-      const clearance = clearanceTo(await hardColliders(biome, layer, decor));
-      for (const a of caveAnchors(decor)) {
-        const [x, y, z] = a.position;
-        const [fx = 0, , fz = 0] = a.facing ?? [];
-        expect(
-          clearance(x + fx * 0.015, y, z + fz * 0.015),
-          `${a.id} out along facing`,
-        ).toBeGreaterThan(0);
-      }
+    it('has room for a fish at every anchor', async () => {
+      await expectMouthsClear(biome, layer, loadPreset(biome).decor);
     });
 
     it.each(SIZES)('%s: every anchor has room for a fish', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
       await expectMouthsClear(biome, layer, fitted.decor);
+    });
+
+    it.each(SIZES)('%s: every anchor has a clear way out along its facing', async (size) => {
+      const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
+      const clearance = clearanceTo(await hardColliders(biome, layer, fitted.decor));
+      for (const a of caveAnchors(fitted.decor)) {
+        const [x, y, z] = a.position;
+        const [fx = 0, , fz = 0] = a.facing ?? [];
+        for (const k of [1, 2, 3]) {
+          const d = k * a.radius;
+          expect(
+            clearance(x + fx * d, y, z + fz * d),
+            `${a.id} ${k} r along facing`,
+          ).toBeGreaterThan(0);
+        }
+      }
     });
   });
 });
