@@ -356,7 +356,7 @@ describe.each(['blackwater', 'mangrove'] as const)('%s preset', (biome) => {
       expect(Math.abs(item.position[0]) + reachX * item.scale, item.assetId).toBeLessThan(halfL);
       expect(Math.abs(item.position[2]) + reachZ * item.scale, item.assetId).toBeLessThan(halfD);
       expect(item.position[1] + y1 * item.scale, item.assetId).toBeLessThan(
-        DEFAULT_TANK.height - 0.05,
+        DEFAULT_TANK.height - DEFAULT_TANK.freeboard - 0.02,
       );
     }
   });
@@ -368,6 +368,24 @@ describe('blackwater and mangrove composition', () => {
     expect(ids.filter((id) => kinds.get(id) === 'driftwood').length).toBeGreaterThanOrEqual(4);
     expect(ids.filter((id) => id === 'oak-leaf-card').length).toBeGreaterThanOrEqual(8);
     expect(ids.some((id) => kinds.get(id) === 'rock')).toBe(false);
+  });
+
+  it('keeps overlapping leaf cards at distinct heights so they cannot z-fight', () => {
+    const bounds = catalog.assets.find((a) => a.id === 'oak-leaf-card')?.bounds;
+    if (!bounds) throw new Error('oak-leaf-card has no bounds');
+    const radius =
+      Math.hypot(
+        (bounds.max[0] ?? 0) - (bounds.min[0] ?? 0),
+        (bounds.max[2] ?? 0) - (bounds.min[2] ?? 0),
+      ) / 2;
+    const cards = loadPreset('blackwater').decor.filter((d) => d.assetId === 'oak-leaf-card');
+    for (const [i, a] of cards.entries()) {
+      for (const b of cards.slice(i + 1)) {
+        const apart = Math.hypot(a.position[0] - b.position[0], a.position[2] - b.position[2]);
+        if (apart >= radius * Math.max(a.scale, b.scale)) continue;
+        expect(Math.abs(a.position[1] - b.position[1])).toBeGreaterThanOrEqual(0.004);
+      }
+    }
   });
 
   it('mangrove is prop roots and stumps on mud, with propagules', () => {
