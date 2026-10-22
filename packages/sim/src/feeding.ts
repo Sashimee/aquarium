@@ -1,7 +1,7 @@
 import { HUNGER_PER_PORTION } from '../lifecycle/params.ts';
 import type { BehaviourHost } from './behaviour.ts';
 import type { FishResize } from './fishArrays.ts';
-import { MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
+import { FOOD_TYPES, MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
 import { clamp } from './math.ts';
 import { selectNearest } from './neighbours.ts';
 import type { Personalities } from './personality.ts';
@@ -122,7 +122,8 @@ export class Feeding {
   /** Each particle's distance to the sand, glass or rock nearest it. */
   private readonly surfaceDist = new Float64Array(MAX_FOOD_PARTICLES);
   private readonly settled = new Uint8Array(MAX_FOOD_PARTICLES);
-  private settledCount = 0;
+  /** Uneaten, unburied settled particles per `FOOD_TYPES` index. */
+  private readonly settledOfType = new Int32Array(FOOD_TYPES.length);
   private readonly n3 = new Float64Array(3);
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
   private readonly nbrDist = new Float64Array(FEEDING.followNeighbours);
@@ -157,9 +158,15 @@ export class Feeding {
     return this._leash;
   }
 
-  /** Whether any uneaten food the fish can reach has settled on sand, rock or glass. */
-  get anySettled(): boolean {
-    return this.settledCount > 0;
+  /**
+   * Whether uneaten food of a type in `sp`'s diet has settled on sand, rock or glass anywhere in
+   * the tank, as of the last update; food lodged inside rock or glass does not count.
+   */
+  settledFor(sp: SimSpecies): boolean {
+    for (let t = 0; t < FOOD_TYPES.length; t++) {
+      if (at(this.settledOfType, t) > 0 && at(sp.foodPreference, t) > 0) return true;
+    }
+    return false;
   }
 
   constructor(host: BehaviourHost, personality: Personalities) {
@@ -251,7 +258,7 @@ export class Feeding {
       this.retarget[i] = at(this.retarget, i) - DT;
       this.looked[i] = 0;
     }
-    this.settledCount = 0;
+    this.settledOfType.fill(0);
     if (food.count === 0) {
       for (let i = 0; i < n; i++) this.drop(i);
       this.backingOut.fill(0);
@@ -272,7 +279,8 @@ export class Feeding {
       this.settled[k] =
         d <= FEEDING.settledHeightM && at(food.speed, k) < FEEDING.settledSpeedMps ? 1 : 0;
       if (this.settled[k] === 1 && this.buried[k] === 0 && food.remaining(k) > EMPTY) {
-        this.settledCount++;
+        const t = at(food.type, k);
+        this.settledOfType[t] = at(this.settledOfType, t) + 1;
       }
     }
 
