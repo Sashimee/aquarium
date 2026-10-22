@@ -403,18 +403,87 @@ describe('live feed and scene', () => {
     controller.dispose();
   });
 
-  it('treats a 401 on the handle as no handle, without a warning', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const myHandle = vi.fn(() =>
-      Promise.reject(new ApiRequestError(401, 'unauthenticated', 'Sign in.')),
-    );
-    const { controller } = setup({}, { myHandle });
-    controller.start();
-    await settle();
-    expect(myHandle).toHaveBeenCalledTimes(1);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-    controller.dispose();
+  describe('own feeds before the handle is known', () => {
+    type Reply = { state: CommunityState; replayed: boolean };
+    function pendingFeed(myHandle: () => Promise<string | null>) {
+      let reply: (v: Reply) => void = () => undefined;
+      const communityFeed = vi.fn(() => new Promise<Reply>((r) => (reply = r)));
+      const made = setup({}, { communityFeed, myHandle });
+      const frame = (by: string) =>
+        made.streams.last.options.onFrame({
+          event: 'feed',
+          data: JSON.stringify(feedEvent(by, 0.5)),
+        });
+      return { ...made, frame, answer: () => reply({ state: stateOf(), replayed: false }) };
+    }
+    const never = () => new Promise<string | null>(() => undefined);
+
+    it('drops once when the own frame comes before the reply', async () => {
+      const { controller, drops, frame, answer } = pendingFeed(never);
+      controller.start();
+      await settle();
+      const pending = controller.feed('flakes', 0.5);
+      await settle();
+      frame('mossy');
+      answer();
+      await pending;
+      expect(drops).toHaveLength(1);
+      controller.dispose();
+    });
+
+    it('drops once when the reply comes before the own frame', async () => {
+      const { controller, drops, frame, answer } = pendingFeed(never);
+      controller.start();
+      await settle();
+      const pending = controller.feed('flakes', 0.5);
+      await settle();
+      answer();
+      await pending;
+      frame('mossy');
+      expect(drops).toHaveLength(1);
+      controller.dispose();
+    });
+
+    it('uses the handle once it arrives mid-flight, so a foreign frame still drops', async () => {
+      let resolveHandle: (h: string | null) => void = () => undefined;
+      const { controller, drops, frame, answer } = pendingFeed(
+        () => new Promise<string | null>((r) => (resolveHandle = r)),
+      );
+      controller.start();
+      await settle();
+      const pending = controller.feed('flakes', 0.5);
+      await settle();
+      resolveHandle('mossy');
+      await settle();
+      frame('misty');
+      expect(drops).toHaveLength(1);
+      frame('mossy');
+      expect(drops).toHaveLength(2);
+      answer();
+      await pending;
+      expect(drops).toHaveLength(2);
+      controller.dispose();
+    });
+
+    it('matches on food and portion after a 401, so a later own feed drops once', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const myHandle = vi.fn(() =>
+        Promise.reject(new ApiRequestError(401, 'unauthenticated', 'Sign in.')),
+      );
+      const { controller, drops, frame, answer } = pendingFeed(myHandle);
+      controller.start();
+      await settle();
+      expect(myHandle).toHaveBeenCalledTimes(1);
+      const pending = controller.feed('flakes', 0.5);
+      await settle();
+      frame('mossy');
+      answer();
+      await pending;
+      expect(drops).toHaveLength(1);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+      controller.dispose();
+    });
   });
 
   it('does not hold the first feed for a slow handle request', async () => {

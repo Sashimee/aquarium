@@ -364,10 +364,7 @@ export class CommunityController {
       const handle = await this.deps.api.myHandle?.();
       if (handle !== undefined && !this.lifetime.signal.aborted) this.handle = handle;
     } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 401) {
-        if (!this.lifetime.signal.aborted) this.handle = null;
-        return;
-      }
+      if (error instanceof ApiRequestError && error.status === 401) return;
       console.warn(
         'could not load your handle; matching own feeds on food and portion only',
         error,
@@ -500,6 +497,7 @@ export class CommunityController {
     this.echoes = this.echoes.filter((e) => e.until > now);
     const echo = this.echoes.find(
       (e) =>
+        // Before the handle is known (or when it never loads) an own feed can only be told by food and portion.
         (this.handle === undefined || this.handle === event.by) &&
         e.food === event.food &&
         Math.abs(e.portion - event.portion) < PORTION_EPSILON,
