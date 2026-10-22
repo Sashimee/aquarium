@@ -646,6 +646,60 @@ describe('wallet, shop and ledger', () => {
       expect((await purchase(h, who, 'equipment:heater:3', tank.id)).statusCode).toBe(200);
     });
 
+    it('lowers CO2, turns it off and restores an owned tier without charging', async () => {
+      const { who, tank } = await primed(h);
+      const [tier1, tier2] = economy.items.equipment.co2;
+      await setBalance(h, who, (tier1 ?? 0) + (tier2 ?? 0));
+      expect((await purchase(h, who, 'equipment:co2:1', tank.id)).statusCode).toBe(200);
+      expect((await purchase(h, who, 'equipment:co2:2', tank.id)).statusCode).toBe(200);
+      const paid = await balance(h, who);
+      const ledgerRows = (await ledgerOf(h, who)).length;
+      const setCo2 = async (tier: number) => {
+        const res = await call(h, who, 'PATCH', `/api/tanks/${tank.id}`, { co2: { tier } });
+        return {
+          res,
+          tier: res.statusCode === 200 ? tankSchema.parse(res.json()).equipment.co2.tier : null,
+        };
+      };
+
+      expect((await setCo2(1)).tier).toBe(1);
+      expect((await setCo2(0)).tier).toBe(0);
+      expect((await setCo2(2)).tier).toBe(2);
+      const above = await setCo2(3);
+      expect(above.res.statusCode).toBe(400);
+      expect(errorCode(above.res)).toBe('validation_failed');
+      expect((await setCo2(2)).tier).toBe(2);
+      expect(await balance(h, who)).toBe(paid);
+      expect((await ledgerOf(h, who)).length).toBe(ledgerRows);
+      expect((await purchase(h, who, 'equipment:co2:1', tank.id)).statusCode).toBe(409);
+      expect((await setCo2(0)).tier).toBe(0);
+      expect((await purchase(h, who, 'equipment:co2:1', tank.id)).statusCode).toBe(409);
+      expect((await purchase(h, who, 'equipment:co2:2', tank.id)).statusCode).toBe(409);
+      expect(await balance(h, who)).toBe(paid);
+      expect((await ledgerOf(h, who)).length).toBe(ledgerRows);
+    });
+
+    it('keeps an owned CO2 tier with the tank that bought it', async () => {
+      const { who, tank } = await primed(h);
+      await setBalance(h, who, economy.items.equipment.co2[0] ?? 0);
+      expect((await purchase(h, who, 'equipment:co2:1', tank.id)).statusCode).toBe(200);
+      await setBalance(h, who, economy.items.tankSlots[0] ?? 0);
+      const other = await createTank(h, who, { biome: 'freshwater' });
+      expect(other.statusCode).toBe(201);
+      const otherId = tankSchema.parse(other.json()).id;
+      const res = await call(h, who, 'PATCH', `/api/tanks/${otherId}`, { co2: { tier: 1 } });
+      expect(res.statusCode).toBe(400);
+      expect(errorCode(res)).toBe('validation_failed');
+    });
+
+    it('never runs CO2 in a biome that cannot use it', async () => {
+      const who = await account(h);
+      const tank = tankSchema.parse((await createTank(h, who, { biome: 'reef' })).json());
+      const res = await call(h, who, 'PATCH', `/api/tanks/${tank.id}`, { co2: { tier: 1 } });
+      expect(res.statusCode).toBe(400);
+      expect(errorCode(res)).toBe('validation_failed');
+    });
+
     it('refuses an equipment upgrade the balance cannot cover, changing nothing', async () => {
       const { who, tank } = await primed(h);
       const [, tier2] = economy.items.equipment.heater;

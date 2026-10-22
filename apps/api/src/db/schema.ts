@@ -193,6 +193,8 @@ export const tanks = pgTable(
       .default(
         sql`'{"filter":{"tier":1},"heater":{"tier":1},"light":{"tier":1,"intensity":0.8,"onHour":8,"offHour":20},"co2":{"tier":0},"waveMaker":{"tier":0}}'::jsonb`,
       ),
+    // The highest CO2 tier this tank has been bought up to; the installed tier can sit below it.
+    co2OwnedTier: integer('co2_owned_tier').notNull().default(0),
   },
   (t) => [
     index('tanks_owner_id_idx').on(t.ownerId),

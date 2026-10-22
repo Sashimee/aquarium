@@ -149,7 +149,11 @@ export function registerShopRoutes(ctx: ShopContext): void {
     if (item.kind === 'equipment') {
       if (!ticked) throw refused('Say which tank the equipment is for.');
       const equipment = equipmentSchema.parse(ticked.tank.equipment);
-      if (item.tier <= equipment[item.device].tier) {
+      const owned = Math.max(
+        equipment[item.device].tier,
+        item.device === 'co2' ? ticked.tank.co2OwnedTier : 0,
+      );
+      if (item.tier <= owned) {
         throw conflict(`This tank already has a ${item.device} of tier ${item.tier} or better.`);
       }
       const upgraded = {
@@ -165,7 +169,13 @@ export function registerShopRoutes(ctx: ShopContext): void {
       const charged = await charge(item.price);
       await tx
         .update(schema.tanks)
-        .set({ equipment: upgraded, updatedAt: new Date(nowMs) })
+        .set({
+          equipment: upgraded,
+          ...(item.device === 'co2'
+            ? { co2OwnedTier: Math.max(ticked.tank.co2OwnedTier, item.tier) }
+            : {}),
+          updatedAt: new Date(nowMs),
+        })
         .where(eq(schema.tanks.id, ticked.tank.id));
       return respond(charged);
     }

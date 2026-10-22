@@ -11,7 +11,7 @@ import {
   unitSchema,
 } from './common.js';
 import { chemistrySchema } from './chemistry.js';
-import { equipmentSchema, lightScheduleSchema } from './equipment.js';
+import { equipmentSchema, lightScheduleSchema, MAX_EQUIPMENT_TIER } from './equipment.js';
 import { coralSchema } from './corals.js';
 import { plantSchema } from './plants.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
@@ -213,6 +213,10 @@ export const updateTankRequestSchema = z
       .boolean()
       .optional()
       .describe('opt this tank in or out of receiving gifted fish'),
+    co2: z
+      .strictObject({ tier: z.int().min(0).max(MAX_EQUIPMENT_TIER) })
+      .optional()
+      .describe('free: switch CO2 to a tier this tank already owns, or 0 for off; never charges'),
   })
   .refine(
     (v) =>
@@ -220,7 +224,8 @@ export const updateTankRequestSchema = z
       v.decorLayout !== undefined ||
       v.backgroundId !== undefined ||
       v.light !== undefined ||
-      v.acceptsGifts !== undefined,
+      v.acceptsGifts !== undefined ||
+      v.co2 !== undefined,
     'nothing to update',
   );
 export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
