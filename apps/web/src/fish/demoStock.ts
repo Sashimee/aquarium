@@ -15,6 +15,7 @@ import {
   type SpeciesInput,
   type TankSpaceWorldConfig,
 } from '@aquarium/sim';
+import altolamprologusCalvusContent from '../../../../content/species/altolamprologus-calvus.json';
 import angelfishContent from '../../../../content/species/angelfish.json';
 import bandedArcherfishContent from '../../../../content/species/banded-archerfish.json';
 import banggaiCardinalfishContent from '../../../../content/species/banggai-cardinalfish.json';
@@ -24,9 +25,14 @@ import blueSpottedMudskipperContent from '../../../../content/species/blue-spott
 import bronzeCorydorasContent from '../../../../content/species/bronze-corydoras.json';
 import bumblebeeGobyContent from '../../../../content/species/bumblebee-goby.json';
 import guppyContent from '../../../../content/species/guppy.json';
+import labidochromisCaeruleusContent from '../../../../content/species/labidochromis-caeruleus.json';
+import melanochromisAuratusContent from '../../../../content/species/melanochromis-auratus.json';
+import neolamprologusBrichardiContent from '../../../../content/species/neolamprologus-brichardi.json';
+import neolamprologusMultifasciatusContent from '../../../../content/species/neolamprologus-multifasciatus.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 import ocellarisClownfishContent from '../../../../content/species/ocellaris-clownfish.json';
 import orangeChromideContent from '../../../../content/species/orange-chromide.json';
+import pseudotropheusDemasoniContent from '../../../../content/species/pseudotropheus-demasoni.json';
 import royalGrammaContent from '../../../../content/species/royal-gramma.json';
 import yellowTangContent from '../../../../content/species/yellow-tang.json';
 import type { TankDimensions } from '../engine/tank/dimensions';
@@ -83,6 +89,10 @@ export function demoStock(
  * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group. The
  * mangrove leaves out the silver mono, which also outgrows 120 cm, and keeps one of each
  * territorial mudskipper.
+ * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
+ * The cichlid lake mixes Malawi mbuna on the rock piles with Tanganyika lamprologines, as its
+ * preset mixes rock piles and a shell bed: mbuna several to a species, which spreads their
+ * aggression (Konings 2007), and one calvus, a solitary stalker.
  */
 export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
   freshwater: demoStock(
@@ -93,7 +103,24 @@ export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
     [ocellarisClownfishContent, yellowTangContent, royalGrammaContent, banggaiCardinalfishContent],
     { 'ocellaris-clownfish': 2, 'yellow-tang': 1, 'royal-gramma': 1, 'banggai-cardinalfish': 1 },
   ),
-  cichlid: demoStock([], {}),
+  cichlid: demoStock(
+    [
+      pseudotropheusDemasoniContent,
+      labidochromisCaeruleusContent,
+      melanochromisAuratusContent,
+      neolamprologusBrichardiContent,
+      neolamprologusMultifasciatusContent,
+      altolamprologusCalvusContent,
+    ],
+    {
+      'pseudotropheus-demasoni': 4,
+      'labidochromis-caeruleus': 3,
+      'melanochromis-auratus': 2,
+      'neolamprologus-brichardi': 2,
+      'neolamprologus-multifasciatus': 4,
+      'altolamprologus-calvus': 1,
+    },
+  ),
   blackwater: demoStock([], {}),
   mangrove: demoStock(
     [

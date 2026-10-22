@@ -224,6 +224,45 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     roughness: 0.5,
     nightPaling: 0.2,
   },
+  'pseudotropheus-demasoni': {
+    ...DEFAULTS,
+    assetId: 'pseudotropheus-demasoni',
+    iridescence: 0.3,
+    iridescenceMask: 'blue',
+    finTransmission: 0.3,
+  },
+  'labidochromis-caeruleus': {
+    ...DEFAULTS,
+    assetId: 'labidochromis-caeruleus',
+    iridescence: 0.1,
+    finTransmission: 0.35,
+  },
+  'melanochromis-auratus': {
+    ...DEFAULTS,
+    assetId: 'melanochromis-auratus-female',
+    male: { assetId: 'melanochromis-auratus-male', lengthFactor: 1 },
+    iridescence: 0.15,
+    finTransmission: 0.35,
+  },
+  'neolamprologus-brichardi': {
+    ...DEFAULTS,
+    assetId: 'neolamprologus-brichardi',
+    iridescence: 0.2,
+    finTransmission: 0.5,
+  },
+  'neolamprologus-multifasciatus': {
+    ...DEFAULTS,
+    assetId: 'neolamprologus-multifasciatus',
+    iridescence: 0.15,
+    finTransmission: 0.45,
+  },
+  'altolamprologus-calvus': {
+    ...DEFAULTS,
+    assetId: 'altolamprologus-calvus',
+    iridescence: 0.1,
+    roughness: 0.45,
+    finTransmission: 0.35,
+  },
 };
 
 export function renderProfile(speciesId: string): FishRenderProfile {
