@@ -132,15 +132,24 @@ describe('effect text', () => {
     expect(effectText('heater', 3, cp)).not.toMatch(/nothing else/);
   });
 
-  it('follows the content warm-up rate: no extra rate, no speed-up', () => {
-    const slow = {
+  it('falls back to the headroom sentence when the warm-up rate gives no speed-up', () => {
+    const withRate = (rate: number, drift = cp.temperature.driftPerHour) => ({
       ...cp,
-      temperature: {
-        ...cp.temperature,
-        heaterWarmupRatePerHourPerTier: 0,
-      },
+      temperature: { ...cp.temperature, driftPerHour: drift, heaterWarmupRatePerHourPerTier: rate },
+    });
+    expect(effectText('heater', 3, withRate(0))).toMatch(/adds headroom and nothing else/);
+    expect(effectText('heater', 2, withRate(0.1, 0.2))).toMatch(/adds headroom and nothing else/);
+    const flat = effectText('heater', 2, withRate(0, 0));
+    expect(flat).toMatch(/adds headroom and nothing else/);
+    expect(flat).not.toMatch(/NaN/);
+  });
+
+  it('weighs the speed-up against drift, not just the tier number', () => {
+    const tuned = {
+      ...cp,
+      temperature: { ...cp.temperature, driftPerHour: 0.15, heaterWarmupRatePerHourPerTier: 0.1 },
     };
-    expect(effectText('heater', 3, slow)).toMatch(/1 times as fast/);
+    expect(effectText('heater', 2, tuned)).toMatch(/1\.33 times as fast as tier 1/);
   });
 
   it('gives the filter media share of a full colony, capped at all of it', () => {
