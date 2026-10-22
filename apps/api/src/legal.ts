@@ -14,6 +14,7 @@ import { storedFishSchema } from './gifts.ts';
 import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
+import type { PaymentProvider } from './payments/provider.ts';
 
 export interface LegalLimits {
   export: Limit;
@@ -40,6 +41,7 @@ export interface LegalDeps {
   limiter: RateLimiter;
   limits: LegalLimits;
   currentSession: (req: FastifyRequest) => Promise<CurrentSession | null>;
+  payments?: PaymentProvider | null;
 }
 
 export function registerLegalRoutes(deps: LegalDeps): void {
@@ -381,6 +383,33 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .send(
           apiError('forbidden', 'Sign in again with your passkey, then retry within 5 minutes.'),
         );
+    }
+
+    // A subscription left running would keep billing an account that no longer exists, so a failed
+    // cancel stops the deletion and the player can retry.
+    if (deps.payments) {
+      const running = await db
+        .select({ id: schema.clubSubscriptions.id })
+        .from(schema.clubSubscriptions)
+        .where(
+          and(
+            eq(schema.clubSubscriptions.userId, userId),
+            inArray(schema.clubSubscriptions.status, ['active', 'past_due', 'unpaid', 'trialing']),
+          ),
+        );
+      try {
+        for (const { id } of running) await deps.payments.cancelSubscriptionNow(id);
+      } catch (error) {
+        app.log.error({ err: error }, 'subscription could not be cancelled for account deletion');
+        return reply
+          .code(502)
+          .send(
+            apiError(
+              'internal',
+              'Your subscription could not be cancelled with the payment provider, so nothing was deleted. Try again in a minute.',
+            ),
+          );
+      }
     }
 
     const orphaned = await db.transaction(async (tx) => {

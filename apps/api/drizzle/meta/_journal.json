@@ -218,6 +218,13 @@
       "when": 1792696608870,
       "tag": "0030_co2_owned_tier",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792703617212,
+      "tag": "0031_stripe_payments",
+      "breakpoints": true
     }
   ]
 }

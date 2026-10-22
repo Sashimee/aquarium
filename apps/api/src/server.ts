@@ -9,6 +9,7 @@ import { createMailer, createSmtpTransport } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { createClock } from './clock.ts';
 import { startMaintenance } from './maintenance.ts';
+import { createStripeProvider } from './payments/provider.ts';
 import { createPushSender } from './push.ts';
 import { startReminders } from './reminders.ts';
 import { loadCatalog } from './species.ts';
@@ -42,6 +43,13 @@ if (!push) {
   );
 }
 
+const payments = config.stripe ? createStripeProvider(config.stripe) : null;
+if (!payments) {
+  console.warn(
+    'payments are off: STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are not set. Pearl packs and the subscription answer 503; the rest of the app works.',
+  );
+}
+
 const clock = createClock();
 const app = buildApp({
   clock,
@@ -62,6 +70,7 @@ const app = buildApp({
   testHooks: config.testHooks,
   authSecret: config.authSecret,
   push,
+  payments,
 });
 
 const stopMaintenance = startMaintenance(database, clock, () => app.settleDueGifts());

@@ -22,6 +22,7 @@ import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { claimAchievementRewards, fryItemRef, fryRoom } from './earn.ts';
 import { apiError, HttpError } from './errors.ts';
+import { claimClubGrant } from './payments/club.ts';
 import { EUPHYLLIA_LICENSE_REF, licenseForRef, type License } from './items.ts';
 import type { CareLimits, SessionUser, Ticked, Tx } from './tanks.ts';
 import {
@@ -201,6 +202,7 @@ export function registerShopRoutes(ctx: ShopContext): void {
       return database.db.transaction(async (tx) => {
         const nowMs = clock.now();
         await lockWallet(tx, economy, user.id, nowMs);
+        await claimClubGrant(tx, economy, user.id, nowMs);
         await claimAchievementRewards(tx, economy, user.id, nowMs);
         const rows = await tx
           .select()
