@@ -1,5 +1,6 @@
 import type { DecorItem } from '@aquarium/shared';
 import { parseEuphylliaId, type EuphylliaVariant } from './euphyllia';
+import { isMudBankId } from './mudBank';
 import { HARDSCAPE_KINDS, PLANT_KIND } from './hardscape';
 
 export interface RoutedDecor {
@@ -7,6 +8,7 @@ export interface RoutedDecor {
   readonly layoutPlants: DecorItem[];
   readonly anemoneItems: DecorItem[];
   readonly euphylliaItems: readonly { item: DecorItem; variant: EuphylliaVariant; seed: number }[];
+  readonly mudBankItems: DecorItem[];
 }
 
 /** Sorts a preset's decor into the groups the scene builds, in preset order within each group. */
@@ -20,8 +22,13 @@ export function routeDecor(
     layoutPlants: [],
     anemoneItems: [],
     euphylliaItems,
+    mudBankItems: [],
   };
   for (const item of decor) {
+    if (isMudBankId(item.assetId)) {
+      routed.mudBankItems.push(item);
+      continue;
+    }
     const procedural = parseEuphylliaId(item.assetId);
     if (procedural) {
       euphylliaItems.push({ item, ...procedural });

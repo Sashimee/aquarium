@@ -14,6 +14,7 @@ import {
   collapseDotSegments,
 } from '../../scene/assets';
 import { euphylliaId, parseEuphylliaId } from '../../scene/euphyllia';
+import { isMudBankId } from '../../scene/mudBank';
 import { loadPreset } from '../../scene/preset';
 import { DESKTOP_PROFILE, MOBILE_PROFILE, type QualityProfile } from './profile';
 import { QualityManager } from './QualityManager';
@@ -111,12 +112,12 @@ interface TextureUse {
 
 /**
  * The preset ids that load a model from the catalog. Procedural euphyllia is built in code and
- * holds no textures; any other id the catalog lacks is a broken preset, not one to skip.
+ * holds no textures, and the procedural mud bank wears the substrate set counted separately; any other id the catalog lacks is a broken preset, not one to skip.
  */
 function catalogModels(owner: string, assetIds: readonly string[]): Set<string> {
   const models = new Set<string>();
   for (const assetId of assetIds) {
-    if (parseEuphylliaId(assetId)) continue;
+    if (parseEuphylliaId(assetId) || isMudBankId(assetId)) continue;
     if (!catalog.has(assetId))
       throw new Error(`${owner} uses ${assetId}, which is not in the catalog`);
     models.add(assetId);

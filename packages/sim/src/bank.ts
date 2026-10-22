@@ -154,6 +154,11 @@ export class Banks {
     return p === Phase.Climb || p === Phase.Perch || p === Phase.Return;
   }
 
+  /** Resting on the perch, breathing air. */
+  perched(i: number): boolean {
+    return at(this.phase, i) === Phase.Perch;
+  }
+
   /** The bank fish `i` is on or making for, or -1. */
   bankOf(i: number): number {
     return at(this.phase, i) === Phase.None ? -1 : at(this.bank, i);

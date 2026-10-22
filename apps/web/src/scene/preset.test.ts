@@ -4,6 +4,7 @@ import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { CatalogEntry } from './assets';
 import { BANK_RIM_MARGIN, isPerch } from './bank';
+import { isMudBankId, mudBankBounds } from './mudBank';
 import { loadPreset, parsePreset } from './preset';
 import catalog from '../../public/assets/index.json';
 import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
@@ -338,7 +339,9 @@ describe.each(['blackwater', 'mangrove'] as const)('%s preset', (biome) => {
     const halfD = DEFAULT_TANK.depth / 2 - DEFAULT_TANK.glass;
     const waterTop = DEFAULT_TANK.height - DEFAULT_TANK.freeboard;
     for (const item of preset.decor) {
-      const bounds = entries.get(item.assetId)?.bounds;
+      const bounds = isMudBankId(item.assetId)
+        ? mudBankBounds()
+        : entries.get(item.assetId)?.bounds;
       if (!bounds) throw new Error(`${item.assetId} has no bounds`);
       const [x0 = 0, , z0 = 0] = bounds.min;
       const [x1 = 0, y1 = 0, z1 = 0] = bounds.max;

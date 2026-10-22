@@ -2,18 +2,19 @@ import { Vector3 } from 'three/webgpu';
 import type { DecorItem } from '@aquarium/shared';
 import { decorMatrix } from './hardscape';
 import type { WaterReach } from './caves';
+import { MUD_BANK_FLAT, MUD_BANK_ID, MUD_BANK_TOP } from './mudBank';
 
 /**
- * A point above the water an amphibious fish can cling to or climb toward, not a flat area to rest
- * on: the one scanned stump offers a spike tip about 1.2 x 1.4 cm across. Banks are `SceneAnchor`s of kind
- * `bank`; the scene keeps them on their own list so a bank is sent only with the decor that makes it.
+ * A place above the water an amphibious fish can cling to or haul out on. The scanned stump offers
+ * only a spike tip about 1.2 x 1.4 cm across, while the mud bank is a level patch whose radius is
+ * the half-width of the flat that fits inside it.
  */
 export interface SceneBank {
   readonly id: string;
   readonly kind: 'bank';
-  /** The cling point, in the frame the scene and sim share. */
+  /** The cling point or the centre of the flat, in the frame the scene and sim share. */
   readonly position: readonly [number, number, number];
-  /** Horizontal radius of the tip a fish can grip. */
+  /** Horizontal radius of the tip a fish can grip, or of the flat it can rest on. */
   readonly radius: number;
 }
 
@@ -29,6 +30,7 @@ interface BankTop {
  */
 export const BANK_TOPS: Readonly<Record<string, BankTop>> = {
   'mangrove-stump': { position: [0.006, 0.275, 0.074], radius: 0.007 },
+  [MUD_BANK_ID]: { position: [0, MUD_BANK_TOP, 0], radius: MUD_BANK_FLAT.z },
 };
 
 /** The least a cling point stands above the water top; less is not an emergent surface. */

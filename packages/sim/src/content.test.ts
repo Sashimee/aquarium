@@ -15,6 +15,7 @@ import {
 } from './fixtures.ts';
 import { TankSdf, type TankDimensions } from './sdf.ts';
 import { toSimSpecies } from './species.ts';
+import { FishState } from './snapshot.ts';
 import { WAVE_MAKER } from './waveMaker.ts';
 import { World } from './world.ts';
 
@@ -58,6 +59,7 @@ const MVP_ROSTER = [
   ['cleaner-wrasse', 'Labroides dimidiatus', 'reef'],
   ['discus', 'Symphysodon aequifasciatus', 'freshwater'],
   ['dwarf-pencilfish', 'Nannostomus marginatus', 'blackwater'],
+  ['figure-8-puffer', 'Dichotomyctere ocellatus', 'freshwater'],
   ['firefish', 'Nemateleotris magnifica', 'reef'],
   ['guppy', 'Poecilia reticulata', 'freshwater'],
   ['harlequin-rasbora', 'Trigonostigma heteromorpha', 'freshwater'],
@@ -118,6 +120,7 @@ function fishCount(species: ReturnType<typeof speciesContentSchema.parse>): numb
 /** Male length over the species length, as apps/web/src/fish/profiles.ts draws and simulates it. */
 const MALE_LENGTH_FACTOR: Readonly<Record<string, number>> = {
   'apistogramma-hongsloi': 0.05 / 0.03,
+  'aulonocara-baenschi': 1.33,
 };
 
 /** The species' fish, the last one a full-grown male where males outgrow the species length. */
@@ -229,6 +232,106 @@ describe('barred mudskippers foraging round the show-tank driftwood', { timeout:
   });
 });
 
+describe('a cory due a breath under the show-tank driftwood', { timeout: LONG }, () => {
+  const base = byId('bronze-corydoras');
+  // Far above the content cap, so the breath falls due within a step or two of the start.
+  const cory = { ...base, behaviour: { ...base.behaviour, airGulp: { perHour: 3600 } } };
+  const wood = SHOW_DECOR.find((c) => c.id === 'driftwood');
+  if (!wood) throw new Error('SHOW_DECOR lost its driftwood');
+  const log = compileCollider(wood);
+  /** A 3.5 s dash up from the sand, plus a slide of a few body lengths out from under the log. */
+  const BREATH_WITHIN_S = 12;
+  const starts = [
+    [-0.27, -0.08],
+    [-0.24, -0.06],
+  ].flatMap(([x, z]) =>
+    [0, 90, 180, -90].flatMap((yawDeg) =>
+      [1, 2, 3].map((seed) => ({ x: x ?? 0, z: z ?? 0, yawDeg, seed })),
+    ),
+  );
+
+  it.each(starts)(
+    'slides out and reaches the surface (#1283): x $x z $z heading $yawDeg seed $seed',
+    ({ x, z, yawDeg, seed }) => {
+      const y = 0.012;
+      const n = new Float64Array(3);
+      let overhead = Infinity;
+      for (let k = 1; k <= 20; k++)
+        overhead = Math.min(overhead, log.sample(x, y + k * 0.004, z, n));
+      expect(overhead).toBeLessThan(0);
+
+      const w = new World({
+        seed,
+        tank: SHOW_TANK,
+        species: [cory],
+        decor: SHOW_DECOR,
+        fish: spawnMany(cory.id, 1),
+      });
+      w.position.set([x, y, z]);
+      w.yaw[0] = (yawDeg * Math.PI) / 180;
+      w.pitch[0] = 0;
+      const wait = w.behaviour.gulpWait;
+      let before = 0;
+      let breathS = Infinity;
+      for (let t = 1; t <= 30 * 2 * BREATH_WITHIN_S; t++) {
+        w.step();
+        const now = wait[0] ?? 0;
+        if (now === 0 && before > 0) {
+          breathS = t / 30;
+          break;
+        }
+        before = now;
+      }
+      expect(breathS).toBeLessThan(BREATH_WITHIN_S);
+    },
+  );
+});
+
+describe('a cory startled on its way up for air', { timeout: LONG }, () => {
+  const base = byId('bronze-corydoras');
+  const LONGEST_WAIT_S = BEHAVIOUR.gulpOverdueS + 2 * BEHAVIOUR.gulpTimeoutS;
+
+  it.each([1, 2, 3, 4, 5])('keeps the breath due and still surfaces (#1283): seed %i', (seed) => {
+    // Far above the content cap, so the first breath falls due within a step or two.
+    const cory = { ...base, behaviour: { ...base.behaviour, airGulp: { perHour: 3600 } } };
+    const w = new World({
+      seed,
+      tank: SHOW_TANK,
+      species: [cory],
+      fish: spawnMany(cory.id, 1),
+    });
+    const wait = w.behaviour.gulpWait;
+    const startled = w.behaviour.startledAt;
+    let rising = 0;
+    for (let t = 0; t < 30 * 60 && rising < 15; t++) {
+      w.step();
+      rising = w.state[0] === FishState.Gulp && (wait[0] ?? 0) > 0 ? rising + 1 : 0;
+    }
+    expect(rising).toBe(15);
+
+    const p = w.position;
+    w.startle({ position: [p[0] ?? 0, p[1] ?? 0, (p[2] ?? 0) + 0.05], intensity: 1 });
+    w.step();
+    expect(startled[0]).toBe(w.tick - 1);
+
+    let before = wait[0] ?? 0;
+    let waited = Infinity;
+    let frozen = 0;
+    for (let t = 1; t <= 30 * 2 * LONGEST_WAIT_S; t++) {
+      w.step();
+      const now = wait[0] ?? 0;
+      if (now === 0) {
+        waited = before;
+        break;
+      }
+      if (now === before) frozen++;
+      before = now;
+    }
+    expect(frozen).toBe(0);
+    expect(waited).toBeLessThan(LONGEST_WAIT_S);
+  });
+});
+
 describe('every shipped species in a full-power wave maker current', { timeout: LONG }, () => {
   const species = roster.map((r) => r.species);
 
@@ -265,6 +368,85 @@ describe('every shipped species in a full-power wave maker current', { timeout: 
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
     expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
   });
+});
+
+describe('air-gulp darts in a full-power wave maker current', { timeout: LONG }, () => {
+  const MAX_GULPS_PER_HOUR = 120;
+  const gulpers = roster
+    .map((r) => r.species)
+    .filter((s) => s.behaviour.traits.includes('air-gulp'))
+    .map((s) => ({
+      ...s,
+      behaviour: { ...s.behaviour, airGulp: { perHour: MAX_GULPS_PER_HOUR } },
+    }));
+
+  it('finds every air-gulping species', () => {
+    expect(gulpers.map((s) => s.id).sort()).toEqual([
+      'barred-mudskipper',
+      'blue-spotted-mudskipper',
+      'bronze-corydoras',
+    ]);
+  });
+
+  /**
+   * A due breath is only ever deferred: after gulpOverdueS of waiting the fish climbs the glass,
+   * and one climb plus one failed attempt each spend at most gulpTimeoutS.
+   */
+  const LONGEST_WAIT_S = BEHAVIOUR.gulpOverdueS + 2 * BEHAVIOUR.gulpTimeoutS;
+  const cases = gulpers.flatMap((s) => {
+    const configured = roster.find((r) => r.species.id === s.id)?.species;
+    if (configured === undefined) throw new Error(`${s.id} is missing from the roster`);
+    return [
+      { id: s.id, rate: `${MAX_GULPS_PER_HOUR}/h`, s },
+      { id: s.id, rate: 'configured', s: configured },
+    ];
+  });
+
+  it.each(cases)(
+    'reach the surface within the cap and stay under the contact budget: $id at $rate',
+    ({ s }) => {
+      const species = [...roster.map((r) => r.species).filter((r) => r.id !== s.id), s];
+      let worst = Infinity;
+      let contacts = 0;
+      let fishSteps = 0;
+      let breaths = 0;
+      let longestWait = 0;
+      for (const seed of CONTACT_SEEDS) {
+        const w = new World({
+          seed,
+          tank: SHOW_TANK,
+          species,
+          decor: SHOW_DECOR,
+          fish: spawnsOf(s, fishCount(s)),
+          waveMaker: {
+            direction: [1, 0.3],
+            speedMps: WAVE_MAKER.maxSpeedMps,
+            mode: 'steady',
+            periodS: WAVE_MAKER.pulsePeriodS,
+          },
+        });
+        const clearance = bruteClearance(w, SHOW_TANK, SHOW_DECOR);
+        const wait = w.behaviour.gulpWait;
+        const before = new Float64Array(w.count);
+        for (let t = 0; t < 10_000; t++) {
+          w.step();
+          for (let i = 0; i < w.count; i++) {
+            worst = Math.min(worst, clearance(i));
+            const now = wait[i] ?? 0;
+            if (now === 0 && (before[i] ?? 0) > 0) breaths++;
+            longestWait = Math.max(longestWait, now);
+            before[i] = now;
+          }
+        }
+        contacts += w.contacts;
+        fishSteps += w.count * 10_000;
+      }
+      expect(worst).toBeGreaterThanOrEqual(-1e-9);
+      expect(contacts / fishSteps).toBeLessThan(1e-3);
+      expect(breaths).toBeGreaterThan(0);
+      expect(longestWait).toBeLessThan(LONGEST_WAIT_S);
+    },
+  );
 });
 
 describe('a mixed community left alone', { timeout: LONG }, () => {

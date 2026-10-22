@@ -193,6 +193,16 @@ describe('presetDownloadBytes', () => {
     expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000);
   });
 
+  it('skips the procedural mud bank but not a lookalike id', () => {
+    const input = inputOf([hdri(2000)]);
+    input.presets[0]!.assetIds = ['mud-bank'];
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000);
+    input.presets[0]!.assetIds = ['mud-bank-2'];
+    expect(() => presetDownloadBytes(input, input.presets[0]!, 'mobile')).toThrow(
+      /unknown asset "mud-bank-2"/,
+    );
+  });
+
   it('throws on an asset id that is neither in the index nor procedural', () => {
     const input = inputOf([hdri(2000)]);
     expect(() => presetDownloadBytes(input, input.presets[0]!, 'mobile')).toThrow(

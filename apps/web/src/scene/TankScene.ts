@@ -18,6 +18,7 @@ import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
 import { abortError } from './abortable';
 import { bankAnchors, type SceneBank } from './bank';
+import { isMudBankId, MudBank, mudBankColliders } from './mudBank';
 import { caveAnchors } from './caves';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
@@ -191,6 +192,7 @@ export class TankScene {
   private hardscape: Hardscape | null = null;
   private anemones: AnemoneGroup[] = [];
   private euphyllias: EuphylliaGroup[] = [];
+  private readonly mudBanks: MudBank[];
   private plantGroups: PlantGroup[] = [];
   private offsetGroups = new Map<string, PlantGroup>();
   private plantState: ReadonlyMap<string, Plant> = new Map();
@@ -225,6 +227,7 @@ export class TankScene {
     private hardItems: readonly { item: DecorItem; kind: string }[],
     private readonly anemoneItems: readonly DecorItem[],
     private readonly euphylliaItems: readonly EuphylliaItem[],
+    private readonly mudBankItems: readonly DecorItem[],
     private readonly anchorData: readonly SceneAnchor[],
     options: SceneOptions,
   ) {
@@ -240,6 +243,10 @@ export class TankScene {
         }),
     );
     this.placeholderSubstrate = engine.tank.substrate.material;
+    this.mudBanks = mudBankItems.map(
+      (item) => new MudBank(item, engine.tank.dimensions, engine.tank.substrate.material),
+    );
+    for (const bank of this.mudBanks) engine.scene.add(bank.mesh);
     this.colliderField = new ColliderField(colliderData);
     this.overlay = new ColliderOverlay(colliderData);
     this.overlay.visible = options.colliders;
@@ -343,6 +350,8 @@ export class TankScene {
       anchors.push(anemoneAnchor(`anemone-${i + 1}`, entry, item));
     });
 
+    for (const item of routed.mudBankItems) colliders.push(...mudBankColliders(item));
+
     const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
     for (const [i, entry] of euphylliaItems.entries()) {
       const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
@@ -362,6 +371,7 @@ export class TankScene {
       hardItems,
       anemoneItems,
       euphylliaItems,
+      routed.mudBankItems,
       anchors,
       options,
     );
@@ -618,7 +628,7 @@ export class TankScene {
   } {
     const order = coralSlotOrder(
       this.preset.decor,
-      (assetId) => this.library.catalog.get(assetId).kind,
+      (assetId) => (isMudBankId(assetId) ? 'procedural' : this.library.catalog.get(assetId).kind),
       items,
       this.euphylliaItems.map((entry) => entry.item),
     );
@@ -898,11 +908,11 @@ export class TankScene {
     ];
   }
 
-  /** Dry perches above the water for amphibious fish, kept apart from `anchors` until the sim reads them. */
+  /** Dry perches above the water for amphibious fish, sent to the sim alongside `anchors`, so a bank follows the decor that makes it. */
   get banks(): readonly SceneBank[] {
     const d = this.engine.tank.dimensions;
     return bankAnchors(
-      this.hardItems.map(({ item }) => item),
+      [...this.hardItems.map(({ item }) => item), ...this.mudBankItems],
       d.height - d.freeboard,
       {
         halfX: d.length / 2 - d.glass - WATER_INSET,
@@ -1109,6 +1119,7 @@ export class TankScene {
     if (substrate) {
       const previous = this.substrate;
       this.engine.tank.substrate.material = substrate.material;
+      for (const bank of this.mudBanks) bank.setMaterial(substrate.material);
       this.substrate = substrate;
       if (previous) this.discardSubstrate(previous);
     }
@@ -1157,6 +1168,7 @@ export class TankScene {
     this.fragHardscape?.dispose();
     for (const coral of this.fragEuphyllias) coral.dispose();
     this.overlay.dispose();
+    for (const bank of this.mudBanks) bank.dispose();
     if (this.substrate) {
       this.engine.tank.substrate.material = this.placeholderSubstrate;
       this.discardSubstrate(this.substrate);
@@ -1252,7 +1264,7 @@ export function fixedDecorOf(
   plantsMovable = false,
 ): DecorItem[] {
   return decor.filter((i) => {
-    if (parseEuphylliaId(i.assetId) !== null) return true;
+    if (parseEuphylliaId(i.assetId) !== null || isMudBankId(i.assetId)) return true;
     const kind = catalog.get(i.assetId).kind;
     return !HARDSCAPE_KINDS.has(kind) && !(plantsMovable && kind === PLANT_KIND);
   });

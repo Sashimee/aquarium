@@ -20,13 +20,17 @@ export function doseOptions(
   const { biome } = tank;
   const options: DoseOption[] = [];
 
-  if (chemistry.salinity.target[biome] > 0) {
+  const saltMix = chemistry.salinity.target[biome];
+  if (saltMix > 0) {
     options.push({
       type: 'salt_dose',
       label: 'Add salt mix',
       hint: 'Raises the salinity toward this tank type’s level.',
       price: 0,
-      disabledReason: null,
+      disabledReason:
+        tank.chemistry.salinity >= saltMix
+          ? 'The water is already as salty as a salt dose can make it.'
+          : null,
     });
   }
 
