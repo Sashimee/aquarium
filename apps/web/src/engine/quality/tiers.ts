@@ -22,8 +22,9 @@ export interface TierSettings {
   causticMethod: CausticMethod;
   causticLayers: 1 | 2;
   /**
-   * Resolution scale of the scene reflected under the water surface; 0 traces only the walls and
-   * floor in the surface's shader.
+   * Resolution scale of the scene reflected under the water surface. Above 0 the side panes also
+   * mirror the tank's contents from a copy of the frame; 0 traces only the walls and floor in the
+   * surface's and the glass's shaders.
    */
   surfaceReflection: number;
   /** Suspended particulates drifting in the water. */
