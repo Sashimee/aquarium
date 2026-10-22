@@ -1,10 +1,10 @@
 import { legacyTintSeed, type Coral, type DecorItem } from '@aquarium/shared';
 import { hashKey } from './plantGrowth';
 import { mulberry32 } from './placement';
+import { parseEuphylliaId } from './euphyllia';
 
 const MAX_ANCESTORS = 64;
 const MIN_FRAGMENT_SCALE_FRACTION = 0.25;
-const DEGENERATE_CAP = 1e-3;
 
 export interface CoralSlot {
   readonly assetId: string;
@@ -36,7 +36,10 @@ function clampedSize(coral: Coral): number {
   return Math.min(coral.maxSize, Math.max(coral.minSize, coral.size));
 }
 
-/** Largest scale an item can take where it stands; the glass and the surface are the limit. */
+/**
+ * Largest scale an item can take where it stands; the glass and the surface are the limit.
+ * A fragment of a swaying coral is floored above it, so its sway can cross the glass.
+ */
 export type ScaleCap = (item: DecorItem) => number;
 
 /**
@@ -102,11 +105,11 @@ export function placeFragments(
       rotationY: mulberry32(hashKey(coral.key))() * Math.PI * 2,
     };
     const wanted = root.item.scale * clampedSize(coral);
-    const limit = cap(standing);
+    const capped = Math.min(wanted, cap(standing));
     const scale =
-      limit > DEGENERATE_CAP
-        ? Math.min(wanted, limit)
-        : root.item.scale * MIN_FRAGMENT_SCALE_FRACTION;
+      parseEuphylliaId(root.assetId) === null
+        ? capped
+        : Math.max(capped, Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION));
     placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;
