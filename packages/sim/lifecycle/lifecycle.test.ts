@@ -7,6 +7,7 @@ import {
   newTankChemistry,
   speciesContentSummarySchema,
   TANK_SIZES,
+  type Biome,
   type Chemistry,
   type Equipment,
   type SpeciesChemistry,
@@ -306,7 +307,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
   });
 
   it.each(nanoCapSpecies.map((s) => [s.id, s.biome] as const))(
-    'a nano stocked to the standard bioload capacity keeps every %s for 120 days of weekly water changes',
+    'a nano stocked to the standard bioload capacity, at most 60 animals, keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
       if (!spec) throw new Error(`no species ${id}`);
@@ -928,6 +929,22 @@ describe('pH, KH, temperature and salinity', () => {
     const t = run(state, 3 * DAY, { env: { biome: 'blackwater' } }).state.chemistry.temperatureC;
     expect(t).toBeCloseTo(27, 1);
   });
+
+  it.each(Object.entries(chemistryParams.temperature.target))(
+    'the default tier 1 heater warms an empty %s tank from room temperature to its target',
+    (biome, target) => {
+      const state = {
+        ...tank([]),
+        chemistry: {
+          ...newTankChemistry('freshwater'),
+          temperatureC: chemistryParams.temperature.roomC,
+        },
+      };
+      const t = run(state, 3 * DAY, { env: { biome: biome as Biome } }).state.chemistry
+        .temperatureC;
+      expect(t).toBeCloseTo(target, 1);
+    },
+  );
 
   it('a water change pulls KH towards the biome source water, not one global value', () => {
     const reef = {

@@ -734,7 +734,9 @@ describe('wallet, shop and ledger', () => {
       expect((await save()).statusCode).toBe(403);
       const before = await balance(h, who);
       expect((await purchase(h, who, 'plant:java-fern', tank.id)).statusCode).toBe(200);
-      expect(await balance(h, who)).toBe(before - (economy.items.plant.prices['java-fern'] ?? 0));
+      const fernPrice = economy.items.plant.prices['java-fern'];
+      if (!fernPrice) throw new Error('java-fern has no price in the economy');
+      expect(await balance(h, who)).toBe(before - fernPrice);
       expect((await save()).statusCode).toBe(200);
     });
 

@@ -44,10 +44,4 @@ describe('equipment price lists against the chemistry rate tables', () => {
     }
     expect(capacity(prices.filter.length)).toBe(1);
   });
-
-  it('lets the cheapest heater tier warm a tank to the hottest biome target', () => {
-    const t = params.temperature;
-    const reach = t.roomC + t.heaterWarmingPerHourPerTier / t.driftPerHour;
-    expect(reach).toBeGreaterThanOrEqual(Math.max(...Object.values(t.target)));
-  });
 });
