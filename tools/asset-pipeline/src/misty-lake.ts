@@ -17,7 +17,7 @@ export const MISTY_LAKE_WIDTH = 4096;
 export const MISTY_LAKE_HEIGHT = 2048;
 export const MISTY_LAKE_RENDER = join(RAW_ROOT, MISTY_LAKE_ID, 'render.png');
 
-const SIGMA_LEVELS = [0, 2, 4, 7, 11] as const;
+export const SIGMA_LEVELS = [0, 2, 4, 7, 11] as const;
 const MAX_FAR_SIGMA = 11;
 const MAX_NEAR_SIGMA = 4;
 
@@ -196,6 +196,26 @@ async function decodePng(dataUrl: string): Promise<Buffer> {
   return Buffer.from(dataUrl.slice(prefix.length), 'base64');
 }
 
+/** Depth-of-field blur, underwater grade and a metadata-free PNG from a raw beauty pass and a depth byte per pixel. */
+export async function developRender(
+  rgb: Uint8Array,
+  depthRed: Uint8Array,
+  params: DepthParams,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const levels: Uint8Array[] = [];
+  for (const sigma of SIGMA_LEVELS) {
+    const image = sharp(rgb, { raw: { width, height, channels: 3 } });
+    levels.push(new Uint8Array(await (sigma === 0 ? image : image.blur(sigma)).raw().toBuffer()));
+  }
+  const blurred = applyDepthOfField(levels, depthRed, params, width * height, 3);
+  const graded = gradeUnderwater(blurred, depthRed, params, width, height);
+  return sharp(Buffer.from(graded), { raw: { width, height, channels: 3 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
 export async function renderMistyLake(repoRoot: string): Promise<string> {
   const { chromium } = await import('@playwright/test');
   const publicAssets = realpathSync(join(repoRoot, 'apps', 'web', 'public', 'assets'));
@@ -241,21 +261,7 @@ export async function renderMistyLake(repoRoot: string): Promise<string> {
   const depthRed = new Uint8Array(pixels);
   for (let p = 0; p < pixels; p++) depthRed[p] = depthRaw[p * 3] ?? 255;
 
-  const levels: Uint8Array[] = [];
-  for (const sigma of SIGMA_LEVELS) {
-    const image = sharp(beauty.data, {
-      raw: { width: info.width, height: info.height, channels: 3 },
-    });
-    levels.push(new Uint8Array(await (sigma === 0 ? image : image.blur(sigma)).raw().toBuffer()));
-  }
-  const blurred = applyDepthOfField(levels, depthRed, passes, pixels, 3);
-
-  const graded = gradeUnderwater(blurred, depthRed, passes, info.width, info.height);
-  const png = await sharp(Buffer.from(graded), {
-    raw: { width: info.width, height: info.height, channels: 3 },
-  })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
+  const png = await developRender(beauty.data, depthRed, passes, info.width, info.height);
   mkdirSync(join(RAW_ROOT, MISTY_LAKE_ID), { recursive: true });
   writeFileSync(MISTY_LAKE_RENDER, png);
   return MISTY_LAKE_RENDER;
