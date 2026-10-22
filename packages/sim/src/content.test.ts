@@ -15,6 +15,7 @@ import {
 } from './fixtures.ts';
 import { TankSdf, type TankDimensions } from './sdf.ts';
 import { toSimSpecies } from './species.ts';
+import { FishState } from './snapshot.ts';
 import { WAVE_MAKER } from './waveMaker.ts';
 import { World } from './world.ts';
 
@@ -283,6 +284,51 @@ describe('a cory due a breath under the show-tank driftwood', { timeout: LONG },
       expect(breathS).toBeLessThan(BREATH_WITHIN_S);
     },
   );
+});
+
+describe('a cory startled on its way up for air', { timeout: LONG }, () => {
+  const base = byId('bronze-corydoras');
+  const LONGEST_WAIT_S = BEHAVIOUR.gulpOverdueS + 2 * BEHAVIOUR.gulpTimeoutS;
+
+  it.each([1, 2, 3, 4, 5])('keeps the breath due and still surfaces (#1283): seed %i', (seed) => {
+    // Far above the content cap, so the first breath falls due within a step or two.
+    const cory = { ...base, behaviour: { ...base.behaviour, airGulp: { perHour: 3600 } } };
+    const w = new World({
+      seed,
+      tank: SHOW_TANK,
+      species: [cory],
+      fish: spawnMany(cory.id, 1),
+    });
+    const wait = w.behaviour.gulpWait;
+    const startled = w.behaviour.startledAt;
+    let rising = 0;
+    for (let t = 0; t < 30 * 60 && rising < 15; t++) {
+      w.step();
+      rising = w.state[0] === FishState.Gulp && (wait[0] ?? 0) > 0 ? rising + 1 : 0;
+    }
+    expect(rising).toBe(15);
+
+    const p = w.position;
+    w.startle({ position: [p[0] ?? 0, p[1] ?? 0, (p[2] ?? 0) + 0.05], intensity: 1 });
+    w.step();
+    expect(startled[0]).toBe(w.tick - 1);
+
+    let before = wait[0] ?? 0;
+    let waited = Infinity;
+    let frozen = 0;
+    for (let t = 1; t <= 30 * 2 * LONGEST_WAIT_S; t++) {
+      w.step();
+      const now = wait[0] ?? 0;
+      if (now === 0) {
+        waited = before;
+        break;
+      }
+      if (now === before) frozen++;
+      before = now;
+    }
+    expect(frozen).toBe(0);
+    expect(waited).toBeLessThan(LONGEST_WAIT_S);
+  });
 });
 
 describe('every shipped species in a full-power wave maker current', { timeout: LONG }, () => {

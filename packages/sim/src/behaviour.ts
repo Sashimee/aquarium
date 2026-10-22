@@ -1250,6 +1250,9 @@ export class Behaviour {
     this.habituation[i] = at(this.habituation, i) + 1;
     this.startledAt[i] = this.host.tick;
     this.territoryPhase[i] = TerritoryPhase.Idle;
+    const gulping = at(this.gulpPhase, i);
+    // A breath cut off on the way up is still owed: its wait keeps counting toward gulpOverdueS.
+    if (gulping === GulpPhase.Ascend || gulping === GulpPhase.Climb) this.gulpDue[i] = 1;
     this.gulpPhase[i] = GulpPhase.None;
     if (this.grazePhase[i] !== GrazePhase.Roam) this.grazePhase[i] = GrazePhase.None;
     this.excursion[i] = 0;
