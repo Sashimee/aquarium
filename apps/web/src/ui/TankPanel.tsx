@@ -21,6 +21,7 @@ import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { doseOptions } from '../sync/doses';
 import { priceOrFree, priceText, tankPrice } from '../sync/economy';
 import { checkTankName, suggestTankName } from '../sync/naming';
+import { salinityNotice, type SalinityNotice } from '../sync/salinityCare';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth, useBridge } from './context';
 import { CoralSection } from './Corals';
@@ -150,7 +151,13 @@ function CareSections({ session, state, tank }: Ready) {
   const water = waterReport(tank.water, tank, state.species);
   return (
     <>
-      <Care session={session} state={state} tank={tank} water={water} />
+      <Care
+        session={session}
+        state={state}
+        tank={tank}
+        water={water}
+        salinity={salinityNotice(tank, state.species)}
+      />
       <WaterTest tank={tank} species={state.species} />
       <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
       <GiftNotice session={session} />
@@ -376,15 +383,18 @@ function Care({
   state,
   tank,
   water,
+  salinity,
 }: {
   session: TankSession;
   state: SessionState;
   tank: Tank;
   water: ReturnType<typeof waterReport>;
+  salinity: SalinityNotice | null;
 }) {
   const id = useId();
   const { spend, notice } = useSpend(session, state.balance);
   const doses = doseOptions(tank, BUNDLED_CHEMISTRY, BUNDLED_ECONOMY);
+  const saltDose = doses.find((d) => d.type === 'salt_dose');
   return (
     <section aria-labelledby={`${id}-h`} className="block">
       <h3 id={`${id}-h`}>Water and chores</h3>
@@ -394,6 +404,22 @@ function Care({
         <li>Algae: {QUALITY_LABEL[water.algae]}</li>
         <li>Leftover food: {QUALITY_LABEL[water.leftoverFood]}</li>
       </ul>
+      {salinity && (
+        <p className={salinity.severity === 'danger' ? 'field-error' : 'hint'} role="status">
+          {salinity.text}
+          {saltDose && salinity.direction === 'low' && (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={() => document.getElementById(`${id}-${saltDose.type}`)?.focus()}
+              >
+                Go to {saltDose.label.toLowerCase()}
+              </button>
+            </>
+          )}
+        </p>
+      )}
       <div className="care-actions">
         <button
           type="button"
@@ -429,6 +455,7 @@ function Care({
               </div>
               <button
                 type="button"
+                id={`${id}-${dose.type}`}
                 data-action={dose.type}
                 disabled={state.busy || dose.disabledReason !== null}
                 onClick={() =>
