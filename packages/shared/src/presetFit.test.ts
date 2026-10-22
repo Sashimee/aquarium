@@ -41,4 +41,12 @@ describe('presetFit', () => {
       expect(fitPresetItem({ ...item, tintSeed: 5 }, size).tintSeed).toBe(5);
     },
   );
+
+  it('keeps a perch at its authored scale while still stretching its position', () => {
+    const perch: DecorItem = { ...item, assetId: 'mangrove-stump', scale: 1.4, perch: true };
+    const fitted = fitPresetItem(perch, 'nano30');
+    expect(fitted.scale).toBe(1.4);
+    expect(fitted.perch).toBe(true);
+    expect(fitted.position[0]).toBeCloseTo(0.2, 9);
+  });
 });
