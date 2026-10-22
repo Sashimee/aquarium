@@ -3,7 +3,7 @@ import { Box3, Color, DirectionalLight, Vector3 } from 'three/webgpu';
 import type { DecorItem } from '@aquarium/shared';
 import { WaterMedium } from '../engine/water/medium';
 import type { Engine } from '../engine/Engine';
-import { anemoneAnchor, anemoneCollider, anemoneReach } from './anemone';
+import { anemoneAnchor, anemoneCollider, anemoneReach, LEAN_SECONDS } from './anemone';
 import type { CatalogEntry } from './assets';
 import { applyBiomeLighting } from './lighting';
 
@@ -44,6 +44,15 @@ describe('anemone hosting data', () => {
     const brisk = { ...calm, speed: 0.1, gustDepth: 0.5 };
     expect(anemoneReach(entry, item, brisk)).toBeGreaterThan(anemoneReach(entry, item, calm));
     expect(anemoneReach(entry, item, calm)).toBeGreaterThan(0.15 * item.scale);
+  });
+
+  it('adds the sideways meander to the ambient lean', () => {
+    const tall: CatalogEntry = { ...entry, bounds: { min: [-0.1, 0, -0.1], max: [0.1, 10, 0.1] } };
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    const gusty = { ...still, speed: 0.05, gustDepth: 0.5 };
+    const flowOnly = gusty.speed * (1 + gusty.gustDepth) * LEAN_SECONDS;
+    const extra = anemoneReach(tall, item, gusty) - anemoneReach(tall, item, still);
+    expect(extra).toBeGreaterThan(flowOnly + 1e-6);
   });
 
   it('stays finite at scale 0 with no pump and no gust', () => {
