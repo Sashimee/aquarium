@@ -3,6 +3,7 @@ import { hashKey } from './plantGrowth';
 import { mulberry32 } from './placement';
 
 const MAX_ANCESTORS = 64;
+const MIN_FRAGMENT_SCALE_FRACTION = 0.25;
 
 export interface CoralSlot {
   readonly assetId: string;
@@ -99,7 +100,9 @@ export function placeFragments(
       position: [x, ground(x, z), z],
       rotationY: mulberry32(hashKey(coral.key))() * Math.PI * 2,
     };
-    const scale = Math.min(root.item.scale * clampedSize(coral), cap(standing));
+    const wanted = root.item.scale * clampedSize(coral);
+    const floor = Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION);
+    const scale = Math.max(floor, Math.min(wanted, cap(standing)));
     placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;

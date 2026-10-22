@@ -131,7 +131,7 @@ describe('Hardscape.setBleach', () => {
     expect(material.emissive.equals(glowing)).toBe(true);
   });
 
-  it('never pushes a channel past the albedo it started with', () => {
+  it('keeps the red channel at or above its live value and every channel within 1', () => {
     const { hardscape, material } = placed('acropora-cytherea');
     const live = material.color.clone();
     for (const bleach of [0.2, 0.6, 1]) {
