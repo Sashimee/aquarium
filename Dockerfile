@@ -4,6 +4,8 @@ RUN corepack enable
 WORKDIR /repo
 
 FROM base AS build
+COPY package.json ./
+RUN for i in 1 2 3 4 5; do pnpm --version && exit 0; echo "pnpm binary fetch failed (attempt $i), retrying" >&2; sleep $((i * 5)); done; exit 1
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 COPY . .
