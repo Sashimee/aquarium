@@ -5,6 +5,9 @@ import {
   paymentsStateSchema,
   subscriptionCheckoutRequestSchema,
   checkoutResponseSchema,
+  orderParamsSchema,
+  orderStatusResponseSchema,
+  type OrderStatus,
   type Economy,
   type PaymentsState,
 } from '@aquarium/shared';
@@ -16,18 +19,20 @@ import { apiError, HttpError } from '../errors.ts';
 import type { Mailer } from '../mail.ts';
 import type { Limit, RateLimiter } from '../rate-limit.ts';
 import { describeProviderError, WebhookSignatureError, type PaymentProvider } from './provider.ts';
-import { settleEvent, type Receipt } from './settle.ts';
+import { settleEvent, takenBack, type Receipt } from './settle.ts';
 
 export interface PaymentsLimits {
   checkout: Limit;
   cancel: Limit;
   settings: Limit;
+  orders: Limit;
 }
 
 export const DEFAULT_PAYMENTS_LIMITS: PaymentsLimits = {
   checkout: { max: 10, windowMs: 60 * 60_000 },
   cancel: { max: 10, windowMs: 60 * 60_000 },
   settings: { max: 30, windowMs: 60_000 },
+  orders: { max: 60, windowMs: 60_000 },
 };
 
 export interface PaymentUser {
@@ -154,7 +159,7 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     });
   }
 
-  const successUrl = `${deps.appOrigin}/?payment=success`;
+  const successUrl = `${deps.appOrigin}/?payment=success&session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = `${deps.appOrigin}/?payment=cancelled`;
 
   app.get(
@@ -163,6 +168,68 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
       const user = await authorize(req, false);
       throttle(user.id, 'settings');
       return state(user.id);
+    }),
+  );
+
+  const notFound = () => new HttpError(404, apiError('not_found', 'No such order.'));
+
+  async function chargeStatus(chargeId: string, amountCents: number): Promise<OrderStatus> {
+    const taken = await db.transaction((tx) => takenBack(tx, chargeId));
+    return amountCents > 0 && taken.cents >= amountCents ? 'refunded' : 'paid';
+  }
+
+  app.get(
+    '/api/payments/orders/:sessionId',
+    guarded(async (req) => {
+      const payments = requireProvider();
+      const user = await authorize(req, false);
+      throttle(user.id, 'orders');
+      const parsed = orderParamsSchema.safeParse(req.params);
+      if (!parsed.success) throw notFound();
+      const { sessionId } = parsed.data;
+
+      const [charge] = await db
+        .select({
+          userId: schema.paymentCharges.userId,
+          amountCents: schema.paymentCharges.amountCents,
+        })
+        .from(schema.paymentCharges)
+        .where(eq(schema.paymentCharges.id, sessionId));
+      if (charge) {
+        if (charge.userId !== user.id) throw notFound();
+        return orderStatusResponseSchema.parse({
+          status: await chargeStatus(sessionId, charge.amountCents),
+        });
+      }
+
+      const session = await checkout(
+        () => payments.retrieveCheckoutSession(sessionId),
+        'The payment provider did not answer. Try again in a moment.',
+      );
+      if (!session || session.userId !== user.id) throw notFound();
+      if (
+        session.status === 'expired' ||
+        (session.status === 'complete' && session.paymentStatus === 'unpaid')
+      )
+        return orderStatusResponseSchema.parse({ status: 'failed' });
+      if (session.subscriptionId) {
+        const [row] = await db
+          .select({
+            paidInvoiceId: schema.clubSubscriptions.paidInvoiceId,
+            paidRevoked: schema.clubSubscriptions.paidRevoked,
+          })
+          .from(schema.clubSubscriptions)
+          .where(
+            and(
+              eq(schema.clubSubscriptions.id, session.subscriptionId),
+              eq(schema.clubSubscriptions.userId, user.id),
+            ),
+          );
+        if (row?.paidInvoiceId) {
+          return orderStatusResponseSchema.parse({ status: row.paidRevoked ? 'refunded' : 'paid' });
+        }
+      }
+      return orderStatusResponseSchema.parse({ status: 'pending' });
     }),
   );
 
@@ -285,18 +352,15 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     }),
   );
 
-  async function checkout<T>(work: () => Promise<T>): Promise<T> {
+  async function checkout<T>(
+    work: () => Promise<T>,
+    message = 'The payment provider did not answer. Nothing was charged; try again.',
+  ): Promise<T> {
     try {
       return await work();
     } catch (err) {
       app.log.error(describeProviderError(err), 'payment provider call failed');
-      throw new HttpError(
-        502,
-        apiError(
-          'internal',
-          'The payment provider did not answer. Nothing was charged; try again.',
-        ),
-      );
+      throw new HttpError(502, apiError('internal', message));
     }
   }
 
