@@ -23,7 +23,7 @@ import { checkTankName, suggestTankName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
 import { FishCards } from './FishCard';
-import { AcceptsGiftsToggle, GiftFishButton, GiftOffers } from './Gifts';
+import { AcceptsGiftsToggle, GiftFishButton, GiftNotice, GiftOffers } from './Gifts';
 import { Link } from './screens';
 import WaterTest from './WaterTest';
 import { ShareSection } from './ShareSection';
@@ -149,6 +149,7 @@ function CareSections({ session, state, tank }: Ready) {
     <>
       <Care session={session} state={state} water={water} />
       <WaterTest tank={tank} species={state.species} />
+      <GiftNotice session={session} />
       <FishCards
         fish={tank.fish}
         names={names}
