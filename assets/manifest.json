@@ -4864,7 +4864,14 @@
       "textures": "none: 24 flat-colour materials (base colour 0.55, 0.76, 0.29)",
       "rigged": false,
       "notes": "Echinodorus sp. (Amazon sword) rosette for the Rio Negro blackwater and freshwater presets. Licence (CC Attribution 4.0, downloadable) read from the Sketchfab API model record and the bundled license.txt. Verified from the downloaded glTF: 3632 triangles, 24 meshes, no skins, no animations, no images. The raw bounds are about 55 x 161 x 11 units (unscaled, units unknown), so the pipeline must normalise the scale. Flat green with no texture: the pipeline should vary the 24 per-leaf base colours slightly and may add a leaf-vein texture. Zip sha256 4f1cd1f2bfea8fb31e84bdb9b481215080912ffec7b428a9aca68bbe929fca7c; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
+        "no textures: flat base colours kept as material factors, PBR metallic-roughness",
+        "scale normalised: the source is unitless and about 55 x 161 x 11 units, so the rosette is scaled to 0.3 m tall",
+        "colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower"
+      ],
       "status": "downloaded",
       "files": [
         {

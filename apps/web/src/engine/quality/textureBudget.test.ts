@@ -7,6 +7,7 @@ import { EventBus, type EngineEvents } from '../events';
 import { backgroundFile, parseBackgroundFiles, posterTier } from '../tank/background';
 import { parseFishAssets } from '../../fish/assetIndex';
 import { fishTextureSize } from '../../fish/assets';
+import { droppedNormalLevels } from '../../fish/impostor';
 import { DEMO_STOCKS } from '../../fish/demoStock';
 import {
   ASSET_BASE,
@@ -60,15 +61,25 @@ function ktx2Layout(bytes: Uint8Array, label: string): Ktx2Layout {
  */
 type DecodeTarget = 'etc' | 'bc' | 'rgba8';
 
-/** Bytes the GPU holds once KTX2Loader has transcoded the file, mips included. */
-function decodedBytes(layout: Ktx2Layout, target: DecodeTarget, label: string): number {
+/**
+ * Bytes the GPU holds once KTX2Loader has transcoded the file, mips included, less the
+ * `dropped` top levels the engine does not upload.
+ */
+function decodedBytes(
+  layout: Ktx2Layout,
+  target: DecodeTarget,
+  label: string,
+  dropped = 0,
+): number {
   let blockBytes: number;
   if (layout.colorModel === KHR_DF_MODEL_ETC1S)
     blockBytes = target === 'etc' && layout.samples === 1 ? 8 : 16;
   else if (layout.colorModel === KHR_DF_MODEL_UASTC) blockBytes = 16;
   else throw new Error(`${label}: colour model ${layout.colorModel} is not a Basis texture`);
   let total = 0;
-  for (let level = 0; level < layout.levels; level++) {
+  if (dropped >= layout.levels)
+    throw new Error(`${label}: cannot drop ${dropped} of ${layout.levels} levels`);
+  for (let level = dropped; level < layout.levels; level++) {
     const w = Math.max(1, layout.width >> level);
     const h = Math.max(1, layout.height >> level);
     total += target === 'rgba8' ? w * h * 4 : Math.ceil(w / 4) * Math.ceil(h / 4) * blockBytes;
@@ -109,6 +120,7 @@ const BIOMES = Object.keys(BACKGROUND_IDS) as PlayableBiome[];
 interface TextureUse {
   readonly owner: string;
   readonly file: string;
+  readonly droppedLevels?: number;
 }
 
 /**
@@ -200,8 +212,16 @@ function tankTextures(
         maps.add(fishSize === 2048 ? (entry.sharperTextures.get(small) ?? small) : small);
       }
     }
-    if (entry.impostor) maps.add(entry.impostor.albedoFile).add(entry.impostor.normalFile);
     for (const file of maps) uses.push({ owner: entry.id, file });
+    const { impostor } = entry;
+    if (impostor) {
+      uses.push({ owner: entry.id, file: impostor.albedoFile });
+      uses.push({
+        owner: entry.id,
+        file: impostor.normalFile,
+        droppedLevels: droppedNormalLevels(impostor.frameSize),
+      });
+    }
   }
   const largestBackdrop = BACKGROUND_IDS[biome]
     .map((id) => backgroundFile(backgrounds, id, posterTier(tier, size)))
@@ -222,7 +242,10 @@ function layoutOf(file: string): Ktx2Layout {
 }
 
 function mib(uses: readonly TextureUse[], target: DecodeTarget): number {
-  const bytes = uses.reduce((sum, u) => sum + decodedBytes(layoutOf(u.file), target, u.file), 0);
+  const bytes = uses.reduce(
+    (sum, u) => sum + decodedBytes(layoutOf(u.file), target, u.file, u.droppedLevels),
+    0,
+  );
   return bytes / MIB;
 }
 
@@ -260,6 +283,11 @@ describe('decodedBytes', () => {
 
   it('counts four bytes a texel when nothing is transcoded to a compressed format', () => {
     expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 1), 'rgba8', 'rgb')).toBe((64 + 16) * 4);
+  });
+
+  it('leaves out the top levels the engine does not upload', () => {
+    expect(decodedBytes(layout(KHR_DF_MODEL_UASTC, 1), 'bc', 'normal', 1)).toBe(16);
+    expect(() => decodedBytes(layout(KHR_DF_MODEL_UASTC, 1), 'bc', 'normal', 2)).toThrow(/normal/);
   });
 
   it('rounds a level smaller than a block up to one block', () => {
