@@ -727,13 +727,15 @@ describe('wallet, shop and ledger', () => {
       const preset = presets.freshwater;
       if (!preset) throw new Error('freshwater preset missing');
       const extra = { assetId: 'java-fern', position: [0.1, 0.05, 0] };
-      expect(
-        (
-          await call(h, who, 'PATCH', `/api/tanks/${tank.id}`, {
-            decorLayout: [...preset.decor, extra],
-          })
-        ).statusCode,
-      ).toBe(403);
+      const save = () =>
+        call(h, who, 'PATCH', `/api/tanks/${tank.id}`, {
+          decorLayout: [...preset.decor, extra],
+        });
+      expect((await save()).statusCode).toBe(403);
+      const before = await balance(h, who);
+      expect((await purchase(h, who, 'plant:java-fern', tank.id)).statusCode).toBe(200);
+      expect(await balance(h, who)).toBe(before - (economy.items.plant.prices['java-fern'] ?? 0));
+      expect((await save()).statusCode).toBe(200);
     });
 
     it('shares one licence between every procedural euphyllia piece', async () => {

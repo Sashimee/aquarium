@@ -113,9 +113,10 @@ export function registerShopRoutes(ctx: ShopContext): void {
     user: SessionUser,
     body: z.infer<typeof purchaseRequestSchema>,
     item: Item,
+    { userRowLocked }: { userRowLocked: boolean },
   ): Promise<PurchaseResponse> {
     const nowMs = clock.now();
-    await lockWallet(tx, economy, user.id, nowMs, ticked !== null);
+    await lockWallet(tx, economy, user.id, nowMs, userRowLocked);
     const replay = await findReplay(tx, user.id, body.idempotencyKey, body.itemRef);
     if (replay) return respond(replay);
 
@@ -210,9 +211,13 @@ export function registerShopRoutes(ctx: ShopContext): void {
       throttle(user.id, 'purchase');
       const item = parseItem(economy, body.itemRef);
       if (body.tankId === undefined) {
-        return database.db.transaction((tx) => buy(tx, null, user, body, item));
+        return database.db.transaction((tx) =>
+          buy(tx, null, user, body, item, { userRowLocked: false }),
+        );
       }
-      return withTank(user, body.tankId, (tx, ticked) => buy(tx, ticked, user, body, item));
+      return withTank(user, body.tankId, (tx, ticked) =>
+        buy(tx, ticked, user, body, item, { userRowLocked: true }),
+      );
     }),
   );
 
