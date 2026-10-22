@@ -23,6 +23,7 @@ export interface SettleDeps {
   provider: PaymentProvider;
   now: () => number;
   log: (message: string, context?: Record<string, string | number>) => void;
+  logError: (message: string, context?: Record<string, string | number>) => void;
 }
 
 const idOf = (ref: string | { id: string } | null | undefined): string | null =>
@@ -102,7 +103,9 @@ async function creditPack(
     return null;
   }
   if (promised === null) {
-    deps.log('checkout session without a price promise ignored', { session: session.id });
+    deps.logError('paid checkout session without a price promise was not credited', {
+      session: session.id,
+    });
     return null;
   }
   const pack = { id: packId, ...promised };
@@ -216,8 +219,8 @@ async function recordInvoicePaid(
       .returning({ id: schema.paymentCharges.id });
     const existing = await lockSubscription(tx, subscriptionId);
     if (created.length === 0) {
-      const duplicate = existing !== undefined && existing.paidEnd === null;
-      return { receipt: null, unclaimed: owner === null || duplicate };
+      const neverGranted = existing ? existing.paidEnd === null : owner === null;
+      return { receipt: null, unclaimed: neverGranted };
     }
 
     const [rival] = owner
@@ -235,7 +238,7 @@ async function recordInvoicePaid(
           )
           .limit(1)
       : [];
-    if (rival) {
+    if (rival || !owner) {
       // No paid window is stored, so this subscription never earns the daily Pearls.
       await tx
         .insert(schema.clubSubscriptions)

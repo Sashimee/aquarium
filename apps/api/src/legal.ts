@@ -387,8 +387,12 @@ export function registerLegalRoutes(deps: LegalDeps): void {
 
     // A subscription left running would keep billing an account that no longer exists, so a failed
     // cancel, or payments being switched off while one still runs, stops the deletion.
-    const running = await db
-      .select({ id: schema.clubSubscriptions.id })
+    const candidates = await db
+      .select({
+        id: schema.clubSubscriptions.id,
+        status: schema.clubSubscriptions.status,
+        createdAt: schema.clubSubscriptions.createdAt,
+      })
       .from(schema.clubSubscriptions)
       .where(
         and(
@@ -402,6 +406,14 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           ]),
         ),
       );
+    // Stripe expires an unpaid checkout subscription after 24 h, but with payments off the webhook
+    // that would record it never arrives, so an old incomplete row must not block deletion forever.
+    const running = candidates.filter(
+      (row) =>
+        Boolean(deps.payments) ||
+        row.status !== 'incomplete' ||
+        Date.now() - row.createdAt.getTime() < 24 * 3_600_000,
+    );
     if (running.length > 0) {
       if (!deps.payments) {
         app.log.error('account deletion refused: a subscription runs but payments are off');

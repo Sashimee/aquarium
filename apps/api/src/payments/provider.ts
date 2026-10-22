@@ -188,10 +188,20 @@ export function createStripeProvider(options: StripeProviderOptions): PaymentPro
         const paymentIntent = payment.payment.payment_intent;
         if (payment.payment.type !== 'payment_intent' || !paymentIntent) continue;
         const id = typeof paymentIntent === 'string' ? paymentIntent : paymentIntent.id;
-        await stripe.refunds.create(
-          { payment_intent: id },
-          { idempotencyKey: `unclaimed-subscription:${invoiceId}:${id}` },
-        );
+        try {
+          await stripe.refunds.create(
+            { payment_intent: id },
+            { idempotencyKey: `unclaimed-subscription:${invoiceId}:${id}` },
+          );
+        } catch (err) {
+          if (
+            err instanceof Stripe.errors.StripeInvalidRequestError &&
+            err.code === 'charge_already_refunded'
+          ) {
+            continue;
+          }
+          throw err;
+        }
       }
     },
 

@@ -710,6 +710,23 @@ describe('Aquarist Club', () => {
       expect(res.statusCode, res.body).toBeLessThan(300);
     };
 
+    it('does not refund an invoice that was granted when it is redelivered after the account is deleted', async () => {
+      const who = await account(h);
+      const ids = newIds();
+      const now = h.clock.now();
+      const event = buildEvent(
+        h,
+        'invoice.paid',
+        invoiceObject(who, ids, { start: seconds(now), end: seconds(now + 30 * DAY_MS) }),
+      );
+      await deliverOk(h, kit, event);
+      await deleteAccount(who);
+      const before = kit.effects.length;
+      await deliverOk(h, kit, event);
+      expect(kit.effects).toHaveLength(before);
+      expect(kit.effects).not.toContain(`refund:${ids.invoice}`);
+    });
+
     it('is cancelled and refunded when its first invoice arrives after the account is gone', async () => {
       const who = await account(h);
       await deleteAccount(who);
@@ -907,5 +924,34 @@ describe('signature gate', () => {
     );
     expect(res.statusCode).toBe(400);
     expect(await balance(who)).toBe(start);
+  });
+});
+
+describe('a paid session without a price promise', () => {
+  it('is logged at error level with the session id', async () => {
+    const lines: string[] = [];
+    const localKit = paymentsKit();
+    const local = await createHarness({
+      payments: localKit.provider,
+      logStream: { write: (chunk) => void lines.push(chunk) },
+    });
+    try {
+      const who = await account(local);
+      const ids = newIds();
+      const base = sessionObject(who, PACK, ids);
+      const rest: Record<string, string> = { ...base.metadata };
+      delete rest['pearls'];
+      await deliverOk(
+        local,
+        localKit,
+        buildEvent(local, 'checkout.session.completed', { ...base, metadata: rest }),
+      );
+      const entry = lines
+        .map((line) => JSON.parse(line) as { level: number; session?: string })
+        .find((e) => e.session === ids.session);
+      expect(entry?.level).toBe(50);
+    } finally {
+      await local.close();
+    }
   });
 });

@@ -8,7 +8,7 @@ import {
   type Economy,
   type PaymentsState,
 } from '@aquarium/shared';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Clock } from '../clock.ts';
 import { schema, type Database } from '../db/index.ts';
@@ -131,7 +131,10 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
           inArray(schema.clubSubscriptions.status, [...REVIVABLE, 'canceled', 'paused']),
         ),
       )
-      .orderBy(desc(schema.clubSubscriptions.createdAt))
+      .orderBy(
+        sql`${schema.clubSubscriptions.paidEnd} desc nulls last`,
+        desc(schema.clubSubscriptions.createdAt),
+      )
       .limit(1);
     return row;
   }
@@ -341,6 +344,7 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
             provider,
             now: () => clock.now(),
             log: (message, context) => app.log.warn({ ...context }, message),
+            logError: (message, context) => app.log.error({ ...context }, message),
           },
           event,
         );

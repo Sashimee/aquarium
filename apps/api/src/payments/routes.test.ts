@@ -22,6 +22,7 @@ import {
   paymentsKit,
   sessionObject,
   invoiceObject,
+  subscriptionObject,
   seconds,
   sign,
   DAY_MS,
@@ -321,6 +322,60 @@ describe('payments enabled', () => {
     expect(calls).toContain(`cancel-now:${ids.subscription}`);
   });
 
+  it('keeps showing, cancelling and guarding the paid subscription after a twin', async () => {
+    const who = await account(h);
+    const first = newIds();
+    const twin = newIds();
+    const now = h.clock.now();
+    for (const ids of [first, twin]) {
+      await deliverOk(
+        h,
+        kit,
+        buildEvent(
+          h,
+          'invoice.paid',
+          invoiceObject(who, ids, { start: seconds(now), end: seconds(now + 30 * DAY_MS) }),
+        ),
+      );
+    }
+    kit.subscriptions.set(twin.subscription, { status: 'canceled', cancelAtPeriodEnd: false });
+    await deliverOk(
+      h,
+      kit,
+      buildEvent(
+        h,
+        'customer.subscription.deleted',
+        subscriptionObject(who, twin.subscription, 'canceled'),
+      ),
+    );
+
+    const state = paymentsStateSchema.parse(
+      (await call(h, who, 'GET', '/api/payments/state')).json(),
+    );
+    expect(state.subscription).toMatchObject({ status: 'active', cancelAtPeriodEnd: false });
+    expect(state.subscription?.paidUntil).not.toBeNull();
+
+    const again = await call(h, who, 'POST', '/api/payments/checkout/subscription', {
+      consent: CONSENT,
+    });
+    expect(again.statusCode).toBe(403);
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    const blocked = await call(h, who, 'POST', '/api/payments/checkout/subscription', {
+      consent: CONSENT,
+    });
+    expect(blocked.statusCode, blocked.body).toBe(409);
+
+    const cancelled = await call(h, who, 'POST', '/api/payments/subscription/cancel');
+    expect(cancelled.statusCode, cancelled.body).toBe(200);
+    expect(paymentsStateSchema.parse(cancelled.json()).subscription?.cancelAtPeriodEnd).toBe(true);
+    expect(calls).toContain(`cancel:${first.subscription}`);
+    expect(calls).not.toContain(`cancel:${twin.subscription}`);
+  });
+
+  it('refunds against stripe-mock with the request shape Stripe validates', async () => {
+    await expect(kit.real.refundInvoice('in_mock')).resolves.toBeUndefined();
+  });
+
   it('answers 502 when the provider hands back a URL that is not https', async () => {
     const who = await account(h);
     await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
@@ -415,6 +470,19 @@ describe('payments disabled with a running subscription', () => {
     h = await createHarness();
   });
   afterAll(() => h.close());
+
+  it('does not let an incomplete subscription older than a day block the deletion', async () => {
+    const who = await account(h);
+    await h.database.db.insert(schema.clubSubscriptions).values({
+      id: newIds().subscription,
+      userId: who.userId,
+      status: 'incomplete',
+      statusEventAt: new Date(h.clock.now()),
+      createdAt: new Date(Date.now() - 2 * DAY_MS),
+    });
+    const res = await call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+    expect(res.statusCode, res.body).toBeLessThan(300);
+  });
 
   it('refuses to delete the account rather than leave a subscription billing', async () => {
     const who = await account(h);
