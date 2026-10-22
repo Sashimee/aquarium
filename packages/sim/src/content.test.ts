@@ -57,6 +57,15 @@ const MVP_ROSTER = [
   ['yellow-tang', 'Zebrasoma flavescens', 'reef'],
 ] as const;
 
+const CICHLID_ROSTER = [
+  ['altolamprologus-calvus', 'Altolamprologus calvus', 'cichlid'],
+  ['labidochromis-caeruleus', 'Labidochromis caeruleus', 'cichlid'],
+  ['melanochromis-auratus', 'Melanochromis auratus', 'cichlid'],
+  ['neolamprologus-brichardi', 'Neolamprologus brichardi', 'cichlid'],
+  ['neolamprologus-multifasciatus', 'Neolamprologus multifasciatus', 'cichlid'],
+  ['pseudotropheus-demasoni', 'Chindongo demasoni', 'cichlid'],
+] as const;
+
 function sortedKeysDeep(value: unknown): boolean {
   if (Array.isArray(value)) return value.every(sortedKeysDeep);
   if (value === null || typeof value !== 'object') return true;
@@ -69,11 +78,11 @@ function sortedKeysDeep(value: unknown): boolean {
 }
 
 describe('content/species', () => {
-  it('ships the MVP roster', () => {
-    const shipped = roster
-      .map(({ species: s }) => [s.id, s.scientificName, s.biome])
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-    expect(shipped).toEqual(MVP_ROSTER.map((r) => [...r]));
+  it('ships the MVP and expansion rosters', () => {
+    const byId = (a: readonly string[], b: readonly string[]) =>
+      String(a[0]).localeCompare(String(b[0]));
+    const shipped = roster.map(({ species: s }) => [s.id, s.scientificName, s.biome]).sort(byId);
+    expect(shipped).toEqual([...MVP_ROSTER, ...CICHLID_ROSTER].map((r) => [...r]).sort(byId));
   });
 
   it.each(roster)('$file is valid, named by id and keeps sorted keys', ({ file, raw, species }) => {

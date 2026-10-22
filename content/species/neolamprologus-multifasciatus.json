@@ -1,0 +1,71 @@
+{
+  "behaviour": {
+    "boldness": 0.3,
+    "curiosity": 0.6,
+    "depthBand": [0, 0.2],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.25,
+    "preferredZone": "bottom",
+    "refuge": {
+      "afterStartleS": 30
+    },
+    "station": {
+      "radiusBodyLengths": 2
+    },
+    "territorial": true,
+    "traits": ["cave-dweller"]
+  },
+  "biome": "cichlid",
+  "breeding": {
+    "broodSize": [5, 20],
+    "fryGrowth": {
+      "adultAfterDays": 180,
+      "juvenileAfterDays": 21
+    },
+    "intervalDays": 28,
+    "minAgeDays": 180,
+    "mode": "substrate-spawner",
+    "needsCave": true,
+    "temperatureC": [24, 27]
+  },
+  "chemistry": {
+    "khMin": 8,
+    "nitriteTolerance": 0.25,
+    "phRange": [8, 9.2],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)",
+      "Konings 2015, Tanganyika Cichlids in their Natural Habitat, 3rd ed. (Lake Tanganyika water: pH 8.6-9.2, 24-27 C)"
+    ],
+    "temperatureC": [23, 27]
+  },
+  "commonName": "Multi shell-dweller",
+  "id": "neolamprologus-multifasciatus",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.12,
+    "bioload": 0.2,
+    "birthSizeM": 0.006,
+    "diet": ["brine-shrimp", "flakes", "pellets"],
+    "growthPerDay": 0.00011,
+    "healthLossPerHourStarving": 0.01,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0085,
+    "lifespanDays": 1825,
+    "maxSizeM": 0.032,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.025,
+    "cruiseSpeedMps": 0.035,
+    "gait": "hover",
+    "massKg": 0.0005,
+    "maxPitchDeg": 50,
+    "maxSpeedMps": 0.35,
+    "maxTurnRateDegPerS": 450,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Neolamprologus multifasciatus"
+}

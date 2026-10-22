@@ -1,0 +1,68 @@
+{
+  "behaviour": {
+    "boldness": 0.35,
+    "curiosity": 0.5,
+    "depthBand": [0.05, 0.6],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.5,
+    "preferredZone": "mid",
+    "refuge": {
+      "afterStartleS": 40
+    },
+    "territorial": false,
+    "traits": ["cave-dweller"]
+  },
+  "biome": "cichlid",
+  "breeding": {
+    "broodSize": [20, 60],
+    "fryGrowth": {
+      "adultAfterDays": 540,
+      "juvenileAfterDays": 45
+    },
+    "intervalDays": 35,
+    "minAgeDays": 540,
+    "mode": "substrate-spawner",
+    "needsCave": true,
+    "temperatureC": [24, 27]
+  },
+  "chemistry": {
+    "khMin": 8,
+    "nitriteTolerance": 0.25,
+    "phRange": [8, 9.2],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)",
+      "Konings 2015, Tanganyika Cichlids in their Natural Habitat, 3rd ed. (Lake Tanganyika water: pH 8.6-9.2, 24-27 C)"
+    ],
+    "temperatureC": [23, 27]
+  },
+  "commonName": "Calvus cichlid",
+  "id": "altolamprologus-calvus",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.12,
+    "bioload": 1.3,
+    "birthSizeM": 0.008,
+    "diet": ["brine-shrimp", "bloodworms", "pellets"],
+    "growthPerDay": 0.00012,
+    "healthLossPerHourStarving": 0.007,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0055,
+    "lifespanDays": 4380,
+    "maxSizeM": 0.1097,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.08,
+    "cruiseSpeedMps": 0.03,
+    "gait": "hover",
+    "massKg": 0.018,
+    "maxPitchDeg": 50,
+    "maxSpeedMps": 0.6,
+    "maxTurnRateDegPerS": 200,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Altolamprologus calvus"
+}

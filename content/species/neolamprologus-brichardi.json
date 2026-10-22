@@ -1,0 +1,71 @@
+{
+  "behaviour": {
+    "boldness": 0.5,
+    "curiosity": 0.5,
+    "depthBand": [0.15, 0.7],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.45,
+    "preferredZone": "mid",
+    "refuge": {
+      "afterStartleS": 20
+    },
+    "station": {
+      "radiusBodyLengths": 2.5
+    },
+    "territorial": true,
+    "traits": ["cave-dweller"]
+  },
+  "biome": "cichlid",
+  "breeding": {
+    "broodSize": [10, 30],
+    "fryGrowth": {
+      "adultAfterDays": 240,
+      "juvenileAfterDays": 30
+    },
+    "intervalDays": 30,
+    "minAgeDays": 240,
+    "mode": "substrate-spawner",
+    "needsCave": true,
+    "temperatureC": [24, 27]
+  },
+  "chemistry": {
+    "khMin": 8,
+    "nitriteTolerance": 0.25,
+    "phRange": [8, 9.2],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)",
+      "Konings 2015, Tanganyika Cichlids in their Natural Habitat, 3rd ed. (Lake Tanganyika water: pH 8.6-9.2, 24-27 C)"
+    ],
+    "temperatureC": [23, 27]
+  },
+  "commonName": "Princess of Burundi",
+  "id": "neolamprologus-brichardi",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.12,
+    "bioload": 0.7,
+    "birthSizeM": 0.008,
+    "diet": ["brine-shrimp", "flakes", "pellets", "bloodworms"],
+    "growthPerDay": 0.00016,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.007,
+    "lifespanDays": 2920,
+    "maxSizeM": 0.0682,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.055,
+    "cruiseSpeedMps": 0.05,
+    "gait": "hover",
+    "massKg": 0.005,
+    "maxPitchDeg": 40,
+    "maxSpeedMps": 0.6,
+    "maxTurnRateDegPerS": 360,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Neolamprologus brichardi"
+}
