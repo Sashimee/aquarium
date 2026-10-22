@@ -13,13 +13,12 @@ import {
 } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { TankDimensions } from '../engine/tank/dimensions';
-import { WATER_INSET } from '../engine/tank/dimensions';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
 import { abortError } from './abortable';
 import { bankAnchors, type SceneBank } from './bank';
 import { isMudBankId, MudBank, mudBankColliders } from './mudBank';
-import { caveAnchors } from './caves';
+import { caveAnchors, waterReach } from './caves';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
   AnemoneGroup,
@@ -896,10 +895,7 @@ export class TankScene {
   /** Where species with a home (clownfish and their anemone) are drawn to. */
   get anchors(): readonly SceneAnchor[] {
     const d = this.engine.tank.dimensions;
-    const reach = {
-      halfX: d.length / 2 - d.glass - WATER_INSET,
-      halfZ: d.depth / 2 - d.glass - WATER_INSET,
-    };
+    const reach = waterReach(d);
     return [
       ...this.anchorData,
       ...caveAnchors(
@@ -915,10 +911,7 @@ export class TankScene {
     return bankAnchors(
       [...this.hardItems.map(({ item }) => item), ...this.mudBankItems],
       d.height - d.freeboard,
-      {
-        halfX: d.length / 2 - d.glass - WATER_INSET,
-        halfZ: d.depth / 2 - d.glass - WATER_INSET,
-      },
+      waterReach(d),
     );
   }
 
