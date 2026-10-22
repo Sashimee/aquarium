@@ -165,6 +165,21 @@ describe('validateManifest', () => {
     );
   });
 
+  it('fails an entry the API schema would refuse at startup', () => {
+    const species = validateManifest(
+      manifestOf(manifestAsset({ id: 'sword', species: 'Echinodorus sp. (Amazon sword)' })),
+      '',
+    );
+    expect(species.join('\n')).toMatch(/manifest asset sword: species fails the API schema/);
+    const url = validateManifest(manifestOf(manifestAsset({ author_url: 'not a url' })), '');
+    expect(url.join('\n')).toMatch(/author_url fails the API schema/);
+    const title = validateManifest(manifestOf(manifestAsset({ title: '' })), '');
+    expect(title.join('\n')).toMatch(/title fails the API schema/);
+    expect(validateManifest(manifestOf(manifestAsset({ species: 'echinodorus-sp' })), '')).toEqual(
+      [],
+    );
+  });
+
   it('flags duplicate ids', () => {
     expect(validateManifest(manifestOf(manifestAsset(), manifestAsset()), '').join('\n')).toContain(
       'duplicate id',

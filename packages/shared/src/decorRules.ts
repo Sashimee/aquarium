@@ -67,6 +67,8 @@ export const DECOR_ASSET_IDS: Readonly<Record<Biome, ReadonlySet<string>>> = {
     'driftwood-scan-b',
     'dry-branches',
     'oak-leaf-card',
+    'catappa-leaf-card',
+    'amazon-sword',
   ]),
   mangrove: new Set([
     ...ROCKS,
