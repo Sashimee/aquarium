@@ -13,7 +13,7 @@ import {
 } from '@aquarium/shared';
 import { eq, sql } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { secondsUntilRoom } from './community.ts';
 import { schema } from './db/index.ts';
 import { pruneExpired } from './maintenance.ts';
@@ -879,63 +879,71 @@ describe('community tank', () => {
     it('reads the tank in one read-only snapshot transaction', async () => {
       const harness = await start();
       await getState(harness);
-      const real = harness.database.db.transaction.bind(harness.database.db);
-      const configs: unknown[] = [];
-      harness.database.db.transaction = ((fn: never, config?: unknown) => {
-        configs.push(config);
-        return real(fn, config as never);
-      }) as typeof harness.database.db.transaction;
+      const spy = vi.spyOn(harness.database.db, 'transaction');
       try {
         expect((await getState(harness)).statusCode).toBe(200);
+        expect(spy.mock.calls.map(([, config]) => config)).toContainEqual({
+          isolationLevel: 'repeatable read',
+          accessMode: 'read only',
+        });
       } finally {
-        harness.database.db.transaction = real as typeof harness.database.db.transaction;
+        spy.mockRestore();
       }
-      expect(configs).toContainEqual({
-        isolationLevel: 'repeatable read',
-        accessMode: 'read only',
-      });
     });
-
     it('waits for an upkeep run in flight before the app closes', async () => {
       const harness = await start({ community: { upkeepMs: 40 } });
       await getState(harness);
+      const held = await holdTankLock(harness);
+      try {
+        await held.blocked();
+        let closed = false;
+        const closing = harness.app.close().then(() => {
+          closed = true;
+        });
+        await pause(300);
+        expect(closed).toBe(false);
+        await held.release();
+        await closing;
+        expect(closed).toBe(true);
+      } finally {
+        await held.release();
+      }
+    });
+
+    const holdTankLock = async (harness: Harness) => {
       const id = await communityTankId(harness);
       let release: () => void = () => undefined;
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      let held: () => void = () => undefined;
-      const holding = new Promise<void>((resolve) => {
+      let held: (pid: unknown) => void = () => undefined;
+      const holding = new Promise<unknown>((resolve) => {
         held = resolve;
       });
       const lock = harness.database.db.transaction(async (tx) => {
         await tx.execute(sql`select 1 from tanks where id = ${id} for update`);
-        held();
+        held((await tx.execute(sql`select pg_backend_pid() as pid`)).rows[0]?.['pid']);
         await gate;
       });
-      await holding;
-      await waitFor(
-        () => blockedBackends(harness),
-        (n) => n > 0,
-      );
-      let closed = false;
-      const closing = harness.app.close().then(() => {
-        closed = true;
-      });
-      await pause(300);
-      expect(closed).toBe(false);
-      release();
-      await lock;
-      await closing;
-      expect(closed).toBe(true);
-    });
-
-    const blockedBackends = async (harness: Harness) =>
-      (
-        await harness.database.db.execute(
-          sql`select 1 from pg_stat_activity where cardinality(pg_blocking_pids(pid)) > 0`,
-        )
-      ).rows.length;
+      const pid = await holding;
+      return {
+        release: async () => {
+          release();
+          await lock;
+        },
+        blocked: () =>
+          waitFor(
+            async () =>
+              (
+                await harness.database.db.execute(
+                  sql`select 1 from pg_stat_activity
+                    where datname = current_database() and ${pid} = any(pg_blocking_pids(pid))`,
+                )
+              ).rows.length,
+            (n) => n > 0,
+          ),
+      };
+    };
 
     it('keeps only the newest memorials of the community tank', async () => {
       const harness = await start({ community: { upkeepMs: 40 } });
@@ -993,36 +1001,17 @@ describe('community tank', () => {
     it('does not start a second run while one is blocked', async () => {
       const harness = await start({ community: { upkeepMs: 40 } });
       await getState(harness);
-      const id = await communityTankId(harness);
-      let release: () => void = () => undefined;
-      const gate = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      let held: () => void = () => undefined;
-      const holding = new Promise<void>((resolve) => {
-        held = resolve;
-      });
-      const lock = harness.database.db.transaction(async (tx) => {
-        await tx.execute(sql`select 1 from tanks where id = ${id} for update`);
-        held();
-        await gate;
-      });
-      await holding;
-      await waitFor(
-        () => blockedBackends(harness),
-        (n) => n > 0,
-      );
-      const real = harness.database.db.transaction.bind(harness.database.db);
-      let started = 0;
-      harness.database.db.transaction = ((fn: never, config?: unknown) => {
-        started += 1;
-        return real(fn, config as never);
-      }) as typeof harness.database.db.transaction;
-      await pause(250);
-      harness.database.db.transaction = real as typeof harness.database.db.transaction;
-      release();
-      await lock;
-      expect(started).toBe(0);
+      const held = await holdTankLock(harness);
+      const spy = vi.spyOn(harness.database.db, 'transaction');
+      try {
+        await held.blocked();
+        spy.mockClear();
+        await pause(250);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+        await held.release();
+      }
     });
 
     it('leaves the water of a fresh tank alone', async () => {
