@@ -10,7 +10,14 @@ import { DEFAULT_TANK, type TankDimensions } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { AssetCatalog } from './assets';
 import { anemoneReach } from './anemone';
-import { BANK_RIM_MARGIN, isPerch, PERCH_GROWTH, PERCH_MIN_FIT } from './bank';
+import {
+  BANK_CLEARANCE,
+  BANK_RIM_MARGIN,
+  BANK_TOPS,
+  isPerch,
+  PERCH_GROWTH,
+  PERCH_MIN_FIT,
+} from './bank';
 import type { CurrentParameters } from './current';
 import { euphylliaReach, generateEuphyllia, parseEuphylliaId } from './euphyllia';
 import { GLASS_SHRINK_FLOOR } from './placement';
@@ -18,6 +25,7 @@ import { SURFACE_MARGIN } from './plants';
 
 const MIN_PLANT_SCALE = 0.05;
 const WALL_MARGIN = 0.005;
+const PERCH_SETTLE_PASSES = 4;
 
 interface Footprint {
   readonly min: readonly number[];
@@ -107,6 +115,11 @@ export function maxScaleAt(
   );
 }
 
+function standsClear(assetId: string, y: number, scale: number, waterTop: number): boolean {
+  const point = BANK_TOPS[assetId]?.position[1] ?? 0;
+  return scale >= PERCH_MIN_FIT && y + point * scale >= waterTop + BANK_CLEARANCE;
+}
+
 function fitItem(
   item: DecorItem,
   size: TankSize,
@@ -125,13 +138,13 @@ function fitItem(
   const seatOffset =
     item.position[1] - substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
   let y = substrateHeight(dimensions, x, z) + seatOffset * k;
-  let scale = perch ? item.scale * PERCH_GROWTH : stretched.scale;
+  const wanted = perch ? item.scale * PERCH_GROWTH : stretched.scale;
+  let scale = wanted;
   const ceiling = perch ? dimensions.height - BANK_RIM_MARGIN : waterTop - SURFACE_MARGIN;
 
   const model = boundsOf(item.assetId);
   if (model) {
     const height = model.bounds.max[1] ?? 0;
-    if (height > 0) scale = Math.min(scale, (ceiling - y) / height);
     const footprint = rotatedReach(model.bounds, item.rotationY);
     let reachX = (s: number) => footprint.x * s;
     let reachZ = (s: number) => footprint.z * s;
@@ -147,15 +160,23 @@ function fitItem(
       const slope = reach(1) - base;
       return slope > 0 ? (room - base) / slope : Infinity;
     };
-    scale = Math.min(scale, growth(halfL, reachX), growth(halfD, reachZ));
-    const limitX = Math.max(0, halfL - reachX(scale));
-    const limitZ = Math.max(0, halfD - reachZ(scale));
-    x = Math.max(-limitX, Math.min(limitX, x));
-    z = Math.max(-limitZ, Math.min(limitZ, z));
-    y = substrateHeight(dimensions, x, z) + seatOffset * k;
-    if (height > 0) scale = Math.min(scale, (ceiling - y) / height);
+    // Nudging a perch off the glass moves it down the sloping bed, which lets it grow back toward
+    // the rim; settle that before judging its clearance.
+    for (let pass = 0; pass < (perch ? PERCH_SETTLE_PASSES : 1); pass++) {
+      if (pass > 0) scale = wanted;
+      if (height > 0) scale = Math.min(scale, (ceiling - y) / height);
+      scale = Math.min(scale, growth(halfL, reachX), growth(halfD, reachZ));
+      const limitX = Math.max(0, halfL - reachX(scale));
+      const limitZ = Math.max(0, halfD - reachZ(scale));
+      x = Math.max(-limitX, Math.min(limitX, x));
+      z = Math.max(-limitZ, Math.min(limitZ, z));
+      y = substrateHeight(dimensions, x, z) + seatOffset * k;
+      if (height > 0) scale = Math.min(scale, (ceiling - y) / height);
+    }
   }
-  if (perch && scale < PERCH_MIN_FIT) return fitItem(item, size, dimensions, boundsOf, false);
+  if (perch && !standsClear(item.assetId, y, scale, waterTop)) {
+    return fitItem(item, size, dimensions, boundsOf, false);
+  }
   return {
     ...stretched,
     position: [x, y, z],

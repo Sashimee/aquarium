@@ -4,15 +4,16 @@ import { decorMatrix } from './hardscape';
 import type { WaterReach } from './caves';
 
 /**
- * A dry perch above the water, for amphibious fish. Not a `SceneAnchor`: the sim rejects kinds
- * other than anemone and cave, so these travel on their own list until it can use them.
+ * A point above the water an amphibious fish can cling to or climb toward, not a flat area to rest
+ * on: the one scanned stump offers a spike tip about 1.2 x 1.4 cm across. Not a `SceneAnchor`, since
+ * the sim rejects kinds other than anemone and cave, so these travel on their own list.
  */
 export interface SceneBank {
   readonly id: string;
   readonly kind: 'bank';
-  /** Centre of the perch's top face, in the frame the scene and sim share. */
+  /** The cling point, in the frame the scene and sim share. */
   readonly position: readonly [number, number, number];
-  /** Horizontal radius of the flat part a fish can rest on. */
+  /** Horizontal radius of the tip a fish can grip. */
   readonly radius: number;
 }
 
@@ -23,12 +24,15 @@ interface BankTop {
 }
 
 /**
- * The scanned stump leans: its tip, 27 to 28 cm high, stands about 6 cm off the base centre and is
- * 3 to 4 cm wide, while the centre is only 17 cm high. The point is just under the tip.
+ * The scanned stump leans: the centre is only 17 cm high, and above 27 cm the mesh is a spike tip
+ * about 1.2 x 1.4 cm across, centred near local (0.006, 0.074). The point sits at the tip.
  */
 export const BANK_TOPS: Readonly<Record<string, BankTop>> = {
-  'mangrove-stump': { position: [0.005, 0.27, 0.065], radius: 0.015 },
+  'mangrove-stump': { position: [0.006, 0.275, 0.074], radius: 0.007 },
 };
+
+/** The least a cling point stands above the water top; less is not an emergent surface. */
+export const BANK_CLEARANCE = 0.01;
 
 /** How far under the rim a perch's highest point stays. */
 export const BANK_RIM_MARGIN = 0.01;
@@ -56,7 +60,7 @@ export function bankAnchor(id: string, item: DecorItem): SceneBank {
 }
 
 /**
- * Only a perch whose top clears `waterTop` is a bank, and only one inside the water's footprint is
+ * Only a perch whose point clears `waterTop` by `BANK_CLEARANCE` is a bank, and only one inside the water's footprint is
  * reachable, so a stump drowned in a deeper tank, or outside a smaller one, is left out. Ids stay
  * tied to the item's place in the list.
  */
@@ -70,7 +74,7 @@ export function bankAnchors(
     .map((item, i) => bankAnchor(`bank-${i + 1}`, item))
     .filter((b) => {
       const [x, y, z] = b.position;
-      if (y < waterTop) return false;
+      if (y < waterTop + BANK_CLEARANCE) return false;
       if (!water) return true;
       return Math.abs(x) + b.radius < water.halfX && Math.abs(z) + b.radius < water.halfZ;
     });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Biome, DecorItem, TankSize } from '@aquarium/shared';
 import { TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
 import catalog from '../../public/assets/index.json';
-import { BANK_RIM_MARGIN, bankAnchors, BANK_TOPS } from './bank';
+import { BANK_CLEARANCE, BANK_RIM_MARGIN, bankAnchors, BANK_TOPS, isPerch } from './bank';
 import { fitPresetToTank, type BoundsOf } from './presetFit';
 import { loadPreset } from './preset';
 
@@ -41,7 +41,7 @@ describe('bank anchors on the fitted mangrove preset', () => {
       expect(banks).toHaveLength(1);
       const [bank] = banks;
       expect(bank?.kind).toBe('bank');
-      expect(bank?.position[1]).toBeGreaterThanOrEqual(waterTop(d));
+      expect(bank?.position[1]).toBeGreaterThanOrEqual(waterTop(d) + BANK_CLEARANCE);
       expect(bank?.position[1]).toBeLessThan(d.height - BANK_RIM_MARGIN);
     },
   );
@@ -79,18 +79,59 @@ describe('bank anchors', () => {
     expect(bankAnchors([stump({ scale: 1 })], waterTop(standard), reach(standard))).toEqual([]);
   });
 
-  it('keeps a perch whose point is exactly at the water line', () => {
-    const top = BANK_TOPS['mangrove-stump']?.position[1] ?? 0;
-    const scale = 1.5;
-    const water = 0.06 + top * scale;
-    const kept = bankAnchors([stump({ scale })], water, reach(standard));
-    expect(kept).toHaveLength(1);
-    expect(bankAnchors([stump({ scale })], water + 1e-6, reach(standard))).toEqual([]);
+  it('needs the clearance over the water top, and no less', () => {
+    const pointHeight = BANK_TOPS['mangrove-stump']?.position[1] ?? 0;
+    const point = 0.06 + pointHeight * 1.5;
+    const item = stump({ scale: 1.5 });
+    const at = (water: number) => bankAnchors([item], water, reach(standard));
+    expect(at(point - BANK_CLEARANCE - 1e-9)).toHaveLength(1);
+    expect(at(point - BANK_CLEARANCE + 1e-6)).toEqual([]);
+    expect(at(point)).toEqual([]);
   });
 
   it('drops a perch outside the water footprint and keeps ids tied to list order', () => {
     const items = [stump({ position: [0.8, 0.06, 0] }), stump({ position: [0.1, 0.06, 0] })];
     const banks = bankAnchors(items, waterTop(standard), reach(standard));
     expect(banks.map((b) => b.id)).toEqual(['bank-2']);
+  });
+});
+
+describe('perch fit', () => {
+  it.each(['standard', 'std200', 'long300'] satisfies TankSize[])(
+    '%s trunk keeps clear of the neighbouring hardscape',
+    (size) => {
+      const { fitted } = fittedBanks(size);
+      const perch = fitted.decor.reduce((a, b) =>
+        a.position[1] + 0.28 * a.scale > b.position[1] + 0.28 * b.scale ? a : b,
+      );
+      const core = 0.06 * perch.scale;
+      for (const other of fitted.decor) {
+        if (other === perch) continue;
+        const bounds = entries.get(other.assetId)?.bounds;
+        if (!bounds) throw new Error(`${other.assetId} has no bounds`);
+        const solid = 0.5 * Math.min(bounds.max[0] ?? 0, bounds.max[2] ?? 0) * other.scale;
+        const gap = Math.hypot(
+          other.position[0] - perch.position[0],
+          other.position[2] - perch.position[2],
+        );
+        expect(gap, `${size}: ${other.assetId} at ${other.position}`).toBeGreaterThanOrEqual(
+          core + solid,
+        );
+      }
+    },
+  );
+
+  it('authors exactly one perch in the mangrove preset and none elsewhere', () => {
+    const count = (biome: Biome) => loadPreset(biome).decor.filter(isPerch).length;
+    expect(count('mangrove')).toBe(1);
+    for (const biome of ['freshwater', 'reef', 'cichlid', 'blackwater'] satisfies Biome[]) {
+      expect(count(biome), biome).toBe(0);
+    }
+  });
+
+  it('gives a tank that cannot reach the clearance below the rim no bank', () => {
+    const shallow = { ...standard, freeboard: 0.02 };
+    const fitted = fitPresetToTank(loadPreset('mangrove'), 'standard', shallow, boundsOf, () => 0);
+    expect(bankAnchors(fitted.decor, waterTop(shallow), reach(shallow))).toEqual([]);
   });
 });
