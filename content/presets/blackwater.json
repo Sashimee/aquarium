@@ -12,7 +12,7 @@
     {
       "assetId": "driftwood-scan-b",
       "position": [-0.3, 0.074, -0.02],
-      "rotationY": 0.0,
+      "rotationY": 0,
       "scale": 0.85
     },
     {
@@ -23,56 +23,38 @@
     },
     {
       "assetId": "driftwood-branch",
-      "position": [0.38, 0.074, 0.0],
+      "position": [0.38, 0.074, 0],
       "rotationY": 2.4,
       "scale": 0.8
     },
     {
       "assetId": "driftwood-branch",
       "position": [-0.02, 0.052, 0.1],
-      "rotationY": 0.0,
+      "rotationY": 0,
       "scale": 0.7
     },
     {
       "assetId": "dry-branches",
       "position": [-0.4, 0.067, 0.03],
       "rotationY": 0.3,
-      "scale": 1.0
+      "scale": 1
     },
     {
       "assetId": "dry-branches",
       "position": [0.2, 0.067, 0.04],
       "rotationY": 2.2,
-      "scale": 1.0
+      "scale": 1
     },
     {
       "assetId": "dry-branches",
       "position": [0.36, 0.092, -0.04],
-      "rotationY": -1.0,
-      "scale": 1.0
-    },
-    {
-      "assetId": "oak-leaf-card",
-      "position": [-0.45, 0.08, 0.0],
-      "rotationY": 0.4,
-      "scale": 0.6
+      "rotationY": -1,
+      "scale": 1
     },
     {
       "assetId": "oak-leaf-card",
       "position": [-0.22, 0.068, 0.1],
       "rotationY": 1.9,
-      "scale": 0.6
-    },
-    {
-      "assetId": "oak-leaf-card",
-      "position": [-0.05, 0.079, 0.02],
-      "rotationY": 3.0,
-      "scale": 0.65
-    },
-    {
-      "assetId": "oak-leaf-card",
-      "position": [0.08, 0.075, 0.1],
-      "rotationY": 0.9,
       "scale": 0.6
     },
     {
@@ -83,26 +65,14 @@
     },
     {
       "assetId": "oak-leaf-card",
-      "position": [0.34, 0.102, -0.1],
-      "rotationY": 5.1,
-      "scale": 0.6
-    },
-    {
-      "assetId": "oak-leaf-card",
-      "position": [0.45, 0.066, 0.08],
-      "rotationY": 1.4,
-      "scale": 0.6
-    },
-    {
-      "assetId": "oak-leaf-card",
       "position": [-0.36, 0.1, -0.12],
       "rotationY": 2.8,
       "scale": 0.6
     },
     {
       "assetId": "oak-leaf-card",
-      "position": [0.0, 0.098, -0.09],
-      "rotationY": 4.0,
+      "position": [0.34, 0.102, -0.1],
+      "rotationY": 5.1,
       "scale": 0.6
     },
     {
@@ -113,8 +83,38 @@
     },
     {
       "assetId": "oak-leaf-card",
-      "position": [0.18, 0.08, 0.0],
+      "position": [0.18, 0.08, 0],
       "rotationY": 5.5,
+      "scale": 0.6
+    },
+    {
+      "assetId": "oak-leaf-card",
+      "position": [-0.05, 0.079, 0.02],
+      "rotationY": 3,
+      "scale": 0.65
+    },
+    {
+      "assetId": "oak-leaf-card",
+      "position": [-0.45, 0.08, 0],
+      "rotationY": 0.4,
+      "scale": 0.6
+    },
+    {
+      "assetId": "oak-leaf-card",
+      "position": [0.45, 0.066, 0.08],
+      "rotationY": 1.4,
+      "scale": 0.6
+    },
+    {
+      "assetId": "oak-leaf-card",
+      "position": [0, 0.098, -0.09],
+      "rotationY": 4,
+      "scale": 0.6
+    },
+    {
+      "assetId": "oak-leaf-card",
+      "position": [0.08, 0.075, 0.1],
+      "rotationY": 0.9,
       "scale": 0.6
     },
     {

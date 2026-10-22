@@ -1,5 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import type { PresetLayout } from '@aquarium/shared';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { beforeAll, describe, expect, it } from 'vitest';
+import {
+  DECOR_MIN_SCALE,
+  keptPresetDecor,
+  presetDecorCount,
+  type Biome,
+  type DecorItem,
+  type PresetLayout,
+} from '@aquarium/shared';
+import { AssetCatalog } from './assets';
+import { offersShelter } from './caves';
+import { loadPreset } from './preset';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import { TANK_SIZES } from '@aquarium/shared';
@@ -95,5 +107,65 @@ describe('fitPresetToTank', () => {
       const [patch] = fitPresetToTank(preset, 'long300', long, boundsOf, () => 0).plantPatches;
       expect(patch?.count).toBeLessThanOrEqual(70);
     });
+  });
+});
+
+describe('the decor a preset keeps on the nano tank', () => {
+  const BIOMES: readonly Biome[] = ['freshwater', 'reef', 'cichlid', 'mangrove', 'blackwater'];
+  let catalog: AssetCatalog;
+
+  beforeAll(async () => {
+    const index = JSON.parse(
+      await readFile(join(__dirname, '../../public/assets/index.json'), 'utf8'),
+    ) as { assets: ConstructorParameters<typeof AssetCatalog>[0] };
+    catalog = new AssetCatalog(index.assets);
+  });
+
+  const kindOf = (item: DecorItem) =>
+    catalog.has(item.assetId) ? catalog.get(item.assetId).kind : 'coral';
+  const kindOfId = (id: string) => (catalog.has(id) ? catalog.get(id).kind : 'coral');
+  const genus = (item: DecorItem) => item.assetId.split('-')[0];
+
+  it.each(BIOMES)('%s keeps every kind of shelter, its anemone and every coral genus', (biome) => {
+    const { decor } = loadPreset(biome);
+    const kept = keptPresetDecor(decor, 'nano30');
+    expect(kept.length).toBe(presetDecorCount(decor.length, 'nano30'));
+    const same = (
+      pick: (item: DecorItem) => boolean,
+      key: (item: DecorItem) => string | undefined,
+    ) => new Set(decor.filter(pick).map(key));
+    for (const [what, pick, key] of [
+      ['shelter', (i: DecorItem) => offersShelter(i.assetId), (i: DecorItem) => i.assetId],
+      ['anemone', (i: DecorItem) => kindOf(i) === 'anemone', (i: DecorItem) => i.assetId],
+      ['coral', (i: DecorItem) => kindOf(i) === 'coral', genus],
+    ] as const) {
+      const wanted = same(pick, key);
+      const keptKinds = new Set(kept.filter(pick).map(key));
+      expect([...keptKinds].sort(), `${biome} ${what}`).toEqual([...wanted].sort());
+    }
+  });
+
+  it('keeps a coral on the reef and a fern on the freshwater tank', () => {
+    const keptIds = (biome: Biome) =>
+      keptPresetDecor(loadPreset(biome).decor, 'nano30').map((item) => item.assetId);
+    expect(keptIds('reef').filter((id) => kindOfId(id) === 'coral').length).toBeGreaterThan(0);
+    expect(keptIds('freshwater')).toContain('java-fern');
+  });
+
+  it('holds decor at the minimum scale', () => {
+    const preset: PresetLayout = {
+      id: 'test',
+      name: 'test',
+      biome: 'freshwater',
+      plantPatches: [],
+      decor: [{ assetId: 'rock', position: [0, 0, 0], rotationY: 0, scale: 1 }],
+    };
+    const nano = { ...DEFAULT_TANK, ...TANK_SIZES.nano30.dimensions };
+    const small: BoundsOf = () => ({
+      bounds: { min: [-0.03, 0, -0.03], max: [0.03, 0.05, 0.03] },
+      swayReach: null,
+    });
+    const [item] = fitPresetToTank(preset, 'nano30', nano, small, () => 0).decor;
+    expect(item?.scale).toBeCloseTo(DECOR_MIN_SCALE, 6);
   });
 });

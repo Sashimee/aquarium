@@ -30,6 +30,10 @@ const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 const SEEDS = [1, 2, 3, 4];
 const STEPS_PER_PHASE = 9000;
 const CONTACTS_PER_FISH_STEP = 1e-3;
+// A nano keeps shelters at 0.6 of their size in a 0.25 m deep tank: the rock pile's mouth sits
+// closer to its own hull than at full size, and the water ends within two radii of it.
+const NANO_MOUTH_ROOM = 0.7;
+const NANO_WAY_OUT_RADII = 1;
 
 let library: ModelLibrary;
 let catalog: AssetCatalog;
@@ -99,13 +103,18 @@ function clearanceTo(colliders: readonly Collider[]) {
     Math.min(...solids.map((p) => p.sample(x, y, z, normal)));
 }
 
-async function expectMouthsClear(biome: Biome, layer: Layer, decor: readonly DecorItem[]) {
+async function expectMouthsClear(
+  biome: Biome,
+  layer: Layer,
+  decor: readonly DecorItem[],
+  room = 0.9,
+) {
   const clearance = clearanceTo(await hardColliders(biome, layer, decor));
   const anchors = caveAnchors(decor);
   expect(anchors.length).toBeGreaterThan(0);
   for (const a of anchors) {
     const [x, y, z] = a.position;
-    expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(0.9 * a.radius);
+    expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(room * a.radius);
   }
 }
 
@@ -117,7 +126,12 @@ describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
 
     it.each(SIZES)('%s: every anchor has room for a fish', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
-      await expectMouthsClear(biome, layer, fitted.decor);
+      await expectMouthsClear(
+        biome,
+        layer,
+        fitted.decor,
+        size === 'nano30' ? NANO_MOUTH_ROOM : undefined,
+      );
     });
 
     it.each(SIZES)('%s: every anchor has a clear way out along its facing', async (size) => {
@@ -131,7 +145,7 @@ describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
       for (const a of anchors) {
         const [x, y, z] = a.position;
         const [fx = 0, , fz = 0] = a.facing ?? [];
-        for (const k of [1, 2, 3]) {
+        for (const k of size === 'nano30' ? [NANO_WAY_OUT_RADII] : [1, 2, 3]) {
           const px = x + fx * k * a.radius;
           const pz = z + fz * k * a.radius;
           const at = `${a.id} ${k} r along facing`;

@@ -1,6 +1,7 @@
 import {
   MIN_FIT_SCALE,
-  fitPresetItem,
+  fitPresetDecor,
+  keptPresetDecor,
   presetFit,
   type DecorItem,
   type PlantPatch,
@@ -137,13 +138,13 @@ function standsClear(assetId: string, y: number, scale: number, waterTop: number
 
 function fitItem(
   item: DecorItem,
+  stretched: DecorItem,
   size: TankSize,
   dimensions: TankDimensions,
   boundsOf: BoundsOf,
   perch = isPerch(item),
 ): DecorItem {
-  const stretched = fitPresetItem(item, size);
-  const { scale: k } = presetFit(size);
+  const { decorScale: k } = presetFit(size);
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const waterTop = dimensions.height - dimensions.freeboard;
@@ -192,7 +193,9 @@ function fitItem(
   if (perch && !standsClear(item.assetId, y, scale, waterTop)) {
     const ordinary: DecorItem = { ...item };
     delete ordinary.perch;
-    return fitItem(ordinary, size, dimensions, boundsOf, false);
+    const fittedOrdinary: DecorItem = { ...stretched, scale: ordinary.scale * k };
+    delete fittedOrdinary.perch;
+    return fitItem(ordinary, fittedOrdinary, size, dimensions, boundsOf, false);
   }
   return {
     ...stretched,
@@ -242,9 +245,11 @@ export function fitPresetToTank(
   boundsOf: BoundsOf,
   patchReach: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PresetLayout {
+  const kept = keptPresetDecor(preset.decor, size);
+  const stretched = fitPresetDecor(preset.decor, size);
   return {
     ...preset,
-    decor: preset.decor.map((item) => fitItem(item, size, dimensions, boundsOf)),
+    decor: kept.map((item, i) => fitItem(item, stretched[i] ?? item, size, dimensions, boundsOf)),
     plantPatches:
       size === 'standard'
         ? preset.plantPatches
