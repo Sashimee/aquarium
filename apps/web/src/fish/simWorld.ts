@@ -9,6 +9,7 @@ import type {
   Visitor,
 } from '@aquarium/sim';
 import type { DaylightChange } from '../engine/daylight';
+import { blockedMouths } from '../interaction/decor/shelterColliders';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
 import { bodyLengthOf } from './profiles';
@@ -21,6 +22,8 @@ import { allSpeciesInputs, speciesInput } from './species';
  * scene's homes and colliders live here and ride along each time.
  */
 export class SimWorldSpec {
+  private sceneAnchors: readonly SceneAnchor[] = [];
+  private blocked: ReadonlySet<string> = new Set();
   private simAnchors: readonly Anchor[] = [];
   private simDecor: readonly Collider[] = [];
   private simToys: readonly SimToy[] = [];
@@ -40,19 +43,43 @@ export class SimWorldSpec {
     return this.simAnchors;
   }
 
-  /** Scene anchors; returns them as the sim takes them, for the running world. */
+  /**
+   * Scene anchors; returns them as the sim takes them, for the running world. A cave whose mouth
+   * the decor blocks is left out until it is clear again.
+   */
   setAnchors(anchors: readonly SceneAnchor[]): readonly Anchor[] {
-    this.simAnchors = sceneAnchorsToSim(anchors, this.demo);
-    return this.simAnchors;
+    this.sceneAnchors = anchors;
+    this.blocked = this.blockedCaves();
+    return this.rebuildAnchors();
   }
 
   get decor(): readonly Collider[] {
     return this.simDecor;
   }
 
-  /** Already in the shared format and tank space; see `SimColliders`. */
-  setDecor(colliders: readonly Collider[]): void {
+  /**
+   * Already in the shared format and tank space; see `SimColliders`. Returns the anchors when the
+   * decor blocked or cleared a cave, for the running world, and null when every cave stays as it
+   * was: the sim deals every home out afresh on new anchors, so resending them unchanged would
+   * shuffle fish between caves on each nudge of a plant.
+   */
+  setDecor(colliders: readonly Collider[]): readonly Anchor[] | null {
     this.simDecor = colliders;
+    const blocked = this.blockedCaves();
+    if (sameIds(blocked, this.blocked)) return null;
+    this.blocked = blocked;
+    return this.rebuildAnchors();
+  }
+
+  private blockedCaves(): ReadonlySet<string> {
+    const caves = this.sceneAnchors.filter((a) => a.kind === 'cave');
+    return new Set(caves.length === 0 ? [] : blockedMouths(caves, this.simDecor));
+  }
+
+  private rebuildAnchors(): readonly Anchor[] {
+    const usable = this.sceneAnchors.filter((a) => !this.blocked.has(a.id));
+    this.simAnchors = sceneAnchorsToSim(usable, this.demo);
+    return this.simAnchors;
   }
 
   /** Tank space, which the sim shares; a world's config has none, so every new world gets them. */
@@ -115,6 +142,10 @@ export class SimWorldSpec {
       anchors: this.simAnchors,
     };
   }
+}
+
+function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && [...a].every((id) => b.has(id));
 }
 
 /** What turns a running world holding `inWorld` into one holding exactly `wanted`. */

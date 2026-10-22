@@ -33,7 +33,7 @@ export const NEW_TANK_CHEMISTRY_BY_BIOME: Readonly<Record<Biome, Chemistry>> = {
     salinity: 0,
     bacteria: SEEDED_FILTER,
   },
-  mangrove: { nitrite: 0, ph: 8, kh: 8, temperatureC: 26, salinity: 15, bacteria: SEEDED_FILTER },
+  mangrove: { nitrite: 0, ph: 8, kh: 8, temperatureC: 26, salinity: 10, bacteria: SEEDED_FILTER },
 };
 
 export const newTankChemistry = (biome: Biome): Chemistry => ({

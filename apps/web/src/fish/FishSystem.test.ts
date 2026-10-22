@@ -230,6 +230,39 @@ describe('FishSystem.create', () => {
     }
   }
 
+  it('takes a cave from the running world while a rock blocks it, and gives it back after', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const sent = (): string[][] =>
+      worker.sent
+        .filter((m): m is { type: 'anchors'; anchors: { id: string }[] } => m.type === 'anchors')
+        .map((m) => m.anchors.map((a) => a.id));
+    const rock = (x: number): Collider => ({
+      id: 'decor:boulder.0',
+      kind: 'sphere',
+      hard: true,
+      center: [x, 0.12, 0.05],
+      radius: 0.04,
+    });
+    fish.setAnchors([{ id: 'cave-1', kind: 'cave', position: [-0.1, 0.12, 0.05], radius: 0.03 }]);
+    expect(sent()).toEqual([['cave-1']]);
+
+    fish.setColliders([rock(0.2)]);
+    fish.setColliders([rock(0.25)]);
+    expect(sent()).toEqual([['cave-1']]);
+
+    fish.setColliders([rock(-0.1)]);
+    fish.setColliders([rock(-0.09)]);
+    expect(sent()).toEqual([['cave-1'], []]);
+
+    fish.setColliders([rock(0.2)]);
+    expect(sent()).toEqual([['cave-1'], [], ['cave-1']]);
+    fish.dispose();
+  });
+
   it("hands the frame loop's hood light to the sim, settled only when nobody saw it change", async () => {
     const { engine } = fakeEngine();
     const start = create(engine);

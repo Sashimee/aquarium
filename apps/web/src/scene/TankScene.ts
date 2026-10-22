@@ -479,9 +479,19 @@ export class TankScene {
         this.engine.scene.add(group.object);
       }
       this.syncGrowth();
-      await this.evictUnused();
+      try {
+        await this.evictUnused();
+      } catch (cause) {
+        this.reportError('Evicting unused models failed after the layout was applied', cause);
+      }
       const anchors = this.anchors;
-      for (const listener of this.anchorListeners) listener(anchors);
+      for (const listener of [...this.anchorListeners]) {
+        try {
+          listener(anchors);
+        } catch (cause) {
+          this.reportError('An anchor listener threw', cause);
+        }
+      }
       return;
     }
   }
@@ -1125,6 +1135,10 @@ export class TankScene {
       }
     }
     await this.library.retainOnly(keep);
+  }
+
+  private reportError(message: string, cause: unknown): void {
+    this.engine.events.emit('engine:error', { message, cause });
   }
 
   async dispose(): Promise<void> {
