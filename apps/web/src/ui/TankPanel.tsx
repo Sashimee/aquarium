@@ -21,7 +21,7 @@ import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { priceOrFree, priceText, tankPrice } from '../sync/economy';
 import { checkTankName, suggestTankName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
-import { useAuth } from './context';
+import { useAuth, useBridge } from './context';
 import { CoralSection } from './Corals';
 import { FishCards } from './FishCard';
 import { AcceptsGiftsToggle, GiftFishButton, GiftNotice, GiftOffers } from './Gifts';
@@ -144,13 +144,14 @@ export function CarePanel() {
 }
 
 function CareSections({ session, state, tank }: Ready) {
+  const { interaction } = useBridge();
   const names = useSpeciesNames();
   const water = waterReport(tank.water, tank, state.species);
   return (
     <>
       <Care session={session} state={state} water={water} />
       <WaterTest tank={tank} species={state.species} />
-      <CoralSection session={session} state={state} tank={tank} />
+      <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
       <GiftNotice session={session} />
       <FishCards
         fish={tank.fish}
