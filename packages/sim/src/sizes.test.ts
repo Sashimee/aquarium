@@ -293,6 +293,41 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
         'FishBase (Monodactylus argenteus): 27 cm SL (Ref. 44894); TL = 1.3455 SL, from two fish of ' +
         '9.1 to 11.8 cm TL (FishBase also lists an older photo estimate, SL = 0.8131 TL)',
     },
+    'apistogramma-hongsloi': {
+      model: 'apistogramma-hongsloi',
+      maxSlM: 0.034,
+      maxTlM: 0.034 * 1.231,
+      source:
+        'Female model. FishBase: 3.4 cm SL is the male/unsexed maximum (Ref. 36377, the original ' +
+        'description), used here for the smaller female because it matches the catalog 4 cm TL ' +
+        'female and Seriously Fish (females 40-45 mm); the 5.0 cm female field in FishBase has no ' +
+        'length type and is not used. FishBase has no length-length relationship, so TL = 1.231 SL, ' +
+        'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
+    },
+    'cardinal-tetra': {
+      model: 'cardinal-tetra',
+      maxSlM: 0.04 / 1.1708,
+      maxTlM: 0.04,
+      source:
+        'FishBase: 2.51 cm SL (Ref. 38376) is the wild-caught record; the larger aquarium adult is ' +
+        'used instead: Seriously Fish, 35 mm SL, about 4.1 cm TL, rounded to the catalog 4 cm TL; ' +
+        'TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
+    },
+    'dwarf-pencilfish': {
+      model: 'dwarf-pencilfish',
+      maxSlM: 0.035 / 1.2,
+      maxTlM: 0.035,
+      source:
+        'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
+        'so TL = 1.2 SL, the proportion of the lofted model',
+    },
+    'rummy-nose-tetra': {
+      model: 'rummy-nose-tetra',
+      maxSlM: 0.036,
+      maxTlM: 0.036 * 1.2506,
+      source:
+        'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
+    },
   };
 
 /**
@@ -305,17 +340,6 @@ const AWAITING_CONTENT: Record<
   string,
   { model: string; maxSlM: number; maxTlM: number; source: string }
 > = {
-  'apistogramma-hongsloi': {
-    model: 'apistogramma-hongsloi',
-    maxSlM: 0.034,
-    maxTlM: 0.034 * 1.231,
-    source:
-      'Female model. FishBase: 3.4 cm SL is the male/unsexed maximum (Ref. 36377, the original ' +
-      'description), used here for the smaller female because it matches the catalog 4 cm TL ' +
-      'female and Seriously Fish (females 40-45 mm); the 5.0 cm female field in FishBase has no ' +
-      'length type and is not used. FishBase has no length-length relationship, so TL = 1.231 SL, ' +
-      'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
-  },
   'aulonocara-baenschi': {
     model: 'aulonocara-baenschi-female',
     maxSlM: (0.13 * 0.75) / 1.2725,
@@ -337,23 +361,6 @@ const AWAITING_CONTENT: Record<
       'length-length relationship was checked, so TL = 1.25 SL, a typical characin proportion ' +
       'with a forked caudal; it is an assumption, not a literature value.',
   },
-  'cardinal-tetra': {
-    model: 'cardinal-tetra',
-    maxSlM: 0.04 / 1.1708,
-    maxTlM: 0.04,
-    source:
-      'FishBase: 2.51 cm SL (Ref. 38376) is the wild-caught record; the larger aquarium adult is ' +
-      'used instead: Seriously Fish, 35 mm SL, about 4.1 cm TL, rounded to the catalog 4 cm TL; ' +
-      'TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
-  },
-  'dwarf-pencilfish': {
-    model: 'dwarf-pencilfish',
-    maxSlM: 0.035 / 1.2,
-    maxTlM: 0.035,
-    source:
-      'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
-      'so TL = 1.2 SL, the proportion of the lofted model',
-  },
   'figure-8-puffer': {
     model: 'figure-8-puffer',
     maxSlM: 0.08 / 1.21,
@@ -362,13 +369,6 @@ const AWAITING_CONTENT: Record<
       'FishBase (as Dichotomyctere ocellatus, of which Tetraodon biocellatus is a junior synonym): ' +
       '8 cm TL (Ref. 12693); FishBase has no length-length relationship, so TL = 1.21 SL, the ' +
       'proportion of the lofted model',
-  },
-  'rummy-nose-tetra': {
-    model: 'rummy-nose-tetra',
-    maxSlM: 0.036,
-    maxTlM: 0.036 * 1.2506,
-    source:
-      'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
   },
 };
 

@@ -114,11 +114,16 @@ describe('modelFor', () => {
     }
   });
 
-  it('gives every male model a length factor in (0, 1]', () => {
+  it('gives every male model the length factor its built model was scaled by', () => {
+    const models = parseFishAssets(shippedIndex);
     for (const [id, profile] of Object.entries(FISH_RENDER_PROFILES)) {
       if (profile.male === null) continue;
       expect(profile.male.lengthFactor, id).toBeGreaterThan(0);
-      expect(profile.male.lengthFactor, id).toBeLessThanOrEqual(1);
+      const female = models.get(profile.assetId)?.standardLengthM;
+      const male = models.get(profile.male.assetId)?.standardLengthM;
+      expect(female, id).toBeDefined();
+      expect(male, id).toBeDefined();
+      expect((male ?? 0) / (female ?? 1), id).toBeCloseTo(profile.male.lengthFactor, 3);
     }
   });
 });

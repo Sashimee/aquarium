@@ -51,6 +51,10 @@ describe('create tank request', () => {
     expect(createTankRequestSchema.safeParse({ ...base, biome: 'cichlid' }).success).toBe(true);
   });
 
+  it('accepts a blackwater tank', () => {
+    expect(createTankRequestSchema.safeParse({ ...base, biome: 'blackwater' }).success).toBe(true);
+  });
+
   it('requires an idempotency key', () => {
     expect(createTankRequestSchema.safeParse({ name: 'Home', biome: 'freshwater' }).success).toBe(
       false,
@@ -61,8 +65,8 @@ describe('create tank request', () => {
     expect(createTankRequestSchema.parse({ ...base, biome: 'mangrove' }).biome).toBe('mangrove');
   });
 
-  it('refuses biomes that have no preset yet and unknown sizes', () => {
-    expect(createTankRequestSchema.safeParse({ ...base, biome: 'blackwater' }).success).toBe(false);
+  it('refuses unknown biomes and sizes', () => {
+    expect(createTankRequestSchema.safeParse({ ...base, biome: 'tundra' }).success).toBe(false);
     expect(createTankRequestSchema.safeParse({ ...base, size: 'huge' }).success).toBe(false);
   });
 });
