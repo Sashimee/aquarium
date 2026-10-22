@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaymentsState } from '@aquarium/shared';
-import { resetPaymentReturn } from '../sync/payments';
+import { paymentNotice } from '../sync/payments';
 import type { TankSession } from '../sync/session';
 import { ApiRequestError } from './api';
 
@@ -56,7 +56,7 @@ describe('the Pearl packs section', () => {
 
   beforeEach(() => {
     for (const fn of Object.values(api)) fn.mockReset();
-    resetPaymentReturn();
+    paymentNotice.set(null);
     sessionStorage.clear();
     goToCheckout.mockReset();
     window.history.replaceState(null, '', '/');
@@ -217,6 +217,17 @@ describe('the Pearl packs section', () => {
     expect(window.location.search).toBe('');
   });
 
+  it('shows the cancelled notice once, not on every later shop open', async () => {
+    ready();
+    window.history.replaceState(null, '', '/?payment=cancelled');
+    await show();
+    expect(text()).toContain('Checkout was cancelled.');
+    act(() => root.unmount());
+    root = createRoot(container);
+    await show();
+    expect(text()).not.toContain('Checkout was cancelled.');
+  });
+
   describe('returning from Checkout with ?payment=success', () => {
     const back = async (wallet: () => number | null, server = state()) => {
       ready(server);
@@ -281,7 +292,7 @@ describe('the Pearl packs section', () => {
       expect(text()).toContain('now an Aquarist Club member');
     });
 
-    it('keeps the confirmation when the shop is closed and opened again', async () => {
+    it('does not repeat the confirmation when the shop is closed and opened again', async () => {
       sessionStorage.setItem(
         'aquarium.payment-pending',
         JSON.stringify({ kind: 'pack', balance: 100 }),
@@ -291,7 +302,7 @@ describe('the Pearl packs section', () => {
       root = createRoot(container);
       ready();
       await show();
-      expect(text()).toContain('Your Pearls have arrived.');
+      expect(text()).not.toContain('Your Pearls have arrived.');
     });
 
     it('survives a wallet refresh that throws something unexpected', async () => {

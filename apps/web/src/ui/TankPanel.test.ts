@@ -1,11 +1,17 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { tankFixture } from '../sync/fixtures';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE } from '../sync/state';
 import { NewTankForm } from './TankPanel';
 import { QuarantineSection } from './Treatment';
+import type { ApiClient } from './api';
+
+vi.mock('./context', async (original) => ({
+  ...(await original<typeof import('./context')>()),
+  useApi: () => ({}) as ApiClient,
+}));
 
 const session = {} as TankSession;
 const state = { ...INITIAL_STATE, tanks: [tankFixture()] };
