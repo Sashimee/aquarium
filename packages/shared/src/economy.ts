@@ -184,6 +184,14 @@ export const packSchema = z.strictObject({
 });
 export type Pack = z.infer<typeof packSchema>;
 
+export const subscriptionOfferSchema = z.strictObject({
+  id: slugSchema,
+  priceCents: z.int().positive(),
+  interval: z.literal('month'),
+  pearlsPerDay: priceSchema,
+});
+export type SubscriptionOffer = z.infer<typeof subscriptionOfferSchema>;
+
 export const economySchema = z
   .strictObject({
     pearlValueCents: z.number().positive(),
@@ -233,12 +241,7 @@ export const economySchema = z
       migration: priceSchema,
     }),
     packs: z.array(packSchema).min(1),
-    subscription: z.strictObject({
-      id: slugSchema,
-      priceCents: z.int().positive(),
-      interval: z.literal('month'),
-      pearlsPerDay: priceSchema,
-    }),
+    subscription: subscriptionOfferSchema,
   })
   .superRefine((e, ctx) => {
     if (e.items.euphyllia < e.items.decor.min || e.items.euphyllia > e.items.decor.max) {
