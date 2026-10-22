@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventBus, type EngineEvents } from '../engine/events';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from '../interaction/events';
+import type { PlantPick } from '../scene/plantGrowth';
 import { App } from './App';
 import { UiProviders, type UiBridge } from './context';
 import { panelLoaders } from './panelLoaders';
@@ -43,6 +44,7 @@ describe('a trim tool chunk that fails to load', () => {
     act(() => root.unmount());
     container.remove();
     sessionStorage.clear();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -83,5 +85,55 @@ describe('a trim tool chunk that fails to load', () => {
     await act(async () => dismiss?.click());
     expect(container.querySelector('.crash-app')).toBeNull();
     expect(container.querySelector('.sheet-decor')).not.toBeNull();
+  });
+
+  it('says so on the next plant tap after the notice was dismissed', async () => {
+    const ui: UiBridge = {
+      engine: new EventBus<EngineEvents>(undefined, ['engine:ready']),
+      interaction: new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS),
+    };
+    await act(async () => {
+      root.render(
+        <UiProviders bridge={ui}>
+          <SessionProvider>
+            <App />
+          </SessionProvider>
+        </UiProviders>,
+      );
+    });
+    await settle();
+    const dismiss = [...container.querySelectorAll('.crash-app button')].find(
+      (b) => b.textContent === 'Dismiss',
+    );
+    await act(async () => (dismiss as HTMLElement | undefined)?.click());
+    expect(container.querySelector('.crash-app')).toBeNull();
+    expect(container.textContent).not.toContain('trim tool did not load');
+
+    vi.useFakeTimers();
+    await act(async () => ui.interaction.emit('plant:picked', { pick: null }));
+    expect(container.textContent).not.toContain('trim tool did not load');
+
+    await act(async () =>
+      ui.interaction.emit('plant:picked', { pick: { key: 's1' } as PlantPick }),
+    );
+    expect(container.querySelector('.toasts .toast')?.textContent).toContain(
+      'trim tool did not load',
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(4499);
+    });
+    expect(container.textContent).toContain('trim tool did not load');
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(container.textContent).not.toContain('trim tool did not load');
+
+    await act(async () =>
+      ui.interaction.emit('plant:picked', { pick: { key: 's1' } as PlantPick }),
+    );
+    expect(container.textContent).toContain('trim tool did not load');
+    await act(async () => ui.interaction.emit('plant:picked', { pick: null }));
+    expect(container.textContent).not.toContain('trim tool did not load');
+    vi.useRealTimers();
   });
 });

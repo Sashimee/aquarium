@@ -12,6 +12,7 @@ interface Props {
   what: string;
   scope: 'panel' | 'app';
   /** Adds a Dismiss button for failures in a feature that can be given up on without a reload. */
+  dismissible?: boolean;
   onDismiss?: () => void;
 }
 
@@ -31,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override render(): ReactNode {
     if (!this.state.failed) return this.props.children;
-    const { what, scope, onDismiss } = this.props;
+    const { what, scope, dismissible, onDismiss } = this.props;
     if (this.state.dismissed) return null;
     if (this.state.updating) {
       return (
@@ -47,12 +48,12 @@ export class ErrorBoundary extends Component<Props, State> {
           <button type="button" onClick={() => window.location.reload()}>
             Reload
           </button>
-          {onDismiss && (
+          {dismissible && (
             <button
               type="button"
               onClick={() => {
                 this.setState({ dismissed: true });
-                onDismiss();
+                onDismiss?.();
               }}
             >
               Dismiss

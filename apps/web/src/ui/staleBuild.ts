@@ -39,8 +39,8 @@ export function reloadForNewBuild(deps: ReloadDeps = browser): boolean {
     const last = Number(storage.getItem(KEY));
     if (Number.isFinite(last) && last > 0 && now - last < WINDOW_MS) return false;
     storage.setItem(KEY, String(now));
-    started = true;
     deps.reload();
+    started = true;
     return true;
   } catch {
     return false;
