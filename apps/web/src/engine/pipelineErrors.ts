@@ -248,8 +248,9 @@ export type ReportFailure = (message: string, cause: unknown) => void;
  *
  * The engine rebuilds dropped effects only after a transient failure, so under a temporal resolve
  * (ultra) one broken scene material costs the post effects for the session: only the plain render
- * tells it from a velocity-only failure. On WebGPU that test can misfire: failures arrive asynchronously, labelled
- * by material alone, so a late one from the earlier velocity build reads as the plain one failing.
+ * tells it from a velocity-only failure. On WebGPU that test can misfire: failures arrive
+ * asynchronously, labelled by material alone, so a late one from the earlier velocity build reads
+ * as the plain one failing.
  */
 export class PipelineFailureHandler {
   private dropping = false;

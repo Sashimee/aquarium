@@ -247,6 +247,39 @@ describe('TierController', () => {
     expect(c.tier).toBe('high');
   });
 
+  it('still steps down under a sustained overload with a stall every 5 s', () => {
+    const c = controller('high', { windowSize: 60, cooldownMs: 3000, downHoldMs: 2000 });
+    const changes = [];
+    let t = 0;
+    for (let cycle = 0; cycle < 6 && changes.length === 0; cycle++) {
+      c.pause(t);
+      const { changes: found, end } = run(c, 30, t, 5000);
+      changes.push(...found);
+      t = end;
+    }
+    expect(changes.map((ch) => ch.to)).toEqual(['medium']);
+    expect(changes[0]?.at).toBeLessThan(15_000);
+  });
+
+  it('keeps the samples taken before a pause', () => {
+    const c = controller('high', { windowSize: 60, cooldownMs: 3000 });
+    const { end } = run(c, 30, 0, 1100);
+    c.pause(end);
+    // A full window of 30 ms frames is already over budget, so only the down hold remains.
+    const { changes } = run(c, 30, end + 3000, 2100);
+    expect(changes).toMatchObject([{ from: 'high', to: 'medium', reason: 'over-budget' }]);
+  });
+
+  it('does not count paused time toward a hold', () => {
+    const c = controller('high', { windowSize: 10, cooldownMs: 3000, downHoldMs: 2000 });
+    let { end } = run(c, 30, 0, 1000);
+    for (let i = 0; i < 4; i++) {
+      c.pause(end);
+      ({ end } = run(c, 30, end, 3200));
+    }
+    expect(c.tier).toBe('high');
+  });
+
   it('reset() applies a manual tier and restarts measurement', () => {
     const c = controller('high');
     run(c, 30, 0, 1900);
