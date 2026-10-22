@@ -4,6 +4,7 @@ import {
   biomeSchema,
   chemistryParametersSchema,
   DEFAULT_EQUIPMENT,
+  equipmentProblems,
   isWarmWater,
   newTankChemistry,
   speciesContentSummarySchema,
@@ -1688,5 +1689,91 @@ describe('warm-water species and the heater', () => {
     const start = tank([fishOf('a', 'neon-tetra')]);
     const f = only(run(start, 5 * DAY, { feeder: true, equipment: heaterless }));
     expect(f.health).toBe(1);
+  });
+});
+
+describe('blackwater pH under good care', () => {
+  const PH_FLOOR_ASSUMED_FOR_APISTOGRAMMA = 5.5;
+  const blackwater = parsedSpecies.filter((s) => s.biome === 'blackwater');
+  const allowedCo2Tiers = [0, 1, 2, 3].filter(
+    (tier) => equipmentProblems('blackwater', { ...DEFAULT_EQUIPMENT, co2: { tier } }).length === 0,
+  );
+
+  function phRangeOverGoodCare(co2Tier: number, days: number): { low: number; high: number } {
+    const equipment = { ...DEFAULT_EQUIPMENT, co2: { tier: co2Tier } };
+    let state: LifecycleState = {
+      water: cleanWater,
+      chemistry: newTankChemistry('blackwater'),
+      medicine: null,
+      fish: blackwater.flatMap((s) =>
+        Array.from({ length: 2 }, (_, i) =>
+          fishOf(`${s.id}-${i}`, s.id, { size: s.lifecycle.maxSizeM }),
+        ),
+      ),
+    };
+    let now = T0;
+    let low = Infinity;
+    let high = -Infinity;
+    for (let day = 0; day < days; day++) {
+      state = {
+        ...state,
+        water: { ...state.water, uneatenFood: state.water.uneatenFood + 0.5 },
+        fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+      };
+      if (day % 7 === 0) {
+        const changed = applyCare(
+          state,
+          { type: 'water_change' },
+          'blackwater',
+          chemistryParams,
+          T0,
+        );
+        if (!changed.ok) throw new Error(changed.reason);
+        state = changed.value;
+      }
+      for (let h = 0; h < 24; h++) {
+        const r = catchUp({
+          state,
+          fromMs: now,
+          toMs: now + HOUR,
+          ...env,
+          equipment,
+          biome: 'blackwater',
+          graceEndsAtMs: NO_GRACE,
+          vacationFeeder: false,
+          ...NO_BREEDING,
+        });
+        state = r.state;
+        now += HOUR;
+        low = Math.min(low, state.chemistry.ph);
+        high = Math.max(high, state.chemistry.ph);
+      }
+    }
+    return { low, high };
+  }
+
+  it('still offers the no-CO2 tier', () => {
+    expect(allowedCo2Tiers).toContain(0);
+  });
+
+  it.each(allowedCo2Tiers)('CO2 tier %d stays at or above pH 5.5 for 90 days', (tier) => {
+    expect(phRangeOverGoodCare(tier, 90).low).toBeGreaterThanOrEqual(
+      PH_FLOOR_ASSUMED_FOR_APISTOGRAMMA,
+    );
+  });
+
+  it.each(allowedCo2Tiers)('CO2 tier %d stays inside every blackwater species range', (tier) => {
+    const { low, high } = phRangeOverGoodCare(tier, 90);
+    for (const s of blackwater) {
+      const [min, max] = s.chemistry.phRange;
+      expect(low, s.id).toBeGreaterThanOrEqual(Math.max(min, PH_FLOOR_ASSUMED_FOR_APISTOGRAMMA));
+      expect(high, s.id).toBeLessThanOrEqual(max);
+    }
+  });
+
+  it('issue repro: CO2 tier 2 is refused in blackwater rather than driving pH to about 4.5', () => {
+    expect(equipmentProblems('blackwater', { ...DEFAULT_EQUIPMENT, co2: { tier: 2 } })).toEqual([
+      'co2 is not used in blackwater tanks',
+    ]);
   });
 });

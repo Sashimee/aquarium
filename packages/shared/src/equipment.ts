@@ -41,13 +41,14 @@ export const DEFAULT_EQUIPMENT: Equipment = {
   waveMaker: { tier: 0 },
 };
 
-// Per biome, which of the two water-specific devices fit. Cichlid and blackwater are fresh water,
-// so CO2 is fine and a wave maker is not. Mangrove is brackish: planted-tank CO2 does not belong
+// Per biome, which of the two water-specific devices fit. Cichlid is fresh water, so CO2 is fine
+// and a wave maker is not. Blackwater is near-unbuffered (KH ~1): injected CO2 would crash pH
+// below what its species tolerate, and blackwater biotopes do not use it. Mangrove is brackish: planted-tank CO2 does not belong
 // in it, while a wave maker (tidal flow) does.
 const DEVICES_BY_BIOME: Readonly<Record<Biome, { co2: boolean; waveMaker: boolean }>> = {
   freshwater: { co2: true, waveMaker: false },
   cichlid: { co2: true, waveMaker: false },
-  blackwater: { co2: true, waveMaker: false },
+  blackwater: { co2: false, waveMaker: false },
   reef: { co2: false, waveMaker: true },
   mangrove: { co2: false, waveMaker: true },
 };

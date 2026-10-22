@@ -208,10 +208,12 @@ describe('equipment', () => {
   it('applies the device rules to every biome', () => {
     const co2 = { ...DEFAULT_EQUIPMENT, co2: { tier: 1 } };
     const waves = { ...DEFAULT_EQUIPMENT, waveMaker: { tier: 1 } };
-    for (const biome of ['freshwater', 'cichlid', 'blackwater'] as const) {
+    for (const biome of ['freshwater', 'cichlid'] as const) {
       expect(equipmentProblems(biome, co2), biome).toEqual([]);
       expect(equipmentProblems(biome, waves), biome).toHaveLength(1);
     }
+    expect(equipmentProblems('blackwater', co2)).toHaveLength(1);
+    expect(equipmentProblems('blackwater', waves)).toHaveLength(1);
     for (const biome of ['reef', 'mangrove'] as const) {
       expect(equipmentProblems(biome, co2), biome).toHaveLength(1);
       expect(equipmentProblems(biome, waves), biome).toEqual([]);
