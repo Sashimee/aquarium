@@ -76,7 +76,7 @@
       "reef": 35,
       "cichlid": 0,
       "blackwater": 0,
-      "mangrove": 15
+      "mangrove": 10
     },
     "driftPerHour": 0.01,
     "restoredPerWaterChange": 0.5,

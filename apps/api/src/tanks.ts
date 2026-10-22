@@ -21,6 +21,7 @@ import {
   MAX_DISPLAY_TANKS,
   MAX_QUARANTINE_TANKS,
   newTankChemistry,
+  tankLengthRefusal,
   TANK_SIZES,
   personalitySchema,
   setGalleryRequestSchema,
@@ -1344,6 +1345,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             apiError('validation_failed', `${spec.commonName} needs a ${spec.biome} tank.`),
           );
         }
+        const tooShort = tankLengthRefusal(economy, spec.id, ticked.tank, spec.commonName);
+        if (tooShort) throw new HttpError(400, apiError('validation_failed', tooShort));
         const existing = ticked.fishRows.map((f) => ({
           alive: f.status === 'alive',
           maxBioload: species.get(f.species)?.lifecycle.bioload ?? 0,
@@ -1524,6 +1527,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
   registerMoveRoutes({
     app,
     species,
+    economy,
     clock,
     authorize,
     throttle,
@@ -1536,6 +1540,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     app,
     database,
     species,
+    economy,
     chemistryParams,
     clock,
     authorize,

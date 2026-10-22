@@ -1,7 +1,17 @@
 import type { LoftFishRecipe } from './loft-fish.ts';
 import type { SectionKey } from './loft.ts';
 import { smoothstep } from './math.ts';
-import { band, canvasFor, disc, eyeSpot, locate, mix, noise, ring, type Rgb } from './mangrove.ts';
+import {
+  band,
+  canvasFor,
+  disc,
+  eyeSpot,
+  locate,
+  mix,
+  noise,
+  ring,
+  type Rgb,
+} from './loft-paint.ts';
 
 const PUFFER_SECTIONS: SectionKey[] = [
   { t: 0, top: 0.06, bottom: -0.08, halfWidth: 0.04 },
@@ -47,7 +57,7 @@ export const FRESHWATER_PUFFER_RECIPES: LoftFishRecipe[] = [
     species: 'figure-8-puffer',
     fallbackLengthM: 0.055,
     roughness: 0.4,
-    note: 'Tetraodon biocellatus: no model and no allowed photo, so the body is a procedural loft and the colour map is painted from the species description alone',
+    note: 'Dichotomyctere ocellatus: no model and no allowed photo, so the body is a procedural loft and the colour map is painted from the species description alone',
     texture: {
       kind: 'synthetic',
       ...canvasFor(PUFFER_SECTIONS, 0.32, -0.32, 0.25),

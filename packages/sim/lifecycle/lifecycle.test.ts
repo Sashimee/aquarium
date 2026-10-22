@@ -887,6 +887,32 @@ describe('pH, KH, temperature and salinity', () => {
     expect(r.state.chemistry.salinity).toBeGreaterThan(30);
   });
 
+  it('holds a mangrove tank at 10 ppt, clear of every mangrove species range by 5 ppt', () => {
+    expect(chemistryParams.salinity.target.mangrove).toBe(newTankChemistry('mangrove').salinity);
+    const target = chemistryParams.salinity.target.mangrove;
+    const mangrove = parsedSpecies.filter((s) => s.biome === 'mangrove');
+    expect(mangrove.length).toBeGreaterThan(0);
+    for (const s of mangrove) {
+      const [low, high] = s.chemistry.salinityPpt;
+      expect(target - low, s.id).toBeGreaterThanOrEqual(5);
+      expect(high - target, s.id).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('keeps a stocked mangrove tank unstressed over a month of daily visits', () => {
+    const fish = parsedSpecies.filter((s) => s.biome === 'mangrove').map((s) => fishOf(s.id, s.id));
+    const start = { ...tank(fish), chemistry: newTankChemistry('mangrove') };
+    const end = fedDaily(start, 30, { env: { biome: 'mangrove' } });
+    expect(end.chemistry.salinity).toBeCloseTo(10, 2);
+    expect(end.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+  });
+
+  it('draws a mangrove tank created at the old 15 ppt down to 10', () => {
+    const old = { ...tank([]), chemistry: { ...newTankChemistry('mangrove'), salinity: 15 } };
+    const r = run(old, 40 * DAY, { env: { biome: 'mangrove' } });
+    expect(r.state.chemistry.salinity).toBeCloseTo(10, 2);
+  });
+
   it('accumulating nitrate consumes KH and then lets pH sag', () => {
     const start = tank([fishOf('a', 'angelfish', { size: 0.15 })], {}, { kh: 3 });
     const end = run(start, 40 * DAY).state;
