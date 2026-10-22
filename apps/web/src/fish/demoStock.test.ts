@@ -266,6 +266,17 @@ describe('sceneAnchorsToSim', () => {
     ]);
   });
 
+  it('carries a cave mouth facing through to the sim', () => {
+    const cave: SceneAnchor = {
+      id: 'c',
+      kind: 'cave',
+      position: [0.1, 0.25, 0],
+      radius: 0.03,
+      facing: [0, 0, 1],
+    };
+    expect(sceneAnchorsToSim([cave], demo)[0]?.facing).toEqual([0, 0, 1]);
+  });
+
   it('lifts an anchor sunk into the sand until its sphere clears it', () => {
     const low: SceneAnchor = { id: 'low', kind: 'anemone', position: [0, 0.02, 0], radius: 0.03 };
     const [sim] = sceneAnchorsToSim([low], demo);

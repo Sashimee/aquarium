@@ -196,6 +196,7 @@ export function sceneAnchorsToSim(anchors: readonly SceneAnchor[], demo: DemoTan
       kind: a.kind,
       position: [x, Math.min(Math.max(y, ground + radius), top - radius), z],
       radius,
+      ...(a.facing && { facing: a.facing }),
     };
   });
 }
