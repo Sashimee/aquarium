@@ -49,7 +49,8 @@ export interface QualityOptions {
   /**
    * A frame at least this long, and `STALL_RATIO` times the probe's fastest quarter, is a stall
    * (a pipeline compile or texture upload) rather than the tier's cost. A probe that saw one runs
-   * again; from `maxProbeMs` after it began it drops the stalls and decides instead. A device that
+   * again while a whole run, warm-up included, still ends within `maxProbeMs` of its start;
+   * otherwise it drops the stalls and decides, so no probe outlasts `maxProbeMs`. A device that
    * is that slow on every frame has no fast quarter to stand out from, so it is timed as it is.
    */
   stallMs?: number;
@@ -206,12 +207,13 @@ export class QualityManager {
 
   /**
    * A load or pipeline compile is stalling frames from now on. A probe in progress starts its
-   * warm-up again, unless it has run for `maxProbeMs`; the controller ignores the next samples.
+   * warm-up again while a whole run still fits before its deadline; the controller ignores the
+   * next samples.
    */
   stall(nowMs: number): void {
     const phase = this.phase;
     if (phase.kind === 'probing') {
-      if (nowMs < phase.deadline) this.restartProbe(phase, nowMs);
+      if (this.canRestart(phase, nowMs)) this.restartProbe(phase, nowMs);
       return;
     }
     if (phase.kind === 'running') this.controller?.pause(nowMs);
@@ -240,6 +242,10 @@ export class QualityManager {
     };
   }
 
+  private canRestart(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): boolean {
+    return nowMs + this.warmupMs + this.probeMs <= phase.deadline;
+  }
+
   private restartProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {
     phase.startedAt = nowMs + this.warmupMs;
     phase.gpu.length = 0;
@@ -249,7 +255,7 @@ export class QualityManager {
   private finishProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {
     const stall = stallThreshold(phase.frame, this.stallMs);
     if (phase.frame.some((ms) => ms >= stall)) {
-      if (nowMs < phase.deadline) {
+      if (this.canRestart(phase, nowMs)) {
         this.restartProbe(phase, nowMs);
         return;
       }

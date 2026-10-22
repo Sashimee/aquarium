@@ -483,19 +483,19 @@ describe('QualityManager', () => {
     expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
   });
 
-  it('decides from the frames between the stalls once the probe has run for maxProbeMs', () => {
+  it('decides from the frames between the stalls once another run would pass maxProbeMs', () => {
     const { quality, announced } = setup({ gpuTiming: false, maxProbeMs: 6000 });
     quality.start(0);
-    const t = feedTrace(quality, compiling, 0, 5000);
+    const t = feedTrace(quality, compiling, 0, 4000);
     expect(quality.probing).toBe(true);
-    feedTrace(quality, compiling, t, 9000);
+    feedTrace(quality, compiling, t, 6000);
     expect(quality.probing).toBe(false);
     expect(quality.tier).toBe('high');
     expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
   });
 
-  it('restarts the probe when told of a stall, until maxProbeMs', () => {
-    const { quality } = setup({ maxProbeMs: 4000 });
+  it('restarts the probe when told of a stall while a whole run still fits in maxProbeMs', () => {
+    const { quality } = setup({ maxProbeMs: 4500 });
     quality.start(0);
     let t = feed(quality, TARGET, 14, 0, 2000);
     quality.stall(t);
@@ -507,6 +507,33 @@ describe('QualityManager', () => {
     feed(quality, TARGET, 14, t, 4500);
     expect(quality.probing).toBe(false);
     expect(quality.tier).toBe('medium');
+  });
+
+  it('ends a probe on uneven frames within maxProbeMs of its start', () => {
+    const { quality } = setup({ gpuTiming: false });
+    quality.start(0);
+    let t = 0;
+    for (let i = 0; quality.probing && t < 20_000; i++) {
+      const { frameMs } = compiling(i);
+      t += frameMs;
+      quality.sample(frameMs, null, t);
+    }
+    expect(quality.probing).toBe(false);
+    expect(t).toBeLessThanOrEqual(10_000);
+  });
+
+  it('does not stretch the probe past maxProbeMs for a stall it is told of late', () => {
+    const { quality } = setup({ maxProbeMs: 10_000 });
+    quality.start(0);
+    let t = 0;
+    for (let i = 0; quality.probing && t < 20_000; i++) {
+      const { frameMs } = compiling(i);
+      t += frameMs;
+      if (t > 9000 && t < 9200) quality.stall(t);
+      quality.sample(frameMs, null, t);
+    }
+    expect(quality.probing).toBe(false);
+    expect(t).toBeLessThanOrEqual(10_000);
   });
 
   it('does not let the controller step down on stalls it was told of', () => {

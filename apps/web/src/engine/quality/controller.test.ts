@@ -280,6 +280,28 @@ describe('TierController', () => {
     expect(c.tier).toBe('high');
   });
 
+  it('keeps the holds saved by a pause when another one comes before any sample', () => {
+    const c = controller('high', { windowSize: 10, cooldownMs: 3000, downHoldMs: 2000 });
+    const { end } = run(c, 30, 0, 1600);
+    c.pause(end);
+    c.pause(end + 3500);
+    const resumeAt = end + 6500;
+    // About 1.45 s of the 2 s down hold stood at the first pause, so it completes soon after.
+    const { changes } = run(c, 30, resumeAt, 1000);
+    expect(changes).toMatchObject([{ from: 'high', to: 'medium', reason: 'over-budget' }]);
+  });
+
+  it('reset() during a pause drops the holds the pause saved', () => {
+    const c = controller('high', { windowSize: 10, cooldownMs: 3000, downHoldMs: 2000 });
+    const { end } = run(c, 30, 0, 1600);
+    c.pause(end);
+    c.reset('high', end + 100);
+    const settled = end + 3100;
+    // A fresh window and the whole down hold: what the pause saved would have cut it short.
+    expect(run(c, 30, settled, 2000).changes).toEqual([]);
+    expect(run(c, 30, settled + 2000, 1000).changes).toMatchObject([{ to: 'medium' }]);
+  });
+
   it('reset() applies a manual tier and restarts measurement', () => {
     const c = controller('high');
     run(c, 30, 0, 1900);
