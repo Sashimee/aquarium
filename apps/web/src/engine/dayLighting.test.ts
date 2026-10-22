@@ -180,6 +180,8 @@ describe('lampGain', () => {
   it('spans two stops under the tuned level to half a stop over', () => {
     expect(lampGain(0)).toBeCloseTo(LAMP_GAIN_MIN, 12);
     expect(lampGain(1)).toBeCloseTo(LAMP_GAIN_MAX, 12);
+    expect(LAMP_GAIN_MIN).toBe(0.25);
+    expect(LAMP_GAIN_MAX).toBeCloseTo(Math.SQRT2, 12);
     expect(Math.log2(LAMP_GAIN_MIN)).toBeCloseTo(-2, 12);
     expect(Math.log2(LAMP_GAIN_MAX)).toBeCloseTo(0.5, 12);
   });
