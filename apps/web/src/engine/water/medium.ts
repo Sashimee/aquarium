@@ -54,7 +54,7 @@ const DEFAULT_FIXTURE_HEIGHT = 1.2;
 const MIN_EXTINCTION = 1e-6;
 
 export interface WaterQuality {
-  /** CDOM absorption at 440 nm (1/m): ~0 for reef water, 0.1-0.5 for tannin-stained water. */
+  /** CDOM absorption at 440 nm (1/m): ~0 for reef water, a few 1/m for tannin-stained water. */
   cdom440: number;
   /** Scattering coefficient (1/m) from suspended particles. */
   turbidity: number;
