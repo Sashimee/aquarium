@@ -406,6 +406,17 @@ describe('ClockPin room minute', () => {
     expect(pin.blendMinute(60 + 20 / 60, 1000 + CLOCK_EASE_MS)).toBeCloseTo(60 + 20 / 60);
   });
 
+  it('does not spin a day when the live target starts just behind the shown minute and passes it', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 0);
+    const live = 13 * 60 - 10 / 60;
+    for (let seconds = 0; seconds <= 20; seconds += 2) {
+      const minute = pin.blendMinute(live + seconds / 60, seconds * 1000);
+      expect(Math.abs(minute - 13 * 60)).toBeLessThan(1);
+    }
+  });
+
   it('chooses the direction afresh for the next fade', () => {
     const pin = new ClockPin(13 * 60);
     pin.blendMinute(13 * 60, 0);

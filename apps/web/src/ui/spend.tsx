@@ -10,12 +10,15 @@ import {
 import { loadPayments } from '../sync/payments';
 import type { TankSession } from '../sync/session';
 import { affordNow, runSpend } from '../sync/spending';
-import { useOptionalApi } from './context';
+import { useApi } from './context';
 
 export const PEARL_PACKS_ID = 'pearl-packs';
 
-/** Opens the shop when it is not already showing; the Shop panel itself needs nothing. */
+/** The app's one way to open the Shop panel, so a note outside it can point the player there. */
 export const OpenShopContext = createContext<(() => void) | null>(null);
+
+// The Shop panel is a lazy chunk; its first frames may not have the section yet.
+const PACKS_WAIT_FRAMES = 120;
 
 type Availability = 'unknown' | 'on' | 'off';
 
@@ -43,29 +46,39 @@ export function useSpend(session: TankSession, balance: number | null): Spender 
   const [pending, setPending] = useState<SpendRequest | null>(null);
   const [availability, setAvailability] = useState<Availability>('unknown');
   const confirmRef = useRef<HTMLButtonElement>(null);
-  const api = useOptionalApi();
+  const api = useApi();
   const openShop = useContext(OpenShopContext);
 
   const offered = Boolean(short?.offer);
   useEffect(() => {
-    if (!offered || !api) return;
+    if (!offered || availability !== 'unknown') return;
     let current = true;
     loadPayments(api).then(
       (view) => current && setAvailability(view.kind === 'off' ? 'off' : 'on'),
-      () => current && setAvailability('unknown'),
+      () => undefined,
     );
     return () => {
       current = false;
     };
-  }, [offered, api]);
+  }, [offered, availability, api]);
+
+  const frame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
   const showPacks = () => {
+    cancelAnimationFrame(frame.current);
     openShop?.();
-    window.setTimeout(() => {
+    let tries = 0;
+    const reach = () => {
       const section = document.getElementById(PEARL_PACKS_ID);
+      if (!section && tries++ < PACKS_WAIT_FRAMES) {
+        frame.current = requestAnimationFrame(reach);
+        return;
+      }
       section?.scrollIntoView?.({ block: 'start' });
       section?.querySelector<HTMLElement>('h3')?.focus();
-    }, 0);
+    };
+    frame.current = requestAnimationFrame(reach);
   };
 
   useEffect(() => {

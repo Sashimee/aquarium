@@ -400,7 +400,7 @@ function Shell() {
                     newTank={newTank}
                     food={food}
                     onFood={setFood}
-                    onShop={() => dispatch({ type: 'open', panel: 'shop' })}
+                    onShop={openShop}
                     onCollection={() => {
                       dispatch({ type: 'close' });
                       setBookOpen(true);

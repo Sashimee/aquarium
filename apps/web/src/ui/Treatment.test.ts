@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Tank } from '@aquarium/shared';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from '../sync/fixtures';
 import { speciesNameMap } from '../sync/life';
@@ -14,6 +14,12 @@ import {
   QuarantineSection,
   Treatment,
 } from './Treatment';
+import type { ApiClient } from './api';
+
+vi.mock('./context', async (original) => ({
+  ...(await original<typeof import('./context')>()),
+  useApi: () => ({}) as ApiClient,
+}));
 
 const ich = {
   kind: 'ich' as const,

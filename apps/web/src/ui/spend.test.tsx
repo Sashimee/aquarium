@@ -8,7 +8,7 @@ import type { TankSession } from '../sync/session';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const api = { paymentsState: vi.fn(), paymentsPacks: vi.fn() };
-vi.mock('./context', () => ({ useOptionalApi: () => api }));
+vi.mock('./context', () => ({ useApi: () => api }));
 
 const { OpenShopContext, PEARL_PACKS_ID, useSpend } = await import('./spend');
 
@@ -89,6 +89,71 @@ describe('the not enough Pearls note', () => {
       link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
     expect(openShop).toHaveBeenCalledOnce();
+  });
+
+  const enable = () => {
+    api.paymentsState.mockResolvedValue(payments());
+    api.paymentsPacks.mockResolvedValue({
+      packs: [{ id: 'pearls-550', priceCents: 499, pearls: 550, webAvailable: true }],
+      subscription: { id: 'club', priceCents: 499, interval: 'month', pearlsPerDay: 20 },
+    });
+  };
+  const followLink = async () => {
+    const link = container.querySelector<HTMLAnchorElement>(`a[href="#${PEARL_PACKS_ID}"]`);
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+  };
+  const frames = async (count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+    }
+  };
+  const mountSection = () => {
+    const section = document.createElement('section');
+    section.id = PEARL_PACKS_ID;
+    const heading = document.createElement('h3');
+    heading.tabIndex = -1;
+    section.append(heading);
+    section.scrollIntoView = vi.fn();
+    document.body.append(section);
+    return { section, heading };
+  };
+
+  it('scrolls to and focuses the packs once the lazy Shop panel has mounted them', async () => {
+    enable();
+    await shortOfPearls();
+    await followLink();
+    await frames(3);
+    const { section, heading } = mountSection();
+    await frames(2);
+    expect(section.scrollIntoView).toHaveBeenCalled();
+    expect(document.activeElement).toBe(heading);
+    section.remove();
+  });
+
+  it('stops waiting for the packs when the note goes away', async () => {
+    enable();
+    await shortOfPearls();
+    await followLink();
+    act(() => root.unmount());
+    root = createRoot(container);
+    const { section, heading } = mountSection();
+    await frames(3);
+    expect(document.activeElement).not.toBe(heading);
+    section.remove();
+  });
+
+  it('asks once whether payments are on, however many notes follow', async () => {
+    enable();
+    await shortOfPearls();
+    await act(async () => {
+      container.querySelector('#buy')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    for (let i = 0; i < 5; i += 1) await act(async () => {});
+    expect(api.paymentsState).toHaveBeenCalledTimes(1);
   });
 
   it('says calmly that packs are unavailable when payments are off', async () => {
