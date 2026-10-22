@@ -7,7 +7,7 @@ import {
   timestampSchema,
 } from './common.js';
 import { diseaseKindSchema } from './fishState.js';
-import { tankSizeSchema } from './tankSize.js';
+import { TANK_SIZES, tankSizeSchema, type TankSize } from './tankSize.js';
 
 // Tables and routes live in apps/api (T70, PLAN 9.2).
 //   wallet(user_id PK -> user ON DELETE CASCADE, balance integer): cache of the ledger sum, kept
@@ -260,6 +260,19 @@ export const economySchema = z
     });
   });
 export type Economy = z.infer<typeof economySchema>;
+
+export function tankLengthRefusal(
+  economy: Economy,
+  speciesId: string,
+  size: TankSize,
+  commonName: string,
+): string | undefined {
+  const minLength = Object.hasOwn(economy.species, speciesId)
+    ? economy.species[speciesId]?.minTankLengthM
+    : undefined;
+  if (minLength === undefined || TANK_SIZES[size].dimensions.length >= minLength) return undefined;
+  return `${commonName} needs a tank at least ${Math.round(minLength * 100)} cm long.`;
+}
 
 export function decorPrice(economy: Economy, assetId: string): number | undefined {
   if (PROCEDURAL_EUPHYLLIA_ID.test(assetId)) return economy.items.euphyllia;

@@ -88,7 +88,12 @@ const errorOf = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()
 async function makeTank(
   h: Harness,
   who: Account,
-  body: { biome?: 'freshwater' | 'reef'; quarantine?: boolean; gifts?: boolean } = {},
+  body: {
+    biome?: 'freshwater' | 'reef' | 'mangrove';
+    quarantine?: boolean;
+    gifts?: boolean;
+    size?: string;
+  } = {},
 ): Promise<string> {
   await topUp(h);
   const res = await call(h, who, 'POST', '/api/tanks', {
@@ -96,6 +101,7 @@ async function makeTank(
     idempotencyKey: randomUUID(),
     biome: body.biome ?? 'freshwater',
     ...(body.quarantine ? { quarantine: true, size: 'nano30' } : {}),
+    ...(body.size ? { size: body.size } : {}),
   });
   expect(res.statusCode).toBe(201);
   const id = tankSchema.parse(res.json()).id;
@@ -114,6 +120,7 @@ async function addFish(
   opts: {
     status?: 'alive' | 'dead';
     name?: string;
+    species?: string;
     disease?: { kind: 'ich'; since: string; severity: number; treatedUntil: string | null };
   } = {},
 ): Promise<string> {
@@ -122,7 +129,7 @@ async function addFish(
     .insert(schema.fish)
     .values({
       tankId,
-      species: 'neon-tetra',
+      species: opts.species ?? 'neon-tetra',
       name: opts.name ?? 'Pip',
       sex: 'female',
       size: 0.03,
@@ -535,7 +542,7 @@ describe('gifting and trading fish', () => {
       expect(rows[0]?.tankId).toBe(acc.statusCode === 200 ? tankB : tankA);
     });
 
-    it('refuses a wrong-biome and a full destination tank and keeps the offer open', async () => {
+    it('refuses a wrong-biome, a full and a too-short destination tank and keeps the offer open', async () => {
       const a = await account(h);
       const b = await account(h);
       const tankA = await makeTank(h, a);
@@ -553,6 +560,18 @@ describe('gifting and trading fish', () => {
       expect(errorOf(full).reason).toBe('tank_full');
       expect((await offerRow(h, id)).status).toBe('open');
       expect(await fishRows(h, fishId)).toHaveLength(0);
+
+      const longA = await makeTank(h, a, { biome: 'mangrove', size: 'long300' });
+      const standardB = await makeTank(h, b, { biome: 'mangrove' });
+      const longB = await makeTank(h, b, { biome: 'mangrove', size: 'long300' });
+      const monoId = await addFish(h, longA, { species: 'silver-mono' });
+      const monoOffer = offerId(await offer(h, a, { fromTankId: longA, fishId: monoId, to: b }));
+      const short = await accept(h, b, monoOffer, { toTankId: standardB });
+      expect(short.statusCode).toBe(400);
+      expect(errorOf(short).message).toContain('150 cm');
+      expect((await offerRow(h, monoOffer)).status).toBe('open');
+      expect(await fishRows(h, monoId)).toHaveLength(0);
+      expect((await accept(h, b, monoOffer, { toTankId: longB })).statusCode).toBe(200);
     });
 
     it("404s on a destination tank that is not the recipient's", async () => {

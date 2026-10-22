@@ -2,7 +2,9 @@ import {
   idSchema,
   moveFishRequestSchema,
   moveFishResponseSchema,
+  tankLengthRefusal,
   TANK_SIZES,
+  type Economy,
   type ConflictReason,
   type Tank,
 } from '@aquarium/shared';
@@ -33,6 +35,7 @@ const refuse = (status: 400 | 409, message: string, reason?: ConflictReason) =>
 export interface MoveContext {
   app: FastifyInstance;
   species: SpeciesCatalog;
+  economy: Economy;
   clock: Clock;
   authorize: (req: FastifyRequest, requireVerified?: boolean) => Promise<SessionUser>;
   throttle: (userId: string, bucket: keyof CareLimits) => void;
@@ -48,7 +51,7 @@ export interface MoveContext {
 }
 
 export function registerMoveRoutes(ctx: MoveContext): void {
-  const { app, species, clock, authorize, throttle, guarded, withTanks, render } = ctx;
+  const { app, species, economy, clock, authorize, throttle, guarded, withTanks, render } = ctx;
 
   app.post(
     '/api/tanks/:tankId/fish/:fishId/move',
@@ -115,6 +118,13 @@ export function registerMoveRoutes(ctx: MoveContext): void {
             'wrong_biome',
           );
         }
+        const tooShort = tankLengthRefusal(
+          economy,
+          spec.id,
+          destination.tank.size,
+          spec.commonName,
+        );
+        if (tooShort) throw refuse(400, tooShort);
         const existing = destination.fishRows.map((f) => ({
           alive: f.status === 'alive',
           maxBioload: species.get(f.species)?.lifecycle.bioload ?? 0,

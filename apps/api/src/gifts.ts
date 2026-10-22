@@ -25,7 +25,9 @@ import {
   type ConflictReason,
   type GiftArrival,
   type GiftFish,
+  type Economy,
   type GiftOffer,
+  tankLengthRefusal,
   type Tank,
 } from '@aquarium/shared';
 import {
@@ -104,6 +106,7 @@ export interface GiftContext {
   app: FastifyInstance;
   database: Database;
   species: SpeciesCatalog;
+  economy: Economy;
   chemistryParams: ChemistryParameters;
   clock: Clock;
   authorize: (req: FastifyRequest, requireVerified?: boolean) => Promise<SessionUser>;
@@ -166,7 +169,8 @@ async function loadUser(tx: Pick<Database['db'], 'select'>, id: string): Promise
 }
 
 export function registerGiftRoutes(ctx: GiftContext): void {
-  const { app, database, species, chemistryParams, clock, authorize, throttle, guarded } = ctx;
+  const { app, database, species, economy, chemistryParams, clock, authorize, throttle, guarded } =
+    ctx;
   const { withTanksOf, render } = ctx;
 
   async function views(
@@ -316,6 +320,8 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         'wrong_biome',
       );
     }
+    const tooShort = tankLengthRefusal(economy, spec.id, dest.tank.size, spec.commonName);
+    if (tooShort) throw refuse(400, tooShort);
     const existing = dest.fishRows
       .filter((f) => f.id !== leavingFishId)
       .map((f) => ({
