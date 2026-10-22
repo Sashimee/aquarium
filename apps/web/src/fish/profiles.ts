@@ -244,6 +244,14 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     roughness: 0.45,
     finTransmission: 0.35,
   },
+  'aulonocara-baenschi': {
+    ...DEFAULTS,
+    assetId: 'aulonocara-baenschi-female',
+    male: { assetId: 'aulonocara-baenschi', lengthFactor: 1.33 },
+    iridescence: 0.3,
+    iridescenceMask: 'blue',
+    finTransmission: 0.4,
+  },
 };
 
 export function renderProfile(speciesId: string): FishRenderProfile {

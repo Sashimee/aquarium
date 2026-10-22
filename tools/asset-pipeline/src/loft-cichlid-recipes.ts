@@ -667,7 +667,7 @@ export const CICHLID_LOFT_RECIPES: LoftFishRecipe[] = [
   {
     id: 'aulonocara-baenschi',
     species: 'aulonocara-baenschi',
-    fallbackLengthM: 0.1,
+    fallbackLengthM: ((0.13 * 0.75) / 1.2725) * 1.33,
     lengthFactor: 1.33,
     roughness: 0.4,
     note: 'Aulonocara baenschi (peacock cichlid) male by Rjcastillo (CC-BY-SA-4.0), side view projected onto the loft; fins painted as translucent membranes. This colour map is a derivative of the photo and stays CC-BY-SA-4.0',
