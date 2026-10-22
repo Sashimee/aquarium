@@ -27,7 +27,7 @@ import {
 } from 'three/webgpu';
 import { texture } from 'three/tsl';
 import { fail, record } from '../../fish/assetIndex';
-import { TIERS, type Tier } from '../quality/tiers';
+import { lowerTier, TIERS, type Tier } from '../quality/tiers';
 
 /** Linear albedo of the plain dark blue film shown while no picture is loaded, or none exists. */
 export const BACKDROP_FILM = new Color(0.01, 0.025, 0.08);
@@ -83,6 +83,14 @@ export function parseBackgroundFiles(json: unknown): BackgroundFiles {
     out.set(id.data, files);
   });
   return out;
+}
+
+/**
+ * The tier whose poster `tier` shows under its capped `textureSize`. High and ultra posters are
+ * 2048 wide, so a device held to 1k maps, a phone, gets medium's 1024x512 one (PLAN §9.2).
+ */
+export function posterTier(tier: Tier, textureSize: 1024 | 2048): Tier {
+  return textureSize < 2048 ? lowerTier(tier, 'medium') : tier;
 }
 
 export function backgroundFile(files: BackgroundFiles, id: BackgroundId, tier: Tier): string {

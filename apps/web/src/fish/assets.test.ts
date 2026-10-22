@@ -4,7 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { parseFishAssets } from './assetIndex';
-import { disposeFishModel, FIN_ATTRIBUTE, FishAssetLoader, LEG_PART_ID } from './assets';
+import {
+  disposeFishModel,
+  FIN_ATTRIBUTE,
+  FishAssetLoader,
+  LEG_PART_ID,
+  SHARP_TEXTURE_MIN_LENGTH_M,
+} from './assets';
 import { MOUTH_LODS } from './lod';
 import { curlAboveFloor, curledTip, MAX_TAIL_CURL } from './walk';
 
@@ -67,15 +73,34 @@ describe('FishAssetLoader', () => {
     const urls = spyTextureLoads();
     const loader = new FishAssetLoader(new KTX2Loader(), ROOT);
     loader.textureSize = 2048;
-    const model = await loader.load('neon-tetra');
+    const model = await loader.load('betta');
 
     expect(model.textureSize).toBe(2048);
     expect(new Set(urls)).toEqual(
       new Set([
-        '/assets/fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2',
-        '/assets/fish/neon-tetra/textures/neon-tetra_normal_2k.ktx2',
+        '/assets/fish/betta/textures/betta_basecolor_2k.ktx2',
+        '/assets/fish/betta/textures/betta_normal_2k.ktx2',
       ]),
     );
+    disposeFishModel(model);
+  });
+
+  it('keeps an animal under 4 cm on its 1k maps at 2048, even where a 2k set ships', async () => {
+    serveShippedAssets();
+    const urls = spyTextureLoads();
+    const loader = new FishAssetLoader(new KTX2Loader(), ROOT);
+    loader.textureSize = 2048;
+    const neon = (await loader.entries()).get('neon-tetra');
+    if (neon === undefined) throw new Error('shipped index changed');
+    expect(neon.sharperTextures.size).toBeGreaterThan(0);
+    expect(neon.standardLengthM).toBeLessThan(SHARP_TEXTURE_MIN_LENGTH_M);
+
+    const model = await loader.load('neon-tetra');
+    expect(model.textureSize).toBe(1024);
+    expect(
+      urls.every((url) => url.endsWith('_1k.ktx2')),
+      urls.join(),
+    ).toBe(true);
     disposeFishModel(model);
   });
 
@@ -86,11 +111,13 @@ describe('FishAssetLoader', () => {
     loader.textureSize = 2048;
     const entries = await loader.entries();
     const corydoras = entries.get('bronze-corydoras');
-    const neon = entries.get('neon-tetra');
-    if (corydoras === undefined || neon === undefined) throw new Error('shipped index changed');
+    const angelfish = entries.get('angelfish');
+    if (corydoras === undefined || angelfish === undefined) {
+      throw new Error('shipped index changed');
+    }
 
     expect(loader.textureSizeFor(corydoras)).toBe(1024);
-    expect(loader.textureSizeFor(neon)).toBe(2048);
+    expect(loader.textureSizeFor(angelfish)).toBe(2048);
     const model = await loader.load('bronze-corydoras');
     expect(model.textureSize).toBe(1024);
     disposeFishModel(model);

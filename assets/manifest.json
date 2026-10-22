@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-10-19",
+  "generated_at": "2026-10-23",
   "status_values": ["downloaded", "selected-pending-download"],
   "rules": [
     "sha256 is null if and only if status is selected-pending-download.",
@@ -4121,7 +4121,7 @@
       "polycount": null,
       "textures": "PBR jpg 2048x2048: Color, Displacement, NormalGL, Opacity, Roughness",
       "rigged": false,
-      "notes": "Leaf atlas with an opacity map (individual leaves on a transparent sheet), to scatter as card meshes for catappa-style floating and sunken leaves. Licence stated as CC0 on the asset page FAQ and https://docs.ambientcg.com/license/. The raw directory also holds the unlisted .blend/.usdc/.mtlx/.tres/NormalDX/preview files from the zip. sha256 is the aggregate over files[].",
+      "notes": "Leaf atlas with an opacity map (individual leaves on a transparent sheet), to scatter as card meshes for catappa-style floating and sunken leaves. Licence stated as CC0 on the asset page FAQ and https://docs.ambientcg.com/license/. The raw directory also holds the unlisted .blend/.usdc/.mtlx/.tres/NormalDX/preview files from the zip. sha256 is the aggregate over files[]. Looked at the colour map on 2026-10-23: four reddish-brown broadleaf shapes (three single leaves with a petiole, one cluster), beech-like rather than true catappa, but the right size, colour and opacity for tannin-tinted leaf litter. Planned card: catappa-leaf-card.",
       "modifications": [],
       "status": "downloaded",
       "files": [
@@ -4848,6 +4848,41 @@
       "notes": "Mangrove roots standing in shallow lagoon water, Laguna de La Restinga, Venezuela. 2773x1875. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-22; Commons sha1 223ef12fde90f6860af692210be1723b61dbec5b matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-mangrove-restinga-wilfredor/original.jpg (not committed). Reference for the mangrove-root background render.",
       "modifications": [],
       "status": "downloaded"
+    },
+    {
+      "id": "sketchfab-3701243a",
+      "kind": "plant",
+      "title": "echinodorus",
+      "author": "trueblack",
+      "author_url": "https://sketchfab.com/pizzabones",
+      "source_url": "https://sketchfab.com/3d-models/echinodorus-3701243ae55c482f82379da81180d8f1",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "79b6d73471aeb29368281ce87c853b37e57d4e26e48556af0b872a0eaadd18f4",
+      "polycount": 3632,
+      "textures": "none: 24 flat-colour materials (base colour 0.55, 0.76, 0.29)",
+      "rigged": false,
+      "notes": "Echinodorus sp. (Amazon sword) rosette for the Rio Negro blackwater and freshwater presets. Licence (CC Attribution 4.0, downloadable) read from the Sketchfab API model record and the bundled license.txt. Verified from the downloaded glTF: 3632 triangles, 24 meshes, no skins, no animations, no images. The raw bounds are about 55 x 161 x 11 units (unscaled, units unknown), so the pipeline must normalise the scale. Flat green with no texture: the pipeline should vary the 24 per-leaf base colours slightly and may add a leaf-vein texture. Zip sha256 4f1cd1f2bfea8fb31e84bdb9b481215080912ffec7b428a9aca68bbe929fca7c; sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "84388d9be80d261bbe006555496a67906f4a84583bf2c3c49c4d0e6d96afbed1",
+          "bytes": 670
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "ddcd1200ce16be29af980059fa9621a82b524a5a67bd1d13001e6af80c4d3a1c",
+          "bytes": 214464
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "33445f169c0d42949c570dcbe04ad898286d187b9aa3fe6f4c21cdd4c406b930",
+          "bytes": 39119
+        }
+      ]
     }
   ]
 }

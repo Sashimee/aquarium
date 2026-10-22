@@ -30,6 +30,20 @@ export type Vec3 = readonly [number, number, number];
 
 export type FishTextureSize = 1024 | 2048;
 
+/**
+ * A 1k map already puts about 30 texels on each millimetre of an animal under 4 cm, more than it
+ * covers pixels unless it fills half a 1440p screen, so its 2k set only spends memory: guppies,
+ * neons and the nerite took 21 MiB of a tank stocked with every freshwater species on high (#1338).
+ */
+export const SHARP_TEXTURE_MIN_LENGTH_M = 0.04;
+
+/** The map size an entry loads at the tier's `size`: 1024 where its 2k set is not worth having. */
+export function fishTextureSize(entry: FishAssetEntry, size: FishTextureSize): FishTextureSize {
+  const worthIt =
+    entry.sharperTextures.size > 0 && entry.standardLengthM >= SHARP_TEXTURE_MIN_LENGTH_M;
+  return worthIt ? size : 1024;
+}
+
 export interface FishModel {
   readonly entry: FishAssetEntry;
   readonly textureSize: FishTextureSize;
@@ -337,9 +351,9 @@ export class FishAssetLoader {
     return this.index;
   }
 
-  /** The size a load of `entry` gets now; a model with no larger 2k map always gets 1024. */
+  /** The size a load of `entry` gets now; a small animal or one with no larger 2k map gets 1024. */
   textureSizeFor(entry: FishAssetEntry): FishTextureSize {
-    return entry.sharperTextures.size > 0 ? this.textureSize : 1024;
+    return fishTextureSize(entry, this.textureSize);
   }
 
   async load(assetId: string): Promise<FishModel> {

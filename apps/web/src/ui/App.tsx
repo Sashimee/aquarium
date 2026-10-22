@@ -32,6 +32,7 @@ import { navigate } from './router';
 import { Sheet } from './Sheet';
 import { SoundButton } from './SoundSetting';
 import { useSessionState } from './session';
+import { useShopAfterCheckout } from './useShopAfterCheckout';
 import {
   CreditsScreen,
   NotFoundScreen,
@@ -306,6 +307,8 @@ function Shell() {
   useEffect(() => {
     if (!home && photoActive) interaction.emit('photo:request', { type: 'exit' });
   }, [home, photoActive, interaction]);
+
+  useShopAfterCheckout(home, () => dispatch({ type: 'open', panel: 'shop' }));
 
   const startPhoto = () => {
     dispatch({ type: 'close' });

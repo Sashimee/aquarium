@@ -62,6 +62,12 @@ import {
   signUpRequestSchema,
   userSchema,
   walletResponseSchema,
+  adultConfirmationRequestSchema,
+  checkoutResponseSchema,
+  packCheckoutRequestSchema,
+  packsResponseSchema,
+  paymentsStateSchema,
+  subscriptionCheckoutRequestSchema,
   purchaseRequestSchema,
   purchaseResponseSchema,
   treatRequestSchema,
@@ -88,6 +94,10 @@ import {
   type LightSchedule,
   type PurchasableStage,
   type PurchaseResponse,
+  type CheckoutConsent,
+  type CheckoutResponse,
+  type PacksResponse,
+  type PaymentsState,
   type SpeciesSummary,
   type Tank,
   type TreatRequest,
@@ -282,6 +292,12 @@ export interface ApiClient {
   saveBackground(tankId: string, backgroundId: BackgroundId): Promise<Tank>;
   addFish(tankId: string, input: AddFishInput): Promise<Tank>;
   wallet(): Promise<WalletView>;
+  paymentsState(): Promise<PaymentsState>;
+  paymentsPacks(): Promise<PacksResponse>;
+  checkoutPack(packId: string, consent: CheckoutConsent): Promise<CheckoutResponse>;
+  checkoutSubscription(consent: CheckoutConsent): Promise<CheckoutResponse>;
+  cancelSubscription(): Promise<PaymentsState>;
+  setAdultConfirmation(confirmed: boolean): Promise<PaymentsState>;
   purchase(request: {
     itemRef: string;
     idempotencyKey: string;
@@ -766,6 +782,34 @@ export function createApiClient(
         balance: body.wallet.balance,
         owned: body.owned,
       };
+    },
+    async paymentsState() {
+      const res = await send('/api/payments/state');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, paymentsStateSchema);
+    },
+    async paymentsPacks() {
+      const res = await send('/api/payments/packs');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, packsResponseSchema);
+    },
+    async checkoutPack(packId, consent) {
+      const body = validate(packCheckoutRequestSchema, { packId, consent });
+      return parsed(await post('/api/payments/checkout/pack', body), checkoutResponseSchema);
+    },
+    async checkoutSubscription(consent) {
+      const body = validate(subscriptionCheckoutRequestSchema, { consent });
+      return parsed(
+        await post('/api/payments/checkout/subscription', body),
+        checkoutResponseSchema,
+      );
+    },
+    async cancelSubscription() {
+      return parsed(await post('/api/payments/subscription/cancel', {}), paymentsStateSchema);
+    },
+    async setAdultConfirmation(confirmed) {
+      const body = validate(adultConfirmationRequestSchema, { confirmed });
+      return parsed(await put('/api/payments/adult-confirmation', body), paymentsStateSchema);
     },
     async purchase(request) {
       const body = validate(purchaseRequestSchema, request);

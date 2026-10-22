@@ -168,7 +168,7 @@ Reference photos (in manifest, downloaded): `wm-banggai-53953454` (CC BY 4.0, Da
 | Coral | [Blue Sea Anemone L (reef piece)](https://sketchfab.com/3d-models/f2542a8681584d048e515c660e6866fe) ([render](https://media.sketchfab.com/models/f2542a8681584d048e515c660e6866fe/thumbnails/9cd178a4da3644ac9d424508cbc281cd/2448df9406a24ff2b1c5ed63103ee865.jpeg)) | stefanorivera | CC-BY 4.0 | 22,057 | focal reef piece; despite the title it is a coral on live rock |
 | Decor | Poly Haven `lambis_shell` | Kuutti Siitonen | CC0 | 12,498 | reef decor, downloaded |
 | Substrate | Poly Haven `coast_sand_01`, `clean_pebbles`, `coast_sand_04` | Poly Haven artists | CC0 | n/a | freshwater sand, gravel, reef sand (2k PBR), downloaded |
-| HDRI | Poly Haven `kloofendal_48d_partly_cloudy_puresky`, `studio_small_09` | Greg Zaal, Jarod Guest / Sergej Majboroda | CC0 | n/a | 2k .hdr, downloaded |
+| HDRI | Poly Haven `studio_small_09` | Sergej Majboroda | CC0 | n/a | 2k .hdr, downloaded |
 
 Poly Haven licence verified on the asset page (https://polyhaven.com/a/boulder_01 shows CC0) and https://polyhaven.com/license.
 
@@ -509,7 +509,8 @@ No allowed model of Indian almond (Terminalia catappa) leaves exists: Sketchfab,
 | Branches and twigs | `polyhaven-dry_branches_medium_01` | CC0 | 16803 triangles, 2k PBR. |
 | Trunks, reused | `polyhaven-dead_tree_trunk_02`, `polyhaven-dead_quiver_trunk`, `sketchfab-c53807ef` | CC0 and CC-BY-4.0 | Already in the manifest. |
 | Leaf-litter floor | `ambientcg-ScatteredLeaves009`, `polyhaven-dry_decay_leaves` | CC0 | 2k PBR ground textures; tint toward tannin brown. |
-| Leaf cards | `ambientcg-LeafSet015`, `ambientcg-LeafSet030` | CC0 | Atlases with opacity maps; scatter as cards (floating and sunken leaves). |
+| Leaf cards | `ambientcg-LeafSet015`, `ambientcg-LeafSet030` | CC0 | Atlases with opacity maps; scatter as cards (floating and sunken leaves). `LeafSet030` is built as `oak-leaf-card`. `LeafSet015` (reddish-brown, beech-like; no true catappa atlas exists under an allowed licence) is the planned `catappa-leaf-card` for the blackwater preset (#1342): recipe still to add in `tools/asset-pipeline/src/leaf-card.ts` (asset-pipeline-engineer). |
+| Amazon sword | [echinodorus](https://sketchfab.com/3d-models/echinodorus-3701243ae55c482f82379da81180d8f1) (`sketchfab-3701243a`, trueblack, [thumbnail](https://media.sketchfab.com/models/3701243ae55c482f82379da81180d8f1/thumbnails/e82e82a5dd384e608fc14fba753d8e88/8c5f0fb028ad4e1a877e3ee0b9f7e5ab.jpeg)) | CC-BY-4.0 | 3632 triangles, 24 flat-colour materials, no textures, no rig; the only candidate found (Sketchfab search for "echinodorus" and "amazon sword"), checked 2026-10-23. Needs scale normalisation and per-leaf colour variation. |
 | Sand | `ambientcg-Ground101`, `polyhaven-coast_sand_01` | CC0 | Already in the manifest: a pale fine sand under the leaf litter. |
 
 ### Backgrounds (render specs, not yet in the manifest)

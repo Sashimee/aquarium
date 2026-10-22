@@ -91,6 +91,8 @@ export class ClockPin {
   private from: LightLevels | null = null;
   private startedAt = 0;
   private shown: LightLevels = { hood: 1, room: 1 };
+  private minuteFrom: number | null = null;
+  private shownMinute: number | null = null;
 
   constructor(private pinned: ClockSetting) {}
 
@@ -109,7 +111,27 @@ export class ClockPin {
     this.pinned = clock;
     this.from = this.shown;
     this.startedAt = nowMs;
+    this.minuteFrom = this.shownMinute;
     return true;
+  }
+
+  /**
+   * The minute the room's sky is read at: the sun runs the shorter way round from the minute last
+   * shown to `target` over the same smoothstep as `blend`, so the sky and the tank light stay in
+   * step and a small correction never spins the sky through a whole day.
+   */
+  blendMinute(target: number, nowMs: number): number {
+    const from = this.minuteFrom;
+    const t = (nowMs - this.startedAt) / CLOCK_EASE_MS;
+    if (from === null || !(t < 1)) {
+      this.minuteFrom = null;
+      this.shownMinute = target;
+    } else {
+      const forward = wrapMinutes(target - from);
+      const arc = forward <= MINUTES_PER_DAY / 2 ? forward : forward - MINUTES_PER_DAY;
+      this.shownMinute = wrapMinutes(from + arc * smoothstep(t));
+    }
+    return this.shownMinute;
   }
 
   blend(target: LightLevels, nowMs: number): LightLevels {

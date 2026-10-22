@@ -898,6 +898,53 @@ describe('api client Pearls contract', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  describe('payments', () => {
+    const consent = { immediateDelivery: true, withdrawalWaiver: true } as const;
+
+    it('posts the pack and consent and returns the https checkout URL', async () => {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ url: 'https://checkout.stripe.com/c/pay/x' }));
+      const result = await createApiClient(fetcher).checkoutPack('pearls-550', consent);
+      expect(result.url).toBe('https://checkout.stripe.com/c/pay/x');
+      expect(fetcher.mock.calls[0]?.[0]).toBe('/api/payments/checkout/pack');
+      expect(JSON.parse(fetcher.mock.calls[0]?.[1].body)).toEqual({
+        packId: 'pearls-550',
+        consent,
+      });
+    });
+
+    it('refuses a checkout URL that is not https', async () => {
+      const fetcher = vi.fn().mockResolvedValue(json({ url: 'javascript:alert(1)' }));
+      await expect(createApiClient(fetcher).checkoutSubscription(consent)).rejects.toBeInstanceOf(
+        ApiRequestError,
+      );
+    });
+
+    it('carries a 503 payments_disabled as a typed error', async () => {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(
+          json({ error: { code: 'payments_disabled', message: 'Not available.' } }, 503),
+        );
+      await expect(createApiClient(fetcher).paymentsPacks()).rejects.toMatchObject({
+        status: 503,
+        code: 'payments_disabled',
+      });
+    });
+
+    it('carries a 409 on cancel', async () => {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ error: { code: 'conflict', message: 'No subscription.' } }, 409));
+      await expect(createApiClient(fetcher).cancelSubscription()).rejects.toMatchObject({
+        status: 409,
+        code: 'conflict',
+      });
+      expect(fetcher.mock.calls[0]?.[0]).toBe('/api/payments/subscription/cancel');
+    });
+  });
+
   it('reads the balance and the purchased items from the wallet endpoint', async () => {
     const entry = (delta: number, reason: string, itemRef: string | null, key: string) => ({
       id: crypto.randomUUID(),
