@@ -51,7 +51,7 @@ import {
   type DisplayPreference,
 } from './displayPreference';
 import { EffectsRecovery, EffectsSlot } from './effectsSlot';
-import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
+import { materialUse, PipelineFailureHandler, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
@@ -322,7 +322,7 @@ export class Engine {
     });
     const pipelineFailures = new PipelineFailureHandler(
       this.effects,
-      (id) => usesMaterial(this.scene, id),
+      (id) => materialUse(this.scene, id),
       (message, cause) => this.reportError(message, cause),
       () => this.materialRebuild.request(performance.now()),
     );

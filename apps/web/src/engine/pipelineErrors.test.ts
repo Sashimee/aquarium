@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BoxGeometry,
   DirectionalLight,
@@ -10,6 +10,7 @@ import {
   PerspectiveCamera,
   Scene,
   setConsoleFunction,
+  ShadowBaseNode,
   WebGLBackend,
 } from 'three/webgpu';
 import {
@@ -19,7 +20,7 @@ import {
   parsePipelineFailure,
   PipelineFailureHandler,
   type DroppableEffects,
-  usesMaterial,
+  materialUse,
   watchPipelineErrors,
   type FailureContext,
   type PipelineFailure,
@@ -270,7 +271,7 @@ describe('watchPipelineErrors', () => {
   });
 });
 
-describe('usesMaterial', () => {
+describe('materialUse', () => {
   it('finds a material on a hidden, nested object and in a material array', () => {
     const scene = new Scene();
     const hiddenMaterial = new MeshBasicNodeMaterial();
@@ -281,22 +282,42 @@ describe('usesMaterial', () => {
     group.add(hidden);
     scene.add(group, new Mesh(undefined, [new MeshBasicNodeMaterial(), arrayMaterial]));
 
-    expect(usesMaterial(scene, materialIdOf(hiddenMaterial) ?? -1)).toBe(true);
-    expect(usesMaterial(scene, materialIdOf(arrayMaterial) ?? -1)).toBe(true);
-    expect(usesMaterial(scene, materialIdOf(new MeshBasicNodeMaterial()) ?? -1)).toBe(false);
+    expect(materialUse(scene, materialIdOf(hiddenMaterial) ?? -1)).toBe('object');
+    expect(materialUse(scene, materialIdOf(arrayMaterial) ?? -1)).toBe('object');
+    expect(materialUse(scene, materialIdOf(new MeshBasicNodeMaterial()) ?? -1)).toBeNull();
   });
 
   it('finds nothing in an empty scene', () => {
-    expect(usesMaterial(new Scene(), 0)).toBe(false);
+    expect(materialUse(new Scene(), 0)).toBeNull();
   });
 
   it("finds the material three draws a casting light's shadow pass with", async () => {
     const { scene, light, mesh, shadowMaterialId } = await shadowedScene();
     expect(shadowMaterialId).not.toBe(materialIdOf(mesh.material));
-    expect(usesMaterial(scene, shadowMaterialId)).toBe(true);
+    expect(materialUse(scene, shadowMaterialId)).toBe('shadow');
 
     light.castShadow = false;
-    expect(usesMaterial(scene, shadowMaterialId)).toBe(false);
+    expect(materialUse(scene, shadowMaterialId)).toBeNull();
+  });
+
+  it('creates no shadow material for a casting light that has not drawn one', () => {
+    const create = vi.spyOn(ShadowBaseNode.prototype, 'getShadowMaterial');
+    const scene = new Scene();
+    const light = new DirectionalLight();
+    new TierShadow(light, 1024).apply(1024);
+    scene.add(light, new Mesh(new BoxGeometry(), new MeshBasicNodeMaterial()));
+
+    expect(light.castShadow).toBe(true);
+    expect(materialUse(scene, 0)).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('forgets the shadow material once three disposes it', async () => {
+    const { scene, light, shadowMaterialId } = await shadowedScene();
+    const node = light.shadow.shadowNode;
+    if (!(node instanceof ShadowBaseNode)) throw new Error('TierShadow set no shadow node');
+    node.disposeShadowMaterial();
+    expect(materialUse(scene, shadowMaterialId)).toBeNull();
   });
 });
 
@@ -368,7 +389,7 @@ describe('PipelineFailureHandler', () => {
     const rebuild = { left: rebuilds, requested: 0 };
     const handler = new PipelineFailureHandler(
       effects,
-      (id) => id === 2,
+      (id) => (id === 2 ? 'object' : null),
       (message, cause) => reports.push({ message, cause }),
       () => {
         if (rebuild.left === 0) return false;
@@ -534,7 +555,7 @@ describe('PipelineFailureHandler', () => {
     let rebuilds = 0;
     const handler = new PipelineFailureHandler(
       effects,
-      (id) => usesMaterial(scene, id),
+      (id) => materialUse(scene, id),
       (message) => reports.push(message),
       () => {
         rebuilds++;
@@ -547,6 +568,23 @@ describe('PipelineFailureHandler', () => {
     expect(rebuilds).toBe(1);
     expect(effects.failures).toEqual([]);
     expect(reports).toEqual([]);
+  });
+
+  it('reports a lasting failure of the shadow pass as a missing shadow', async () => {
+    const { scene, shadowMaterialId } = await shadowedScene();
+    const effects = new FakeEffects();
+    const reports: string[] = [];
+    const handler = new PipelineFailureHandler(
+      effects,
+      (id) => materialUse(scene, id),
+      (message) => reports.push(message),
+      () => false,
+    );
+
+    handler.handle(failure(shadowMaterialId, 'error: unresolved identifier'));
+    await settle();
+    expect(effects.active).toBe(true);
+    expect(reports).toEqual(["An object's shadow failed to build and is not drawn"]);
   });
 
   it('never rebuilds the scene for a transient failure of a pass outside it', async () => {
