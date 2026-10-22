@@ -1,7 +1,7 @@
 import {
-  playableBiomeSchema,
+  creatableBiomeSchema,
   type Biome,
-  type PlayableBiome,
+  type CreatableBiome,
   type Tank,
   type TankSize,
   DEFAULT_TANK_SIZE,
@@ -97,7 +97,7 @@ const needTank = (): ReactNode => (
   <p>You have no tank yet. Open My tank at the top to start one.</p>
 );
 
-export function TanksPanel({ newTankBiome }: { newTankBiome: PlayableBiome | null }) {
+export function TanksPanel({ newTankBiome }: { newTankBiome: CreatableBiome | null }) {
   return (
     <Gate
       noTank={(session, state) => (
@@ -163,7 +163,7 @@ function TankSwitcher({
   session: TankSession;
   state: SessionState;
   tank: Tank;
-  newTankBiome: PlayableBiome | null;
+  newTankBiome: CreatableBiome | null;
 }) {
   const selectId = useId();
   const [adding, setAdding] = useState(newTankBiome !== null);
@@ -259,7 +259,7 @@ function RenameForm({
   );
 }
 
-function NewTankForm({
+export function NewTankForm({
   session,
   state,
   initialBiome,
@@ -267,11 +267,11 @@ function NewTankForm({
 }: {
   session: TankSession;
   state: SessionState;
-  initialBiome: PlayableBiome;
+  initialBiome: CreatableBiome;
   onDone?: () => void;
 }) {
   const id = useId();
-  const [biome, setBiome] = useState<PlayableBiome>(initialBiome);
+  const [biome, setBiome] = useState<CreatableBiome>(initialBiome);
   const [size, setSize] = useState<TankSize>(DEFAULT_TANK_SIZE);
   const taken = state.tanks.map((t) => t.name);
   const [name, setName] = useState(() => suggestTankName(initialBiome, taken));
@@ -302,12 +302,12 @@ function NewTankForm({
         id={`${id}-b`}
         value={biome}
         onChange={(e) => {
-          const next = playableBiomeSchema.parse(e.target.value);
+          const next = creatableBiomeSchema.parse(e.target.value);
           setBiome(next);
           setName(suggestTankName(next, taken));
         }}
       >
-        {playableBiomeSchema.options.map((b) => (
+        {creatableBiomeSchema.options.map((b) => (
           <option key={b} value={b}>
             {BIOME_LABEL[b]}
           </option>

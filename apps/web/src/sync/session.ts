@@ -1,7 +1,7 @@
 import type {
   AwaySummary,
   BackgroundId,
-  PlayableBiome,
+  CreatableBiome,
   CareAction,
   ConflictReason,
   DecorLayout,
@@ -350,7 +350,7 @@ export class TankSession {
 
   async createTank(
     name: string,
-    biome: PlayableBiome,
+    biome: CreatableBiome,
     size: TankSize = DEFAULT_TANK_SIZE,
     quarantine = false,
   ): Promise<boolean> {
