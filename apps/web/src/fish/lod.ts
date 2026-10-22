@@ -37,8 +37,29 @@ export function selectLod(
   return Math.min(level, available - 1);
 }
 
+/**
+ * Camera distance times the impostor atlas's texels per metre of fish. A screen pixel spans a
+ * width proportional to the distance, so a fish with a smaller value would show its atlas more
+ * undersampled: a small fish baked into 64 px frames has half the texels per metre of one of the
+ * same size in 128 px frames, and needs its mesh at twice the distance.
+ */
+export function atlasDistance(
+  distance: number,
+  frameSize: number,
+  radius: number,
+  scale: number,
+): number {
+  const extent = 2 * radius * scale;
+  if (!(frameSize > 0) || !(extent > 0)) {
+    throw new RangeError(
+      `lod: atlas needs a positive frame and extent, got ${frameSize} px over ${extent} m`,
+    );
+  }
+  return (distance * frameSize) / extent;
+}
+
 export interface MeshRank {
-  /** Length-normalised camera distance, as `effectiveDistance`. */
+  /** Its `atlasDistance`. */
   distance: number;
   /** Drawn as a full mesh; read as last frame's choice, written with this frame's. */
   full: boolean;
@@ -49,9 +70,9 @@ export interface MeshRank {
 const byRankKey = (a: MeshRank, b: MeshRank): number => a.rankKey - b.rankKey;
 
 /**
- * Lets only the `limit` nearest fish draw as full meshes. One that already does keeps its place
- * until another is 8% nearer, so two fish at about the same distance do not trade it every frame.
- * Sorts `items` nearest first.
+ * Lets only the `limit` fish whose impostors would look worst, nearest by `atlasDistance`, draw as
+ * full meshes. One that already does keeps its place until another is 8% nearer, so two fish at
+ * about the same distance do not trade it every frame. Sorts `items` nearest first.
  */
 export function markNearest(items: MeshRank[], limit: number): void {
   if (!(limit >= 0)) throw new RangeError(`lod: mesh limit must be >= 0, got ${limit}`);

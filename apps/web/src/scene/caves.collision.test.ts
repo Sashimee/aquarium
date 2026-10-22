@@ -2,10 +2,16 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { WebGPURenderer } from 'three/webgpu';
-import type { Biome, Collider } from '@aquarium/shared';
+import {
+  TANK_SIZES,
+  type Biome,
+  type Collider,
+  type DecorItem,
+  type TankSize,
+} from '@aquarium/shared';
 import { compileCollider, FishState, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
-import { DEFAULT_TANK } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { caveAnchors } from './caves';
@@ -15,9 +21,11 @@ import { specsFromCatalog } from '../interaction/decor/spec';
 import type { Collider as SceneCollider } from './colliders';
 import { fitCollider, HARDSCAPE_KINDS } from './hardscape';
 import { loadPreset } from './preset';
+import { fitPresetToCatalog } from './TankScene';
 
 const PUBLIC = join(__dirname, '../../public');
 const SHELTERED: readonly Biome[] = ['reef', 'cichlid'];
+const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 const SEEDS = [1, 2, 3, 4];
 const STEPS_PER_PHASE = 9000;
 const CONTACTS_PER_FISH_STEP = 1e-3;
@@ -56,19 +64,23 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-type Layer = 'scene hulls' | 'decor shelter parts';
-const LAYERS: readonly Layer[] = ['scene hulls', 'decor shelter parts'];
+type Layer = 'scene hulls' | 'decor colliders';
+const LAYERS: readonly Layer[] = ['scene hulls', 'decor colliders'];
 
 /**
  * The hard colliders for a preset's rocks and shells: the scene's own fitted hulls, and the
  * colliders the decor layer reports to the sim once it mounts (shelter parts for shelters, boxes
  * for other rocks), which replace them at runtime.
  */
-async function hardColliders(biome: Biome, layer: Layer): Promise<Collider[]> {
+async function hardColliders(
+  biome: Biome,
+  layer: Layer,
+  decor: readonly DecorItem[] = loadPreset(biome).decor,
+): Promise<Collider[]> {
   const specs = specsFromCatalog(catalog.entries());
   const boxes: Collider[] = [];
   const hulls: SceneCollider[] = [];
-  for (const [i, item] of loadPreset(biome).decor.entries()) {
+  for (const [i, item] of decor.entries()) {
     if (!catalog.has(item.assetId)) continue;
     const kind = catalog.get(item.assetId).kind;
     if (!HARDSCAPE_KINDS.has(kind)) continue;
@@ -76,7 +88,7 @@ async function hardColliders(biome: Biome, layer: Layer): Promise<Collider[]> {
     if (spec) boxes.push(...collidersFor(`piece-${i}`, spec, item));
     hulls.push(...fitCollider(kind, await library.collisionGeometry(item.assetId), item));
   }
-  return layer === 'decor shelter parts' ? boxes : sceneCollidersToSim(hulls);
+  return layer === 'decor colliders' ? boxes : sceneCollidersToSim(hulls);
 }
 
 function clearanceTo(colliders: readonly Collider[]) {
@@ -86,27 +98,37 @@ function clearanceTo(colliders: readonly Collider[]) {
     Math.min(...solids.map((p) => p.sample(x, y, z, normal)));
 }
 
-// Not run against the scene's own single hull per piece: it fills the cave, and the decor layer
-// replaces it on mount. The sim does not reject an anchor inside a collider, so the mouths are
-// only judged against the layer that stays.
-describe('cave anchors against the decor layer colliders fish actually meet', () => {
-  it.each(SHELTERED)(
-    '%s: every anchor is outside every collider, with room for a fish',
-    async (b) => {
-      const clearance = clearanceTo(await hardColliders(b, 'decor shelter parts'));
-      const anchors = caveAnchors(loadPreset(b).decor);
-      expect(anchors.length).toBeGreaterThan(0);
-      for (const a of anchors) {
+async function expectMouthsClear(biome: Biome, layer: Layer, decor: readonly DecorItem[]) {
+  const clearance = clearanceTo(await hardColliders(biome, layer, decor));
+  const anchors = caveAnchors(decor);
+  expect(anchors.length).toBeGreaterThan(0);
+  for (const a of anchors) {
+    const [x, y, z] = a.position;
+    expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(0.9 * a.radius);
+  }
+}
+
+describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
+  describe.each(SHELTERED)('%s', (biome) => {
+    it('has room for a fish at every anchor and a clear way out along its facing', async () => {
+      const decor = loadPreset(biome).decor;
+      await expectMouthsClear(biome, layer, decor);
+      const clearance = clearanceTo(await hardColliders(biome, layer, decor));
+      for (const a of caveAnchors(decor)) {
         const [x, y, z] = a.position;
         const [fx = 0, , fz = 0] = a.facing ?? [];
-        expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(0.9 * a.radius);
         expect(
           clearance(x + fx * 0.015, y, z + fz * 0.015),
           `${a.id} out along facing`,
         ).toBeGreaterThan(0);
       }
-    },
-  );
+    });
+
+    it.each(SIZES)('%s: every anchor has room for a fish', async (size) => {
+      const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
+      await expectMouthsClear(biome, layer, fitted.decor);
+    });
+  });
 });
 
 describe.each(LAYERS)('a royal gramma on the reef preset with %s', (layer) => {

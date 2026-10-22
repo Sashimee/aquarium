@@ -1,3 +1,6 @@
+import type { DecorItem, Point3 } from '@aquarium/shared';
+import { heightScale } from './coralStyle';
+
 /**
  * Convex parts of the shelter pieces in the asset's own frame (origin at the base centre, metres
  * at scale 1), as packed `x, y, z` points: one part per member rock of the piles, and for the arch a
@@ -249,3 +252,27 @@ export const SHELTER_PARTS: Readonly<Record<string, readonly (readonly number[])
     ],
   ],
 };
+
+export function hasShelterParts(assetId: string): boolean {
+  return assetId in SHELTER_PARTS;
+}
+
+/** Each convex part's corners placed in the tank, in the order of `SHELTER_PARTS`. */
+export function placedShelterParts(item: DecorItem): Point3[][] {
+  const parts = SHELTER_PARTS[item.assetId];
+  if (!parts) throw new Error(`"${item.assetId}" has no shelter parts; add it to SHELTER_PARTS`);
+  const sy = item.scale * heightScale(item.assetId);
+  const cos = Math.cos(item.rotationY);
+  const sin = Math.sin(item.rotationY);
+  return parts.map((part) =>
+    Array.from({ length: part.length / 3 }, (_, k): Point3 => {
+      const lx = (part[k * 3] ?? 0) * item.scale;
+      const lz = (part[k * 3 + 2] ?? 0) * item.scale;
+      return [
+        item.position[0] + lx * cos + lz * sin,
+        item.position[1] + (part[k * 3 + 1] ?? 0) * sy,
+        item.position[2] - lx * sin + lz * cos,
+      ];
+    }),
+  );
+}
