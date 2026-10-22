@@ -549,3 +549,89 @@ export const communityFeeds = pgTable(
     index('community_feeds_fed_at_idx').on(t.fedAt),
   ],
 );
+
+export const adultConfirmations = pgTable('adult_confirmations', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  confirmedAt: timestamptz('confirmed_at').notNull().defaultNow(),
+});
+
+export const paymentChargeKindEnum = pgEnum('payment_charge_kind', ['pack', 'invoice']);
+
+// One row per paid Checkout Session (kind pack, id cs_...) or paid subscription invoice (kind
+// invoice, id in_...). SET NULL like the ledger: the accounting record outlives the account. A pack
+// row is written in the same transaction as the credit, so its existence means "credited".
+export const paymentCharges = pgTable(
+  'payment_charges',
+  {
+    id: text('id').primaryKey(),
+    kind: paymentChargeKindEnum('kind').notNull(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    paymentIntentId: text('payment_intent_id'),
+    amountCents: integer('amount_cents').notNull(),
+    packId: text('pack_id'),
+    packPearls: integer('pack_pearls'),
+    subscriptionId: text('subscription_id'),
+    periodStart: timestamptz('period_start'),
+    periodEnd: timestamptz('period_end'),
+    consentAt: timestamptz('consent_at'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('payment_charges_intent_idx')
+      .on(t.paymentIntentId)
+      .where(sql`${t.paymentIntentId} is not null`),
+    index('payment_charges_subscription_idx').on(t.subscriptionId),
+    check('payment_charges_amount_nonneg', sql`${t.amountCents} >= 0`),
+  ],
+);
+
+// invoice_payment.paid names the PaymentIntent of an invoice, which refunds and disputes later
+// refer to. It can arrive before invoice.paid created the charge row, so there is no foreign key.
+export const paymentIntentLinks = pgTable('payment_intent_links', {
+  paymentIntentId: text('payment_intent_id').primaryKey(),
+  invoiceId: text('invoice_id').notNull(),
+});
+
+export const paymentRefunds = pgTable('payment_refunds', {
+  refundId: text('refund_id').primaryKey(),
+  chargeId: text('charge_id')
+    .notNull()
+    .references(() => paymentCharges.id, { onDelete: 'cascade' }),
+  cents: integer('cents').notNull(),
+  pearls: integer('pearls').notNull(),
+  createdAt: timestamptz('created_at').notNull().defaultNow(),
+});
+
+export const paymentDisputeStateEnum = pgEnum('payment_dispute_state', ['lost', 'won']);
+
+export const paymentDisputes = pgTable('payment_disputes', {
+  disputeId: text('dispute_id').primaryKey(),
+  chargeId: text('charge_id')
+    .notNull()
+    .references(() => paymentCharges.id, { onDelete: 'cascade' }),
+  state: paymentDisputeStateEnum('state').notNull(),
+  cents: integer('cents').notNull(),
+  pearls: integer('pearls').notNull(),
+  updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+});
+
+// paidStart/paidEnd come from the latest paid invoice. Daily Pearls need status active, now inside
+// that window and paidRevoked false (the invoice was refunded in full or its dispute lost).
+export const clubSubscriptions = pgTable(
+  'club_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    status: text('status').notNull(),
+    statusEventAt: timestamptz('status_event_at').notNull().defaultNow(),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+    paidInvoiceId: text('paid_invoice_id'),
+    paidStart: timestamptz('paid_start'),
+    paidEnd: timestamptz('paid_end'),
+    paidRevoked: boolean('paid_revoked').notNull().default(false),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('club_subscriptions_user_idx').on(t.userId)],
+);

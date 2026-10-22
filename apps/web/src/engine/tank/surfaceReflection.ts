@@ -55,8 +55,8 @@ export const TANK_TOLERANCE = 0.02;
 /** Past the tolerance the pass's view fades to the traced mirror over this many metres. */
 export const COVERAGE_FALLOFF = 0.05;
 /** The mirror is averaged over a centre tap and four diagonal ones this many texels out. */
-const SOFT_EDGE_TEXELS = 1.5;
-const TAPS: readonly (readonly [number, number])[] = [
+export const SOFT_EDGE_TEXELS = 1.5;
+export const TAPS: readonly (readonly [number, number])[] = [
   [0, 0],
   [1, 1],
   [-1, 1],

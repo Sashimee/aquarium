@@ -10,6 +10,7 @@ import {
   intraAssetDuplicateTextureProblems,
   loadCheckInput,
   sharedKtx2Problems,
+  unreferencedHdriProblems,
   type GlbDocument,
   type CheckInput,
 } from './check.ts';
@@ -917,6 +918,21 @@ describe('checkAssets', () => {
     const input = inputFor([fishAsset()]);
     const problems = checkAssets({ ...input, index: { ...input.index, totalBytes: 1 } });
     expect(problems.join('\n')).toContain('totalBytes');
+  });
+});
+
+describe('unreferencedHdriProblems', () => {
+  const hdri = (id: string) => ({ id, kind: 'hdri' }) as OutputAsset;
+  const loaded = { id: 'studio-small-09', file: 'hdri/studio-small-09/env.ktx2' };
+
+  it('passes when the only hdri is the one the web app loads', () => {
+    expect(unreferencedHdriProblems([hdri('studio-small-09')], loaded)).toEqual([]);
+  });
+
+  it('flags a shipped hdri that nothing loads', () => {
+    const problems = unreferencedHdriProblems([hdri('studio-small-09'), hdri('sky')], loaded);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('hdri/sky');
   });
 });
 

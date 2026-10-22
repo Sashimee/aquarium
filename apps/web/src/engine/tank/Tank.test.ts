@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, Color, Mesh, type MeshBasicNodeMaterial, Texture, Vector3 } from 'three/webgpu';
+import {
+  Box3,
+  Color,
+  Mesh,
+  type MeshBasicNodeMaterial,
+  type MeshStandardNodeMaterial,
+  Texture,
+  Vector3,
+} from 'three/webgpu';
 import { texture } from 'three/tsl';
 import { BACKGROUND_TIERS } from '@aquarium/shared';
 import { Caustics } from '../water/caustics';
@@ -36,6 +44,10 @@ function boxOf(t: Tank, name: string): Box3 {
   const mesh = meshes(t).get(name);
   if (mesh === undefined) throw new Error(`no mesh named ${name}`);
   return new Box3().setFromObject(mesh);
+}
+
+function lookups(shader: string): string[] {
+  return shader.match(/\btexture(?:Load|Lod|Sample\w*)?\s*\(/g) ?? [];
 }
 
 function meshes(t: Tank): Map<string, Mesh> {
@@ -107,10 +119,46 @@ describe('Tank', () => {
       const mirrored = built('water-surface-underside');
       expect(mirrored).not.toBe(traced);
       // Each of the five taps reads the pass's colour and its depth.
-      const lookups = mirrored.match(/\btexture(?:Load|Sample\w*)?\s*\(/g) ?? [];
-      expect(lookups.length).toBeGreaterThanOrEqual(10);
+      expect(lookups(mirrored).length - lookups(traced).length).toBe(10);
     },
   );
+
+  it.each(['webgpu', 'webgl'] as const)(
+    'mirrors the tank contents in the glass with five explicit-level taps of the frame for %s',
+    (backend: ShaderBackend) => {
+      const t = tank();
+      const glass = meshes(t).get('glass-faces');
+      if (glass === undefined) throw new Error('no glass-faces mesh');
+      const traced = buildShaders(glass, backend).fragment;
+      t.setSurfaceReflection(0.5);
+      const mirrored = buildShaders(glass, backend).fragment;
+      expect(mirrored).not.toBe(traced);
+      expect(lookups(mirrored).length - lookups(traced).length).toBe(5);
+      // The taps sit in a branch, where WGSL allows only explicit-level sampling.
+      const explicit = backend === 'webgpu' ? /\btextureSampleLevel\s*\(/g : /\btextureLod\s*\(/g;
+      const added = (mirrored.match(explicit) ?? []).length - (traced.match(explicit) ?? []).length;
+      expect(added).toBe(5);
+    },
+  );
+
+  it('swaps the glass to the mirrored contents with the surface reflection, and back', () => {
+    const t = tank();
+    const material = meshes(t).get('glass-faces')?.material as MeshStandardNodeMaterial;
+    const traced = material.outputNode;
+
+    t.setSurfaceReflection(0.5);
+    const mirrored = material.outputNode;
+    const version = material.version;
+    expect(mirrored).not.toBe(traced);
+
+    t.setSurfaceReflection(1);
+    expect(material.outputNode).toBe(mirrored);
+    expect(material.version).toBe(version);
+
+    t.setSurfaceReflection(0);
+    expect(material.outputNode).not.toBe(mirrored);
+    expect(material.version).toBeGreaterThan(version);
+  });
 
   it('rebuilds the glass, water and stand for a new size and moves its water box in place', () => {
     const t = tank();

@@ -39,6 +39,12 @@ import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './l
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
 import type { PushSender } from './push.ts';
+import type { PaymentProvider } from './payments/provider.ts';
+import {
+  DEFAULT_PAYMENTS_LIMITS,
+  registerPaymentRoutes,
+  type PaymentsLimits,
+} from './payments/routes.ts';
 import {
   DEFAULT_REMINDER_LIMITS,
   registerReminderRoutes,
@@ -78,6 +84,8 @@ export interface AppOptions {
   legalLimits?: LegalLimits;
   authSecret: string;
   push?: PushSender | null;
+  payments?: PaymentProvider | null;
+  paymentsLimits?: PaymentsLimits;
   reminderLimits?: ReminderLimits;
   handleLimit?: Limit;
   collectionLimit?: Limit;
@@ -331,6 +339,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   const { indexable, webRoot, appOrigin, database, auth, mailer, logger = true } = opts;
   const clock = opts.clock ?? createClock();
   const { signInThrottle } = opts;
+  const paymentsStatus = opts.payments ? 'enabled' : 'disabled';
   const secure = new URL(appOrigin).protocol === 'https:';
   const applySecurityHeaders = (reply: FastifyReply): void => {
     reply.headers(SECURITY_HEADERS);
@@ -448,10 +457,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.get('/api/health', async (_req, reply) => {
     try {
       await database.pool.query('select 1');
-      return { status: 'ok' };
+      return { status: 'ok', payments: paymentsStatus };
     } catch {
       app.log.error('health check: database unreachable');
-      return reply.code(503).send({ status: 'unavailable' });
+      return reply.code(503).send({ status: 'unavailable', payments: paymentsStatus });
     }
   });
 
@@ -642,6 +651,20 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     limiter: new RateLimiter(),
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
+    payments: opts.payments ?? null,
+  });
+
+  registerPaymentRoutes({
+    app,
+    database,
+    economy,
+    clock,
+    limiter,
+    limits: opts.paymentsLimits ?? DEFAULT_PAYMENTS_LIMITS,
+    mailer,
+    appOrigin,
+    provider: opts.payments ?? null,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
   registerReminderRoutes({
