@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useAuth, useBridge, usePhotoView, useRedirect, useRoute } from './context';
 import { Dock } from './Dock';
+import { ErrorBoundary } from './ErrorBoundary';
 import {
   AccountPanel,
   AvatarButton,
@@ -185,7 +186,11 @@ export function App() {
   if (route.name === 'gallery-tank') {
     return <PublicShell view={<GalleryTankView id={route.id} />} />;
   }
-  return <Shell />;
+  return (
+    <ErrorBoundary what="the aquarium" scope="app">
+      <Shell />
+    </ErrorBoundary>
+  );
 }
 
 function PublicShell({ view }: { view: ReactNode }) {
@@ -314,24 +319,26 @@ function Shell() {
             closeLabel={panel === 'decor' ? 'Done' : 'Close'}
             onClose={() => dispatch({ type: 'close' })}
           >
-            <Suspense
-              fallback={
-                <p className="hint" role="status">
-                  Opening.
-                </p>
-              }
-            >
-              <PanelBody
-                panel={panel}
-                newTank={newTank}
-                food={food}
-                onFood={setFood}
-                onCollection={() => {
-                  dispatch({ type: 'close' });
-                  setBookOpen(true);
-                }}
-              />
-            </Suspense>
+            <ErrorBoundary what={`the ${PANEL_TITLE[panel].title} panel`} scope="panel">
+              <Suspense
+                fallback={
+                  <p className="hint" role="status">
+                    Opening.
+                  </p>
+                }
+              >
+                <PanelBody
+                  panel={panel}
+                  newTank={newTank}
+                  food={food}
+                  onFood={setFood}
+                  onCollection={() => {
+                    dispatch({ type: 'close' });
+                    setBookOpen(true);
+                  }}
+                />
+              </Suspense>
+            </ErrorBoundary>
           </Sheet>
         )}
         {bookOpen && (
