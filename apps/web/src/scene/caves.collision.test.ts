@@ -11,7 +11,7 @@ import {
 } from '@aquarium/shared';
 import { compileCollider, FishState, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
-import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
 import { SimWorldSpec } from '../fish/simWorld';
 import { AssetCatalog, ModelLibrary } from './assets';
@@ -111,25 +111,39 @@ async function expectMouthsClear(biome: Biome, layer: Layer, decor: readonly Dec
 
 describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
   describe.each(SHELTERED)('%s', (biome) => {
-    // The facing probe is a fixed 0.015 m, which lands in a neighbouring rock on the smaller fitted
-    // layouts, so it only runs on the authored one; see #1321.
-    it('has room for a fish at every anchor and a clear way out along its facing', async () => {
-      const decor = loadPreset(biome).decor;
-      await expectMouthsClear(biome, layer, decor);
-      const clearance = clearanceTo(await hardColliders(biome, layer, decor));
-      for (const a of caveAnchors(decor)) {
-        const [x, y, z] = a.position;
-        const [fx = 0, , fz = 0] = a.facing ?? [];
-        expect(
-          clearance(x + fx * 0.015, y, z + fz * 0.015),
-          `${a.id} out along facing`,
-        ).toBeGreaterThan(0);
-      }
+    it('has room for a fish at every anchor', async () => {
+      await expectMouthsClear(biome, layer, loadPreset(biome).decor);
     });
 
     it.each(SIZES)('%s: every anchor has room for a fish', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
       await expectMouthsClear(biome, layer, fitted.decor);
+    });
+
+    it.each(SIZES)('%s: every anchor has a clear way out along its facing', async (size) => {
+      const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
+      const clearance = clearanceTo(await hardColliders(biome, layer, fitted.decor));
+      const dim = TANK_DIMENSIONS[size];
+      const reach = {
+        halfX: dim.length / 2 - dim.glass - WATER_INSET,
+        halfZ: dim.depth / 2 - dim.glass - WATER_INSET,
+      };
+      const anchors = caveAnchors(fitted.decor, reach);
+      expect(anchors.length, 'anchors kept inside the water').toBe(
+        caveAnchors(fitted.decor).length,
+      );
+      for (const a of anchors) {
+        const [x, y, z] = a.position;
+        const [fx = 0, , fz = 0] = a.facing ?? [];
+        for (const k of [1, 2, 3]) {
+          const px = x + fx * k * a.radius;
+          const pz = z + fz * k * a.radius;
+          const at = `${a.id} ${k} r along facing`;
+          expect(Math.abs(px), `${at}, x in water`).toBeLessThan(reach.halfX);
+          expect(Math.abs(pz), `${at}, z in water`).toBeLessThan(reach.halfZ);
+          expect(clearance(px, y, pz), at).toBeGreaterThan(0);
+        }
+      }
     });
   });
 });
