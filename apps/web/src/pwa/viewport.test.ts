@@ -1,6 +1,17 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
+import { EventBus, type EngineEvents } from '../engine/events';
+import type { PhotoView } from '../interaction/events';
+import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from '../interaction/events';
+import { createApiClient } from '../ui/api';
+import { UiProviders } from '../ui/context';
+import { PhotoLayer, PhotoTools } from '../ui/PhotoControls';
+import { Sheet } from '../ui/Sheet';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -15,7 +26,8 @@ describe('page zoom lock', () => {
   });
 });
 
-const SHEETS = ['styles.css', 'game.css', 'photo.css'] as const;
+const SHEETS = ['styles.css', 'game.css', 'photo.css', 'loading.css'] as const;
+const ALLOWED = ['none', 'pan-x pan-y'];
 
 function loadSheets(): CSSStyleSheet[] {
   document.head.replaceChildren();
@@ -36,36 +48,138 @@ function styleRules(rules: CSSRuleList): CSSStyleRule[] {
   return out;
 }
 
+function compound(part: string): HTMLElement {
+  const bare = part.replace(/:not\([^)]*\)/g, '').replace(/:[a-z-]+(\([^)]*\))?/g, '');
+  const el = document.createElement(/^[a-z][a-z0-9]*/i.exec(bare)?.[0] ?? 'div');
+  const id = /#([\w-]+)/.exec(bare)?.[1];
+  if (id) el.id = id;
+  if (part.includes(':not(:empty)')) el.append(document.createElement('span'));
+  for (const m of bare.matchAll(/\.([\w-]+)/g)) el.classList.add(m[1] as string);
+  for (const m of bare.matchAll(/\[([\w-]+)(?:=["']?([^\]"']*)["']?)?\]/g)) {
+    el.setAttribute(m[1] as string, m[2] ?? '');
+  }
+  return el;
+}
+
+function fixtureFor(selector: string): HTMLElement {
+  const parts = selector.trim().split(/\s*>\s*|\s+/);
+  const nodes = parts.map(compound);
+  nodes.forEach((node, i) => nodes[i - 1]?.append(node));
+  const leaf = nodes[nodes.length - 1];
+  const root = nodes[0];
+  if (!leaf || !root) throw new Error(`cannot build a fixture for ${selector}`);
+  document.body.append(root);
+  if (!leaf.matches(selector)) throw new Error(`fixture does not match ${selector}`);
+  return leaf;
+}
+
+function computed(el: Element, property: string): string {
+  return getComputedStyle(el).getPropertyValue(property);
+}
+
 describe('overlay touch-action', () => {
   afterEach(() => {
     document.head.replaceChildren();
     document.body.replaceChildren();
   });
 
-  it.each(SHEETS)('%s: every pointer-events: auto rule disallows pinch zoom', (name) => {
-    const sheet = loadSheets()[SHEETS.indexOf(name)];
+  it.each(SHEETS)('%s: every pointer-events: auto element disallows pinch zoom', (name) => {
+    const sheets = loadSheets();
+    const sheet = sheets[SHEETS.indexOf(name)];
     if (!sheet) throw new Error(`${name} did not parse into a stylesheet`);
-    const interactive = styleRules(sheet.cssRules).filter(
-      (r) => r.style.getPropertyValue('pointer-events') === 'auto',
+    const selectors = new Set(
+      styleRules(sheet.cssRules)
+        .filter((r) => r.style.getPropertyValue('pointer-events') === 'auto')
+        .flatMap((r) => r.selectorText.split(',').map((s) => s.trim())),
     );
-    expect(interactive.length).toBeGreaterThan(0);
-    for (const rule of interactive) {
-      expect(['none', 'pan-x pan-y'], rule.selectorText).toContain(
-        rule.style.getPropertyValue('touch-action'),
-      );
+    expect(selectors.size).toBeGreaterThan(0);
+    for (const selector of selectors) {
+      const el = fixtureFor(selector);
+      expect(computed(el, 'pointer-events'), selector).toBe('auto');
+      expect(ALLOWED, selector).toContain(computed(el, 'touch-action'));
+      document.body.replaceChildren();
     }
   });
+});
 
-  it('keeps sheet drag and photo-pad hold on touch-action: none', () => {
+const signedOutApi = createApiClient(async () => new Response(null, { status: 401 }));
+
+describe('the real overlay components', () => {
+  let root: Root | null = null;
+  let container: HTMLElement | null = null;
+
+  afterEach(() => {
+    if (root) act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    container = null;
+    document.head.replaceChildren();
+  });
+
+  function mount(
+    node: () => ReturnType<typeof createElement>,
+    interaction?: EventBus<InteractionEvents>,
+  ) {
     loadSheets();
     const ui = document.createElement('div');
     ui.id = 'ui';
-    ui.innerHTML = '<div class="sheet-grab"></div><button class="pad-button"></button>';
     document.body.append(ui);
-    for (const selector of ['.sheet-grab', '.pad-button']) {
-      const el = ui.querySelector(selector);
-      if (!el) throw new Error(`${selector} missing from fixture`);
-      expect(getComputedStyle(el).getPropertyValue('touch-action'), selector).toBe('none');
+    container = ui;
+    root = createRoot(ui);
+    const bridge = {
+      engine: new EventBus<EngineEvents>(undefined, ['engine:ready']),
+      interaction:
+        interaction ?? new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS),
+    };
+    act(() =>
+      root?.render(createElement(UiProviders, { bridge, api: signedOutApi, children: node() })),
+    );
+    return { ui, bridge };
+  }
+
+  const expectTouch = (ui: HTMLElement, selector: string, value: string) => {
+    const el = ui.querySelector(selector);
+    if (!el) throw new Error(`${selector} is missing from the rendered component`);
+    expect(computed(el, 'touch-action'), selector).toBe(value);
+  };
+
+  it('keeps the Sheet drag handle on touch-action: none and the sheet pannable', () => {
+    const { ui } = mount(() =>
+      createElement(Sheet, {
+        panel: 'care',
+        label: 'Care',
+        title: 'Care',
+        onClose: () => undefined,
+        children: createElement('p', null, 'body'),
+      }),
+    );
+    expectTouch(ui, '.sheet-grab', 'none');
+    expectTouch(ui, '.sheet', 'pan-x pan-y');
+  });
+
+  it('keeps the photo pad on touch-action: none and the photo chrome pannable', () => {
+    const interaction = new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS);
+    const view: PhotoView = {
+      capturing: false,
+      state: {
+        active: true,
+        filter: 'natural',
+        depthOfField: { enabled: false, available: true, focusDistance: 1, fStop: 2.8 },
+        simPaused: false,
+        uiHidden: false,
+        fov: 50,
+      },
+    };
+    interaction.emit('photo:view', view);
+    const { ui } = mount(
+      () => createElement('div', null, createElement(PhotoLayer), createElement(PhotoTools)),
+      interaction,
+    );
+    expect(ui.querySelectorAll('.pad-button')).toHaveLength(6);
+    for (const pad of Array.from(ui.querySelectorAll('.pad-button'))) {
+      expect(computed(pad, 'touch-action')).toBe('none');
     }
+    expectTouch(ui, '.photo-bar', 'pan-x pan-y');
+    expectTouch(ui, '.photo-tools', 'pan-x pan-y');
   });
 });
