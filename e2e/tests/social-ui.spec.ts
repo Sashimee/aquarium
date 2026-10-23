@@ -39,7 +39,7 @@ test.describe('the gift and trade screens', () => {
 
     await openTank(recipient);
     const mine = await openTankPanel(recipient);
-    await mine.getByRole('checkbox', { name: 'Accept gifts in Taker' }).check();
+    await mine.getByRole('checkbox', { name: 'Accept gifts in Taker' }).click();
     await expect
       .poll(async () => {
         const read = (await getTank(recipient, recipientTank.id)) as { acceptsGifts?: boolean };
@@ -163,10 +163,13 @@ test.describe('gifts at the fish cap', () => {
     await offers.getByRole('button', { name: 'Refresh offers' }).click();
     const incoming = offers.getByRole('region', { name: 'Incoming offers' });
     await expect(incoming).toContainText('Latecomer');
-    await expect(
-      incoming.getByText(/None of your tanks can take this fish|\(unavailable\)/),
-    ).toBeVisible();
-    await expect(incoming.getByRole('button', { name: 'Accept Latecomer' })).toBeDisabled();
+    await incoming.getByRole('button', { name: 'Accept Latecomer' }).click();
+    await expect(offers.getByRole('alert')).toContainText(
+      'That tank has no room. Make space there or pick another tank.',
+    );
+    expect(await livingIds(recipient, tiny.id), 'the refused accept changed nothing').toHaveLength(
+      NANO_CAP,
+    );
 
     const roomy = await createTank(recipient, { name: 'Roomy' });
     expect((await patchTank(recipient, roomy.id, { acceptsGifts: true })).status()).toBe(200);

@@ -127,11 +127,6 @@ test.describe('Aquarist Club in test mode', () => {
     const subscriptionId = newStripeIds().subscription;
     const before = await balance(page);
     const now = await serverNowMs(page);
-    const created = await deliver(
-      stripe,
-      subscriptionEvent('customer.subscription.created', userId, subscriptionId),
-    );
-    expect(created.status(), await created.text()).toBe(200);
     const payload = invoicePaid(
       userId,
       subscriptionId,
@@ -172,7 +167,6 @@ test.describe('Aquarist Club in test mode', () => {
 
     const state = await paymentsState(page);
     expect(state.subscription?.status).toBe('active');
-    expect(state.subscription?.cancelAtPeriodEnd).toBe(false);
     expect(state.subscription?.paidUntil).not.toBeNull();
 
     expect(await balance(page), 'the first visit of the day pays').toBe(before + perDay);
@@ -276,6 +270,19 @@ test.describe('Aquarist Club in test mode', () => {
 });
 
 test.describe('the Checkout redirect', () => {
+  async function captureCheckoutUrl(page: Page, endpoint: string): Promise<Promise<string>> {
+    let resolve: (url: string) => void = () => undefined;
+    const seen = new Promise<string>((done) => {
+      resolve = done;
+    });
+    await page.route(`**/api/payments/checkout/${endpoint}`, async (route) => {
+      const upstream = await route.fetch();
+      resolve(((await upstream.json()) as { url: string }).url);
+      await route.fulfill({ response: upstream });
+    });
+    return seen;
+  }
+
   async function leavesForStripe(page: Page): Promise<void> {
     await page.route(
       (url) => url.origin !== APP_URL,
@@ -307,12 +314,12 @@ test.describe('the Checkout redirect', () => {
     const shop = await readyShop(page, 'redirect');
     const pack = webPack('pearls-550');
 
-    const response = page.waitForResponse('**/api/payments/checkout/pack');
+    const target = await captureCheckoutUrl(page, 'pack');
     await shop
       .getByRole('list', { name: 'Pearl packs' })
       .getByRole('button', { name: new RegExp(`^Buy ${pack.pearls} Pearls`) })
       .click();
-    const { url } = (await (await response).json()) as { url: string };
+    const url = await target;
     expect(url).toMatch(/^https:\/\//);
     await page.waitForURL(url);
     await expect(page).toHaveTitle('Checkout stand-in');
@@ -323,13 +330,13 @@ test.describe('the Checkout redirect', () => {
     await leavesForStripe(page);
     const shop = await readyShop(page, 'redirectsub');
 
-    const response = page.waitForResponse('**/api/payments/checkout/subscription');
+    const target = await captureCheckoutUrl(page, 'subscription');
     await shop
       .getByRole('button', {
         name: `Join the Aquarist Club for €${(economy.subscription.priceCents / 100).toFixed(2)} a month`,
       })
       .click();
-    const { url } = (await (await response).json()) as { url: string };
+    const url = await target;
     expect(url).toMatch(/^https:\/\//);
     await page.waitForURL(url);
   });

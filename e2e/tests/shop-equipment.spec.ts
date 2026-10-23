@@ -69,8 +69,8 @@ test.describe('equipment tiers', () => {
     expect(skipped.status(), await skipped.text()).toBe(200);
     expect((await readTank(page, pond.id)).equipment.filter.tier).toBe(3);
     expect(equipmentCharges(await wallet(page)).map((r) => [r.itemRef, r.delta])).toEqual([
-      ['equipment:heater:2', -price('heater', 2)],
       ['equipment:filter:3', -price('filter', 3)],
+      ['equipment:heater:2', -price('heater', 2)],
     ]);
     expect(await balance(page), 'skipping tiers pays only the tier chosen').toBe(
       start - price('heater', 2) - price('filter', 3),

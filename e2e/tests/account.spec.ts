@@ -103,7 +103,7 @@ test.describe('your data and deleting the account', () => {
 
     await danger.getByLabel('Password').fill(PASSWORD);
     await danger.getByRole('button', { name: 'Permanently delete my account' }).click();
-    await expect(page).toHaveURL(`${APP_URL}/`);
+    await expect(page).toHaveURL((url) => url.origin === APP_URL && url.pathname === '/');
 
     const gone = await page.request.get('/api/me');
     expect(gone.status()).toBeGreaterThanOrEqual(400);

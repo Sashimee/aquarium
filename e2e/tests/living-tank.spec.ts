@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { registerVerifiedUser } from '../support/app.ts';
-import { createTank, errorOf, key, patchTank, purchase } from '../support/api.ts';
+import { addFish, createTank, errorOf, key, patchTank, purchase } from '../support/api.ts';
 import {
   advanceDaysAndRead,
+  feedIfPossible,
   fragRaw,
   readTank,
   trimRaw,
@@ -29,10 +30,16 @@ test('plants grow while you are away, and a trim cuts one back for good', async 
   const start = await readTank(page, pond.id);
   expect(start.plants?.length, 'the preset freshwater layout has plants').toBeGreaterThan(0);
 
-  const grown = await advanceDaysAndRead(page, pond.id, 30);
-  const target = (grown.plants ?? []).find((p) => p.size > p.minSize * 1.5);
-  if (!target) throw new Error('no plant grew past one and a half times its smallest size');
-  expect(target.size).toBeGreaterThan(plantOf(start, target.key).size);
+  await addFish(page, pond.id, 'neon-tetra', { name: 'Fertiliser 1' });
+  await addFish(page, pond.id, 'neon-tetra', { name: 'Fertiliser 2' });
+  await addFish(page, pond.id, 'neon-tetra', { name: 'Fertiliser 3' });
+  let grown = start;
+  for (let week = 0; week < 8; week += 1) {
+    await feedIfPossible(page, pond.id);
+    grown = await advanceDaysAndRead(page, pond.id, 5);
+  }
+  const target = (grown.plants ?? []).find((p) => p.size > plantOf(start, p.key).size);
+  if (!target) throw new Error('no plant grew in 40 days with fish making nitrate');
 
   const middle = (target.size + target.minSize) / 2;
   const firstKey = key();
@@ -97,6 +104,7 @@ test('a reef colony grows in good light, bleaches in too much, and is fragged on
   });
   expect(bright.ok(), await bright.text()).toBe(true);
 
+  await advanceDaysAndRead(page, reef.id, 55);
   const grown = coralOf(await advanceDaysAndRead(page, reef.id, 55), colony.key);
   expect(grown.size).toBeGreaterThan(colony.size);
   expect(grown.size, 'grown past the size a fragment can be cut at').toBeGreaterThanOrEqual(

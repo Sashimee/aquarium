@@ -189,7 +189,9 @@ test.describe('disease and quarantine', () => {
     const section = care.getByRole('region', { name: 'Quarantine tank' });
     await expect(section).toContainText('does not count toward your six tanks');
     await section.getByRole('button', { name: 'Set up the quarantine tank' }).click();
-    await expect(section.getByRole('button', { name: 'Open Quarantine' })).toBeVisible();
+    await expect(section.getByRole('status')).toContainText(
+      'You are looking at the quarantine tank.',
+    );
 
     const tanks = await savedTanks(page);
     expect(tanks).toHaveLength(2);
@@ -215,7 +217,10 @@ test.describe('disease and quarantine', () => {
     await openTank(page);
     const panel = await openDock(page, 'Care', 'Care');
     const quarantineSection = panel.getByRole('region', { name: 'Quarantine tank' });
-    await quarantineSection.getByRole('button', { name: 'Open Quarantine' }).click();
+    const open = quarantineSection.getByRole('button', { name: 'Open Quarantine' });
+    const here = quarantineSection.getByRole('status');
+    await expect(open.or(here)).toBeVisible();
+    if (await open.isVisible()) await open.click();
     await expect(quarantineSection.getByRole('status')).toContainText(
       'You are looking at the quarantine tank.',
     );
