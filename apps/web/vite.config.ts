@@ -41,5 +41,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}', 'build/**/*.test.ts'],
+    execArgv: ['--expose-gc'],
   },
 });
