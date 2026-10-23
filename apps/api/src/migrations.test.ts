@@ -48,6 +48,11 @@ describe('the fish length clamp migration', () => {
         ('00000000-0000-4000-8000-0000000000a2', '00000000-0000-4000-8000-000000000011', 'royal-gramma', 'Short', 'male', 0.05, '{}'),
         ('00000000-0000-4000-8000-0000000000a3', '00000000-0000-4000-8000-000000000012', 'blue-tang', 'Roomy', 'male', 0.267, '{}')`,
     );
+    await database.pool.query(
+      `insert into gift_offers (id, from_user_id, from_tank_id, fish, creation_key, expires_at) values
+        ('00000000-0000-4000-8000-0000000000b1', 'u1', '00000000-0000-4000-8000-000000000011', '{"name":"Escrowed","size":0.267}', 'k1', now()),
+        ('00000000-0000-4000-8000-0000000000b2', 'u1', '00000000-0000-4000-8000-000000000012', '{"name":"Roomy","size":0.267}', 'k2', now())`,
+    );
     await runMigrations(database);
   });
 
@@ -55,6 +60,16 @@ describe('the fish length clamp migration', () => {
     await database.close();
     await testDb.drop();
     rmSync(oldDir, { recursive: true, force: true });
+  });
+
+  it('trims fish held in gift offers the same way', async () => {
+    const { rows } = await database.pool.query<{ fish: { name: string; size: number } }>(
+      `select fish from gift_offers order by fish->>'name'`,
+    );
+    expect(rows.map((r) => r.fish)).toEqual([
+      { name: 'Escrowed', size: 0.2168 },
+      { name: 'Roomy', size: 0.267 },
+    ]);
   });
 
   it('trims only the fish longer than their tank holds', async () => {
