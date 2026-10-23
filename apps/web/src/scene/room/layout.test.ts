@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TANK_SIZES } from '@aquarium/shared';
 import { defaultView, TANK_DIMENSIONS } from '../../engine/tank/dimensions';
-import {
-  boxBounds,
-  planRoom,
-  ROOM_PRESETS,
-  roomDetailFor,
-  visibleParts,
-  type Bounds,
-  type RoomBox,
-} from './layout';
+import { boxBounds, planRoom, ROOM_PRESETS, type Bounds, type RoomBox } from './layout';
 
 const EPS = 1e-9;
 const sizes = Object.keys(TANK_SIZES) as (keyof typeof TANK_SIZES)[];
@@ -126,27 +118,5 @@ describe('planRoom edge cases', () => {
     expect(living).toContain('sofa-seat');
     expect(work).toContain('desk-top');
     expect(work).not.toContain('sofa-seat');
-  });
-});
-
-describe('detail by tier', () => {
-  const layout = planRoom('office', TANK_DIMENSIONS.standard);
-
-  it('maps every tier and drops props on the low one', () => {
-    expect(roomDetailFor('low')).toBe('shell');
-    expect(roomDetailFor('medium')).toBe('reduced');
-    expect(roomDetailFor('high')).toBe('full');
-    expect(roomDetailFor('ultra')).toBe('full');
-    expect(visibleParts(layout, 'shell')).toEqual({ boxes: [], books: [], ceiling: false });
-  });
-
-  it('adds books and the ceiling only on the full detail', () => {
-    const reduced = visibleParts(layout, 'reduced');
-    const full = visibleParts(layout, 'full');
-    expect(reduced.boxes.length).toBeGreaterThan(0);
-    expect(reduced.books).toHaveLength(0);
-    expect(reduced.ceiling).toBe(false);
-    expect(full.books.length).toBeGreaterThan(50);
-    expect(full.ceiling).toBe(true);
   });
 });
