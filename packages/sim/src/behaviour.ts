@@ -84,6 +84,7 @@ export const BEHAVIOUR = {
   caveRouteReachBodyLengths: 2,
   caveRouteAheadBodyLengths: 1,
   caveRouteRiseBodyLengths: 1,
+  caveRouteBuildUnitsPerStep: 1024,
   caveLeashBodyLengths: 2.5,
   shelterAfterStartleS: 20,
   shelterComfort: 0.4,
@@ -426,8 +427,13 @@ export class Behaviour {
   /** The body length the nooks were found for, 0 when the scene's caves are used instead. */
   private nookLength = 0;
   private readonly nookSearch = new NookSearch();
-  /** Each cave's way in, per clearance a fish needs, found when a fish first needs to go round to it. */
+  /**
+   * Each cave's way in, per clearance a fish needs. A way is queued when the caves are dealt or the
+   * rock moves, or when a fish first needs it, and is found a bounded piece per step (#1505).
+   */
   private readonly routes = new Map<Anchor, Map<number, Route>>();
+  private routeQueue: Route[] = [];
+  private _routeWork = 0;
   private readonly stimuli: Stimulus[] = [];
 
   private startlePhase: Uint8Array;
@@ -533,6 +539,23 @@ export class Behaviour {
   /** What `anchor` indexes: the scene's anemones and caves, then any nooks found for them. */
   get homes(): readonly Anchor[] {
     return this.anchors;
+  }
+
+  /** Units of work spent finding ways to caves in the last step, at most `caveRouteBuildUnitsPerStep`. */
+  get routeWork(): number {
+    return this._routeWork;
+  }
+
+  /** Ways to caves still being found. */
+  get routesPending(): number {
+    return this.routeQueue.length;
+  }
+
+  /** Ways to caves kept, found or not. */
+  get routesKept(): number {
+    let n = 0;
+    for (const byClearance of this.routes.values()) n += byClearance.size;
+    return n;
   }
 
   /** Seconds each fish has left hiding in shelter after a startle. */
@@ -719,6 +742,7 @@ export class Behaviour {
     this.cleaning.resize(edit);
     this.banks.resize(edit);
     if (edit.removed < 0) return;
+    this.pruneRoutes();
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
       this.territoryTarget[i] = j;
@@ -876,6 +900,7 @@ export class Behaviour {
   private deal(): void {
     const given = this.given;
     this.routes.clear();
+    this.routeQueue = [];
     this.nookLength = given.some((a) => a.kind === 'cave') ? 0 : this.longestCaveDweller();
     const homes =
       this.nookLength > 0 ? [...given, ...this.nooksFor(this.nookLength, given)] : given;
@@ -909,6 +934,7 @@ export class Behaviour {
       // holds a mid-water station instead of fighting for one.
       if (caves < matching.length) this.anchor[i] = matching[caves++] ?? -1;
     }
+    this.queueRoutes();
   }
 
   /**
@@ -918,6 +944,7 @@ export class Behaviour {
   private redealNooks(): void {
     const given = this.given;
     this.routes.clear();
+    this.routeQueue = [];
     this.nookLength = this.longestCaveDweller();
     const nooks = this.nookLength > 0 ? this.nooksFor(this.nookLength, given) : [];
     this.anchors = [...given, ...nooks];
@@ -927,6 +954,7 @@ export class Behaviour {
       this.anchor[i] = k < nooks.length ? given.length + k : -1;
       k++;
     }
+    this.queueRoutes();
   }
 
   private longestCaveDweller(): number {
@@ -1033,6 +1061,7 @@ export class Behaviour {
       this.rest[i] = r + (restTarget - r) * (1 - Math.exp(-DT / at(this.restTau, i)));
     }
     this.updateGroups();
+    this.buildRoutes();
     if (shock > 0) this.applyLightStartle(shock);
     for (const s of this.stimuli) this.applyStimulus(s);
     this.stimuli.length = 0;
@@ -1211,6 +1240,7 @@ export class Behaviour {
    */
   decorMoved(): void {
     this.routes.clear();
+    this.routeQueue = [];
     const { count, species } = this.host;
     for (let s = 0; s < species.length; s++) {
       const leader = at(this.groupLeader, s);
@@ -1228,6 +1258,7 @@ export class Behaviour {
       }
     }
     if (this.nookLength > 0) this.redealNooks();
+    else this.queueRoutes();
     this.brood.decorMoved();
     this.cleaning.decorMoved();
     this.banks.decorMoved();
@@ -2577,16 +2608,20 @@ export class Behaviour {
       return null;
     }
     const x = at(this.host.position, o);
+    const y = at(this.host.position, o + 1);
     const z = at(this.host.position, o + 2);
     const reach = BEHAVIOUR.caveRouteReachBodyLengths * length;
     const ahead = BEHAVIOUR.caveRouteAheadBodyLengths * length;
-    return (
-      this.routeTo(a, at(this.host.radius, i)).toward(x, z, reach, ahead) ??
-      this.routeTo(a, BEHAVIOUR.caveRouteClearanceBodyLengths * length).toward(x, z, reach, ahead)
-    );
+    const wide = this.routeTo(a, at(this.host.radius, i));
+    if (wide === null) return null;
+    const way = wide.toward(x, y, z, reach, ahead);
+    if (way !== null) return way;
+    const narrow = this.routeTo(a, BEHAVIOUR.caveRouteClearanceBodyLengths * length);
+    return narrow === null ? null : narrow.toward(x, y, z, reach, ahead);
   }
 
-  private routeTo(a: Anchor, clearance: number): Route {
+  /** The way to cave `a` for `clearance`, or null while it is still being found. */
+  private routeTo(a: Anchor, clearance: number): Route | null {
     let byClearance = this.routes.get(a);
     if (byClearance === undefined) {
       byClearance = new Map();
@@ -2598,8 +2633,62 @@ export class Behaviour {
       const { basin, sceneSdf } = this.host;
       route = new Route(basin, sceneSdf, x, y, z, a.radius, clearance, 0.5 * clearance);
       byClearance.set(clearance, route);
+      this.routeQueue.push(route);
     }
-    return route;
+    return route.ready ? route : null;
+  }
+
+  /**
+   * Queues the way to its cave each fish holding one needs first, so the ways are being found
+   * before the fish head home.
+   */
+  private queueRoutes(): void {
+    for (let i = 0; i < this.host.count; i++) {
+      const a = this.anchors[at(this.anchor, i)];
+      if (a?.kind === 'cave' && a.facing !== undefined) this.routeTo(a, at(this.host.radius, i));
+    }
+  }
+
+  /** Spends this step's budget on the queued ways, oldest first. */
+  private buildRoutes(): void {
+    const budget = BEHAVIOUR.caveRouteBuildUnitsPerStep;
+    const queue = this.routeQueue;
+    let work = 0;
+    let done = 0;
+    while (done < queue.length && work < budget) {
+      const route = queue[done];
+      if (route === undefined) break;
+      const spent = route.build(budget - work, work === 0);
+      work += spent;
+      if (route.ready) done++;
+      else if (spent === 0) break;
+    }
+    if (done > 0) queue.splice(0, done);
+    this._routeWork = work;
+  }
+
+  /** Drops the ways no fish still in the tank can take: to a cave none holds, or too wide or narrow. */
+  private pruneRoutes(): void {
+    const wanted = new Map<Anchor, Set<number>>();
+    for (let i = 0; i < this.host.count; i++) {
+      const a = this.anchors[at(this.anchor, i)];
+      if (a?.kind !== 'cave') continue;
+      const clearances = wanted.get(a) ?? new Set<number>();
+      clearances.add(at(this.host.radius, i));
+      clearances.add(BEHAVIOUR.caveRouteClearanceBodyLengths * at(this.host.bodyLength, i));
+      wanted.set(a, clearances);
+    }
+    for (const [a, byClearance] of this.routes) {
+      const keep = wanted.get(a);
+      for (const clearance of byClearance.keys()) {
+        if (keep?.has(clearance) !== true) byClearance.delete(clearance);
+      }
+      if (byClearance.size === 0) this.routes.delete(a);
+    }
+    const kept = new Set(
+      [...this.routes.values()].flatMap((byClearance) => [...byClearance.values()]),
+    );
+    this.routeQueue = this.routeQueue.filter((r) => kept.has(r));
   }
 
   private startExcursion(i: number, a: Anchor, length: number): void {
