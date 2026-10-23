@@ -211,27 +211,9 @@ const SPAWN_BIOMES: readonly Biome[] = ['freshwater', 'reef', 'cichlid', 'mangro
 // largest size. A fish that fits in the empty nano at a length is checked, so an entry here must
 // fail; the test below fails on one that has started to spawn so it gets dropped.
 const NO_ROOM_WITH_DECOR: Readonly<Record<Layer, Readonly<Record<string, readonly number[]>>>> = {
-  'scene hulls': {
-    angelfish: [1],
-    discus: [0, 1],
-    'blue-tang': [0],
-    'yellow-tang': [1],
-    'banded-archerfish': [0],
-    'barred-mudskipper': [1],
-    'blue-spotted-mudskipper': [1],
-  },
-  'decor colliders': {
-    angelfish: [1],
-    discus: [0, 1],
-    'blue-tang': [0],
-    'yellow-tang': [0, 1],
-    'banded-archerfish': [0],
-    'barred-mudskipper': [1],
-    'blue-spotted-mudskipper': [1],
-  },
+  'scene hulls': {},
+  'decor colliders': {},
 };
-// The blackwater nano preset builds invalid colliders, so no world starts with it (#1392).
-const BROKEN_NANO_PRESETS: ReadonlySet<Biome> = new Set(['blackwater']);
 
 interface ContentFish {
   readonly id: string;
@@ -280,7 +262,7 @@ function failedSeeds(id: string, length: number, decor: readonly Collider[]): st
 }
 
 describe.each(LAYERS)('a nano tank with the fitted decor and %s', (layer) => {
-  describe.each(SPAWN_BIOMES.filter((b) => !BROKEN_NANO_PRESETS.has(b)))('%s', (biome) => {
+  describe.each(SPAWN_BIOMES)('%s', (biome) => {
     it('spawns every fish that spawns in an empty nano, at its adult and its largest size', async () => {
       const fitted = fitPresetToCatalog(
         loadPreset(biome),
