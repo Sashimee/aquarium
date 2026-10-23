@@ -1,5 +1,6 @@
 import { tankLengthRefusal, TANK_SIZES, type Economy } from '@aquarium/shared';
 import { BUNDLED_ECONOMY } from './bundledEconomy';
+import { adultLengthRefusal } from './fishFit';
 import type {
   AwaySummary,
   CauseOfDeath,
@@ -210,6 +211,8 @@ export function canBuy(
   }
   const tooShort = tankLengthRefusal(economy, candidate.id, tank, candidate.commonName);
   if (tooShort !== undefined) return { ok: false, reason: tooShort };
+  const tooBig = adultLengthRefusal(candidate, tank.size);
+  if (tooBig !== undefined) return { ok: false, reason: tooBig };
   const bioload = new Map(all.map((s) => [s.id, s.lifecycle.bioload]));
   const existing = tank.fish.map((f) => ({
     alive: f.status === 'alive',

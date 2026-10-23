@@ -104,9 +104,7 @@ export function paymentErrorText(error: unknown): string {
     case 'rate_limited':
       return error.retryAfterSeconds
         ? `Too many attempts. Try again in ${error.retryAfterSeconds} s.`
-        : error.message.includes('Try again in')
-          ? error.message
-          : 'Too many attempts. Try again in a little while.';
+        : 'Too many attempts. Try again in a little while.';
     case 'network':
     case 'timeout':
       return 'Could not reach the server. Nothing was charged; try again.';

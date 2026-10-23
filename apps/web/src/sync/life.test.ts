@@ -202,6 +202,34 @@ describe('shop capacity', () => {
     });
   });
 
+  describe('adult length gate', () => {
+    const tang = speciesFixture({
+      id: 'blue-tang',
+      commonName: 'Blue tang',
+      biome: 'reef',
+      lifecycle: { ...speciesFixture().lifecycle, maxSizeM: 0.267 },
+    });
+
+    it('refuses a species that outgrows a nano tank and names the limit', () => {
+      const verdict = canBuy(tankFixture({ size: 'nano30', biome: 'reef' }), tang, [tang]);
+      expect(verdict.ok).toBe(false);
+      expect(verdict.ok ? '' : verdict.reason).toMatch(
+        /^Blue tang grows to 27 cm, but this tank only holds fish up to \d+ cm/,
+      );
+    });
+
+    it('does not let quarantine bypass it', () => {
+      const quarantine = tankFixture({ size: 'nano30', biome: 'reef', quarantine: true });
+      expect(canBuy(quarantine, tang, [tang]).ok).toBe(false);
+    });
+
+    it('allows it in a bigger tank', () => {
+      expect(canBuy(tankFixture({ size: 'standard', biome: 'reef' }), tang, [tang])).toEqual({
+        ok: true,
+      });
+    });
+  });
+
   it('refuses the wrong biome with a plain reason', () => {
     const verdict = canBuy(tankFixture(), clown, species);
     expect(verdict).toEqual({ ok: false, reason: 'Clownfish needs a reef tank.' });

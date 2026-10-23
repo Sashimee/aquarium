@@ -135,12 +135,12 @@ describe('adultConfirmationErrorText', () => {
       adultConfirmationErrorText(new ApiRequestError(429, 'rate_limited', 'x', {}, 9)),
     ).toContain('9 s');
   });
-  it('reads the wait from a 429 message when there is no retry-after header', () => {
+  it('ignores the message text and says so generally when there is no retry-after header', () => {
     expect(
       paymentErrorText(
         new ApiRequestError(429, 'rate_limited', 'Too many requests. Try again in 30 s.'),
       ),
-    ).toBe('Too many requests. Try again in 30 s.');
+    ).toContain('a little while');
     expect(paymentErrorText(new ApiRequestError(429, 'rate_limited', 'x'))).toContain(
       'a little while',
     );
