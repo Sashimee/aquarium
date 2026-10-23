@@ -28,7 +28,7 @@ import { posterSpan, Tank } from './Tank';
 
 const POSTER_ASPECT = BACKGROUND_TIERS.high[0] / BACKGROUND_TIERS.high[1];
 
-function tank(d: TankDimensions = DEFAULT_TANK): Tank {
+function lit(d: TankDimensions = DEFAULT_TANK): { tank: Tank; interior: InteriorLight } {
   const medium = new WaterMedium(waterBounds(d), { cdom440: 0.05, turbidity: 0.08 });
   const interior = new InteriorLight(
     medium,
@@ -37,7 +37,11 @@ function tank(d: TankDimensions = DEFAULT_TANK): Tank {
     new Color(0.13, 0.09, 0.055),
     meanSubstrateHeight(d),
   );
-  return new Tank(d, medium, new Texture(), interior, texture(new Texture()));
+  return { tank: new Tank(d, medium, new Texture(), interior, texture(new Texture())), interior };
+}
+
+function tank(d: TankDimensions = DEFAULT_TANK): Tank {
+  return lit(d).tank;
 }
 
 function boxOf(t: Tank, name: string): Box3 {
@@ -140,6 +144,21 @@ describe('Tank', () => {
       expect(added).toBe(5);
     },
   );
+
+  it('mirrors the room in the glass at the reflected room level, not the lighting one (#1549)', () => {
+    const { tank: t, interior } = lit();
+    const material = meshes(t).get('glass-faces')?.material as MeshStandardNodeMaterial;
+    const reads = (uniform: object): boolean => {
+      let found = false;
+      material.envNode?.traverse((n) => {
+        if (n === uniform) found = true;
+      });
+      return found;
+    };
+    expect(material.envNode).not.toBeNull();
+    expect(reads(interior.reflectionLevel)).toBe(true);
+    expect(reads(interior.roomLevel)).toBe(false);
+  });
 
   it('swaps the glass to the mirrored contents with the surface reflection, and back', () => {
     const t = tank();

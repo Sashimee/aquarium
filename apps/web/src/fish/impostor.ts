@@ -194,8 +194,8 @@ function prepare(texture: Texture): Texture {
 }
 
 /**
- * three hands overlapping loads of one URL the same texture. Disposing it while another atlas
- * still draws with it would make three upload it again from its CPU mips.
+ * three returns the same texture to overlapping loads of one URL. Disposing it while another
+ * atlas still draws with it would make three upload it again from its CPU mips.
  */
 const textureUsers = new WeakMap<Texture, number>();
 

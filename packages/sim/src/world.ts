@@ -2365,14 +2365,14 @@ export class World {
     const thrustMax = kd * vmax * vmax;
     const target = this.targetSpeed[i] ?? 0;
     let thrust: number;
-    let dragScale = 1;
+    let glide = false;
     if (burstAndCoast) {
       // Burst-and-coast: a short kick above the wanted speed, then an unpowered glide with the
       // body straight (lower drag) until speed falls below it (Weihs 1974; Calovi et al. 2018).
       const timer = (this.gaitTimer[i] ?? 0) + dt;
       if (coasting) {
         thrust = 0;
-        dragScale = BEHAVIOUR.glideDragFactor;
+        glide = true;
         const done = v <= BEHAVIOUR.coastReleaseFactor * target || timer >= BEHAVIOUR.coastMaxS;
         this.coasting[i] = done ? 0 : 1;
         this.gaitTimer[i] = done ? 0 : timer;
@@ -2392,7 +2392,11 @@ export class World {
       );
     }
     this.thrust[i] = thrustMax > 0 ? clamp(thrust / thrustMax, 0, 1) : 0;
-    const nextV = clamp((v + (dt * thrust) / m) / (1 + (dt * kd * dragScale * v) / m), 0, vmax);
+    // A glide relaxes exponentially with a fixed time constant (Calovi et al. 2018), not with the
+    // quadratic body drag, which at tetra cruise speeds would stretch a coast past a second.
+    const nextV = glide
+      ? v * Math.exp(-dt / BEHAVIOUR.glideTauS)
+      : clamp((v + (dt * thrust) / m) / (1 + (dt * kd * v) / m), 0, vmax);
 
     const ny = this.yaw[i] ?? 0;
     const np = this.pitch[i] ?? 0;

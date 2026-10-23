@@ -26,6 +26,12 @@ const SUBSTRATE_BOUNCE = 0.5;
 export class InteriorLight {
   /** The room's brightness relative to the day: its lamps at night. */
   readonly roomLevel = uniform(1);
+  /**
+   * The room as the glass mirrors it, relative to the day. The room map is a daylit room whose
+   * window is its brightest feature, and the room around the tank dims with the light through that
+   * window (`RoomLight`), so the mirror image follows the daylight without the lamps' floor.
+   */
+  readonly reflectionLevel = uniform(1);
   /** Linear albedo of the substrate, which colours the hood light it throws back. */
   readonly substrateAlbedo: UniformNode<'color', Color>;
   /**
@@ -98,6 +104,11 @@ export class InteriorLight {
    */
   environmentNode(): Node<'vec3'> {
     return this.around(positionWorld, this.roomNode());
+  }
+
+  /** For the `envNode` of a surface in the air that only mirrors the room, such as a pane. */
+  reflectionNode(): Node<'vec3'> {
+    return this.roomNode().mul(this.reflectionLevel);
   }
 
   /** Mean radiance arriving at `p` from the hemisphere around `normal`, for surfaces shaded by hand. */

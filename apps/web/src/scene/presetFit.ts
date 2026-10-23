@@ -100,6 +100,8 @@ function rotatedReach(bounds: Footprint, rotationY: number): { x: number; z: num
 /**
  * The largest scale whose `reach` fits `room`. A swaying item's lean saturates with its scale, so
  * the chord from scale 0 to 1 understates its reach below 1; bisect the real curve instead.
+ * Assumes reach never shrinks as scale grows. The search starts from the linear estimate, so when that
+ * estimate already fits, it is returned as is and may fall slightly short of the true maximum.
  */
 function scaleWithin(room: number, reach: (scale: number) => number): number {
   if (reach(0) > room) return 0;
