@@ -95,6 +95,7 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
         decorLayout: tank.decorLayout,
         decorEdited: tank.decorEdited,
         backgroundId: tank.backgroundId,
+        roomId: tank.roomId,
       });
     } finally {
       emittingOwn = false;

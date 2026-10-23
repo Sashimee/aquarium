@@ -13,6 +13,7 @@ import {
 } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
+import { COMMUNITY_ROOM_ID } from '../scene/room/roomScene';
 import {
   ApiRequestError,
   REQUEST_TIMEOUT_MS,
@@ -211,6 +212,7 @@ export function applyTankToScene(bus: SceneBus, held: Tank | null, next: Tank): 
       decorLayout: next.decorLayout,
       decorEdited: next.decorEdited,
       backgroundId: next.backgroundId,
+      roomId: COMMUNITY_ROOM_ID,
       recentVisitDays: 0,
     });
     bus.emit('tank:water', { tankId: next.id, water: next.water });

@@ -16,6 +16,7 @@ function setup() {
     species: vi.fn().mockResolvedValue([speciesFixture()]),
     tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [sick] })]),
     wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+    ownedRooms: vi.fn().mockResolvedValue([]),
     treat: vi.fn(),
   };
   const session = new TankSession({

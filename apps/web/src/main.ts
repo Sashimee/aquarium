@@ -8,7 +8,7 @@ import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig, orbitDistanceFor, tankBounds } from './interaction/camera';
 import { syncRoomLimit } from './interaction/roomLimit';
-import { roomPreference } from './interaction/roomPreference';
+import { ShownRoom } from './interaction/shownRoom';
 import { bindRoomLight } from './interaction/roomLight';
 import { IdleOrbit, bindIdleInput } from './interaction/idleOrbit';
 import { BackgroundChoice } from './interaction/background';
@@ -79,6 +79,7 @@ async function boot(): Promise<void> {
   const plantFeed = new PlantFeed(interaction);
   const coralFeed = new CoralFeed(interaction);
   const roomSeed = new RoomSeedFeed(interaction);
+  const shownRoom = new ShownRoom(interaction);
   const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
@@ -152,6 +153,7 @@ async function boot(): Promise<void> {
     plantFeed.stop();
     coralFeed.stop();
     roomSeed.stop();
+    shownRoom.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
@@ -182,12 +184,10 @@ async function boot(): Promise<void> {
     },
   });
 
-  const { mountRoom } = await import('./scene/room');
-  const room = mountRoom(engine, roomPreference);
   const { RoomLight } = await import('./engine/room');
   const roomLight = bindRoomLight({
-    preference: roomPreference,
-    backdrop: room.backdrop,
+    shown: shownRoom,
+    room: () => engine.room,
     seed: roomSeed,
     create: (seed) => {
       const environment = engine.scene.environment;
@@ -200,10 +200,16 @@ async function boot(): Promise<void> {
     now: () => Date.now(),
     onFrame: (callback) => engine.onFrame(callback),
   });
-  const limitToRoom = (): void => syncRoomLimit(rig, room.backdrop.layout);
+  const limitToRoom = (): void => syncRoomLimit(rig, engine.room?.layout ?? null);
+  const showRoom = (): void => {
+    void engine.setRoom(shownRoom.snapshot()).then(() => {
+      roomLight.sync();
+      limitToRoom();
+    });
+  };
   limitToRoom();
   const stopRoomLimit = [
-    roomPreference.subscribe(limitToRoom),
+    shownRoom.subscribe(showRoom),
     engine.events.on('engine:tank-resized', limitToRoom),
     engine.events.on('quality:tier-changed', limitToRoom),
     engine.events.on('quality:tier-changed', ({ to }) => roomLight.setTier(to)),
@@ -359,6 +365,7 @@ async function boot(): Promise<void> {
       sceneBiome = scene.biome;
       showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
+      void engine.useRoomIndex({ assets: [...scene.catalogEntries()] }).then(showRoom);
       fish.setAnchors([...scene.anchors, ...scene.banks]);
       detachAnchors = scene.onAnchorsChanged((anchors) =>
         fish.setAnchors([...anchors, ...scene.banks]),
@@ -422,8 +429,8 @@ async function boot(): Promise<void> {
     for (const off of stopRoomLimit) off();
     roomLight.dispose();
     roomSeed.stop();
+    shownRoom.stop();
     stopIdleInput();
-    room.dispose();
     stopTankSize();
     tankSize.stop();
     assetWatch.stop();

@@ -14,7 +14,14 @@ import type {
   TankSize,
   User,
 } from '@aquarium/shared';
-import { DEFAULT_TANK_SIZE, ONE_TIME_REF } from '@aquarium/shared';
+import {
+  DEFAULT_TANK_SIZE,
+  isFreeRoom,
+  ONE_TIME_REF,
+  roomIdSchema,
+  roomRef,
+  type RoomId,
+} from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -30,6 +37,7 @@ import {
   shouldShowAway,
   speciesNameMap,
 } from './life';
+import { DEVICE_ROOM_KEY, planRoomMigration } from './roomMigration';
 import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
 import { moveRefusalText } from './moveFish';
@@ -210,6 +218,7 @@ export class TankSession {
       activeId: null,
       awayByTank: {},
       owned: [],
+      ownedRooms: [],
       pendingNet: null,
       error: null,
       notice: null,
@@ -228,6 +237,7 @@ export class TankSession {
       const activeId = tanks.find((t) => t.id === stored)?.id ?? tanks[0]?.id ?? null;
       this.patch({ phase: 'ready', species, tanks, awayByTank, activeId });
       void this.refreshWallet();
+      void this.refreshRooms().then(() => this.migrateDeviceRoom(id));
       if (activeId) this.activate(activeId);
       else this.deps.interaction.emit('tank:none', {});
     } catch (error) {
@@ -328,6 +338,99 @@ export class TankSession {
     } catch (error) {
       if (!(error instanceof ApiRequestError)) throw error;
     }
+  }
+
+  /** The paid rooms the account owns. A failed read keeps the last list; the server checks every use. */
+  async refreshRooms(): Promise<void> {
+    const gen = this.loadId;
+    try {
+      const owned = await this.deps.api.ownedRooms();
+      if (gen === this.loadId) this.patch({ ownedRooms: owned });
+    } catch (error) {
+      if (!(error instanceof ApiRequestError)) throw error;
+    }
+  }
+
+  private readonly buyingRooms = new Set<RoomId>();
+
+  /**
+   * Buys a paid room for the whole account. A room that is free or already owned is never charged,
+   * and a second press while the first is out is dropped; a retry after an unknown outcome carries
+   * the same key, so the server replays instead of charging twice.
+   */
+  async buyRoom(roomId: RoomId): Promise<boolean> {
+    if (isFreeRoom(roomId) || this.state.ownedRooms.includes(roomId)) return true;
+    if (this.buyingRooms.has(roomId)) return false;
+    this.buyingRooms.add(roomId);
+    const itemRef = roomRef(roomId);
+    const gen = this.loadId;
+    try {
+      return await this.paid(`buy:${itemRef}`, async (idempotencyKey) => {
+        let bought;
+        try {
+          bought = await this.deps.api.purchase({ itemRef, idempotencyKey });
+        } catch (error) {
+          if (error instanceof ApiRequestError && error.reason === 'room_already_owned') {
+            this.patch({ ownedRooms: [...new Set([...this.state.ownedRooms, roomId])] });
+          }
+          throw error;
+        }
+        if (gen !== this.loadId) return;
+        this.walletApplied = ++this.walletSeq;
+        this.patch({
+          balance: bought.wallet.balance,
+          ownedRooms: [...new Set([...this.state.ownedRooms, roomId])],
+        });
+      });
+    } finally {
+      this.buyingRooms.delete(roomId);
+    }
+  }
+
+  /** Sets the active tank's room; null is the plain studio. A paid room has to be bought first. */
+  async setRoom(roomId: RoomId | null): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    if (roomId !== null && !roomIdSchema.safeParse(roomId).success) {
+      this.patch({ error: 'That room does not exist.' });
+      return false;
+    }
+    if (roomId !== null && !isFreeRoom(roomId) && !this.state.ownedRooms.includes(roomId)) {
+      this.patch({ error: 'That room is not unlocked yet. Buy it first.' });
+      return false;
+    }
+    if (roomId === tank.roomId) return true;
+    const gen = this.loadId;
+    return this.perform(async () => {
+      try {
+        const next = await this.deps.api.saveRoom(tank.id, roomId);
+        if (gen === this.loadId) this.apply(next);
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.reason === 'room_not_owned') {
+          void this.refreshRooms();
+        }
+        throw error;
+      }
+    });
+  }
+
+  private async migrateDeviceRoom(loadId: number): Promise<void> {
+    const storage = this.deps.storage;
+    if (!storage || loadId !== this.loadId || this.state.phase !== 'ready') return;
+    const plan = planRoomMigration(
+      storage.getItem(DEVICE_ROOM_KEY),
+      this.state.tanks,
+      this.state.ownedRooms,
+    );
+    for (const move of plan.moves) {
+      if (loadId !== this.loadId) return;
+      const moved = await this.perform(async () => {
+        const next = await this.deps.api.saveRoom(move.tankId, move.roomId);
+        if (loadId === this.loadId) this.apply(next);
+      });
+      if (!moved) return;
+    }
+    if (plan.done && loadId === this.loadId) storage.removeItem(DEVICE_ROOM_KEY);
   }
 
   dismissEarned(): void {
@@ -825,6 +928,7 @@ export class TankSession {
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,
       backgroundId: tank.backgroundId,
+      roomId: tank.roomId,
       recentVisitDays: tank.recentVisitDays,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
@@ -994,6 +1098,9 @@ export class TankSession {
     ) {
       this.shownBackground.set(tank.id, tank.backgroundId);
       interaction.emit('tank:background', { tankId: tank.id, backgroundId: tank.backgroundId });
+    }
+    if (held.roomId !== tank.roomId) {
+      interaction.emit('tank:room', { tankId: tank.id, roomId: tank.roomId });
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });

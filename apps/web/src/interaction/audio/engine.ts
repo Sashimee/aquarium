@@ -14,6 +14,8 @@ export const ROLE = {
   uiClick: 'ui-click',
 } as const;
 
+export const AMBIENCE_ROLE = 'room-ambience';
+
 const PRELOAD_ROLES: readonly string[] = Object.values(ROLE);
 
 const DEFAULT_VOLUME = 0.6;
@@ -23,6 +25,9 @@ const SURFACE_CUTOFF_HZ = 20000;
 const DIVE_CUTOFF_HZ = 700;
 const TOPSIDE_HUM = 1;
 const DIVE_HUM = 0.25;
+const DIVE_ROOM = 0.2;
+const AMBIENCE_FADE_S = 0.9;
+const AMBIENCE_RELEASE_S = AMBIENCE_FADE_S * 6;
 const BUBBLES = 0.45;
 const QUIET_EFFECTS = 0.4;
 const TAP_BASE = 0.7;
@@ -117,6 +122,7 @@ interface Graph {
   underwaterGain: GainLike;
   effects: GainLike;
   compressor: CompressorLike;
+  roomGain: GainLike;
 }
 
 export function storageKey(userId: string | null): string {
@@ -162,6 +168,9 @@ export class AudioEngine {
   private started = false;
   private loadScheduled = false;
   private readonly loops: SourceLike[] = [];
+  private ambienceWanted: string | null = null;
+  private ambience: { id: string; source: SourceLike; gain: GainLike } | null = null;
+  private ambienceToken = 0;
   private version = 0;
   private readonly listeners = new Set<() => void>();
   private offGesture: (() => void) | null = null;
@@ -213,6 +222,7 @@ export class AudioEngine {
         this.deps.warn(`Sound loop could not stop: ${reason(cause)}`);
       }
     }
+    this.stopAmbience();
     this.graph = null;
     this.started = false;
     this.loadScheduled = false;
@@ -280,6 +290,16 @@ export class AudioEngine {
     level.connect(graph.effects);
     source.start();
     return true;
+  }
+
+  /**
+   * Plays the looping ambience of the room whose manifest asset is `assetId`, fading it in over the
+   * last one; null fades the room tone out. It follows mute and volume through the master bus and
+   * only fetches while sound is on, so a muted player downloads nothing.
+   */
+  setAmbience(assetId: string | null): void {
+    this.ambienceWanted = assetId;
+    void this.syncAmbience();
   }
 
   glassTap(intensity: number): boolean {
@@ -375,7 +395,9 @@ export class AudioEngine {
     compressor.connect(tone);
     tone.connect(master);
     master.connect(ctx.destination);
-    return { ctx, master, tone, humGain, underwaterGain, effects, compressor };
+    const roomGain = ctx.createGain();
+    roomGain.connect(tone);
+    return { ctx, master, tone, humGain, underwaterGain, effects, compressor, roomGain };
   }
 
   private async loadSounds(graph: Graph): Promise<void> {
@@ -435,6 +457,69 @@ export class AudioEngine {
       source.start();
       this.loops.push(source);
     }
+    void this.syncAmbience();
+  }
+
+  private async syncAmbience(): Promise<void> {
+    const graph = this.graph;
+    const wanted = this.ambienceWanted;
+    if (!graph || !this.started || this.statusValue !== 'running') return;
+    if (this.ambience?.id === wanted) return;
+    if (wanted !== null && this.settingsValue.muted) return;
+    const token = ++this.ambienceToken;
+    let loaded: { entry: SoundEntry; buffer: BufferLike } | null = null;
+    if (wanted !== null) {
+      const entry = this.catalog?.get(AMBIENCE_ROLE)?.find((e) => e.id === wanted && e.loop);
+      if (!entry) {
+        this.failed.add(wanted);
+        this.deps.warn(`No looping room ambience "${wanted}"; check assets/index.json.`);
+      } else {
+        try {
+          const buffer =
+            this.buffers.get(entry) ??
+            (await graph.ctx.decodeAudioData(await this.deps.fetchBytes(entry.url)));
+          this.buffers.set(entry, buffer);
+          loaded = { entry, buffer };
+        } catch (cause) {
+          this.failed.add(entry.id);
+          this.deps.warn(`Sound "${entry.id}" failed to load: ${reason(cause)}`);
+        }
+      }
+      if (token !== this.ambienceToken || this.graph !== graph) return;
+    }
+    const now = graph.ctx.currentTime;
+    const previous = this.ambience;
+    if (previous) {
+      previous.gain.gain.setTargetAtTime(0, now, AMBIENCE_FADE_S);
+      previous.source.stop(now + AMBIENCE_RELEASE_S);
+    }
+    this.ambience = null;
+    if (!loaded) return;
+    const { entry, buffer } = loaded;
+    const source = graph.ctx.createBufferSource();
+    const gain = graph.ctx.createGain();
+    gain.gain.value = 0;
+    gain.gain.setTargetAtTime(1, now, AMBIENCE_FADE_S);
+    source.buffer = buffer;
+    source.loop = true;
+    source.loopStart = 0;
+    source.loopEnd = Math.min(entry.frames / entry.sampleRate, buffer.duration);
+    source.connect(gain);
+    gain.connect(graph.roomGain);
+    source.start();
+    this.ambience = { id: entry.id, source, gain };
+  }
+
+  private stopAmbience(): void {
+    this.ambienceToken++;
+    const current = this.ambience;
+    this.ambience = null;
+    if (!current) return;
+    try {
+      current.source.stop();
+    } catch (cause) {
+      this.deps.warn(`Room ambience could not stop: ${reason(cause)}`);
+    }
   }
 
   private update(next: AudioSettings): void {
@@ -446,6 +531,7 @@ export class AudioEngine {
     }
     this.applySettings();
     this.scheduleLoad();
+    void this.syncAmbience();
     this.changed();
   }
 
@@ -468,6 +554,7 @@ export class AudioEngine {
     graph.tone.frequency.setTargetAtTime(this.dived ? DIVE_CUTOFF_HZ : SURFACE_CUTOFF_HZ, now, tc);
     graph.humGain.gain.setTargetAtTime(this.dived ? DIVE_HUM : TOPSIDE_HUM, now, tc);
     graph.underwaterGain.gain.setTargetAtTime(this.dived ? 1 : 0, now, tc);
+    graph.roomGain.gain.setTargetAtTime(this.dived ? DIVE_ROOM : 1, now, tc);
   }
 
   private syncVisibility(): void {

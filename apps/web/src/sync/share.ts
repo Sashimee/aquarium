@@ -1,3 +1,4 @@
+import { roomTitle } from './roomCatalog';
 import {
   shareTokenSchema,
   type Fish,
@@ -162,6 +163,7 @@ export function publicTankLoaded(tank: PublicTank): InteractionEvents['tank:load
     decorLayout: tank.decorLayout,
     decorEdited: tank.decorEdited,
     backgroundId: tank.backgroundId,
+    roomId: tank.roomId,
   };
 }
 
@@ -192,5 +194,6 @@ export function publicReportLines(tank: PublicTank): string[] {
   if (dead.length > 0) {
     lines.push(`${dead.map((f) => f.name).join(', ')} ${dead.length === 1 ? 'has' : 'have'} died.`);
   }
+  lines.push(`Room: ${roomTitle(tank.roomId)}.`);
   return lines;
 }

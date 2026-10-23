@@ -14,7 +14,6 @@ import { useApi, useAuth } from './context';
 import { PaymentsSettings } from './PaymentsSettings';
 import { HapticsSetting } from './HapticsSetting';
 import { DisplaySetting } from './DisplaySetting';
-import { RoomSetting } from './RoomSetting';
 import { SoundSetting } from './SoundSetting';
 import { RemindersSetting } from './RemindersSetting';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
@@ -777,7 +776,6 @@ export function SettingsScreen() {
       <RemindersSetting />
       <SoundSetting />
       <HapticsSetting />
-      <RoomSetting />
       <DisplaySetting />
       <PaymentsSettings />
       <section aria-labelledby="export-title">
