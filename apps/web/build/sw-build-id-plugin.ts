@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Plugin } from 'vite';
 
 const PLACEHOLDER = '__BUILD_ID__';
-// Parses as an array so an unstamped worker is still valid JS; dev never registers it (src/pwa/register.ts).
+// Parses as an array so an unstamped worker is still valid JS.
 const EMITTED_PLACEHOLDER = "['__EMITTED_ASSETS__']";
 
 /** Paths the worker precaches, read from its own SHELL list so the two cannot drift apart. */
