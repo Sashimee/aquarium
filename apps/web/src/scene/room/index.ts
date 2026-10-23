@@ -1,11 +1,6 @@
-export { RoomBackdrop, type RoomConfig } from './RoomBackdrop';
 export {
-  ROOM_CHOICES,
   ROOM_PRESETS,
   planRoom,
-  roomDetailFor,
-  type RoomChoice,
-  type RoomDetail,
   type RoomLayout,
   type RoomPreset,
   type WindowSlot,
