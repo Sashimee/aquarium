@@ -11,7 +11,7 @@ import {
   type DecorItem,
   type TankSize,
 } from '@aquarium/shared';
-import { compileCollider, FishState, World } from '@aquarium/sim';
+import { compileCollider, FishState, maxFishLengthM, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim, tankSpaceOf } from '../fish/demoStock';
@@ -206,33 +206,6 @@ describe('the sim at boot', () => {
 const SPAWN_SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
 const SPAWN_BIOMES: readonly Biome[] = ['freshwater', 'reef', 'cichlid', 'mangrove', 'blackwater'];
 
-// Fish that spawn in an empty nano but find no free water once its fitted decor stands in it
-// (#1392), keyed by layer then fish id. Each index is a length: 0 the adult body length, 1 the
-// largest size. A fish that fits in the empty nano at a length is checked, so an entry here must
-// fail; the test below fails on one that has started to spawn so it gets dropped.
-const NO_ROOM_WITH_DECOR: Readonly<Record<Layer, Readonly<Record<string, readonly number[]>>>> = {
-  'scene hulls': {
-    angelfish: [1],
-    discus: [0, 1],
-    'blue-tang': [0],
-    'yellow-tang': [1],
-    'banded-archerfish': [0],
-    'barred-mudskipper': [1],
-    'blue-spotted-mudskipper': [1],
-  },
-  'decor colliders': {
-    angelfish: [1],
-    discus: [0, 1],
-    'blue-tang': [0],
-    'yellow-tang': [0, 1],
-    'banded-archerfish': [0],
-    'barred-mudskipper': [1],
-    'blue-spotted-mudskipper': [1],
-  },
-};
-// The blackwater nano preset builds invalid colliders, so no world starts with it (#1392).
-const BROKEN_NANO_PRESETS: ReadonlySet<Biome> = new Set(['blackwater']);
-
 interface ContentFish {
   readonly id: string;
   readonly biome: Biome;
@@ -279,8 +252,15 @@ function failedSeeds(id: string, length: number, decor: readonly Collider[]): st
   return failed;
 }
 
+describe('a nano tank', () => {
+  // Fish longer than this (a grown blue tang, archerfish or silver mono) are refused by name (#1413).
+  it('holds fish shorter than its 21.7 cm of water over the sand', () => {
+    expect(maxFishLengthM(tankSpaceOf(TANK_DIMENSIONS.nano30))).toBeCloseTo(0.217, 3);
+  });
+});
+
 describe.each(LAYERS)('a nano tank with the fitted decor and %s', (layer) => {
-  describe.each(SPAWN_BIOMES.filter((b) => !BROKEN_NANO_PRESETS.has(b)))('%s', (biome) => {
+  describe.each(SPAWN_BIOMES)('%s', (biome) => {
     it('spawns every fish that spawns in an empty nano, at its adult and its largest size', async () => {
       const fitted = fitPresetToCatalog(
         loadPreset(biome),
@@ -292,21 +272,15 @@ describe.each(LAYERS)('a nano tank with the fitted decor and %s', (layer) => {
       const fish = contentFish().filter((f) => f.biome === biome);
       expect(fish.length).toBeGreaterThan(0);
       const worse: string[] = [];
-      const fixed: string[] = [];
       for (const { id, lengths } of fish) {
-        for (const [i, length] of lengths.entries()) {
+        for (const length of lengths) {
           const empty = failedSeeds(id, length, []);
           if (empty.length > 0) continue;
           const failed = failedSeeds(id, length, decor);
-          if (NO_ROOM_WITH_DECOR[layer][id]?.includes(i)) {
-            if (failed.length === 0) fixed.push(`${id} ${length} m`);
-          } else if (failed.length > 0) {
-            worse.push(`${id} ${length} m: ${failed.length}/20, ${failed[0]}`);
-          }
+          if (failed.length > 0) worse.push(`${id} ${length} m: ${failed.length}/20, ${failed[0]}`);
         }
       }
       expect(worse, 'fish the fitted nano decor keeps from spawning').toEqual([]);
-      expect(fixed, 'fish that spawn now: drop them from NO_ROOM_WITH_DECOR').toEqual([]);
     });
 
     it.runIf(isPlayableBiome(biome))('boots the nano demo stock', async () => {

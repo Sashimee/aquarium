@@ -244,6 +244,7 @@ interface Spot {
   readonly yaw: number;
 }
 const MAX_BODY_PUSHES = 8;
+const SPAWN_GRID_CELLS = 32;
 const STATION_MEMO = 8;
 
 const NO_ATE_EVENTS: readonly AteEvent[] = Object.freeze([]);
@@ -874,9 +875,11 @@ export class World {
       throw new RangeError(`fish "${spawn.id}": bodyLengthM must be positive, got ${length}`);
     }
     const r = length * STEERING.collisionRadiusBodyLengths;
-    const basin = this.basin;
-    if (2 * r >= Math.min(basin.width, basin.maxY - basin.floorMax, basin.depth)) {
-      throw new RangeError(`fish "${spawn.id}" (${length} m) does not fit in the tank`);
+    const longest = longestFitting(this.basin);
+    if (length >= longest) {
+      throw new RangeError(
+        `fish "${spawn.id}" (${length} m) does not fit in the tank, which holds fish shorter than ${longest.toFixed(3)} m`,
+      );
     }
     const { hunger, stage, sex } = spawn;
     if (stage !== undefined && stage !== 'fry' && stage !== 'juvenile' && stage !== 'adult') {
@@ -966,7 +969,46 @@ export class World {
       if (this.hardDecor.sample(x, y, z, this.normal) < pad) continue;
       return { x, y, z, yaw: this.rng.range(-Math.PI, Math.PI) };
     }
-    throw new RangeError(`fish "${fit.id}": no free water to spawn in, decor fills the tank`);
+    // A big fish in a small decorated tank (a tang in a nano) may have no spot a body length clear
+    // of everything; it still starts in the roomiest water as long as its body fits there.
+    const roomy = this.roomiestSpot(r);
+    if (roomy === null) {
+      throw new RangeError(`fish "${fit.id}": no free water to spawn in, decor fills the tank`);
+    }
+    const [x, y, z] = roomy;
+    return { x, y, z, yaw: this.rng.range(-Math.PI, Math.PI) };
+  }
+
+  /**
+   * The point of a grid over the water farthest from glass, sand, surface and hard decor, or null
+   * when even that leaves less than `r` (the fish's whole body in any pose). Draws nothing from
+   * the RNG.
+   */
+  private roomiestSpot(r: number): Point3 | null {
+    const basin = this.basin;
+    const span = Math.max(basin.width, basin.maxY - basin.minY, basin.depth);
+    const step = Math.max(0.5 * r, span / SPAWN_GRID_CELLS);
+    const xs = Math.floor((basin.width - 2 * r) / step) + 1;
+    const zs = Math.floor((basin.depth - 2 * r) / step) + 1;
+    let best: Point3 | null = null;
+    let bestClearance = -Infinity;
+    for (let ix = 0; ix < xs; ix++) {
+      const x = basin.minX + r + ix * step;
+      for (let iz = 0; iz < zs; iz++) {
+        const z = basin.minZ + r + iz * step;
+        const lo = basin.ground(x, z) + r;
+        const ys = Math.floor((basin.maxY - r - lo) / step) + 1;
+        for (let iy = 0; iy < ys; iy++) {
+          const y = lo + iy * step;
+          const d = this.sceneSdf.sample(x, y, z, this.normal);
+          if (d > bestClearance) {
+            bestClearance = d;
+            best = [x, y, z];
+          }
+        }
+      }
+    }
+    return bestClearance >= r ? best : null;
   }
 
   /**
@@ -2688,6 +2730,20 @@ export class World {
       out[o + 16] = this.behaviour.brood.fan[i] ?? 0;
     }
   }
+}
+
+/**
+ * The body length a fish must stay under for a tank to hold it: its whole body, in any pose, has
+ * to clear the glass, the highest sand and the surface. `World` refuses a longer fish, so a tank
+ * must not be stocked with one, nor a fish in it grown past this.
+ */
+export function maxFishLengthM(tank: TankSpace | TankDimensions): number {
+  return longestFitting('floor' in tank ? Basin.fromSpace(tank) : Basin.fromTank(tank));
+}
+
+function longestFitting(basin: Basin): number {
+  const room = Math.min(basin.width, basin.maxY - basin.floorMax, basin.depth);
+  return room / (2 * STEERING.collisionRadiusBodyLengths);
 }
 
 function basinOfConfig(config: AnyWorldConfig): Basin {

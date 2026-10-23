@@ -51,6 +51,9 @@ export function collidersFor(
   const cy = f.yMin + height / 2;
   const colliderId = `${COLLIDER_PREFIX}${id}`;
   if (spec.kind === 'plant') return plantCollider(colliderId, spec, item, up);
+  // A flat card (catappa leaves on the sand) has no volume for a fish to swim into, and the
+  // collider contract has no zero-thickness shape.
+  if (!(height > 0)) return [];
   if (hasShelterParts(spec.assetId)) {
     if (up === UPRIGHT || (up[0] === 0 && up[1] === 1 && up[2] === 0)) {
       return shelterColliders(colliderId, item);

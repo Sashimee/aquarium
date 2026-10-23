@@ -1,4 +1,4 @@
-import { colliderListSchema, type Collider, type Point3 } from '@aquarium/shared';
+import { colliderListSchema, isDegenerateHull, type Collider, type Point3 } from '@aquarium/shared';
 import type { Collider as SceneCollider } from '../scene/colliders';
 
 const ON_PLANE_M = 1e-7;
@@ -59,13 +59,21 @@ function cross(a: Point3, b: Point3): Point3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 
-/** The scene's colliders in the shared format. Ids follow list order, so a rebuilt scene keeps them. */
+/**
+ * The scene's colliders in the shared format. Ids follow list order, so a rebuilt scene keeps them.
+ * A flat card's hull (catappa leaves on the sand) has no volume a fish could swim into and no valid
+ * shape in the contract, so it is left out; the ids of the rest do not move.
+ */
 export function sceneCollidersToSim(colliders: readonly SceneCollider[]): Collider[] {
-  return colliders.map((c, i): Collider => {
+  return colliders.flatMap((c, i): Collider[] => {
     const id = `scene:${i}`;
-    return c.kind === 'hull'
-      ? { id, kind: 'hull', hard: c.hard, vertices: hullCorners(c.planes) }
-      : { id, kind: 'capsule', hard: c.hard, a: [...c.a], b: [...c.b], radius: c.radius };
+    if (c.kind !== 'hull') {
+      return [{ id, kind: 'capsule', hard: c.hard, a: [...c.a], b: [...c.b], radius: c.radius }];
+    }
+    const vertices = hullCorners(c.planes);
+    // No corners at all means broken planes rather than a flat card, so validation reports it.
+    if (vertices.length > 0 && isDegenerateHull(vertices)) return [];
+    return [{ id, kind: 'hull', hard: c.hard, vertices }];
   });
 }
 

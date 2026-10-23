@@ -6,6 +6,7 @@ import {
   colliderListSchema,
   colliderSchema,
   fitHullPlanes,
+  isDegenerateHull,
   maxTetrahedronVolume,
 } from './collider.js';
 
@@ -115,6 +116,20 @@ describe('hull validation', () => {
       ]).success,
     ).toBe(false);
     expect(hull(Array.from({ length: 5 }, () => [0.1, 0.1, 0.1])).success).toBe(false);
+  });
+
+  it('names a flat or empty vertex set degenerate, the same rule the schema applies', () => {
+    const card: [number, number, number][] = [
+      [0, 0.02, 0],
+      [0.1, 0.02, 0],
+      [0, 0.02, 0.1],
+      [0.1, 0.02, 0.1],
+    ];
+    expect(isDegenerateHull(card)).toBe(true);
+    expect(hull(card).success).toBe(false);
+    expect(isDegenerateHull([])).toBe(true);
+    expect(isDegenerateHull(tetra as [number, number, number][])).toBe(false);
+    expect(hull(tetra).success).toBe(true);
   });
 
   it('rejects too few and too many vertices', () => {

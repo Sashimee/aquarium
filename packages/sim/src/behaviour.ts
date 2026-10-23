@@ -10,6 +10,7 @@ import { GREETING, Greeting, type Visitor } from './greeting.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
 import { Night } from './night.ts';
+import { findNooks } from './nooks.ts';
 import { Personalities } from './personality.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
@@ -367,6 +368,14 @@ function at(a: ArrayLike<number>, i: number): number {
   return a[i] ?? 0;
 }
 
+/**
+ * Whether a cave-dweller takes a crevice found in the hardscape when the scene has no cave. A
+ * walker rests in the open and a bottom forager already lies on the sand against the rock.
+ */
+function takesNook(sp: SimSpecies): boolean {
+  return sp.home === 'cave' && sp.walking === null && sp.gait !== 'forage';
+}
+
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
 }
@@ -402,6 +411,10 @@ export class Behaviour {
 
   private readonly host: BehaviourHost;
   private anchors: readonly Anchor[] = [];
+  /** The scene's anemones and caves, before any nooks are added. */
+  private given: readonly Anchor[] = [];
+  /** The body length the nooks were found for, 0 when the scene's caves are used instead. */
+  private nookLength = 0;
   private readonly stimuli: Stimulus[] = [];
 
   private startlePhase: Uint8Array;
@@ -502,6 +515,11 @@ export class Behaviour {
 
   get anchor(): Int32Array {
     return this._anchor;
+  }
+
+  /** What `anchor` indexes: the scene's anemones and caves, then any nooks found for them. */
+  get homes(): readonly Anchor[] {
+    return this.anchors;
   }
 
   /** Seconds each fish has left hiding in shelter after a startle. */
@@ -614,7 +632,14 @@ export class Behaviour {
   addFish(i: number): void {
     this.drawTimers(i);
     this.pickHome(i);
-    this.anchor[i] = this.freeAnchor(i);
+    const sp = this.speciesOf(i);
+    const needsNooks =
+      takesNook(sp) &&
+      !this.given.some((a) => a.kind === 'cave') &&
+      at(this.host.bodyLength, i) > this.nookLength;
+    // Nooks sized for smaller fish have no room for this one, so they are found and dealt anew.
+    if (needsNooks) this.redealNooks();
+    else this.anchor[i] = this.freeAnchor(i);
   }
 
   /**
@@ -728,8 +753,9 @@ export class Behaviour {
     const own = at(this.host.speciesIndex, i);
     let best = -1;
     let bestHeld = Infinity;
-    for (let k = 0; k < this.anchors.length; k++) {
-      if (this.anchors[k]?.kind !== kind) continue;
+    const pool = kind === 'cave' && !takesNook(sp) ? this.given : this.anchors;
+    for (let k = 0; k < pool.length; k++) {
+      if (pool[k]?.kind !== kind) continue;
       let held = 0;
       for (let j = 0; j < this.host.count; j++) {
         if (j !== i && at(this.anchor, j) === k && at(this.host.speciesIndex, j) === own) held++;
@@ -755,7 +781,8 @@ export class Behaviour {
     let best = -1;
     let bestDist = Infinity;
     let bestHeld = Infinity;
-    for (let k = 0; k < this.anchors.length; k++) {
+    // Nooks follow the given anchors and are for swimmers; walkers rest in the open without a cave.
+    for (let k = 0; k < this.given.length; k++) {
       const a = this.anchors[k];
       if (a?.kind !== 'cave') continue;
       const room = Math.max(1, Math.floor(BEHAVIOUR.walkerCaveShare * (a.radius / length) ** 2));
@@ -818,7 +845,20 @@ export class Behaviour {
       }
     }
     this.banks.setBanks(anchors.filter((a) => a.kind === 'bank'));
-    const homes = anchors.filter((a) => a.kind !== 'bank');
+    this.given = anchors.filter((a) => a.kind !== 'bank');
+    this.deal();
+  }
+
+  /**
+   * Deals the anemones and caves out to the fish. With no cave from the scene, the cave-dwellers
+   * that hover get crevices found in the hardscape instead (`findNooks`), sized for the longest
+   * of them.
+   */
+  private deal(): void {
+    const given = this.given;
+    this.nookLength = given.some((a) => a.kind === 'cave') ? 0 : this.longestCaveDweller();
+    const homes =
+      this.nookLength > 0 ? [...given, ...this.nooksFor(this.nookLength, given)] : given;
     this.anchors = homes;
     this.anchor.fill(-1);
     // A swimmer's rest station does not depend on the anchors, so only walkers choose again.
@@ -834,7 +874,8 @@ export class Behaviour {
         this.anchor[i] = this.walkerCave(i);
         continue;
       }
-      const matching = homes.flatMap((a, k) => (a.kind === kind ? [k] : []));
+      const pool = kind === 'cave' && !takesNook(sp) ? given : homes;
+      const matching = pool.flatMap((a, k) => (a.kind === kind ? [k] : []));
       if (matching.length === 0) continue;
       const k = ordinal.get(sp.id) ?? 0;
       ordinal.set(sp.id, k + 1);
@@ -844,6 +885,48 @@ export class Behaviour {
       if (kind === 'cave' && pick >= matching.length) continue;
       this.anchor[i] = matching[pick % matching.length] ?? -1;
     }
+  }
+
+  /**
+   * Finds the nooks again (the rock moved, or a longer cave-dweller came) and deals them out anew
+   * to the fish that take one. Every other fish keeps its anemone, cave or rest spot.
+   */
+  private redealNooks(): void {
+    const given = this.given;
+    this.nookLength = this.longestCaveDweller();
+    const nooks = this.nookLength > 0 ? this.nooksFor(this.nookLength, given) : [];
+    this.anchors = [...given, ...nooks];
+    const ordinal = new Map<string, number>();
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      if (!takesNook(sp)) continue;
+      const k = ordinal.get(sp.id) ?? 0;
+      ordinal.set(sp.id, k + 1);
+      this.anchor[i] = k < nooks.length ? given.length + k : -1;
+    }
+  }
+
+  private longestCaveDweller(): number {
+    let longest = 0;
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      if (takesNook(sp)) {
+        longest = Math.max(longest, at(this.host.bodyLength, i));
+      }
+    }
+    return longest;
+  }
+
+  private nooksFor(length: number, given: readonly Anchor[]): Anchor[] {
+    const { basin, substrateSdf, sceneSdf, decorSdf } = this.host;
+    if (decorSdf === null) return [];
+    let prefix = 'nook:';
+    while (given.some((a) => a.id.startsWith(prefix))) prefix = `_${prefix}`;
+    return findNooks(
+      { basin, cover: substrateSdf, water: sceneSdf, rock: decorSdf },
+      length,
+      prefix,
+    );
   }
 
   startle(stimulus: Stimulus): void {
@@ -1118,6 +1201,7 @@ export class Behaviour {
         this.restSpotSet[i] = 0;
       }
     }
+    if (this.nookLength > 0) this.redealNooks();
     this.brood.decorMoved();
     this.cleaning.decorMoved();
     this.banks.decorMoved();
@@ -1986,7 +2070,7 @@ export class Behaviour {
     const pz = at(position, o + 2);
     let cave: Anchor | undefined;
     let caveDist = Infinity;
-    for (const a of this.anchors) {
+    for (const a of this.given) {
       if (a.kind !== 'cave') continue;
       const d = Math.hypot(a.position[0] - px, a.position[2] - pz);
       if (d < caveDist) {
