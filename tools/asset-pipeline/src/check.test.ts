@@ -7,6 +7,7 @@ import {
   borrowedTextureProblems,
   checkAssets,
   duplicateTextureProblems,
+  glbDrawCalls,
   intraAssetDuplicateTextureProblems,
   loadCheckInput,
   sharedKtx2Problems,
@@ -961,11 +962,18 @@ describe('unreferencedHdriProblems', () => {
 });
 
 describe('duplicateTextureProblems', () => {
-  function asset(id: string, files: [string, string][]): OutputAsset {
+  function asset(
+    id: string,
+    files: [string, string][],
+    textures: { '1k': string; '2k': string }[] = [],
+  ): OutputAsset {
     return {
       id,
       kind: 'rock',
       files: files.map(([file, sha]) => ({ file, bytes: 1, sha256: sha })),
+      textures: textures.map((t) => ({
+        variants: { '1k': { file: t['1k'] }, '2k': { file: t['2k'] } },
+      })),
     } as unknown as OutputAsset;
   }
 
@@ -979,12 +987,41 @@ describe('duplicateTextureProblems', () => {
     expect(problems[0]).toContain('rock/rock-a/textures/a_basecolor_1k.ktx2');
   });
 
-  it('accepts distinct textures and repeats inside one asset', () => {
+  it('flags identical textures under different names inside one asset', () => {
+    const problems = duplicateTextureProblems([
+      asset('rock-a', [
+        ['rock/rock-a/textures/a_1k.ktx2', 'a'.repeat(64)],
+        ['rock/rock-a/textures/b_1k.ktx2', 'a'.repeat(64)],
+      ]),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/rock-a/textures/b_1k.ktx2');
+    expect(problems[0]).toContain('rock/rock-a/textures/a_1k.ktx2');
+    expect(problems[0]).toContain('same asset');
+  });
+
+  it('leaves a 1k/2k pair of one texture to the intra-asset check', () => {
+    const pair = {
+      '1k': 'rock/r/textures/a_1k.ktx2',
+      '2k': 'rock/r/textures/a_2k.ktx2',
+    };
+    const r = asset(
+      'r',
+      [
+        [pair['1k'], 'a'.repeat(64)],
+        [pair['2k'], 'a'.repeat(64)],
+      ],
+      [pair],
+    );
+    expect(duplicateTextureProblems([r])).toEqual([]);
+  });
+
+  it('accepts distinct textures', () => {
     expect(
       duplicateTextureProblems([
         asset('rock-a', [
           ['rock/rock-a/textures/a_1k.ktx2', 'a'.repeat(64)],
-          ['rock/rock-a/textures/b_1k.ktx2', 'a'.repeat(64)],
+          ['rock/rock-a/textures/b_1k.ktx2', 'c'.repeat(64)],
         ]),
         asset('rock-b', [['rock/rock-b/textures/c_1k.ktx2', 'b'.repeat(64)]]),
       ]),
@@ -998,6 +1035,34 @@ describe('duplicateTextureProblems', () => {
         asset('b', [['rock/b/lod0.glb', 'c'.repeat(64)]]),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('glbDrawCalls', () => {
+  it('counts the primitives of every mesh', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'glb-draws-'));
+    try {
+      const json = {
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{}, {}] }, { primitives: [{}] }],
+      };
+      mkdirSync(join(dir, 'room-furniture/x'), { recursive: true });
+      writeFileSync(join(dir, 'room-furniture/x/lod2.glb'), packGlb(json, new Uint8Array(4)));
+      expect(glbDrawCalls(dir, 'room-furniture/x/lod2.glb')).toBe(3);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('fails with the missing path instead of counting zero', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'glb-draws-'));
+    try {
+      expect(() => glbDrawCalls(dir, 'room-furniture/gone/lod2.glb')).toThrow(
+        join(dir, 'room-furniture/gone/lod2.glb'),
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 });
 

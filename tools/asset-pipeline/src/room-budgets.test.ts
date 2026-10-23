@@ -87,6 +87,34 @@ describe('roomStats', () => {
   });
 });
 
+describe('roomStats with a shell', () => {
+  const withShell = () => room({ assets: { shell: 's1', furniture: ['p1'], hdri: null } });
+  const assets = (shell: OutputAsset) => [shell, prop('p1', [3000, 2000, 1000]), audio('a1')];
+
+  it('counts the shell bytes, triangles and draw calls', () => {
+    const stats = roomStats(withShell(), refs(assets(prop('s1', [500, 400, 300], 5000)), 2));
+    expect(stats.bytes).toBe(1000 + 5000 + 1000 - 1000 + 1000);
+    expect(stats.tiers.mobile).toEqual({ triangles: 1300, drawCalls: 4 });
+    expect(stats.tiers.high).toEqual({ triangles: 3500, drawCalls: 4 });
+  });
+
+  it('flags a shell that pushes the room over its byte budget', () => {
+    const shell = prop('s1', [1, 1, 1], ROOM_MAX_BYTES);
+    const problems = roomProblems([withShell()], refs(assets(shell), 1, ['s1', 'p1', 'a1']));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('room budget');
+  });
+
+  it('flags a shell missing from the built index', () => {
+    const problems = roomProblems(
+      [withShell()],
+      refs([prop('p1', [1, 1, 1]), audio('a1')], 1, ['s1', 'p1', 'a1']),
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('shell "s1" is not in the built index');
+  });
+});
+
 describe('roomProblems', () => {
   it('passes a room inside every budget', () => {
     expect(roomProblems([room()], refs(good()))).toEqual([]);
