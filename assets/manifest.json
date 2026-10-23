@@ -6824,7 +6824,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Living room. 17.3 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (329533_4437257-lq.ogg, 133874 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-329533/freesound-329533.m4a.",
+      "notes": "Role: room ambience for the Living room. 17.3 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (329533_4437257-lq.ogg, 133874 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-329533/freesound-329533.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -6848,7 +6848,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Bedroom. 546.5 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (630612_6580859-lq.ogg, 5236186 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-630612/freesound-630612.m4a.",
+      "notes": "Role: room ambience for the Bedroom. 546.5 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (630612_6580859-lq.ogg, 5236186 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-630612/freesound-630612.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -6872,7 +6872,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Aquarium shop. 180.0 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (764641_15681090-lq.ogg, 1554241 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-764641/freesound-764641.m4a.",
+      "notes": "Role: room ambience for the Aquarium shop. 180.0 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (764641_15681090-lq.ogg, 1554241 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-764641/freesound-764641.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -6896,7 +6896,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Home office. 101.2 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (327497_5654022-lq.ogg, 881337 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-327497/freesound-327497.m4a.",
+      "notes": "Role: room ambience for the Home office. 101.2 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (327497_5654022-lq.ogg, 881337 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-327497/freesound-327497.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -6920,7 +6920,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the City loft. 224.6 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (330427_3287894-lq.ogg, 2115307 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-330427/freesound-330427.m4a.",
+      "notes": "Role: room ambience for the City loft. 224.6 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (330427_3287894-lq.ogg, 2115307 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-330427/freesound-330427.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -6944,7 +6944,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Japanese zen room. 48.3 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (629951_8535955-lq.ogg, 639096 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-629951/freesound-629951.m4a.",
+      "notes": "Role: room ambience for the Japanese zen room. 48.3 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (629951_8535955-lq.ogg, 639096 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-629951/freesound-629951.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -6968,7 +6968,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Beach house. 21.8 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (852826_17997500-lq.ogg, 177046 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-852826/freesound-852826.m4a.",
+      "notes": "Role: room ambience for the Beach house. 21.8 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (852826_17997500-lq.ogg, 177046 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-852826/freesound-852826.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -6992,7 +6992,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Mountain cabin. 73.4 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (346321_6290213-lq.ogg, 725753 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-346321/freesound-346321.m4a.",
+      "notes": "Role: room ambience for the Mountain cabin. 73.4 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (346321_6290213-lq.ogg, 725753 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-346321/freesound-346321.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -7017,7 +7017,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Sushi restaurant. 136.5 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (723834_14961185-lq.ogg, 975809 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-723834/freesound-723834.m4a.",
+      "notes": "Role: room ambience for the Sushi restaurant. 136.5 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (723834_14961185-lq.ogg, 975809 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-723834/freesound-723834.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -7041,7 +7041,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Castle library. 580.6 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (620683_13504080-lq.ogg, 5191561 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-620683/freesound-620683.m4a.",
+      "notes": "Role: room ambience for the Castle library. 580.6 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (620683_13504080-lq.ogg, 5191561 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-620683/freesound-620683.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -7065,7 +7065,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Public aquarium hall. 70.4 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (393689_123355-lq.ogg, 670574 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-393689/freesound-393689.m4a.",
+      "notes": "Role: room ambience for the Public aquarium hall. 70.4 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (393689_123355-lq.ogg, 670574 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-393689/freesound-393689.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
@@ -7089,7 +7089,7 @@
       "polycount": null,
       "textures": null,
       "rigged": false,
-      "notes": "Role: room ambience for the Submarine. 23.8 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (438735_2524442-lq.ogg, 178786 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-438735/freesound-438735.m4a.",
+      "notes": "Role: room ambience for the Submarine. 23.8 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (438735_2524442-lq.ogg, 178786 bytes) because the original needs a login; sha256 is of that file. Measured by the pipeline (T74, #1484): a 14 s stationary section, mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, measured -26 LUFS integrated, AAC-LC 64 kbit/s in .m4a at audio/freesound-438735/freesound-438735.m4a.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
