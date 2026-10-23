@@ -3,6 +3,7 @@ import {
   type DeviceLossWatch,
   type DeviceLostInfo,
   type LossSource,
+  outOfMemoryLoss,
   recoveryFor,
   sessionBackend,
   type SessionStore,
@@ -22,11 +23,13 @@ function fakeRenderer(withDevice: boolean) {
     resolveLost = resolve;
   });
   const threeHandler = vi.fn<(info: DeviceLostInfo) => void>();
+  const threeOnError = vi.fn<LossSource['onError']>();
   const renderer: LossSource = {
     onDeviceLost: threeHandler,
+    onError: threeOnError,
     backend: withDevice ? { device: { lost } } : {},
   };
-  return { renderer, threeHandler, loseDevice: resolveLost, lost };
+  return { renderer, threeHandler, threeOnError, loseDevice: resolveLost, lost };
 }
 
 function watch(renderer: LossSource, onLost: (info: DeviceLostInfo) => void): DeviceLossWatch {
@@ -121,6 +124,19 @@ describe('watchDeviceLoss', () => {
     expect(renderer.onDeviceLost).toBe(threeHandler);
   });
 
+  it('gives the renderer its own error handler back once stopped', () => {
+    const { renderer, threeOnError } = fakeRenderer(false);
+    const onLost = vi.fn();
+    const { stop } = watch(renderer, onLost);
+    expect(renderer.onError).not.toBe(threeOnError);
+
+    stop();
+    Reflect.apply(renderer.onError, renderer, [{ type: 'GPUOutOfMemoryError', message: '' }]);
+
+    expect(renderer.onError).toBe(threeOnError);
+    expect(onLost).not.toHaveBeenCalled();
+  });
+
   it('holds a loss during start-up until a handler takes it', () => {
     const { renderer } = fakeRenderer(false);
     const watcher = watchDeviceLoss(renderer);
@@ -164,6 +180,30 @@ describe('watchDeviceLoss', () => {
     const watcher = watchDeviceLoss(renderer);
     watcher.onLost(vi.fn());
     expect(() => watcher.onLost(vi.fn())).toThrow(/already given a handler/);
+  });
+});
+
+describe('outOfMemoryLoss', () => {
+  it('reads a WebGPU out-of-memory error as a loss of the WebGPU device', () => {
+    const error = { api: 'WebGPU', type: 'GPUOutOfMemoryError', message: 'createTexture' };
+    expect(outOfMemoryLoss(error)).toEqual({
+      api: 'WebGPU',
+      message: 'createTexture',
+      reason: 'out-of-memory',
+      originalEvent: error,
+    });
+  });
+
+  it('names the cause when the error has no message', () => {
+    expect(outOfMemoryLoss({ type: 'GPUOutOfMemoryError', message: '' })?.message).toBe(
+      'Out of GPU memory',
+    );
+  });
+
+  it('ignores every other error', () => {
+    expect(outOfMemoryLoss({ type: 'GPUValidationError', message: 'x' })).toBeNull();
+    expect(outOfMemoryLoss('GPUOutOfMemoryError')).toBeNull();
+    expect(outOfMemoryLoss(null)).toBeNull();
   });
 });
 

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type DeviceLostInfo,
   type LossResponder,
+  type LossSource,
   LOST_NOTICE,
   respondToDeviceLoss,
   type SessionStore,
@@ -120,26 +121,37 @@ describe('respondToDeviceLoss', () => {
     expect(notice()).toBeNull();
   });
 
-  it('reloads onto WebGL 2 after an automatic WebGPU loss, remembering it for the tab', () => {
+  it('asks for a reload onto WebGL 2 after an automatic WebGPU loss, remembering it for the tab', () => {
     const store = new MemoryStore();
     const { r, steps, location } = responder(store);
-    expect(respondToDeviceLoss(WEBGPU_LOSS, 'auto', r)).toBeNull();
+    respondToDeviceLoss(WEBGPU_LOSS, 'auto', r);
     expect(store.items.get(WEBGPU_LOST_KEY)).toBe('1');
+    expect(steps[0]).toBe('halt');
+    expect(notice()?.textContent).toContain(LOST_NOTICE);
+    expect(location.reload).not.toHaveBeenCalled();
+
+    notice()?.querySelector('button')?.click();
     expect(location.reload).toHaveBeenCalledTimes(1);
     expect(location.replace).not.toHaveBeenCalled();
-    expect(steps[0]).toBe('halt');
-    expect(notice()).toBeNull();
   });
 
-  it('carries ?backend=webgl in the URL when there is no session storage', () => {
+  it('carries ?backend=webgl in the reload when there is no session storage', () => {
     const { r, location } = responder(null);
     respondToDeviceLoss(WEBGPU_LOSS, 'auto', r);
+    expect(notice()).not.toBeNull();
+    expect(location.replace).not.toHaveBeenCalled();
+
+    notice()?.querySelector('button')?.click();
     expect(location.replace).toHaveBeenCalledWith(`${HREF}&backend=webgl`);
     expect(location.reload).not.toHaveBeenCalled();
   });
 
   it('answers a lost WebGL context delivered through the renderer exactly once', () => {
-    const renderer = { onDeviceLost: vi.fn<(info: DeviceLostInfo) => void>(), backend: {} };
+    const renderer = {
+      onDeviceLost: vi.fn<(info: DeviceLostInfo) => void>(),
+      onError: vi.fn<LossSource['onError']>(),
+      backend: {},
+    };
     const watcher = watchDeviceLoss(renderer);
     const { r, steps } = responder();
     watcher.onLost((info) => respondToDeviceLoss(info, 'auto', r));
@@ -149,5 +161,38 @@ describe('respondToDeviceLoss', () => {
 
     expect(steps.filter((s) => s === 'halt')).toHaveLength(1);
     expect(document.body.querySelectorAll('[role="alert"]')).toHaveLength(1);
+  });
+
+  it('answers an out-of-memory error as a loss, after three has logged it', () => {
+    const threeOnError = vi.fn<LossSource['onError']>();
+    const renderer: LossSource = { onDeviceLost: vi.fn(), onError: threeOnError, backend: {} };
+    const watcher = watchDeviceLoss(renderer);
+    const { r, steps } = responder(new MemoryStore());
+    watcher.onLost((info) => respondToDeviceLoss(info, 'auto', r));
+
+    const oom = { api: 'WebGPU', type: 'GPUOutOfMemoryError', message: 'createTexture failed' };
+    // three r186 passes this object; @types/three says a string.
+    Reflect.apply(renderer.onError, renderer, [oom]);
+    Reflect.apply(renderer.onError, renderer, [oom]);
+
+    expect(threeOnError).toHaveBeenCalledTimes(2);
+    expect(steps.filter((s) => s === 'halt')).toHaveLength(1);
+    expect(steps).toContain('announce WebGPU webgl');
+    expect(notice()?.textContent).toContain(LOST_NOTICE);
+  });
+
+  it('leaves other uncaptured errors to three', () => {
+    const renderer: LossSource = { onDeviceLost: vi.fn(), onError: vi.fn(), backend: {} };
+    const watcher = watchDeviceLoss(renderer);
+    const onLost = vi.fn();
+    watcher.onLost(onLost);
+
+    Reflect.apply(renderer.onError, renderer, [
+      { api: 'WebGPU', type: 'GPUValidationError', message: 'bad binding' },
+    ]);
+    Reflect.apply(renderer.onError, renderer, ['a string message']);
+
+    expect(onLost).not.toHaveBeenCalled();
+    expect(notice()).toBeNull();
   });
 });
