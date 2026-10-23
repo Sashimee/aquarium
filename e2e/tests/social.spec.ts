@@ -154,9 +154,7 @@ test.describe('gifts and trades', () => {
     expect((await setHandle(sender, ownHandle)).status()).toBe(200);
     const self = await offer(sender, { ...request, toHandle: ownHandle });
     expect(self.status()).toBe(400);
-    expect((await offer(sender, { ...request, toHandle: 'nobody_has_this_handle' })).status()).toBe(
-      404,
-    );
+    expect((await offer(sender, { ...request, toHandle: 'nobody_here_x9' })).status()).toBe(404);
 
     const idempotencyKey = key();
     const sent = await offer(sender, { ...request, idempotencyKey });

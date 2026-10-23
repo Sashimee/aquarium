@@ -408,7 +408,7 @@ test('the account settings confirm and withdraw the adult confirmation', async (
   await expect.poll(confirmedOnServer).toBe(true);
   await expect(checkbox).toBeChecked();
 
-  await checkbox.uncheck();
+  await checkbox.click();
   await expect.poll(confirmedOnServer).toBe(false);
   await expect(checkbox).not.toBeChecked();
 });
