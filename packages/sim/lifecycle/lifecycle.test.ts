@@ -558,6 +558,18 @@ describe('growth and old age', () => {
     expect(only(grown).size).toBe(spec?.maxSizeM);
   });
 
+  it('stops growth at the tank length limit and trims a fish already past it', () => {
+    const spec = species.get('guppy');
+    const cap = (spec?.birthSizeM ?? 0) * 1.05;
+    const capped = run(tank([fishOf('a', 'guppy')]), 60 * DAY, { env: { maxFishLengthM: cap } });
+    expect(only(capped).size).toBe(cap);
+    expect(only(capped).size).toBeLessThan(spec?.maxSizeM ?? 0);
+    const trimmed = run(tank([fishOf('a', 'guppy', { size: spec?.maxSizeM ?? 1 })]), 60 * DAY, {
+      env: { maxFishLengthM: cap },
+    });
+    expect(only(trimmed).size).toBe(cap);
+  });
+
   it('does not grow a starving fish', () => {
     const start = tank([fishOf('a', 'guppy', { hunger: 0.9 })]);
     expect(only(run(start, 2 * DAY)).size).toBe(fishOf('a', 'guppy').size);

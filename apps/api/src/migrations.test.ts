@@ -24,6 +24,51 @@ function migrationsUpTo(lastIdx: number): string {
   return dir;
 }
 
+describe('the fish length clamp migration', () => {
+  let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
+  let database: Database;
+  let oldDir: string;
+
+  beforeAll(async () => {
+    testDb = await createTestDatabase();
+    database = connect(testDb.url);
+    oldDir = migrationsUpTo(33);
+    await migrate(drizzle(database.pool), { migrationsFolder: oldDir });
+    await database.pool.query(
+      `insert into "user" (id, name, email) values ('u1', 'Old timer', 'clamp@bas.lu')`,
+    );
+    await database.pool.query(
+      `insert into tanks (id, owner_id, biome, name, size) values
+        ('00000000-0000-4000-8000-000000000011', 'u1', 'reef', 'Nano', 'nano30'),
+        ('00000000-0000-4000-8000-000000000012', 'u1', 'reef', 'Big', 'long300')`,
+    );
+    await database.pool.query(
+      `insert into fish (id, tank_id, species, name, sex, size, personality) values
+        ('00000000-0000-4000-8000-0000000000a1', '00000000-0000-4000-8000-000000000011', 'blue-tang', 'Long', 'male', 0.267, '{}'),
+        ('00000000-0000-4000-8000-0000000000a2', '00000000-0000-4000-8000-000000000011', 'royal-gramma', 'Short', 'male', 0.05, '{}'),
+        ('00000000-0000-4000-8000-0000000000a3', '00000000-0000-4000-8000-000000000012', 'blue-tang', 'Roomy', 'male', 0.267, '{}')`,
+    );
+    await runMigrations(database);
+  });
+
+  afterAll(async () => {
+    await database.close();
+    await testDb.drop();
+    rmSync(oldDir, { recursive: true, force: true });
+  });
+
+  it('trims only the fish longer than their tank holds', async () => {
+    const { rows } = await database.pool.query<{ name: string; size: number }>(
+      'select name, size from fish order by name',
+    );
+    expect(rows).toEqual([
+      { name: 'Long', size: 0.2168 },
+      { name: 'Roomy', size: 0.267 },
+      { name: 'Short', size: 0.05 },
+    ]);
+  });
+});
+
 describe('the chemistry v2 migration on tanks that already exist', () => {
   let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
   let database: Database;
