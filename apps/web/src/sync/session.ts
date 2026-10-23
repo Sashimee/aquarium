@@ -410,7 +410,7 @@ export class TankSession {
       this.patch({ error: 'That room is not unlocked yet. Buy it first.' });
       return false;
     }
-    if (roomId === tank.roomId) return true;
+    if (roomId === tank.roomId && tank.roomSetAt !== null) return true;
     const gen = this.loadId;
     return this.perform(async () => {
       try {
@@ -436,11 +436,13 @@ export class TankSession {
     const storage = this.deps.storage;
     if (!storage || !this.roomsKnown) return;
     if (loadId !== this.loadId || this.state.phase !== 'ready') return;
-    const plan = planRoomMigration(
-      storage.getItem(DEVICE_ROOM_KEY),
-      this.state.tanks,
-      this.state.ownedRooms,
-    );
+    let deviceRoom: string | null = null;
+    try {
+      deviceRoom = storage.getItem(DEVICE_ROOM_KEY);
+    } catch {
+      // Some privacy modes throw on any storage read; the device room is then simply absent.
+    }
+    const plan = planRoomMigration(deviceRoom, this.state.tanks, this.state.ownedRooms);
     for (const move of plan.moves) {
       if (loadId !== this.loadId) return;
       const moved = await this.perform(async () => {
