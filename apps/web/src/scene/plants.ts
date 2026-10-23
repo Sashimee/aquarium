@@ -34,6 +34,7 @@ import {
 } from './current';
 import type { LoadedModel, ModelLod } from './assets';
 import type { PlantInstance } from './placement';
+import type { Tier } from '../engine/quality/tiers';
 
 /** Seconds of current a leaf tip leans into; the bend grows with the square of the height. */
 const SWAY_SECONDS = 1.2;
@@ -60,6 +61,8 @@ const CARPET: ReadonlySet<string> = new Set(['staurogyne-repens']);
 export function plantCastsShadow(assetId: string): boolean {
   return !CARPET.has(assetId);
 }
+
+export const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
 
 export function plantLodFor(assetId: string, tierLod: ModelLod): ModelLod {
   return CARPET.has(assetId) ? (Math.min(2, tierLod + 1) as ModelLod) : tierLod;

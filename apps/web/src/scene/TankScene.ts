@@ -68,6 +68,7 @@ import { RebuildQueue } from './rebuildQueue';
 import {
   PlantGroup,
   maxSway,
+  PLANT_LOD,
   plantLodFor,
   surfaceScaleCeiling,
   SURFACE_MARGIN,
@@ -112,7 +113,6 @@ export const DEFAULT_CURRENT: CurrentParameters = {
   gustDepth: 0.4,
 };
 
-export const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
 const HARDSCAPE_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 0, ultra: 0 };
 const WALL_MARGIN = 0.005;
 const BLOCKED_CLEARANCE = 0.005;
