@@ -9,6 +9,7 @@ import {
   Scene,
   Vector3,
   type Node,
+  type Object3D,
 } from 'three/webgpu';
 import {
   CARCASS,
@@ -1512,7 +1513,14 @@ describe('FishSystem toys and display', () => {
       fishImpostors: { fullMeshes: 0 },
     };
     const gramma = fishFixture(FISH_2, { species: 'royal-gramma', size: 0.06 });
-    const { fish, load, nextWorld, snapshot } = await bettaTank(gramma, 'freshwater', tier);
+    const { fish, engine, load, nextWorld, snapshot } = await bettaTank(gramma, 'freshwater', tier);
+    const fishMeshes = (): Set<Object3D> => {
+      const found = new Set<Object3D>();
+      engine.scene.traverse((o) => {
+        if (o instanceof InstancedMesh) found.add(o);
+      });
+      return found;
+    };
     const show = (shown: ReturnType<typeof fishFixture>[]): void =>
       fish.handle({
         type: 'tank:loaded',
@@ -1533,6 +1541,7 @@ describe('FishSystem toys and display', () => {
       if (impostorWrites.mock.calls.length === 0) throw new Error('no gramma impostor yet');
     });
     const grammaLoads = loadAsync.mock.calls.length;
+    const grammaMeshes = fishMeshes();
 
     let finish = (): void => undefined;
     held = new Promise<void>((resolve) => (finish = resolve));
@@ -1542,11 +1551,14 @@ describe('FishSystem toys and display', () => {
       snapshot(0, 0, 2);
       if (loadAsync.mock.calls.length === grammaLoads) throw new Error('no betta atlas load yet');
     });
+    expect(fishMeshes().size).toBeGreaterThan(grammaMeshes.size);
     show([gramma]);
     await nextWorld();
+    expect(fishMeshes()).toEqual(grammaMeshes);
     finish();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(fishMeshes()).toEqual(grammaMeshes);
     expect(disposals.size).toBe(0);
     impostorWrites.mockClear();
     snapshot(0, 0);
