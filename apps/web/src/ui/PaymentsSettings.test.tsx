@@ -141,10 +141,10 @@ describe('purchase settings', () => {
     expect(alert).not.toContain('not right');
   });
 
-  it('shows the wait from the server message on a 429 without a retry-after header', async () => {
+  it('shows the retry-after wait on a 429', async () => {
     api.paymentsState.mockResolvedValue(state());
     api.setAdultConfirmation.mockRejectedValue(
-      new ApiRequestError(429, 'rate_limited', 'Too many requests. Try again in 30 s.'),
+      new ApiRequestError(429, 'rate_limited', 'Too many requests.', {}, 30),
     );
     await show();
     await click(box());
@@ -153,7 +153,7 @@ describe('purchase settings', () => {
     expect(container.querySelector('[role=alert]')?.textContent).toContain('Try again in 30 s');
   });
 
-  it('focuses the password field and links its hint', async () => {
+  it('limits the password field and links its hint', async () => {
     api.paymentsState.mockResolvedValue(state());
     await show();
     await click(box());

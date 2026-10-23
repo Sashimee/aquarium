@@ -1,5 +1,12 @@
-import { tankLengthRefusal, type Economy, type Fish, type Tank } from '@aquarium/shared';
+import {
+  tankLengthRefusal,
+  type Economy,
+  type Fish,
+  type SpeciesSummary,
+  type Tank,
+} from '@aquarium/shared';
 import { BUNDLED_ECONOMY } from './bundledEconomy';
+import { adultLengthRefusal } from './fishFit';
 import { ApiRequestError } from '../ui/api';
 
 /** Quarantine tanks send fish out to display tanks, and display tanks send them to quarantine; only the same kind of water fits. */
@@ -8,13 +15,15 @@ export function moveTargets(
   tanks: readonly Tank[],
   speciesId: string,
   economy: Economy = BUNDLED_ECONOMY,
+  species?: Pick<SpeciesSummary, 'commonName' | 'lifecycle'>,
 ): Tank[] {
   return tanks.filter(
     (t) =>
       t.id !== from.id &&
       t.quarantine !== from.quarantine &&
       t.biome === from.biome &&
-      tankLengthRefusal(economy, speciesId, t, speciesId) === undefined,
+      tankLengthRefusal(economy, speciesId, t, speciesId) === undefined &&
+      (species === undefined || adultLengthRefusal(species, t.size) === undefined),
   );
 }
 

@@ -1,3 +1,4 @@
+import { BREEDING_SHELTER_ASSET_IDS } from '@aquarium/sim/lifecycle';
 import {
   keptPresetDecor,
   newTankChemistry,
@@ -161,10 +162,12 @@ describe('lakeWaterNotes', () => {
 });
 
 describe('shelters', () => {
-  it('keeps the asset list in step with the scene', () => {
+  it('uses the server list and covers every cave the scene can hide in', () => {
     const mouths = Object.keys(CAVE_MOUTHS);
     for (const id of mouths) expect(isShelterAsset(id)).toBe(true);
-    expect(SHELTER_ASSET_IDS).toEqual(new Set(mouths));
+    expect(SHELTER_ASSET_IDS).toEqual(new Set(BREEDING_SHELTER_ASSET_IDS));
+    expect(isShelterAsset('lambis-shell')).toBe(true);
+    expect(isShelterAsset('driftwood-branch')).toBe(true);
     expect(isShelterAsset('malawi-boulder-03')).toBe(false);
   });
 

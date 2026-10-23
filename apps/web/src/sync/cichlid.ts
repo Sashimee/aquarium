@@ -1,4 +1,5 @@
 import { keptPresetDecor, type DecorItem, type SpeciesSummary, type Tank } from '@aquarium/shared';
+import { BREEDING_SHELTER_ASSET_IDS } from '@aquarium/sim/lifecycle';
 import { loadPreset } from '../scene/preset';
 import { BUNDLED_CHEMISTRY } from './bundledEconomy';
 import { isBundledTerritorial } from './bundledSpecies';
@@ -104,12 +105,7 @@ export function lakeWaterNotes(
   return notes;
 }
 
-export const SHELTER_ASSET_IDS: ReadonlySet<string> = new Set([
-  'reef-arch',
-  'rock-pile-cave',
-  'rock-pile-stack',
-  'neothauma-shell',
-]);
+export const SHELTER_ASSET_IDS: ReadonlySet<string> = new Set(BREEDING_SHELTER_ASSET_IDS);
 
 export const isShelterAsset = (assetId: string): boolean => SHELTER_ASSET_IDS.has(assetId);
 
