@@ -16,6 +16,7 @@ import {
   type PublicTank,
   type ReactionCounts,
 } from '@aquarium/shared';
+import { tankMaxFishLengthM } from './fishFit.ts';
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -176,7 +177,7 @@ export function registerPublicRoutes({
           personality: personalitySchema.parse(f.personality),
           disease: f.disease === null ? null : diseaseStateSchema.parse(f.disease),
           bornAt: f.bornAt.toISOString(),
-          size: f.size,
+          size: Math.min(f.size, tankMaxFishLengthM(tank.size)),
           hunger: f.hunger,
           health: f.health,
           status: f.status,

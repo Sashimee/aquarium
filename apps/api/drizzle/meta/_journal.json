@@ -246,6 +246,13 @@
       "when": 1792720730920,
       "tag": "0034_clamp_fish_length",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792722094897,
+      "tag": "0035_clamp_escrowed_fish",
+      "breakpoints": true
     }
   ]
 }
