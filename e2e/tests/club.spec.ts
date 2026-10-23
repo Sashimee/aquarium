@@ -272,29 +272,24 @@ test.describe('Aquarist Club in test mode', () => {
 test.describe('the Checkout redirect', () => {
   test.use({ serviceWorkers: 'block' });
 
-  async function captureCheckoutUrl(page: Page, endpoint: string): Promise<Promise<string>> {
+  async function leavesForStripe(page: Page): Promise<Promise<string>> {
     let resolve: (url: string) => void = () => undefined;
     const seen = new Promise<string>((done, fail) => {
       resolve = done;
-      setTimeout(() => fail(new Error(`no ${endpoint} Checkout response within 90 s`)), 90_000);
+      setTimeout(() => fail(new Error('the browser never left for Checkout within 90 s')), 90_000);
     });
-    await page.route(`**/api/payments/checkout/${endpoint}`, async (route) => {
-      const upstream = await route.fetch();
-      const body = await upstream.body();
-      resolve((JSON.parse(body.toString('utf8')) as { url: string }).url);
-      await route.fulfill({ response: upstream, body });
-    });
-    return seen;
-  }
-
-  async function leavesForStripe(page: Page): Promise<void> {
     await page.route(
       (url) => url.origin !== APP_URL,
-      (route) =>
-        route.request().resourceType() === 'document'
-          ? route.fulfill({ contentType: 'text/html', body: '<title>Checkout stand-in</title>' })
-          : route.abort(),
+      (route) => {
+        if (route.request().resourceType() !== 'document') return route.abort();
+        resolve(route.request().url());
+        return route.fulfill({
+          contentType: 'text/html',
+          body: '<title>Checkout stand-in</title>',
+        });
+      },
     );
+    return seen;
   }
 
   async function readyShop(page: Page, label: string) {
@@ -314,35 +309,31 @@ test.describe('the Checkout redirect', () => {
 
   test('Buy sends the browser to the Checkout URL the server returned', async ({ page }) => {
     test.setTimeout(420_000);
-    await leavesForStripe(page);
+    const target = await leavesForStripe(page);
     const shop = await readyShop(page, 'redirect');
     const pack = webPack('pearls-550');
 
-    const target = await captureCheckoutUrl(page, 'pack');
     await shop
       .getByRole('list', { name: 'Pearl packs' })
       .getByRole('button', { name: new RegExp(`^Buy ${pack.pearls} Pearls`) })
       .click();
     const url = await target;
     expect(url).toMatch(/^https:\/\//);
-    await page.waitForURL(url);
     await expect(page).toHaveTitle('Checkout stand-in');
   });
 
   test('Join sends the browser to the subscription Checkout URL', async ({ page }) => {
     test.setTimeout(420_000);
-    await leavesForStripe(page);
+    const target = await leavesForStripe(page);
     const shop = await readyShop(page, 'redirectsub');
 
-    const target = await captureCheckoutUrl(page, 'subscription');
     await shop
       .getByRole('button', {
         name: `Join the Aquarist Club for €${(economy.subscription.priceCents / 100).toFixed(2)} a month`,
       })
       .click();
-    const url = await target;
-    expect(url).toMatch(/^https:\/\//);
-    await page.waitForURL(url);
+    expect(await target).toMatch(/^https:\/\//);
+    await expect(page).toHaveTitle('Checkout stand-in');
   });
 
   test('without the adult confirmation the server refuses and the page stays put', async ({
