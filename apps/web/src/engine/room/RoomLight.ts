@@ -31,7 +31,7 @@ import {
   vec3,
 } from 'three/tsl';
 import type { Bounds, WindowSlot } from '../../scene/room/layout';
-import type { RoomLightPlan } from '../../scene/room/roomScene';
+import type { PracticalLight, RoomLightPlan } from '../../scene/room/roomScene';
 import type { Tier } from '../quality/tiers';
 import { crossfade, crossfadeAt, type Crossfade } from './crossfade';
 import { roomLightAt, type Rgb, type RoomLightState } from './timeOfDay';
@@ -58,14 +58,29 @@ export interface LitRoom {
   readonly rig?: RoomRig | null;
 }
 
-export type RoomRig = Pick<RoomLightPlan, 'key' | 'ambient'> &
-  Partial<Pick<RoomLightPlan, 'practical'>>;
+export type RoomRig = Pick<RoomLightPlan, 'key' | 'ambient'> & { readonly practical?: RoomLamps };
+
+/** A room's lamps, no more than it has slots for: `roomLamps` makes one from a plan's list. */
+export type RoomLamps = readonly [PracticalLight?, PracticalLight?];
 
 /**
  * Lamps a room can light at once. Every room material carries this many lamp terms whatever the
  * room holds, so lamps coming and going change uniforms only.
  */
-export const ROOM_LAMP_SLOTS = 2;
+export const ROOM_LAMP_SLOTS: Required<RoomLamps>['length'] = 2;
+
+/** A plan's lamps as a rig's; throws when the room plans more than it has slots for. */
+export function roomLamps(practical: readonly PracticalLight[]): RoomLamps {
+  if (practical.length > ROOM_LAMP_SLOTS) {
+    throw new RangeError(
+      `RoomLight: ${practical.length} lamps exceed ROOM_LAMP_SLOTS (${ROOM_LAMP_SLOTS}); ` +
+        'plan fewer lamps for the room or raise the slots',
+    );
+  }
+  const [first, second] = practical;
+  if (!first) return [];
+  return second ? [first, second] : [first];
+}
 
 export interface RoomLightDetail {
   /** Octaves of cloud noise in the window; 0 shows cover as an even overcast. */
@@ -516,12 +531,7 @@ export class RoomLight {
   }
 
   private fitLamps(room: LitRoom): void {
-    const practical = room.rig?.practical ?? [];
-    if (practical.length > ROOM_LAMP_SLOTS) {
-      throw new Error(
-        `RoomLight: ${practical.length} lamps exceed ROOM_LAMP_SLOTS (${ROOM_LAMP_SLOTS})`,
-      );
-    }
+    const practical: RoomLamps = room.rig?.practical ?? [];
     this.lamps.forEach((lamp, i) => {
       const plan = practical[i];
       if (!plan) {

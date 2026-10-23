@@ -1,29 +1,38 @@
 import {
   CubeUVReflectionMapping,
   DirectionalLight,
+  Group,
   Mesh,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
   OperatorNode,
+  PlaneGeometry,
   RenderTarget,
   UniformNode,
   type Node,
 } from 'three/webgpu';
+import { diffuseContribution, normalWorld, positionWorld } from 'three/tsl';
 import { describe, expect, it } from 'vitest';
-import { RoomBackdrop } from '../../scene/room/RoomBackdrop';
+import type { Bounds, WindowSlot } from '../../scene/room/layout';
+import type { PracticalLight } from '../../scene/room/roomScene';
 import { TANK_DIMENSIONS } from '../tank/dimensions';
 import { TIERS, type Tier } from '../quality/tiers';
 import { reversedSmoothsteps } from '../reversedSmoothsteps';
-import { buildShaders } from '../shaderFixtures';
+import { buildShaders, evaluate } from '../shaderFixtures';
 import {
   RAIN_RATES,
+  ROOM_LAMP_SLOTS,
   ROOM_LIGHT_DETAIL,
   RoomLight,
+  roomLamps,
   tankGlow,
   windowMotion,
   windowMotionAt,
+  type LitRoom,
+  type LitRoomLayout,
   type PatternMotion,
   type RoomLightInput,
+  type RoomRig,
   type WindowMotion,
 } from './RoomLight';
 import { roomLightAt } from './timeOfDay';
@@ -31,46 +40,98 @@ import { roomLightAt } from './timeOfDay';
 const tank = TANK_DIMENSIONS.standard;
 const NOON: RoomLightInput = { nowMs: Date.UTC(2026, 9, 19, 12), minute: 13 * 60, hood: 1 };
 
+const SHELL: Bounds = { min: [-2.5, -0.75, -0.8], max: [2.5, 1.85, 2.5] };
+const TANK: Bounds = {
+  min: [-tank.length / 2, 0, -tank.depth / 2],
+  max: [tank.length / 2, tank.height, tank.depth / 2],
+};
+const WINDOW: WindowSlot = {
+  id: 'window-main',
+  centre: [1.4, 0.9, -0.8],
+  size: [1, 1.2],
+  paneZ: -0.82,
+};
+const SURFACES = ['room-wall-back', 'room-floor', 'room-shelf'];
+
 function environment() {
   const texture = new RenderTarget(64, 64).texture;
   texture.mapping = CubeUVReflectionMapping;
   return texture;
 }
 
-function room(tier: Tier = 'high', choice: 'living-room' | 'office' | 'none' = 'living-room') {
-  const backdrop = new RoomBackdrop();
-  backdrop.update({ choice, tank, tier });
-  return backdrop;
+/** A room as RoomLight sees it: named room surfaces, a window pane, a layout and a rig. */
+class TestRoom implements LitRoom {
+  readonly group = new Group();
+  pane: Mesh | null = null;
+  layout: LitRoomLayout | null = null;
+  rig: RoomRig | null = null;
+  revision = 0;
+
+  constructor(options: { window?: boolean; rig?: RoomRig | null } = {}) {
+    this.build(options);
+  }
+
+  /** Builds the room afresh, with new meshes, materials and layout, as a room change does. */
+  build({ window = true, rig = null }: { window?: boolean; rig?: RoomRig | null } = {}): void {
+    this.clear();
+    for (const name of SURFACES) {
+      const material = new MeshStandardNodeMaterial();
+      material.name = name;
+      const mesh = new Mesh(new PlaneGeometry(), material);
+      mesh.name = name;
+      this.group.add(mesh);
+    }
+    if (window) {
+      const sky = new MeshBasicNodeMaterial();
+      sky.name = 'room-window-pane';
+      this.pane = new Mesh(new PlaneGeometry(...WINDOW.size), sky);
+      this.group.add(this.pane);
+    }
+    this.layout = { shell: SHELL, tank: TANK, window: window ? WINDOW : null };
+    this.rig = rig;
+  }
+
+  clear(): void {
+    this.group.clear();
+    this.pane = null;
+    this.layout = null;
+  }
+
+  surface(name: string): Mesh {
+    const mesh = this.group.getObjectByName(name);
+    if (!(mesh instanceof Mesh)) throw new Error(`no ${name}`);
+    return mesh;
+  }
 }
 
-function standardMaterials(backdrop: RoomBackdrop): MeshStandardNodeMaterial[] {
+function standardMaterials(room: TestRoom): MeshStandardNodeMaterial[] {
   const found = new Set<MeshStandardNodeMaterial>();
-  backdrop.group.traverse((object) => {
+  room.group.traverse((object) => {
     const material = (object as Partial<Mesh>).material;
     if (material instanceof MeshStandardNodeMaterial) found.add(material);
   });
   return [...found];
 }
 
-function paneMaterial(backdrop: RoomBackdrop): MeshBasicNodeMaterial {
-  const material = backdrop.pane?.material;
+function paneMaterial(room: TestRoom): MeshBasicNodeMaterial {
+  const material = room.pane?.material;
   if (!(material instanceof MeshBasicNodeMaterial)) throw new Error('no pane material');
   return material;
 }
 
-function lit(tier: Tier, backdrop = room(tier)) {
+function lit(tier: Tier, room = new TestRoom()) {
   const light = new RoomLight({ environment: environment(), tier, seed: 12 });
-  light.attach(backdrop);
+  light.attach(room);
   light.update(NOON);
-  return { light, backdrop };
+  return { light, room };
 }
 
 describe('RoomLight', () => {
   it('paints the window and lights every room material', () => {
-    const { backdrop } = lit('high');
-    expect(paneMaterial(backdrop).colorNode).not.toBeNull();
-    const materials = standardMaterials(backdrop);
-    expect(materials.map((m) => m.name)).toContain('room-books');
+    const { room } = lit('high');
+    expect(paneMaterial(room).colorNode).not.toBeNull();
+    const materials = standardMaterials(room);
+    expect(materials.map((m) => m.name)).toEqual(SURFACES);
     for (const material of materials) {
       expect(material.envNode).not.toBeNull();
       expect(material.emissiveNode).not.toBeNull();
@@ -78,9 +139,9 @@ describe('RoomLight', () => {
   });
 
   it('keeps the low tier to the sky and the ambient: no sun patch or tank glow', () => {
-    const { backdrop } = lit('low');
-    expect(paneMaterial(backdrop).colorNode).not.toBeNull();
-    for (const material of standardMaterials(backdrop)) {
+    const { room } = lit('low');
+    expect(paneMaterial(room).colorNode).not.toBeNull();
+    for (const material of standardMaterials(room)) {
       expect(material.envNode).not.toBeNull();
       expect(material.emissiveNode).toBeNull();
     }
@@ -107,7 +168,7 @@ describe('RoomLight', () => {
 
   it('grows the window shader with the tier, keeping low to a gradient', () => {
     const size = (tier: Tier) => {
-      const pane = lit(tier).backdrop.pane;
+      const pane = lit(tier).room.pane;
       if (!pane) throw new Error('no pane');
       return buildShaders(pane, 'webgpu').fragment.length;
     };
@@ -115,42 +176,42 @@ describe('RoomLight', () => {
     for (let i = 1; i < sizes.length; i++) {
       expect(sizes[i]).toBeGreaterThan(sizes[i - 1] ?? Infinity);
     }
-    const low = lit('low').backdrop.pane;
+    const low = lit('low').room.pane;
     if (!low) throw new Error('no pane');
     expect(buildShaders(low, 'webgpu').fragment).not.toMatch(/mx_|noise/i);
   });
 
   it('builds WGSL and GLSL for the window and the room on every tier', () => {
     for (const tier of TIERS) {
-      const { backdrop } = lit(tier);
-      const pane = backdrop.pane;
+      const { room } = lit(tier);
+      const pane = room.pane;
       if (!pane) throw new Error('no pane');
-      const wall = backdrop.group.getObjectByName('room-wall-back');
+      const wall = room.group.getObjectByName('room-wall-back');
       if (!(wall instanceof Mesh)) throw new Error('no back wall');
       for (const backend of ['webgpu', 'webgl'] as const) {
         expect(buildShaders(pane, backend).fragment.length).toBeGreaterThan(0);
         const lit = buildShaders(wall, backend, [new DirectionalLight()]).fragment;
         expect(lit).toContain('getUV');
       }
-      expect(reversedSmoothsteps(paneMaterial(backdrop).colorNode)).toEqual([]);
+      expect(reversedSmoothsteps(paneMaterial(room).colorNode)).toEqual([]);
       const emissive = (wall.material as MeshStandardNodeMaterial).emissiveNode as Node | null;
       expect(reversedSmoothsteps(emissive)).toEqual([]);
     }
   });
 
   it('dresses the room again after it rebuilds, and the new tier on a tier change', () => {
-    const { light, backdrop } = lit('low', room('low'));
-    backdrop.update({ choice: 'office', tank, tier: 'high' });
+    const { light, room } = lit('low');
+    room.build();
     light.setTier('high');
     light.update(NOON);
-    expect(paneMaterial(backdrop).colorNode).not.toBeNull();
-    for (const material of standardMaterials(backdrop)) {
+    expect(paneMaterial(room).colorNode).not.toBeNull();
+    for (const material of standardMaterials(room)) {
       expect(material.emissiveNode).not.toBeNull();
     }
     light.setTier('low');
-    for (const material of standardMaterials(backdrop)) expect(material.envNode).toBeNull();
+    for (const material of standardMaterials(room)) expect(material.envNode).toBeNull();
     light.update(NOON);
-    for (const material of standardMaterials(backdrop)) {
+    for (const material of standardMaterials(room)) {
       expect(material.envNode).not.toBeNull();
       expect(material.emissiveNode).toBeNull();
     }
@@ -159,11 +220,11 @@ describe('RoomLight', () => {
   it('copes with no room, and lets go of a room that leaves', () => {
     const light = new RoomLight({ environment: environment(), tier: 'high', seed: 1 });
     expect(() => light.update(NOON)).not.toThrow();
-    const backdrop = room('high');
-    light.attach(backdrop);
+    const room = new TestRoom();
+    light.attach(room);
     light.update(NOON);
-    const pane = paneMaterial(backdrop);
-    backdrop.update({ choice: 'none', tank, tier: 'high' });
+    const pane = paneMaterial(room);
+    room.clear();
     light.update(NOON);
     expect(pane.colorNode).toBeNull();
     light.attach(null);
@@ -201,16 +262,16 @@ describe('RoomLight', () => {
   });
 
   it('puts the room back as it was built on dispose, and refuses use after', () => {
-    const { light, backdrop } = lit('ultra');
+    const { light, room } = lit('ultra');
     light.dispose();
-    expect(paneMaterial(backdrop).colorNode).toBeNull();
-    for (const material of standardMaterials(backdrop)) {
+    expect(paneMaterial(room).colorNode).toBeNull();
+    for (const material of standardMaterials(room)) {
       expect(material.envNode).toBeNull();
       expect(material.emissiveNode).toBeNull();
     }
     expect(() => light.dispose()).not.toThrow();
     expect(() => light.update(NOON)).toThrow(/after dispose/);
-    expect(() => light.attach(backdrop)).toThrow(/after dispose/);
+    expect(() => light.attach(room)).toThrow(/after dispose/);
     expect(() => light.setTier('low')).toThrow(/after dispose/);
   });
 
@@ -247,9 +308,9 @@ describe('RoomLight', () => {
 
   it('writes each cross-fade copy into the window uniforms that copy reads', () => {
     const nowMs = NOON.nowMs + 1_290_000;
-    const { light, backdrop } = lit('ultra');
+    const { light, room } = lit('ultra');
     light.update({ ...NOON, nowMs });
-    const graph = paneMaterial(backdrop).colorNode;
+    const graph = paneMaterial(room).colorNode;
     if (!graph) throw new Error('no sky');
     const expected = windowMotionAt(nowMs, 12, windowMotion());
 
@@ -289,6 +350,93 @@ describe('RoomLight', () => {
         }
       }
     }
+  });
+});
+
+describe('room lamps', () => {
+  const lamp = (asset: string, position: PracticalLight['position']): PracticalLight => ({
+    asset,
+    position,
+    color: '#ff8040',
+    intensity: 2,
+    distance: 3,
+  });
+  /** '#ff8040' decoded from sRGB to linear, as three's ColorManagement does for a hex colour. */
+  const LAMP_LINEAR = [1, 0.21586050011389926, 0.05126945837404324];
+  const ALBEDO = [0.6, 0.5, 0.4];
+  const DARK: RoomRig = {
+    key: { color: '#000000', intensity: 0, position: [0, 0, 0] },
+    ambient: { color: '#ffffff', intensity: 1 },
+  };
+  const LAMP_AT: PracticalLight['position'] = [0.3, 1.2, 0.1];
+  const ROOM_OFFSET = [0.5, 0, -0.25];
+  const LAMP_WORLD = LAMP_AT.map((x, i) => x + (ROOM_OFFSET[i] ?? 0));
+
+  /** three's PointLightNode with decay 2 and a cut-off (`getDistanceAttenuation`), into Lambert. */
+  function pointLight(distance: number, cosine: number): number[] {
+    const cutoff = Math.min(1, Math.max(0, 1 - (distance / 3) ** 4)) ** 2;
+    const falloff = cutoff / Math.max(distance ** 2, 0.01);
+    return LAMP_LINEAR.map((c, i) => ((ALBEDO[i] ?? 0) / Math.PI) * 2 * c * cosine * falloff);
+  }
+
+  /** What the lamp adds to a room surface at world `p` facing `n`: lit minus unlit. */
+  function lampAdds(p: number[], n: number[]): number[] {
+    const room = new TestRoom({
+      window: false,
+      rig: { ...DARK, practical: [lamp('lamp', LAMP_AT)] },
+    });
+    room.group.position.set(ROOM_OFFSET[0] ?? 0, ROOM_OFFSET[1] ?? 0, ROOM_OFFSET[2] ?? 0);
+    const { light } = lit('high', room);
+    const emissive = (room.surface('room-floor').material as MeshStandardNodeMaterial)
+      .emissiveNode as Node | null;
+    if (!emissive) throw new Error('no room glow');
+    const inputs = new Map<Node, number[]>([
+      [positionWorld, p],
+      [normalWorld, n],
+      [diffuseContribution, ALBEDO],
+    ]);
+    expect(light.litLamps).toBe(1);
+    const on = evaluate(emissive, inputs);
+    room.rig = { ...DARK, practical: [] };
+    room.revision++;
+    light.update(NOON);
+    expect(light.litLamps).toBe(0);
+    const off = evaluate(emissive, inputs);
+    return on.map((v, i) => v - (off[i] ?? 0));
+  }
+
+  it('lights a surface as three lights it with a PointLight of the lamp', () => {
+    const toLamp = [0, 1.2, 0.5];
+    const distance = Math.hypot(...toLamp);
+    const added = lampAdds(
+      LAMP_WORLD.map((x, i) => x - (toLamp[i] ?? 0)),
+      [0, 1, 0],
+    );
+    const expected = pointLight(distance, 1.2 / distance);
+    expect(added[0]).toBeGreaterThan(0.01);
+    added.forEach((v, i) => expect(v).toBeCloseTo(expected[i] ?? Number.NaN, 6));
+  });
+
+  it("adds nothing past the lamp's reach or behind the surface", () => {
+    const below = (drop: number) => [
+      LAMP_WORLD[0] ?? 0,
+      (LAMP_WORLD[1] ?? 0) - drop,
+      LAMP_WORLD[2] ?? 0,
+    ];
+    for (const v of lampAdds(below(3.2), [0, 1, 0])) expect(v).toBeCloseTo(0, 12);
+    for (const v of lampAdds(below(1), [0, -1, 0])) expect(v).toBeCloseTo(0, 12);
+  });
+
+  it("fits a plan's lamps into the slots and refuses more when the room is planned", () => {
+    const a = lamp('lamp-a', [0, 1, 0]);
+    const b = lamp('lamp-b', [1, 1, 0]);
+    expect(roomLamps([])).toEqual([]);
+    expect(roomLamps([a])).toEqual([a]);
+    expect(roomLamps([a, b])).toEqual([a, b]);
+    const over = Array.from({ length: ROOM_LAMP_SLOTS + 1 }, (_, i) =>
+      lamp(`lamp-${i}`, [i, 1, 0]),
+    );
+    expect(() => roomLamps(over)).toThrow(/3 lamps exceed ROOM_LAMP_SLOTS \(2\)/);
   });
 });
 
