@@ -1,5 +1,5 @@
 {
-  "source": "apps/web on 2026-10-23, rounded to 1 µm: fitPresetToCatalog(loadPreset(biome), size), its hard colliders built as caves.collision.test.ts builds them (scene hulls, decor colliders), and demoTank(size, 1, biome).config.space. Regenerate it the same way after a preset or hull-fitting change.",
+  "source": "apps/web/src/fish/simFixtures.test.ts, rounded to 1 µm: fitPresetToCatalog(loadPreset(biome), size), its hard colliders as scene hulls and decor colliders, and demoTank(size, 1, biome).config.space. Regenerate with `pnpm vitest run apps/web/src/fish/simFixtures.test.ts -u`.",
   "presets": {
     "reef/nano30": {
       "space": {
@@ -2246,7 +2246,7 @@
             [-0.341228, 0.191347, -0.02113],
             [-0.354919, 0.193431, -0.000921],
             [-0.422913, 0.183112, -0.03399],
-            [-0.376784, 0.187195, 8.1e-5],
+            [-0.376784, 0.187195, 0.000081],
             [-0.421503, 0.182175, -0.028713],
             [-0.407375, 0.185483, -0.102865],
             [-0.367018, 0.176359, -0.117786],

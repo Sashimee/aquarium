@@ -107,6 +107,7 @@ export const STEERING = {
   backOutMaxBodyLengths: 2,
   backOutAlignedRad: 30 * DEG,
   backOutBlockedCos: 0.5,
+  backHomeBehindCos: 0.5,
   scrapeWindowS: 1,
   scrapeContactFraction: 0.2,
   scrapeDriftBodyLengths: 0.5,
@@ -320,6 +321,7 @@ export class World {
   private cramped: Uint8Array;
   private wedged: Float64Array;
   private reverseLeft: Float64Array;
+  private backHomeBlocked: Float64Array;
   private scrapeAnchor: Float64Array;
   private scrapeTime: Float64Array;
   private scrapeHits: Uint16Array;
@@ -516,6 +518,7 @@ export class World {
     this.cramped = new Uint8Array(n);
     this.wedged = new Float64Array(n);
     this.reverseLeft = new Float64Array(n);
+    this.backHomeBlocked = new Float64Array(n);
     this.scrapeAnchor = new Float64Array(n * 3);
     this.scrapeTime = new Float64Array(n);
     this.scrapeHits = new Uint16Array(n);
@@ -1173,6 +1176,7 @@ export class World {
     this.cramped = edit.array(this.cramped);
     this.wedged = edit.array(this.wedged);
     this.reverseLeft = edit.array(this.reverseLeft);
+    this.backHomeBlocked = edit.array(this.backHomeBlocked);
     this.scrapeAnchor = edit.array(this.scrapeAnchor, 3);
     this.scrapeTime = edit.array(this.scrapeTime);
     this.scrapeHits = edit.array(this.scrapeHits);
@@ -2178,6 +2182,7 @@ export class World {
       this.targetSpeed[i] = speed;
       this.reverseLeft[i] = 0;
       this.detourTimer[i] = 0;
+      this.backHomeBlocked[i] = 0;
       this.wedged[i] = 0;
       this.coasting[i] = 0;
       this.scrapeAnchor.set(this.position.subarray(o, o + 3), o);
@@ -2300,9 +2305,11 @@ export class World {
 
     const yaw = this.yaw[i] ?? 0;
     const pitch = this.pitch[i] ?? 0;
+    this.backHomeBlocked[i] = Math.max(0, (this.backHomeBlocked[i] ?? 0) - dt);
+    if (!reflex && (this.reverseLeft[i] ?? 0) <= 0) this.backHome(i, plan, yaw);
     if (!reflex && (this.reverseLeft[i] ?? 0) > 0) {
       this.behaviour.feeding.backedOut(i);
-      this.reverse(i, sp, plan, yaw, pitch);
+      if (this.reverse(i, sp, plan, yaw, pitch)) this.backHomeBlocked[i] = STEERING.detourS;
       return;
     }
     let yawError = wrapAngle((this.targetYaw[i] ?? 0) - yaw);
@@ -2500,6 +2507,34 @@ export class World {
     this.rememberDeadEnd(i);
   }
 
+  /**
+   * A fish that has slipped out of its cave along a slot too narrow to turn in (a gap between rock
+   * and glass) faces away from home, and swimming on only carries it further out until the gap
+   * opens (#1465). It backs home on its pectoral fins instead, as labriform swimmers can (Drucker
+   * & Lauder 1999), until it has room to turn or is back. The slot is its way home, so it is not
+   * remembered as a dead end.
+   */
+  private backHome(i: number, plan: Plan, yaw: number): void {
+    if (
+      (this.backHomeBlocked[i] ?? 0) > 0 ||
+      !plan.homing ||
+      plan.seekWeight <= 0 ||
+      this.cramped[i] !== 1
+    )
+      return;
+    const o = i * 3;
+    const ex = plan.seekX - (this.position[o] ?? 0);
+    const ez = plan.seekZ - (this.position[o + 2] ?? 0);
+    const reach = Math.hypot(ex, ez);
+    if (ex * Math.sin(yaw) + ez * Math.cos(yaw) > -STEERING.backHomeBehindCos * reach) return;
+    const length = this.bodyLength[i] ?? 0;
+    const room = this.turnRoom(i, this.steerSdf[0] ?? this.sceneSdf, yaw, Math.atan2(ex, ez));
+    if (room >= STEERING.turnRoomMarginBodyLengths * length) return;
+    this.wedged[i] = 0;
+    this.detourTimer[i] = 0;
+    this.reverseLeft[i] = Math.min(reach, STEERING.backOutMaxBodyLengths * length);
+  }
+
   private rememberDeadEnd(i: number): void {
     this.deadEnd[i * 3] = this.position[i * 3] ?? 0;
     this.deadEnd[i * 3 + 1] = this.position[i * 3 + 1] ?? 0;
@@ -2513,8 +2548,9 @@ export class World {
    * stopping as soon as it is free would just send it nose-first back into the same slot. It
    * backs out level, since a fish pitched up to climb past an overhang would otherwise sink back
    * under it, and slides along a surface its tail comes up against rather than grinding into it.
+   * Returns whether something behind it stopped it.
    */
-  private reverse(i: number, sp: SimSpecies, plan: Plan, yaw: number, pitchIn: number): void {
+  private reverse(i: number, sp: SimSpecies, plan: Plan, yaw: number, pitchIn: number): boolean {
     const o = i * 3;
     const dt = STEP_DT;
     const prev = this.previous;
@@ -2548,7 +2584,7 @@ export class World {
       const nz = n[2] ?? 0;
       if (fx * nx + fy * ny + fz * nz > STEERING.backOutBlockedCos) {
         this.reverseLeft[i] = 0;
-        return;
+        return true;
       }
       const along = bx * nx + bz * nz;
       if (along < 0) {
@@ -2568,14 +2604,14 @@ export class World {
     if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
       this.position.set(prev, o);
       this.reverseLeft[i] = 0;
-      return;
+      return true;
     }
     const left = Math.max(0, (this.reverseLeft[i] ?? 0) - step);
     const length = this.bodyLength[i] ?? 0;
     const backed = (STEERING.backOutMaxBodyLengths - STEERING.backOutBodyLengths) * length;
     if (into !== null && into > STEERING.backOutBlockedCos) {
       this.reverseLeft[i] = 0;
-      return;
+      return true;
     }
     if (into !== null && into > 0) {
       const nl = Math.hypot(n[0] ?? 0, n[2] ?? 0);
@@ -2596,7 +2632,7 @@ export class World {
     }
     if (left > backed) {
       this.reverseLeft[i] = left;
-      return;
+      return false;
     }
 
     const want = this.targetYaw[i] ?? 0;
@@ -2605,6 +2641,7 @@ export class World {
       this.turnRoom(i, this.steerSdf[0] ?? this.sceneSdf, heading, want) >=
         STEERING.turnRoomMarginBodyLengths * length;
     this.reverseLeft[i] = free ? 0 : left;
+    return false;
   }
 
   /**

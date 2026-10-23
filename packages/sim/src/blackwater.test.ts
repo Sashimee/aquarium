@@ -9,6 +9,7 @@ import {
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { findNooks } from './nooks.ts';
+import type { Anchor } from './behaviour.ts';
 import { World, type FishSpawn } from './world.ts';
 
 const LONG = 120_000;
@@ -113,57 +114,98 @@ describe('the blackwater presets, which have no scene cave', { timeout: LONG }, 
   );
 
   it.each(cases)(
-    '$size, $layer, seed $seed: every crevice with room for the body is dealt out',
+    '$size, $layer, seed $seed: every cave-dweller gets a crevice it can turn in (#1464)',
     ({ size, layer, seed }) => {
       const w = world(size, layer, seed);
       const decorSdf = w.decorSdf;
       if (decorSdf === null) throw new Error('the preset has no hard decor');
       const dwellers = caveDwellers(w);
       expect(dwellers).toHaveLength(2);
-      const roomForTheBody = findNooks(
+      const length = longestCaveDweller(w);
+      const room = w.bodyTurnRoom(length);
+      const found = findNooks(
         { basin: w.basin, cover: w.substrateSdf, water: w.sceneSdf, rock: decorSdf },
-        longestCaveDweller(w),
-        0,
+        length,
+        room,
+        'nook:',
+        w.decorShapes,
       );
+      expect(found.length).toBeGreaterThanOrEqual(dwellers.length);
       const dealt = crevices(w);
       expect(new Set(dealt).size).toBe(dealt.length);
-      expect(dealt.length).toBe(Math.min(dwellers.length, roomForTheBody.length));
+      expect(dealt).toHaveLength(dwellers.length);
+      for (const { a } of homesOf(w)) expect(a.radius, a.id).toBeGreaterThanOrEqual(room);
     },
   );
 
-  it.each([
-    { size: 'standard', layer: 'hulls', seed: 2 },
-    { size: 'long300', layer: 'decor', seed: 1 },
-    { size: 'long300', layer: 'decor', seed: 2 },
-  ] as const)(
-    '$size, $layer, seed $seed: a cave-dweller holds a crevice too tight to turn in all night',
+  it.each(cases)(
+    '$size, $layer, seed $seed: every cave-dweller holds its crevice all night',
     ({ size, layer, seed }) => {
       const w = world(size, layer, seed);
-      const room = w.bodyTurnRoom(longestCaveDweller(w));
-      const homes = caveDwellers(w).flatMap((i) => {
-        const a = w.behaviour.homes[w.behaviour.anchor[i] ?? -1];
-        return a === undefined || a.radius >= room ? [] : [{ i, a }];
-      });
-      expect(homes).toHaveLength(1);
-      w.setLight(0);
-      const inside = homes.map(() => 0);
-      let night = 0;
-      for (let t = 0; t < 6000; t++) {
-        w.step();
-        if (t < 3000) continue;
-        night++;
-        homes.forEach(({ i, a }, j) => {
-          const d = Math.hypot(
-            at(w.position, 3 * i) - a.position[0],
-            at(w.position, 3 * i + 1) - a.position[1],
-            at(w.position, 3 * i + 2) - a.position[2],
-          );
-          if (d < a.radius + at(w.bodyLength, i)) inside[j] = at(inside, j) + 1;
-        });
-      }
-      homes.forEach(({ a }, j) => {
-        expect(at(inside, j) / night, a.id).toBeGreaterThan(0.8);
+      const homes = homesOf(w);
+      expect(homes).toHaveLength(2);
+      night(w, homes).forEach(({ held }, j) => {
+        expect(held, homes[j]?.a.id).toBeGreaterThan(0.8);
       });
     },
   );
+
+  // The crevice found for one apistogramma here before the finer grid (#1464): roomy, but its
+  // mouth opens on a gap between the wood and the front glass narrower than the fish can turn in.
+  // Drifting out of it at night, the fish swam on along the gap, away from home (#1465).
+  it('standard, hulls, seed 2: a cave-dweller drifting out along a slot backs home (#1465)', () => {
+    const w = world('standard', 'hulls', 2);
+    w.setAnchors([
+      {
+        id: 'front-glass-crevice',
+        kind: 'cave',
+        position: [-0.396, 0.091, 0.219],
+        radius: 0.62 * longestCaveDweller(w),
+        facing: [-0.84, 0, -0.55],
+      },
+    ]);
+    const homes = homesOf(w);
+    expect(homes).toHaveLength(1);
+    const [stay] = night(w, homes);
+    expect(stay?.held).toBeGreaterThan(0.95);
+    expect(stay?.farthest).toBeLessThan(2);
+  });
 });
+
+function homesOf(w: World): { i: number; a: Anchor }[] {
+  return caveDwellers(w).flatMap((i) => {
+    const a = w.behaviour.homes[w.behaviour.anchor[i] ?? -1];
+    return a === undefined ? [] : [{ i, a }];
+  });
+}
+
+/**
+ * Over the second half of a 200 s night, the share of the time each fish spends within a body
+ * length of its home, and how many body lengths past the home's radius it strays at most.
+ */
+function night(
+  w: World,
+  homes: readonly { i: number; a: Anchor }[],
+): { held: number; farthest: number }[] {
+  w.setLight(0);
+  const stays = homes.map(() => ({ held: 0, farthest: 0 }));
+  let steps = 0;
+  for (let t = 0; t < 6000; t++) {
+    w.step();
+    if (t < 3000) continue;
+    steps++;
+    homes.forEach(({ i, a }, j) => {
+      const stay = stays[j];
+      if (stay === undefined) throw new RangeError(`no stay for home ${j}`);
+      const length = at(w.bodyLength, i);
+      const d = Math.hypot(
+        at(w.position, 3 * i) - a.position[0],
+        at(w.position, 3 * i + 1) - a.position[1],
+        at(w.position, 3 * i + 2) - a.position[2],
+      );
+      if (d < a.radius + length) stay.held++;
+      stay.farthest = Math.max(stay.farthest, (d - a.radius) / length);
+    });
+  }
+  return stays.map(({ held, farthest }) => ({ held: held / steps, farthest }));
+}
