@@ -9,6 +9,7 @@ import {
   COMMUNITY_ROOM_ID,
   planRoomChoice,
   planRoomScene,
+  PROP_DRAW_CALLS,
   propCatalogFrom,
   ROOM_HDRI_YAW,
   ROOM_PRESET_DATA,
@@ -26,7 +27,8 @@ const rooms = roomFileSchema.parse(
 );
 const sizes = Object.keys(TANK_SIZES) as (keyof typeof TANK_SIZES)[];
 const EPS = 1e-6;
-const SHELL_DRAWS = 5;
+const shellDraws = (hasWindow: boolean, tier: Tier) =>
+  4 + (hasWindow ? 2 : 0) + (tier === 'high' || tier === 'ultra' ? 1 : 0);
 
 function primitives(file: string): number {
   const bytes = readFileSync(join(ASSETS, file));
@@ -153,9 +155,26 @@ describe.each(ROOM_IDS)('%s', (roomId: RoomId) => {
     });
 
     it('rests raised props on a host or hangs them from a wall or the ceiling', () => {
+      const floor = plan.shell.min[1];
       const ceiling = plan.shell.max[1];
+      const wall = plan.shell.min[2];
       for (const prop of plan.props) {
         expect(prop.bounds.max[1], prop.asset).toBeLessThanOrEqual(ceiling + EPS);
+        if (prop.bounds.min[1] < floor + 1e-3) continue;
+        const [cx, , cz] = prop.position;
+        const hung = ceiling - prop.bounds.max[1] < 0.01;
+        const onWall = prop.bounds.min[2] - wall < 0.05;
+        const hosted = plan.props.some(
+          (host) =>
+            host !== prop &&
+            host.bounds.min[1] < prop.bounds.min[1] &&
+            prop.bounds.min[1] <= host.bounds.max[1] + 0.01 &&
+            cx > host.bounds.min[0] &&
+            cx < host.bounds.max[0] &&
+            cz > host.bounds.min[2] &&
+            cz < host.bounds.max[2],
+        );
+        expect(hung || onWall || hosted, `${prop.asset} is supported`).toBe(true);
       }
     });
 
@@ -293,8 +312,9 @@ describe('quality tiers', () => {
       const triangles = plan.props.reduce((s, p) => s + p.triangles, 0);
       expect(triangles, room.id).toBeLessThanOrEqual(15_000);
       expect(triangles).toBe(plan.triangles);
-      const draws = drawCalls(plan) + SHELL_DRAWS;
+      const draws = drawCalls(plan) + shellDraws(room.hasWindow, 'medium');
       expect(draws, room.id).toBeLessThanOrEqual(10);
+      expect(plan.drawCalls, room.id).toBe(draws);
     }
   });
 
@@ -303,12 +323,18 @@ describe('quality tiers', () => {
       for (const room of rooms) {
         const plan = planRoomScene({ roomId: room.id, tank: TANK_DIMENSIONS[size], tier, catalog });
         expect(plan.triangles, room.id).toBeLessThanOrEqual(60_000);
-        expect(drawCalls(plan) + SHELL_DRAWS + 1, room.id).toBeLessThanOrEqual(30);
+        const draws = drawCalls(plan) + shellDraws(room.hasWindow, tier);
+        expect(draws, room.id).toBeLessThanOrEqual(30);
+        expect(plan.drawCalls, room.id).toBe(draws);
       }
     }
   });
 
-  it('shows every authored prop on mobile where the budget allows', () => {
+  it('keeps every authored prop on mobile except what the draw-call cap leaves out', () => {
+    const left: Record<string, string[]> = {
+      'room-cabin': ['polyhaven-vintage-oil-lamp'],
+      'room-office': ['polyhaven-classic-laptop'],
+    };
     for (const room of rooms) {
       const plan = planRoomScene({
         roomId: room.id,
@@ -316,8 +342,52 @@ describe('quality tiers', () => {
         tier: 'medium',
         catalog,
       });
-      expect(plan.dropped, room.id).toEqual([]);
-      expect(plan.props).toHaveLength(ROOM_PRESET_DATA[room.id].layout.length);
+      expect(plan.dropped, room.id).toEqual(left[room.id] ?? []);
+    }
+  });
+
+  it('keeps every authored prop on high and ultra', () => {
+    for (const room of rooms) {
+      for (const tier of ['high', 'ultra'] as Tier[]) {
+        const plan = planRoomScene({
+          roomId: room.id,
+          tank: TANK_DIMENSIONS.standard,
+          tier,
+          catalog,
+        });
+        expect(plan.dropped, room.id).toEqual([]);
+      }
+    }
+  });
+
+  it('trims on draw calls when triangles would fit', () => {
+    const plan = planRoomScene({
+      roomId: 'room-cabin',
+      tank: TANK_DIMENSIONS.standard,
+      tier: 'medium',
+      catalog,
+    });
+    expect(plan.triangles).toBeLessThan(ROOM_TIER_POLICY.medium.maxTriangles);
+    expect(plan.drawCalls).toBeLessThanOrEqual(ROOM_TIER_POLICY.medium.maxDrawCalls);
+    expect(plan.dropped).toHaveLength(1);
+  });
+
+  it('counts the pane and frame only for a room with a window', () => {
+    const at = (roomId: RoomId) =>
+      planRoomScene({ roomId, tank: TANK_DIMENSIONS.standard, tier: 'medium', catalog });
+    const bare = at('room-shop');
+    expect(bare.drawCalls - drawCalls(bare)).toBe(4);
+    const windowed = at('room-living');
+    expect(windowed.drawCalls - drawCalls(windowed)).toBe(6);
+  });
+
+  it('lists the primitives of every prop that has more than one', () => {
+    for (const asset of index.assets.filter((a) => a.kind === 'room-furniture')) {
+      for (const level of asset.lods as unknown as { file: string }[]) {
+        expect(primitives(level.file), `${asset.id} ${level.file}`).toBe(
+          PROP_DRAW_CALLS[asset.id] ?? 1,
+        );
+      }
     }
   });
 
@@ -402,5 +472,39 @@ describe('light rig', () => {
     const without = plan('room-shop');
     expect(without.window).toBeNull();
     expect(without.light.key.position[0]).toBe(0);
+  });
+});
+
+describe('tanks beyond the four sizes', () => {
+  const tanks = [
+    { length: 0.3, depth: 0.2, height: 0.25 },
+    { length: 0.6, depth: 0.6, height: 0.4 },
+    { length: 1.2, depth: 1.0, height: 0.6 },
+    { length: 2.4, depth: 0.7, height: 0.7 },
+  ];
+
+  it.each(tanks)('keeps every prop out of the tank and stand (%j)', (tank) => {
+    for (const roomId of ROOM_IDS) {
+      const plan = planRoomScene({ roomId, tank, tier: 'ultra', catalog });
+      const footprint: Bounds = {
+        min: [-tank.length / 2, -STAND_HEIGHT, -tank.depth / 2],
+        max: [tank.length / 2, tank.height, tank.depth / 2],
+      };
+      for (const prop of plan.props) {
+        expect(overlaps(prop.bounds, footprint), `${roomId} ${prop.asset}`).toBe(false);
+        expect(prop.bounds.min[2], `${roomId} ${prop.asset}`).toBeGreaterThanOrEqual(
+          plan.shell.min[2] - EPS,
+        );
+      }
+    }
+  });
+});
+
+describe('window position in the presets', () => {
+  it('keeps x and z nominal, since only the height is read', () => {
+    for (const id of ROOM_IDS) {
+      const p = ROOM_PRESET_DATA[id].light.windowPosition;
+      if (p) expect([p[0], p[2]], id).toEqual([1.2, -0.37]);
+    }
   });
 });

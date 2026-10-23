@@ -8,15 +8,15 @@
       "scale": 1
     },
     {
-      "asset": "polyhaven-classic-laptop",
-      "position": [-1.95, 0.037, 0.1],
-      "rotationY": 0,
-      "scale": 1
-    },
-    {
       "asset": "polyhaven-modern-arm-chair-01",
       "position": [-1.95, -0.75, 1.15],
       "rotationY": 3.142,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-classic-laptop",
+      "position": [-1.95, 0.037, 0.1],
+      "rotationY": 0,
       "scale": 1
     }
   ],

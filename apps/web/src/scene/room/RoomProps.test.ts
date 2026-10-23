@@ -168,4 +168,77 @@ describe('RoomProps', () => {
     controller.abort();
     await expect(pending).rejects.toThrow();
   });
+
+  it('frees what a load resolves with after the abort', async () => {
+    const controller = new AbortController();
+    const parts = {
+      geometry: new BoxGeometry(),
+      material: new MeshBasicNodeMaterial(),
+      texture: new Texture(),
+    };
+    parts.material.map = parts.texture;
+    let finish: (root: Group) => void = () => undefined;
+    const late: PropSource = { load: () => new Promise<Group>((resolve) => (finish = resolve)) };
+    const spies = [
+      vi.spyOn(parts.geometry, 'dispose'),
+      vi.spyOn(parts.material, 'dispose'),
+      vi.spyOn(parts.texture, 'dispose'),
+    ];
+    const plan = planRoomScene({
+      roomId: 'room-zen',
+      tank: TANK_DIMENSIONS.standard,
+      tier: 'high',
+      catalog,
+    });
+    const pending = new RoomProps().show(
+      { ...plan, props: plan.props.slice(0, 1) },
+      late,
+      controller.signal,
+    );
+    controller.abort();
+    await expect(pending).rejects.toThrow();
+    const root = new Group();
+    root.add(new Mesh(parts.geometry, parts.material));
+    finish(root);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    for (const spy of spies) expect(spy).toHaveBeenCalled();
+  });
+
+  it('frees the props that loaded when another one fails', async () => {
+    const ok = { geometry: new BoxGeometry(), material: new MeshBasicNodeMaterial() };
+    const spies = [vi.spyOn(ok.geometry, 'dispose'), vi.spyOn(ok.material, 'dispose')];
+    const source: PropSource = {
+      load: async (asset) => {
+        if (asset.endsWith('bar-chair-round-01')) throw new Error('chair 404');
+        const root = new Group();
+        root.add(new Mesh(ok.geometry, ok.material));
+        return root;
+      },
+    };
+    const props = new RoomProps();
+    await expect(props.show(sushi(), source)).rejects.toThrow('chair 404');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    for (const spy of spies) expect(spy).toHaveBeenCalled();
+    expect(props.group.children).toHaveLength(0);
+  });
+
+  it('keeps quiet about a failure in a show that a newer one replaced', async () => {
+    let fail: (cause: Error) => void = () => undefined;
+    const failing: PropSource = {
+      load: () => new Promise<Group>((_resolve, reject) => (fail = reject)),
+    };
+    const props = new RoomProps();
+    const stale = props.show(sushi(), failing);
+    await props.show(
+      planRoomScene({
+        roomId: 'room-living',
+        tank: TANK_DIMENSIONS.standard,
+        tier: 'low',
+        catalog,
+      }),
+      failing,
+    );
+    fail(new Error('late failure'));
+    await expect(stale).resolves.toBeUndefined();
+  });
 });

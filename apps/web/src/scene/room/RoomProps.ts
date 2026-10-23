@@ -61,19 +61,35 @@ export class RoomProps {
       if (list) list.push(prop);
       else byAsset.set(prop.asset, [prop]);
     }
-    const loaded = await Promise.all(
-      [...byAsset].map(async ([asset, placements]) => {
-        const first = placements[0];
-        if (!first) throw new Error(`room props: no placement for ${asset}`);
-        const work = source.load(asset, first.lod, signal);
-        const root = await (signal ? raceAbort(work, signal) : work);
-        return { asset, placements, root };
-      }),
-    );
+    const wanted = [...byAsset];
+    const attempts = wanted.map(async ([asset, placements]) => {
+      const first = placements[0];
+      if (!first) throw new Error(`room props: no placement for ${asset}`);
+      return source.load(asset, first.lod, signal);
+    });
+    let roots: Object3D[];
+    try {
+      const all = Promise.all(attempts);
+      roots = await (signal ? raceAbort(all, signal) : all);
+    } catch (cause) {
+      for (const attempt of attempts) {
+        attempt.then(
+          (late) => this.release(late),
+          () => undefined,
+        );
+      }
+      if (generation !== this.generation) return;
+      throw cause;
+    }
     if (generation !== this.generation) {
-      for (const { root } of loaded) this.release(root);
+      for (const root of roots) this.release(root);
       return;
     }
+    const loaded = wanted.map(([asset, placements], i) => ({
+      asset,
+      placements,
+      root: roots[i] as Object3D,
+    }));
     for (const { asset, placements, root } of loaded) this.instance(asset, placements, root);
     for (const lamp of plan.light.practical) {
       const light = new PointLight(new Color(lamp.color), lamp.intensity, lamp.distance, 2);

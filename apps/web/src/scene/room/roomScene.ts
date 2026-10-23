@@ -83,16 +83,71 @@ export interface RoomTierPolicy {
   readonly lod: PropLod | null;
   /** Triangle budget for the props, leaving the shell's few hundred under PLAN 9.2's limits. */
   readonly maxTriangles: number;
+  /** Draw calls of the whole room, shell included: PLAN 9.2's 10 on mobile and 30 on high. */
+  readonly maxDrawCalls: number;
+  /** The ceiling is drawn from the full detail level up, and the window frame from medium up. */
+  readonly ceiling: boolean;
+  readonly windowFrame: boolean;
   /** Real lights for lamps and flames, which T74 dropped the emissive maps for. */
   readonly practicalLights: boolean;
 }
 
 export const ROOM_TIER_POLICY: Readonly<Record<Tier, RoomTierPolicy>> = {
-  low: { lod: null, maxTriangles: 0, practicalLights: false },
-  medium: { lod: 2, maxTriangles: 14_000, practicalLights: false },
-  high: { lod: 0, maxTriangles: 58_000, practicalLights: true },
-  ultra: { lod: 0, maxTriangles: 58_000, practicalLights: true },
+  low: {
+    lod: null,
+    maxTriangles: 0,
+    maxDrawCalls: 10,
+    ceiling: false,
+    windowFrame: false,
+    practicalLights: false,
+  },
+  medium: {
+    lod: 2,
+    maxTriangles: 14_000,
+    maxDrawCalls: 10,
+    ceiling: false,
+    windowFrame: true,
+    practicalLights: false,
+  },
+  high: {
+    lod: 0,
+    maxTriangles: 58_000,
+    maxDrawCalls: 30,
+    ceiling: true,
+    windowFrame: true,
+    practicalLights: true,
+  },
+  ultra: {
+    lod: 0,
+    maxTriangles: 58_000,
+    maxDrawCalls: 30,
+    ceiling: true,
+    windowFrame: true,
+    practicalLights: true,
+  },
 };
+
+/**
+ * Primitives per prop, which is its draw calls however often it is placed (every LOD has the same
+ * materials). The built index does not carry them, so roomScene.test.ts checks this table against
+ * the GLBs; a prop not listed has one.
+ */
+export const PROP_DRAW_CALLS: Readonly<Record<string, number>> = {
+  'polyhaven-cashregister-01': 2,
+  'polyhaven-classic-laptop': 2,
+  'polyhaven-hanging-industrial-lamp': 2,
+  'polyhaven-modern-arm-chair-01': 2,
+  'polyhaven-outdoor-table-chair-set-01': 2,
+  'polyhaven-sofa-03': 2,
+  'polyhaven-steel-frame-shelves-03': 2,
+  'polyhaven-vintage-oil-lamp': 3,
+};
+
+/** Floor, two side walls and the back wall, plus the window pane and its frame where it has them. */
+export function shellDrawCalls(hasWindow: boolean, policy: RoomTierPolicy): number {
+  const window = hasWindow ? 1 + (policy.windowFrame ? 1 : 0) : 0;
+  return 4 + window + (policy.ceiling ? 1 : 0);
+}
 
 export interface PlacedProp {
   readonly asset: string;
@@ -130,6 +185,8 @@ export interface RoomScenePlan {
   /** Props the tier's triangle budget left out, in layout order. */
   readonly dropped: readonly string[];
   readonly triangles: number;
+  /** Draw calls of the room: the shell and one per primitive of each distinct prop. */
+  readonly drawCalls: number;
   readonly light: RoomLightPlan;
   readonly hdriYaw: number;
 }
@@ -255,7 +312,7 @@ export interface RoomSceneInput {
 /**
  * Plans one room around a tank: the window that follows the tank, the props the tier can afford at
  * its LOD, and the light rig. The layout's order is its priority, so a tier over its triangle
- * budget keeps the first props and drops the rest; hosts come before what stands on them.
+ * or draw-call budget keeps the first props and drops the rest; hosts come before what stands on them.
  */
 export function planRoomScene(input: RoomSceneInput): RoomScenePlan {
   const { roomId, tank, tier, catalog } = input;
@@ -267,10 +324,14 @@ export function planRoomScene(input: RoomSceneInput): RoomScenePlan {
   const preset = input.preset ?? roomPresetData(roomId);
   const policy = ROOM_TIER_POLICY[tier];
   const rig = preset.light;
+  // Only the height is tuned: x follows the tank length and z is the back wall, so the x and z in
+  // the preset are nominal.
   const window = rig.windowPosition === null ? null : windowSlotFor(tank, rig.windowPosition[1]);
 
   const props: PlacedProp[] = [];
   const dropped: string[] = [];
+  const drawn = new Set<string>();
+  let drawCalls = shellDrawCalls(window !== null, policy);
   let triangles = 0;
   let full = false;
   if (policy.lod !== null) {
@@ -285,13 +346,20 @@ export function planRoomScene(input: RoomSceneInput): RoomScenePlan {
       if (!level) {
         throw new Error(`"${prop.asset}" has no LOD${policy.lod} in assets/index.json`);
       }
-      if (full || triangles + level.triangles > policy.maxTriangles) {
+      const newDraws = drawn.has(prop.asset) ? 0 : (PROP_DRAW_CALLS[prop.asset] ?? 1);
+      if (
+        full ||
+        triangles + level.triangles > policy.maxTriangles ||
+        drawCalls + newDraws > policy.maxDrawCalls
+      ) {
         full = true;
         dropped.push(prop.asset);
         continue;
       }
       const position = fitToTank(prop.position, tank);
       triangles += level.triangles;
+      drawCalls += newDraws;
+      drawn.add(prop.asset);
       props.push({
         asset: prop.asset,
         position,
@@ -335,6 +403,7 @@ export function planRoomScene(input: RoomSceneInput): RoomScenePlan {
     props,
     dropped,
     triangles,
+    drawCalls,
     light: {
       key: { color: rig.keyColor, intensity: rig.keyIntensity, position: keyAt },
       ambient: { color: rig.ambientColor, intensity: rig.ambientIntensity },
