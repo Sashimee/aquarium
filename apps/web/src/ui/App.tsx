@@ -285,6 +285,7 @@ function Shell() {
   const photoActive = usePhotoView()?.state.active ?? false;
   const shell = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
+  const hud = useRef<HTMLElement>(null);
   const previous = useRef(route.name);
 
   useLayoutEffect(() => {
@@ -292,6 +293,17 @@ function Shell() {
     const root = shell.current;
     if (!target || !root) return;
     const publish = () => root.style.setProperty('--dock-h', `${target.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const target = hud.current;
+    const root = shell.current;
+    if (!target || !root) return;
+    const publish = () => root.style.setProperty('--hud-h', `${target.offsetHeight}px`);
     publish();
     const observer = new ResizeObserver(publish);
     observer.observe(target);
@@ -351,7 +363,7 @@ function Shell() {
           Skip to the tank
         </a>
         <div id="photo-chrome" className="chrome">
-          <header className="hud">
+          <header ref={hud} className="hud">
             <div className="hud-left">
               <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
               <ChemistryChip open={panel === 'care'} onPress={() => toggle('care')} />
