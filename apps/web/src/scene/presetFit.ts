@@ -28,7 +28,7 @@ import { SURFACE_MARGIN } from './plants';
 
 const WALL_MARGIN = 0.005;
 /** A nano patch crowded against the front glass shrinks its disc to fit, but never below this share, so it stays a patch. */
-const MIN_PATCH_RADIUS_SHARE = 0.45;
+export const MIN_PATCH_RADIUS_SHARE = 0.45;
 const PERCH_SETTLE_PASSES = 4;
 
 interface Footprint {
@@ -206,6 +206,43 @@ function fitItem(
   };
 }
 
+/**
+ * Where a patch of `radius` centred `z` from the middle sits against a depth limit that plants
+ * cannot root past. One that stays inside it is left alone; one that crosses it shrinks to the room
+ * it has, down to `MIN_PATCH_RADIUS_SHARE` of its radius, and slides inwards for the rest, so its
+ * roots spread over the strip the glass leaves instead of piling onto the limit line.
+ */
+export function fitDepth(
+  radius: number,
+  z: number,
+  limit: number,
+): { radius: number; depth: number } {
+  if (Math.abs(z) + radius <= limit) return { radius, depth: z };
+  const fitted = Math.max(radius * MIN_PATCH_RADIUS_SHARE, Math.min(radius, limit - Math.abs(z)));
+  const inner = Math.max(0, limit - fitted);
+  return { radius: fitted, depth: Math.sign(z) * Math.min(Math.abs(z), inner) };
+}
+
+/** Mean ground area one plant of the patch covers once the glass has shrunk it, per drawn scale². */
+function placedScale(scale: readonly [number, number]): number {
+  return ((scale[0] + scale[1]) / 2) * ((1 + GLASS_SHRINK_FLOOR) / 2);
+}
+
+/**
+ * Plants a disc of `radius` needs to cover the ground as thickly as the authored patch does: the
+ * authored plant footprints per square metre, at the size the plants end up after the glass
+ * shrinks them. Never more than the authored count.
+ */
+export function coverageCount(
+  patch: PlantPatch,
+  scale: readonly [number, number],
+  radius: number,
+): number {
+  const authored = patch.count * ((patch.scale[0] + patch.scale[1]) / 2) ** 2;
+  const wanted = (authored * (radius / patch.radius) ** 2) / placedScale(scale) ** 2;
+  return Math.min(patch.count, Math.max(MIN_KEPT_PATCH, Math.round(wanted)));
+}
+
 function fitPatch(
   patch: PlantPatch,
   size: TankSize,
@@ -226,22 +263,29 @@ function fitPatch(
     Math.max(MIN_KEPT_PATCH, Math.round((patch.count * share) / (plantScale * plantScale))),
   );
   const radiusShare = Math.min(share, depthRatio);
-  const fitted = { ...patch, scale, count, radius: patch.radius * Math.sqrt(radiusShare) };
-  const smallest = scale[0] * GLASS_SHRINK_FLOOR;
-  const smallestPatch = { ...fitted, scale: [smallest, smallest] as [number, number] };
-  const limitX = Math.max(0, halfL - reachOf(smallestPatch, 'x'));
-  const limitZ = Math.max(0, halfD - reachOf(smallestPatch, 'z'));
+  const nominal = { ...patch, scale, count, radius: patch.radius * Math.sqrt(radiusShare) };
   const x = patch.center[0] * lengthRatio;
   const z = patch.center[1] * depthRatio;
-  const nanoFront = size === 'nano30' && z > 0;
-  const radius = nanoFront
-    ? Math.max(fitted.radius * MIN_PATCH_RADIUS_SHARE, Math.min(fitted.radius, limitZ - z))
-    : fitted.radius;
-  const frontLimit = nanoFront ? Math.max(0, limitZ - radius) : limitZ;
+  const smallest = scale[0] * GLASS_SHRINK_FLOOR;
+  const probe = { ...nominal, scale: [smallest, smallest] as [number, number] };
+  const limitX = Math.max(0, halfL - reachOf(probe, 'x'));
+  const limitZ = Math.max(0, halfD - reachOf(probe, 'z'));
+  // Plants held above the tank's scale by MIN_PLANT_FIT are the ones the glass squeezes. Their
+  // height is not given up for depth: a front disc shrinks to the room it has instead, and its
+  // count follows its area so the ground stays as covered as authored.
+  const squeezed = plantScale > k && z > 0;
+  const fitted = squeezed
+    ? fitDepth(nominal.radius, z, limitZ)
+    : { radius: nominal.radius, depth: z };
+  const kept = fitted.radius / nominal.radius;
   return {
-    ...fitted,
-    radius,
-    center: [Math.max(-limitX, Math.min(limitX, x)), Math.max(-limitZ, Math.min(frontLimit, z))],
+    ...nominal,
+    radius: fitted.radius,
+    count: kept < 1 ? coverageCount(patch, scale, fitted.radius) : count,
+    center: [
+      Math.max(-limitX, Math.min(limitX, x)),
+      Math.max(-limitZ, Math.min(limitZ, fitted.depth)),
+    ],
   };
 }
 
