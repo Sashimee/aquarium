@@ -178,10 +178,19 @@ describe('setting the room of a tank', () => {
     expect(session.getState().error).toMatch(/does not exist/i);
   });
 
-  it('does not call the server for the room the tank already has', async () => {
-    const { session, api } = await ready();
+  it('does not call the server for the room the tank already has once it was set', async () => {
+    const { session, api } = await ready([
+      tankFixture({ roomId: 'room-living', roomSetAt: '2026-02-01T10:00:00.000Z' }),
+    ]);
     expect(await session.setRoom('room-living')).toBe(true);
     expect(api.saveRoom).not.toHaveBeenCalled();
+  });
+
+  it('saves the shown room when the tank was never set, so a stored device room cannot move it', async () => {
+    const { session, api } = await ready();
+    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-living', roomSetAt: 'now' }));
+    expect(await session.setRoom('room-living')).toBe(true);
+    expect(api.saveRoom).toHaveBeenCalledWith(TANK_A, 'room-living');
   });
 
   it('keeps the shown room and refreshes ownership when the server says it is not owned', async () => {
@@ -218,6 +227,34 @@ describe('the device room from before rooms', () => {
     await session.refreshRooms();
     expect(api.saveRoom).toHaveBeenCalledWith(TANK_A, 'room-office');
     expect(storage.store.has('aquarium.room')).toBe(false);
+  });
+
+  it('treats a throwing storage read as no device room', async () => {
+    const storage = {
+      ...memoryStorage(),
+      getItem: (key: string) => {
+        if (key !== 'aquarium.room') return null;
+        throw new Error('storage blocked');
+      },
+    };
+    const { session, api } = setup([tankFixture()], ['room-office'], storage);
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(api.ownedRooms).toHaveBeenCalled());
+    await expect(session.refreshRooms()).resolves.toBeUndefined();
+    expect(api.saveRoom).not.toHaveBeenCalled();
+  });
+
+  it('keeps the device room from moving a tank once the player picked the shown room', async () => {
+    const storage = memoryStorage({ 'aquarium.room': 'office' });
+    const { session, api } = setup([tankFixture()], ['room-office'], storage);
+    api.ownedRooms.mockRejectedValueOnce(new ApiRequestError(0, 'network', 'offline'));
+    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-living', roomSetAt: 'now' }));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().phase).toBe('ready'));
+    await session.setRoom('room-living');
+    api.saveRoom.mockClear();
+    await session.refreshRooms();
+    expect(api.saveRoom).not.toHaveBeenCalled();
   });
 
   it('keeps the key when the save fails so the next load retries', async () => {
