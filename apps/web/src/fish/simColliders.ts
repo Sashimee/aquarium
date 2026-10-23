@@ -59,13 +59,40 @@ function cross(a: Point3, b: Point3): Point3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 
-/** The scene's colliders in the shared format. Ids follow list order, so a rebuilt scene keeps them. */
+/** How thick a hull must be across its narrowest plane pair for a fish to meet it. */
+export const FLAT_HULL_M = 1e-4;
+
+/** Smallest width of a hull's corners across any of its plane normals. */
+function hullThickness(corners: readonly Point3[], planes: readonly number[]): number {
+  let thinnest = Infinity;
+  for (let o = 0; o + 3 < planes.length; o += 4) {
+    const n: Point3 = [planes[o] ?? 0, planes[o + 1] ?? 0, planes[o + 2] ?? 0];
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const v of corners) {
+      const d = dot(n, v);
+      lo = Math.min(lo, d);
+      hi = Math.max(hi, d);
+    }
+    thinnest = Math.min(thinnest, (hi - lo) / Math.hypot(...n));
+  }
+  return thinnest;
+}
+
+/**
+ * The scene's colliders in the shared format. Ids follow list order, so a rebuilt scene keeps them.
+ * A flat card's hull (catappa leaves on the sand) has no volume a fish could swim into and no valid
+ * shape in the contract, so it is left out; the ids of the rest do not move.
+ */
 export function sceneCollidersToSim(colliders: readonly SceneCollider[]): Collider[] {
-  return colliders.map((c, i): Collider => {
+  return colliders.flatMap((c, i): Collider[] => {
     const id = `scene:${i}`;
-    return c.kind === 'hull'
-      ? { id, kind: 'hull', hard: c.hard, vertices: hullCorners(c.planes) }
-      : { id, kind: 'capsule', hard: c.hard, a: [...c.a], b: [...c.b], radius: c.radius };
+    if (c.kind !== 'hull') {
+      return [{ id, kind: 'capsule', hard: c.hard, a: [...c.a], b: [...c.b], radius: c.radius }];
+    }
+    const vertices = hullCorners(c.planes);
+    if (vertices.length > 0 && hullThickness(vertices, c.planes) < FLAT_HULL_M) return [];
+    return [{ id, kind: 'hull', hard: c.hard, vertices }];
   });
 }
 

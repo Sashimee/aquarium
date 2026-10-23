@@ -71,6 +71,12 @@ describe('collidersFor', () => {
     const feeder = spec('vacation-feeder');
     expect(collidersFor('p9', feeder, item('vacation-feeder', 0, 0))).toHaveLength(1);
   });
+
+  it('has none for a flat catappa leaf card lying on the sand', () => {
+    expect(collidersFor('p7', spec('catappa-leaf-card'), item('catappa-leaf-card', 0, 0))).toEqual(
+      [],
+    );
+  });
 });
 
 describe('plant colliders', () => {

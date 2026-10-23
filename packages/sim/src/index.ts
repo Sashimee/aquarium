@@ -102,6 +102,7 @@ export {
   type Snapshot,
 } from './snapshot.ts';
 export {
+  maxFishLengthM,
   STEERING,
   STEP_DT,
   STEP_HZ,

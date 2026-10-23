@@ -97,6 +97,28 @@ describe('sceneCollidersToSim', () => {
     expect(out[1]).toEqual({ id: 'scene:1', ...PLANT });
     expect(colliderListSchema.safeParse(out).success).toBe(true);
   });
+
+  it('leaves out a flat leaf card the contract has no shape for, keeping the others’ ids', () => {
+    const card: number[] = [];
+    for (const [x, z] of [
+      [-0.05, -0.02],
+      [0.04, -0.03],
+      [0.06, 0.03],
+      [-0.03, 0.04],
+    ] as const) {
+      card.push(x, 0.02, z);
+    }
+    const leaf = fitHull(card);
+    expect(hullCorners(leaf.planes).length).toBeGreaterThan(0);
+    expect(
+      colliderListSchema.safeParse([
+        { id: 'leaf', kind: 'hull', hard: true, vertices: hullCorners(leaf.planes) },
+      ]).success,
+    ).toBe(false);
+    const out = sceneCollidersToSim([rock(-0.2, 0, 1), leaf, PLANT]);
+    expect(out.map((c) => c.id)).toEqual(['scene:0', 'scene:2']);
+    expect(colliderListSchema.safeParse(out).success).toBe(true);
+  });
 });
 
 describe('SimColliders', () => {
