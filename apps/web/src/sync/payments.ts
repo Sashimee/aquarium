@@ -104,13 +104,22 @@ export function paymentErrorText(error: unknown): string {
     case 'rate_limited':
       return error.retryAfterSeconds
         ? `Too many attempts. Try again in ${error.retryAfterSeconds} s.`
-        : 'Too many attempts. Try again in a little while.';
+        : error.message.includes('Try again in')
+          ? error.message
+          : 'Too many attempts. Try again in a little while.';
     case 'network':
     case 'timeout':
       return 'Could not reach the server. Nothing was charged; try again.';
     default:
       return error.message;
   }
+}
+
+export function adultConfirmationErrorText(error: unknown): string {
+  if (error instanceof ApiRequestError && error.status === 403 && error.code === 'forbidden') {
+    return error.message;
+  }
+  return paymentErrorText(error);
 }
 
 export const WALLET_POLL_ATTEMPTS = 8;
