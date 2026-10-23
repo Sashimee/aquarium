@@ -962,11 +962,18 @@ describe('unreferencedHdriProblems', () => {
 });
 
 describe('duplicateTextureProblems', () => {
-  function asset(id: string, files: [string, string][]): OutputAsset {
+  function asset(
+    id: string,
+    files: [string, string][],
+    textures: { '1k': string; '2k': string }[] = [],
+  ): OutputAsset {
     return {
       id,
       kind: 'rock',
       files: files.map(([file, sha]) => ({ file, bytes: 1, sha256: sha })),
+      textures: textures.map((t) => ({
+        variants: { '1k': { file: t['1k'] }, '2k': { file: t['2k'] } },
+      })),
     } as unknown as OutputAsset;
   }
 
@@ -991,6 +998,22 @@ describe('duplicateTextureProblems', () => {
     expect(problems[0]).toContain('rock/rock-a/textures/b_1k.ktx2');
     expect(problems[0]).toContain('rock/rock-a/textures/a_1k.ktx2');
     expect(problems[0]).toContain('same asset');
+  });
+
+  it('leaves a 1k/2k pair of one texture to the intra-asset check', () => {
+    const pair = {
+      '1k': 'rock/r/textures/a_1k.ktx2',
+      '2k': 'rock/r/textures/a_2k.ktx2',
+    };
+    const r = asset(
+      'r',
+      [
+        [pair['1k'], 'a'.repeat(64)],
+        [pair['2k'], 'a'.repeat(64)],
+      ],
+      [pair],
+    );
+    expect(duplicateTextureProblems([r])).toEqual([]);
   });
 
   it('accepts distinct textures', () => {

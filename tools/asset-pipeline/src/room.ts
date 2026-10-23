@@ -17,8 +17,17 @@ import { decodeImage, resizeImage } from './textures.ts';
 export const MOBILE_PROP_TRIANGLES = 14_000;
 export const LOD0_MAX_TRIANGLES = 7_000;
 export const ROOM_TEXTURE_PX = 512;
-/** Roughness and metal vary slowly over a surface, so the map can be coarser than the colour and normal maps. */
-export const ROOM_ROUGHNESS_PX = 256;
+
+/** room-shop is within 0.1 MB of its 1.8 MB budget; its props take a coarser metallic-roughness map, since roughness varies slowly over a surface. */
+export interface RoomPropTuning {
+  roughnessPx?: number;
+}
+
+export const ROOM_PROP_TUNING: Readonly<Record<string, RoomPropTuning>> = {
+  'polyhaven-steel-frame-shelves-03': { roughnessPx: 256 },
+  'polyhaven-cashregister-01': { roughnessPx: 256 },
+  'polyhaven-plastic-crate-02': { roughnessPx: 256 },
+};
 const TRANSMISSION_ALPHA = 0.35;
 
 export function loadRooms(repoRoot: string): RoomEntry[] {
@@ -170,7 +179,7 @@ function recentreOnBase(parts: Part[]): void {
       part.positions[i] = v - (i % 3 === 0 ? x : i % 3 === 1 ? y : z);
 }
 
-async function roomMaterial(source: Material): Promise<MaterialDef> {
+async function roomMaterial(source: Material, roughnessPx: number): Promise<MaterialDef> {
   const def = await materialDefFrom(source, {
     roughness: source.getRoughnessFactor(),
     metallic: source.getMetallicFactor(),
@@ -191,7 +200,7 @@ async function roomMaterial(source: Material): Promise<MaterialDef> {
           codec: 'etc1s' as const,
           image: dropOcclusion(await decodeImage(roughnessBytes)),
         },
-        ROOM_ROUGHNESS_PX,
+        roughnessPx,
       )
     : undefined;
   const glass = transmission !== null && transmission.getTransmissionFactor() > 0;
@@ -229,12 +238,14 @@ export async function buildRoomProp(
   mobileTriangles: number,
   ctx: FishContext,
 ): Promise<OutputAsset> {
+  const tuning = ROOM_PROP_TUNING[id];
   const { doc, parts } = await loadParts(id, ctx);
   recentreOnBase(parts);
   const used = new Set(parts.map((p) => p.material));
   const materials: MaterialDef[] = [];
   for (const source of doc.getRoot().listMaterials())
-    if (used.has(source.getName())) materials.push(await roomMaterial(source));
+    if (used.has(source.getName()))
+      materials.push(await roomMaterial(source, tuning?.roughnessPx ?? ROOM_TEXTURE_PX));
 
   const triangles = parts.reduce((sum, p) => sum + p.indices.length / 3, 0);
   const plan: LodPlan = {
@@ -243,6 +254,10 @@ export async function buildRoomProp(
     sloppyFallback: true,
   };
   const built = buildDocument(id, parts, materials);
+  const slots = materials.reduce(
+    (sum, m) => sum + [m.baseColor, m.normal, m.metallicRoughness].filter(Boolean).length,
+    0,
+  );
   return emitAsset({
     outRoot: ctx.outRoot,
     kind: 'room-furniture',
@@ -256,7 +271,15 @@ export async function buildRoomProp(
       modifications: [
         'node transforms baked, meshes merged into one primitive per material, origin at the base centre, true scale in metres kept',
         `LOD0 capped at ${LOD0_MAX_TRIANGLES} triangles; LOD2 is the mobile level, sized so the props of every room using it stay within ${MOBILE_PROP_TRIANGLES} triangles together`,
-        `colour and normal maps capped at ${ROOM_TEXTURE_PX} px, metallic-roughness maps at ${ROOM_ROUGHNESS_PX} px, re-encoded to KTX2 (ETC1S), one file for every quality tier; identical maps of different materials are written once`,
+        `${
+          tuning?.roughnessPx
+            ? `colour and normal maps capped at ${ROOM_TEXTURE_PX} px, metallic-roughness maps at ${tuning.roughnessPx} px`
+            : `colour, normal and metallic-roughness maps capped at ${ROOM_TEXTURE_PX} px`
+        } and re-encoded to KTX2 (ETC1S), one file for every quality tier${
+          built.textures.length < slots
+            ? '; identical maps of different materials are written once'
+            : ''
+        }`,
         ...(materials.some(
           (m) => m.alphaMode === 'BLEND' && m.baseColorFactor[3] === TRANSMISSION_ALPHA,
         )

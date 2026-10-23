@@ -671,6 +671,13 @@ function snailProblems(asset: OutputAsset, repoRoot: string, problems: string[])
   }
 }
 
+function sharedVariantPair(asset: OutputAsset, a: string, b: string): boolean {
+  return asset.textures.some((t) => {
+    const files = [t.variants['1k'].file, t.variants['2k'].file];
+    return files.includes(a) && files.includes(b);
+  });
+}
+
 export function duplicateTextureProblems(assets: readonly OutputAsset[]): string[] {
   const first = new Map<string, { file: string; asset: string }>();
   const problems: string[] = [];
@@ -680,7 +687,7 @@ export function duplicateTextureProblems(assets: readonly OutputAsset[]): string
       const key = `${asset.kind}/${asset.id}`;
       const earlier = first.get(file.sha256);
       if (earlier === undefined) first.set(file.sha256, { file: file.file, asset: key });
-      else if (earlier.file !== file.file)
+      else if (earlier.file !== file.file && !sharedVariantPair(asset, earlier.file, file.file))
         problems.push(
           earlier.asset === key
             ? `${file.file} is byte-identical to ${earlier.file} in the same asset; bind both materials to one texture`

@@ -35,7 +35,7 @@ function builtAsset(index: AssetIndex, kind: OutputAsset['kind'], id: string) {
 
 function roomAssets(room: RoomEntry, index: AssetIndex) {
   const shell =
-    room.assets.shell === null ? undefined : index.assets.find((a) => a.id === room.assets.shell);
+    room.assets.shell === null ? undefined : builtAsset(index, 'room-furniture', room.assets.shell);
   const furniture = room.assets.furniture.map((id) => builtAsset(index, 'room-furniture', id));
   const hdri = room.assets.hdri === null ? undefined : builtAsset(index, 'hdri', room.assets.hdri);
   const audio =

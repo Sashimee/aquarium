@@ -78,6 +78,32 @@ describe('buildDocument texture reuse', () => {
     expect(a?.getBaseColorTexture()).toBe(b?.getBaseColorTexture());
   });
 
+  it('shares only the maps that match and keeps the others per material', () => {
+    const withNormal = (name: string, normalSize: number): MaterialDef => ({
+      ...def(name, 0),
+      normal: { role: 'normal', codec: 'uastc', image: image(normalSize) },
+    });
+    const { doc, textures } = buildDocument(
+      'x',
+      parts,
+      [withNormal('a', 8), withNormal('b', 16)],
+      new Map(),
+    );
+    expect(textures.map((t) => t.name)).toEqual(['x_a_basecolor', 'x_a_normal', 'x_b_normal']);
+    const [a, b] = doc.getRoot().listMaterials();
+    expect(a?.getBaseColorTexture()).toBe(b?.getBaseColorTexture());
+    expect(a?.getNormalTexture()).not.toBe(b?.getNormalTexture());
+  });
+
+  it('never merges a texture owned by another asset with one this asset writes', () => {
+    const shared = new Map([['b', { assetDir: 'decor/owner', prefix: 'owner_b' }]]);
+    const { doc, textures } = buildDocument('x', parts, [def('a', 0), def('b', 0)], shared);
+    expect(textures.map((t) => t.name)).toEqual(['x_a_basecolor', 'owner_b_basecolor']);
+    expect(textures[1]?.shared?.assetDir).toBe('decor/owner');
+    const [a, b] = doc.getRoot().listMaterials();
+    expect(a?.getBaseColorTexture()).not.toBe(b?.getBaseColorTexture());
+  });
+
   it('keeps maps that differ apart', () => {
     const { textures } = buildDocument('x', parts, [def('a', 0), def('b', 1)], new Map());
     expect(textures).toHaveLength(2);

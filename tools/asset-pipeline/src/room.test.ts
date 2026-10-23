@@ -11,6 +11,7 @@ import {
   roomHdriIds,
   roomHdriOutput,
   roomPropIds,
+  ROOM_PROP_TUNING,
 } from './room.ts';
 import { resolve } from 'node:path';
 import { ROOM_GPU_BUDGETS } from './room-budgets.ts';
@@ -137,5 +138,13 @@ describe('room recipes', () => {
       expect(ids).toEqual([...new Set(ids)].sort());
       expect(ids.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('ROOM_PROP_TUNING', () => {
+  it('only names props that a room places', () => {
+    const rooms = loadRooms(resolve(import.meta.dirname, '..', '..', '..'));
+    const props = new Set(roomPropIds(rooms));
+    for (const id of Object.keys(ROOM_PROP_TUNING)) expect(props.has(id)).toBe(true);
   });
 });
