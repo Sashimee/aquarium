@@ -23,7 +23,8 @@ import { MAX_FISH_PER_TANK } from '@aquarium/sim/lifecycle';
 import { schema } from './db/index.ts';
 import { personalityFromFishId } from './personality.ts';
 import { hashShareToken } from './shareToken.ts';
-import { DEFAULT_CARE_LIMITS } from './tanks.ts';
+import { loadPresets } from './presets.ts';
+import { DEFAULT_CARE_LIMITS, hasShelter } from './tanks.ts';
 import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
@@ -199,12 +200,32 @@ describe('tanks and fish', () => {
     expect(read.equipment.light).toEqual({ tier: 1, ...light });
   });
 
-  it('gives a new tank of every biome a heater', async () => {
+  it('gives a new tank of every biome a heater, and finds its preset shelter', async () => {
     const cookie = await signedIn(h);
     for (const biome of ['freshwater', 'reef'] as const) {
       const created = await createTank(h, cookie, biome);
       expect(created.equipment.heater.tier, biome).toBeGreaterThanOrEqual(1);
     }
+    const presets = loadPresets();
+    const tank = await createTank(h, cookie);
+    const readRow = async () => {
+      const [row] = await h.database.db
+        .select()
+        .from(schema.tanks)
+        .where(eq(schema.tanks.id, tank.id));
+      if (!row) throw new Error('no tank row');
+      return row;
+    };
+    const unedited = await readRow();
+    expect(unedited.decorLayout).toBeNull();
+    expect(hasShelter(unedited, presets)).toBe(true);
+    expect(hasShelter({ ...unedited, biome: 'cichlid' }, presets)).toBe(true);
+
+    await h.database.db
+      .update(schema.tanks)
+      .set({ decorLayout: [] })
+      .where(eq(schema.tanks.id, tank.id));
+    expect(hasShelter(await readRow(), presets)).toBe(false);
   });
 
   it('creates, lists, renames and re-lays-out a tank, and validates input', async () => {

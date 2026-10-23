@@ -4869,7 +4869,6 @@
         "origin at the centre of the base, scaled so the longest edge is 0.3 m",
         "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
         "no textures: flat base colours kept as material factors, PBR metallic-roughness",
-        "the source is unitless and about 55 x 161 x 11 units",
         "colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower"
       ],
       "status": "downloaded",

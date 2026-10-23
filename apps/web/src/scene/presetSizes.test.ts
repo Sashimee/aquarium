@@ -305,6 +305,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
             for (const patch of loadPreset(biome).plantPatches) {
               const drawn = scales.get(patch.id) ?? [];
               const mean = drawn.reduce((sum, v) => sum + v, 0) / drawn.length;
+              // Checks the patch average: single rosettes may sit well below it where decor crowds them.
               expect(mean, `${patch.id} mean scale`).toBeGreaterThanOrEqual(
                 patch.scale[0] * MIN_PATCH_SCALE_SHARE,
               );

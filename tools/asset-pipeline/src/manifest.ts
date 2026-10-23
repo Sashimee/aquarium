@@ -68,7 +68,7 @@ export const manifestSchema = z.looseObject({
 });
 export type Manifest = z.infer<typeof manifestSchema>;
 
-/** The fields the API parses at startup (apps/api/src/credits.ts), built from the same shared primitives. */
+/** Checks the assets against manifestAssetCreditFieldsSchema, the shared schema the API parses at startup (apps/api/src/credits.ts). */
 export function apiSchemaProblems(manifest: Manifest): string[] {
   const result = z.array(manifestAssetCreditFieldsSchema).safeParse(manifest.assets);
   if (result.success) return [];
