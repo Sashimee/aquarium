@@ -49,16 +49,6 @@ const MAX_NUDGED_ITEMS = { freshwater: 1, reef: 5, blackwater: 0 } as const;
 const MAX_NUDGED_NANO_ITEMS = { freshwater: 2, reef: 7, blackwater: 3 } as const;
 
 /**
- * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
- * `<size>:<patch id>`, with the mean root z band they settle in. A nano holds its plants near life
- * size, so a tall back patch cannot settle as deep as authored.
- */
-const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
-  'nano30:vallisneria-right': [-0.016, -0.008],
-  'nano30:carpet-right': [0.012, 0.019],
-};
-
-/**
  * Patches a nano's life-size hardscape covers completely, keyed `<size>:<patch id>`. They stay in
  * the preset for the larger tanks; the nano plants the rest.
  */
@@ -96,23 +86,6 @@ beforeAll(async () => {
 
 afterAll(() => {
   vi.unstubAllGlobals();
-});
-
-describe('KNOWN_DEPTH_SHORTFALLS', () => {
-  it('only pins patches that exist', () => {
-    for (const key of Object.keys(KNOWN_DEPTH_SHORTFALLS)) {
-      const [size, id] = key.split(':');
-      expect(SIZES, key).toContain(size);
-      const patches = [
-        ...loadPreset('freshwater').plantPatches,
-        ...loadPreset('reef').plantPatches,
-      ];
-      expect(
-        patches.map((p) => p.id),
-        key,
-      ).toContain(id);
-    }
-  });
 });
 
 describe.each(['freshwater', 'reef'] as const)('%s preset at the standard tank', (biome) => {
@@ -353,21 +326,8 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           expect(Math.abs(meanX - patch.center[0]), `${patch.id} x`).toBeLessThanOrEqual(slack * 2);
           if (Math.abs(authoredZ) <= 0.05) continue;
           const key = `${size}:${patch.id}`;
-          const pinned = KNOWN_DEPTH_SHORTFALLS[key];
-          if (pinned) {
-            expect(
-              meanZ,
-              `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
-            ).toBeGreaterThanOrEqual(pinned[0]);
-            expect(meanZ, key).toBeLessThanOrEqual(pinned[1]);
-            expect(
-              meanZ / authoredZ,
-              `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
-            ).toBeLessThan(MIN_DEPTH_SHARE);
-          } else {
-            expect(Math.sign(meanZ), `${key} side`).toBe(Math.sign(authoredZ));
-            expect(meanZ / authoredZ, `${key} depth share`).toBeGreaterThanOrEqual(MIN_DEPTH_SHARE);
-          }
+          expect(Math.sign(meanZ), `${key} side`).toBe(Math.sign(authoredZ));
+          expect(meanZ / authoredZ, `${key} depth share`).toBeGreaterThanOrEqual(MIN_DEPTH_SHARE);
         }
       });
     });
