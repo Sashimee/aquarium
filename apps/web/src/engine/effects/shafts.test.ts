@@ -17,7 +17,7 @@ import { float, texture, vec4 } from 'three/tsl';
 import { buildShaders, evaluate, type ShaderBackend } from '../shaderFixtures';
 import { Caustics } from '../water/caustics';
 import { WaterMedium } from '../water/medium';
-import { DEPTH_TOLERANCE, upscaleWeight, WaterShafts } from './shafts';
+import { DENOISE_TAPS, DEPTH_TOLERANCE, upscaleWeight, WaterShafts } from './shafts';
 
 function shafts(): WaterShafts {
   const medium = new WaterMedium(new Box3(new Vector3(-0.5, 0, -0.2), new Vector3(0.5, 0.5, 0.2)), {
@@ -54,6 +54,56 @@ describe('WaterShafts.upscale', () => {
     expect(fragment).toMatch(/textureSize\(/);
     // Four shaft texels and the pixel's own depth: GLSL samples depth with texture() too.
     expect(fragment.match(/\btexture\(/g)).toHaveLength(5);
+  });
+});
+
+describe('WaterShafts.denoise', () => {
+  function denoiseShader(backend: ShaderBackend): string {
+    const rays = new DataTexture(new Uint16Array(4 * 4 * 4), 4, 4, RGBAFormat, HalfFloatType);
+    rays.minFilter = LinearFilter;
+    rays.magFilter = LinearFilter;
+    const material = new MeshBasicNodeMaterial();
+    material.colorNode = shafts().denoise(texture(rays));
+    return buildShaders(new Mesh(new PlaneGeometry(), material), backend).fragment;
+  }
+
+  it('gathers the shaft texels around each one on WebGPU', () => {
+    const fragment = denoiseShader('webgpu');
+    expect(fragment).toMatch(/textureDimensions\(/);
+    expect(fragment.match(/textureSample(Level)?\(/g)).toHaveLength(DENOISE_TAPS.length);
+  });
+
+  it('builds the same gather for the WebGL 2 fallback', () => {
+    const fragment = denoiseShader('webgl');
+    expect(fragment).toMatch(/textureSize\(/);
+    expect(fragment.match(/\btexture\(/g)).toHaveLength(DENOISE_TAPS.length);
+  });
+
+  /** three's `interleavedGradientNoise`, which offsets the march per pixel. */
+  function ign(x: number, y: number): number {
+    const fract = (v: number) => v - Math.floor(v);
+    return fract(52.9829189 * fract(0.06711056 * x + 0.00583715 * y));
+  }
+
+  it('averages the march jitter out to a small share of its screen-locked lattice (#1542)', () => {
+    // The march error of a smooth integrand follows its jitter's offset from the mean, 0.5.
+    let raw = 0;
+    let cleaned = 0;
+    let worst = 0;
+    let n = 0;
+    for (let x = 0.5; x < 256; x++) {
+      for (let y = 0.5; y < 256; y++) {
+        let sum = 0;
+        for (const [dx, dy] of DENOISE_TAPS) sum += ign(x + dx, y + dy);
+        const residual = sum / DENOISE_TAPS.length - 0.5;
+        raw += (ign(x, y) - 0.5) ** 2;
+        cleaned += residual ** 2;
+        worst = Math.max(worst, Math.abs(residual));
+        n++;
+      }
+    }
+    expect(Math.sqrt(cleaned / n)).toBeLessThan(Math.sqrt(raw / n) / 5);
+    expect(worst).toBeLessThan(0.1);
   });
 });
 

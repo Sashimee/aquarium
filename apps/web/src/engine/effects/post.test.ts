@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AdditiveBlending,
   AgXToneMapping,
+  Box3,
   CustomBlending,
   MaterialBlending,
   MeshBasicNodeMaterial,
@@ -16,6 +17,7 @@ import {
   SubtractiveBlending,
   type Blending,
   type Node,
+  Vector3,
   type WebGPURenderer,
 } from 'three/webgpu';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -33,7 +35,9 @@ import {
   type PostSettings,
   temporalOutputs,
 } from './post';
-import type { WaterShafts } from './shafts';
+import { Caustics } from '../water/caustics';
+import { WaterMedium } from '../water/medium';
+import { WaterShafts } from './shafts';
 
 describe('blendsVelocity', () => {
   function material(transparent: boolean, blending: Blending): MeshBasicNodeMaterial {
@@ -184,4 +188,52 @@ describe('PostPipeline disposal', () => {
       expect([...targets].filter((target) => !disposed.has(target))).toEqual([]);
     },
   );
+
+  describe('light shafts', () => {
+    function waterShafts(): WaterShafts {
+      const box = new Box3(new Vector3(-0.5, 0, -0.2), new Vector3(0.5, 0.5, 0.2));
+      const medium = new WaterMedium(box, { cdom440: 0, turbidity: 0.1 });
+      return new WaterShafts(new PerspectiveCamera(), medium, new Caustics(medium));
+    }
+
+    function build(chain: PostSettings['chain'], water: WaterShafts): PostPipeline {
+      const settings: PostSettings = {
+        chain,
+        godRays: true,
+        depthOfField: false,
+        photo: null,
+        grade: false,
+      };
+      const camera = new PerspectiveCamera(40, 16 / 9, 0.05, 50);
+      return new PostPipeline(renderer, nodes, new Scene(), camera, water, settings);
+    }
+
+    it.each(['none', 'smaa', 'smaa-bloom'] as const)(
+      'denoises the march jitter without a temporal resolve: %s (#1542)',
+      (chain) => {
+        const water = waterShafts();
+        const denoise = vi.spyOn(water, 'denoise');
+        build(chain, water).dispose();
+        expect(denoise).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('leaves the jitter to TRAA on the temporal chain', () => {
+      const water = waterShafts();
+      const denoise = vi.spyOn(water, 'denoise');
+      build('taa-bloom', water).dispose();
+      expect(denoise).not.toHaveBeenCalled();
+    });
+
+    it.each(chains)('frees the shaft targets it made: %s', (chain) => {
+      const pipeline = build(chain, waterShafts());
+      const targets = renderTargets(pipeline.outputNode);
+      const disposed = new Set<RenderTarget>();
+      for (const target of targets) {
+        target.addEventListener('dispose', () => disposed.add(target));
+      }
+      pipeline.dispose();
+      expect([...targets].filter((target) => !disposed.has(target))).toEqual([]);
+    });
+  });
 });
