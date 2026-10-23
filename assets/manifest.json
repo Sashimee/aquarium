@@ -6,7 +6,7 @@
     "sha256 is null if and only if status is selected-pending-download.",
     "files[] is optional. When present, sha256 is the aggregate: sha256 of the lines '<file sha256>  <path>' sorted by path, joined with \\n, with no trailing newline (utf-8).",
     "rigged is null until a downloaded file confirms it.",
-    "CC-BY-SA entries are allowed only for reference photos, per Alex's decisions: issue #29 (2026-10-12: Corydoras aeneus, Gramma loreto, Pterapogon kauderni) and 2026-10-15 (docs/PLAN.md section 1: lateral photos for firefish, six-line wrasse, harlequin rasbora and Ancistrus by Nick Hobgood, Diego Delso, Mariusz Dabrowski, Júlio Reis and Corydoras-adolfoi). ShareAlike applies to any texture derived from them: derived textures ship as CC-BY-SA with attribution, and a photo used as a source is credited as shipped with its modifications."
+    "CC-BY-SA entries are allowed only for reference photos, per Alex's decisions: issue #29 (2026-10-12: Corydoras aeneus, Gramma loreto, Pterapogon kauderni) and 2026-10-15 (docs/PLAN.md section 1: lateral photos for firefish, six-line wrasse, harlequin rasbora and Ancistrus by Nick Hobgood, Diego Delso, Mariusz Dabrowski, Júlio Reis and Corydoras-adolfoi) and 2026-10-22 (docs/PLAN.md section 1: lateral photos for Neolamprologus brichardi, Aulonocara baenschi and Neolamprologus multifasciatus by David J. Stang, Rjcastillo and Richard A. Ingebrigtsen). ShareAlike applies to any texture derived from them: derived textures ship as CC-BY-SA with attribution, and a photo used as a source is credited as shipped with its modifications."
   ],
   "assets": [
     {

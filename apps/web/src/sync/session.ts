@@ -346,7 +346,7 @@ export class TankSession {
    * waits for that and a failed read never loses it.
    */
   private roomsKnown = false;
-  private migratingRoom = false;
+  private roomMigration: Promise<void> = Promise.resolve();
 
   /** The paid rooms the account owns. A failed read keeps the last list; the server checks every use. */
   async refreshRooms(): Promise<void> {
@@ -425,22 +425,17 @@ export class TankSession {
     });
   }
 
-  private async migrateDeviceRoom(loadId: number): Promise<void> {
-    const storage = this.deps.storage;
-    if (!storage || !this.roomsKnown || this.migratingRoom) return;
-    if (loadId !== this.loadId || this.state.phase !== 'ready') return;
-    this.migratingRoom = true;
-    try {
-      await this.runRoomMigration(storage, loadId);
-    } finally {
-      this.migratingRoom = false;
-    }
+  /** Runs after any earlier migration has stopped, so a reload never has two writing at once. */
+  private migrateDeviceRoom(loadId: number): Promise<void> {
+    const run = this.roomMigration.then(() => this.runRoomMigration(loadId));
+    this.roomMigration = run.catch(() => undefined);
+    return run;
   }
 
-  private async runRoomMigration(
-    storage: NonNullable<SessionDeps['storage']>,
-    loadId: number,
-  ): Promise<void> {
+  private async runRoomMigration(loadId: number): Promise<void> {
+    const storage = this.deps.storage;
+    if (!storage || !this.roomsKnown) return;
+    if (loadId !== this.loadId || this.state.phase !== 'ready') return;
     const plan = planRoomMigration(
       storage.getItem(DEVICE_ROOM_KEY),
       this.state.tanks,
@@ -449,6 +444,9 @@ export class TankSession {
     for (const move of plan.moves) {
       if (loadId !== this.loadId) return;
       const moved = await this.perform(async () => {
+        if (loadId !== this.loadId) return;
+        const current = this.state.tanks.find((t) => t.id === move.tankId);
+        if (!current || current.roomSetAt !== null) return;
         const next = await this.deps.api.saveRoom(move.tankId, move.roomId);
         if (loadId === this.loadId) this.apply(next);
       });

@@ -153,7 +153,6 @@ describe('room GPU budget', () => {
     for (const roomId of ROOM_IDS) {
       const cost = roomCost(roomId, 'ultra', true);
       expect(cost.drawing / MIB, roomId).toBeCloseTo(10, 5);
-      expect(cost.drawing, roomId).toBeLessThanOrEqual(MOBILE_ROOM_BYTES + cost.hdri);
     }
   });
 

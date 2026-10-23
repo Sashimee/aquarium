@@ -15,7 +15,13 @@ import { propFilesFrom, type PropFiles } from './gltfPropSource';
 import type { RoomLighting } from '../environment';
 import { lowerTier, type Tier } from '../quality/tiers';
 import type { TankDimensions } from '../tank/dimensions';
-import type { LitRoom, LitRoomLayout, RoomRig } from './RoomLight';
+import {
+  roomLamps,
+  type LitRoom,
+  type LitRoomLayout,
+  type RoomLamps,
+  type RoomRig,
+} from './RoomLight';
 import { buildRoomShell, type RoomShell } from './roomShell';
 
 type TankExtent = Pick<TankDimensions, 'length' | 'depth' | 'height'>;
@@ -214,9 +220,9 @@ export class RoomStage implements LitRoom {
 
   /**
    * Shows `roomId`, or the default studio and no room for null, around a tank of `tank`'s size.
-   * Settles once the room is complete or a newer show overtook it. Rejects for an unknown room,
-   * which keeps the room on show, and for a failed load, which keeps the shell and falls back to
-   * the default studio's light. Showing what is already on show or loading changes nothing.
+   * Settles once the room is complete or a newer show overtook it. Rejects for an unknown room or
+   * one planned with more lamps than `ROOM_LAMP_SLOTS`, which keeps the room on show, and for a
+   * failed load, which keeps the shell and falls back to the default studio's light. Showing what is already on show or loading changes nothing.
    */
   show(roomId: string | null, tank: TankExtent, tier: Tier): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('RoomStage: show() after dispose()'));
@@ -228,19 +234,25 @@ export class RoomStage implements LitRoom {
     const key =
       roomId === null ? 'none' : [roomId, tank.length, tank.depth, tank.height, roomTier].join('|');
     if (key === this.key) return this.pending ?? Promise.resolve();
+    let plan: RoomScenePlan | null = null;
+    let lamps: RoomLamps = [];
+    if (roomId !== null) {
+      try {
+        plan = planRoomScene({ roomId, tank, tier: roomTier, catalog: this.options.catalog });
+        lamps = roomLamps(plan.light.practical);
+      } catch (cause) {
+        return Promise.reject(cause instanceof Error ? cause : new Error(String(cause)));
+      }
+    }
     this.key = key;
 
     this.controller?.abort();
     const controller = new AbortController();
     this.controller = controller;
     this.clear();
-    const plan =
-      roomId === null
-        ? null
-        : planRoomScene({ roomId, tank, tier: roomTier, catalog: this.options.catalog });
     if (plan) this.build(plan, tank, roomTier);
 
-    const work = this.load(plan, controller);
+    const work = this.load(plan, lamps, controller);
     this.pending = work;
     const settle = () => {
       if (this.pending === work) this.pending = null;
@@ -281,7 +293,11 @@ export class RoomStage implements LitRoom {
     };
   }
 
-  private async load(plan: RoomScenePlan | null, controller: AbortController): Promise<void> {
+  private async load(
+    plan: RoomScenePlan | null,
+    lamps: RoomLamps,
+    controller: AbortController,
+  ): Promise<void> {
     const { signal } = controller;
     const roomId = plan?.roomId ?? null;
     try {
@@ -294,12 +310,9 @@ export class RoomStage implements LitRoom {
         this.baked = roomId;
       }
       if (plan && plan.props.length > 0) {
-        // RoomLight lights the lamps on the room's materials alone; RoomProps' PointLights would
-        // reach the tank too and recompile every lit material whenever their count changed.
-        const unlit = { ...plan, light: { ...plan.light, practical: [] } };
-        await this.props.show(unlit, this.options.props, signal);
+        await this.props.show(plan, this.options.props, signal);
         if (controller !== this.controller) return;
-        this.rigNow = plan.light;
+        this.rigNow = { key: plan.light.key, ambient: plan.light.ambient, practical: lamps };
         this.revisionNow++;
       }
     } catch (cause) {
