@@ -563,6 +563,7 @@ describe('growth and old age', () => {
     const cap = (spec?.birthSizeM ?? 0) * 1.05;
     const capped = run(tank([fishOf('a', 'guppy')]), 60 * DAY, { env: { maxFishLengthM: cap } });
     expect(only(capped).size).toBe(cap);
+    expect(only(capped).size).toBeLessThan(spec?.maxSizeM ?? 0);
     const trimmed = run(tank([fishOf('a', 'guppy', { size: spec?.maxSizeM ?? 1 })]), 60 * DAY, {
       env: { maxFishLengthM: cap },
     });

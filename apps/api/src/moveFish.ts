@@ -121,7 +121,7 @@ export function registerMoveRoutes(ctx: MoveContext): void {
         }
         const tooShort = tankLengthRefusal(economy, spec.id, destination.tank, spec.commonName);
         if (tooShort) throw refuse(409, tooShort);
-        const tooLong = adultLengthRefusal(spec, destination.tank.size);
+        const tooLong = adultLengthRefusal(spec, destination.tank);
         if (tooLong) throw refuse(409, tooLong);
         const existing = destination.fishRows.map((f) => ({
           alive: f.status === 'alive',

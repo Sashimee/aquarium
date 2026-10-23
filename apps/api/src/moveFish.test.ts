@@ -286,7 +286,7 @@ describe('moving a fish between tanks', () => {
       const res = await move(h, who, long, fishId, { toTankId: quarantine });
       expect(res.statusCode).toBe(409);
       expect(error(res).message).toMatch(
-        /Silver mono grows to 27 cm, but this tank only holds fish up to \d+ cm/,
+        /Silver mono grows to 27 cm, but this tank only holds fish up to 21 cm. A quarantine tank is too small for it, so it cannot go there\./,
       );
       expect((await fishRow(h, fishId)).tankId).toBe(long);
     });
@@ -579,7 +579,7 @@ describe('moving a fish between tanks', () => {
       const fishId = await addFish(h, nano, { species: 'blue-tang', size: 0.267 });
       h.clock.advance(HOUR_MS);
       await getTank(h, who, nano);
-      expect((await fishRow(h, fishId)).size).toBeLessThanOrEqual(tankMaxFishLengthM('nano30'));
+      expect((await fishRow(h, fishId)).size).toBe(tankMaxFishLengthM('nano30'));
     });
   });
 });

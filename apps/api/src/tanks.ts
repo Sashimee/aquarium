@@ -1387,7 +1387,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         }
         const tooShort = tankLengthRefusal(economy, spec.id, ticked.tank, spec.commonName);
         if (tooShort) throw new HttpError(400, apiError('validation_failed', tooShort));
-        const tooLong = adultLengthRefusal(spec, ticked.tank.size);
+        const tooLong = adultLengthRefusal(spec, ticked.tank);
         if (tooLong) throw new HttpError(400, apiError('validation_failed', tooLong));
         const existing = ticked.fishRows.map((f) => ({
           alive: f.status === 'alive',

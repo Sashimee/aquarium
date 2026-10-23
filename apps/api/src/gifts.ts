@@ -323,7 +323,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     }
     const tooShort = tankLengthRefusal(economy, spec.id, dest.tank, spec.commonName);
     if (tooShort) throw refuse(409, tooShort);
-    const tooLong = adultLengthRefusal(spec, dest.tank.size);
+    const tooLong = adultLengthRefusal(spec, dest.tank);
     if (tooLong) throw refuse(409, tooLong);
     const existing = dest.fishRows
       .filter((f) => f.id !== leavingFishId)
