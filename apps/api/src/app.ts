@@ -821,6 +821,15 @@ interface ViteManifestEntry {
   assets?: string[];
 }
 
+const isStringList = (value: unknown): boolean =>
+  value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+
+function isManifestEntry(value: unknown): value is ViteManifestEntry {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const { file, css, assets } = value as Record<string, unknown>;
+  return typeof file === 'string' && isStringList(css) && isStringList(assets);
+}
+
 export function loadEmittedAssets(webRoot: string): ReadonlySet<string> {
   const path = resolve(webRoot, VITE_MANIFEST);
   const unusable = (cause?: unknown) =>
@@ -835,9 +844,9 @@ export function loadEmittedAssets(webRoot: string): ReadonlySet<string> {
     throw unusable(cause);
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw unusable();
-  const manifest = parsed as Record<string, ViteManifestEntry>;
   const emitted = new Set<string>();
-  for (const entry of Object.values(manifest)) {
+  for (const entry of Object.values(parsed)) {
+    if (!isManifestEntry(entry)) throw unusable();
     for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) {
       if (file) emitted.add(file);
     }
