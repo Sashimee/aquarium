@@ -159,6 +159,11 @@ function hullExtent(vertices: readonly Point3[]): number {
   return extent;
 }
 
+/** Whether `vertices` span no volume (collinear, coplanar or coincident), as the hull schema rejects. */
+export function isDegenerateHull(vertices: readonly Point3[]): boolean {
+  return maxTetrahedronVolume(vertices) <= HULL_RELATIVE_VOLUME_EPSILON * hullExtent(vertices) ** 3;
+}
+
 export const hullColliderSchema = z
   .strictObject({
     ...base,
@@ -170,8 +175,7 @@ export const hullColliderSchema = z
       .describe('points whose convex hull is the collider'),
   })
   .superRefine((h, ctx) => {
-    const extent = hullExtent(h.vertices);
-    if (maxTetrahedronVolume(h.vertices) <= HULL_RELATIVE_VOLUME_EPSILON * extent ** 3) {
+    if (isDegenerateHull(h.vertices)) {
       ctx.addIssue({
         code: 'custom',
         path: ['vertices'],

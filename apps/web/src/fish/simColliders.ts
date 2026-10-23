@@ -1,4 +1,4 @@
-import { colliderListSchema, type Collider, type Point3 } from '@aquarium/shared';
+import { colliderListSchema, isDegenerateHull, type Collider, type Point3 } from '@aquarium/shared';
 import type { Collider as SceneCollider } from '../scene/colliders';
 
 const ON_PLANE_M = 1e-7;
@@ -59,26 +59,6 @@ function cross(a: Point3, b: Point3): Point3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 
-/** How thick a hull must be across its narrowest plane pair for a fish to meet it. */
-export const FLAT_HULL_M = 1e-4;
-
-/** Smallest width of a hull's corners across any of its plane normals. */
-function hullThickness(corners: readonly Point3[], planes: readonly number[]): number {
-  let thinnest = Infinity;
-  for (let o = 0; o + 3 < planes.length; o += 4) {
-    const n: Point3 = [planes[o] ?? 0, planes[o + 1] ?? 0, planes[o + 2] ?? 0];
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const v of corners) {
-      const d = dot(n, v);
-      lo = Math.min(lo, d);
-      hi = Math.max(hi, d);
-    }
-    thinnest = Math.min(thinnest, (hi - lo) / Math.hypot(...n));
-  }
-  return thinnest;
-}
-
 /**
  * The scene's colliders in the shared format. Ids follow list order, so a rebuilt scene keeps them.
  * A flat card's hull (catappa leaves on the sand) has no volume a fish could swim into and no valid
@@ -91,7 +71,8 @@ export function sceneCollidersToSim(colliders: readonly SceneCollider[]): Collid
       return [{ id, kind: 'capsule', hard: c.hard, a: [...c.a], b: [...c.b], radius: c.radius }];
     }
     const vertices = hullCorners(c.planes);
-    if (vertices.length > 0 && hullThickness(vertices, c.planes) < FLAT_HULL_M) return [];
+    // No corners at all means broken planes rather than a flat card, so validation reports it.
+    if (vertices.length > 0 && isDegenerateHull(vertices)) return [];
     return [{ id, kind: 'hull', hard: c.hard, vertices }];
   });
 }

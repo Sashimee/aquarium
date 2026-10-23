@@ -1,6 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesContentSchema, type Collider } from '@aquarium/shared';
+import {
+  createTankSpace,
+  speciesContentSchema,
+  TANK_SIZES,
+  tankWaterBounds,
+  type Collider,
+} from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { Basin } from './basin.ts';
 import { DecorField, UnionSdf } from './decor.ts';
@@ -13,7 +19,7 @@ import { World, maxFishLengthM, type FishSpawn } from './world.ts';
 
 const LONG = 120_000;
 
-/** The nano30 tank's water: 40 × 25 × 30 cm. */
+/** A nano-sized box of water, 40 cm wide, 25 cm high and 30 cm deep, with no sand. */
 const NANO = { width: 0.4, height: 0.25, depth: 0.3 } as const;
 
 /** A nano reef's rockwork: a wall of live rock along the back with a ledge over the sand. */
@@ -71,6 +77,28 @@ describe('the longest fish a tank holds', () => {
   it('is set by the shortest of the tank’s width, water height and depth', () => {
     expect(maxFishLengthM(NANO)).toBeCloseTo(0.25, 12);
     expect(maxFishLengthM({ width: 1.2, height: 0.5, depth: 0.4 })).toBeCloseTo(0.4, 12);
+  });
+
+  it('counts only the water over the highest sand in a nano30 with a sand slope', () => {
+    const { length, depth, height, glass, freeboard } = TANK_SIZES.nano30.dimensions;
+    // Sand banked from 2 cm at the front pane to 5 cm at the back.
+    const space = createTankSpace(
+      { width: length, depth, height, glass, freeboard },
+      (_x, z) => 0.035 - 0.015 * (z / (depth / 2)),
+    );
+    const water = tankWaterBounds(space);
+    const overSand = water.max[1] - space.floor.max;
+    expect(overSand).toBeLessThan(water.max[2] - water.min[2]);
+    expect(maxFishLengthM(space)).toBeCloseTo(overSand, 12);
+    const spawn = (bodyLengthM: number) =>
+      new World({
+        seed: 1,
+        space,
+        species: [royalGramma],
+        fish: [{ id: 'a', species: royalGramma.id, bodyLengthM }],
+      });
+    expect(spawn(overSand * 0.99).count).toBe(1);
+    expect(() => spawn(overSand)).toThrow(/does not fit in the tank/);
   });
 
   it('spawns a fish just under it and turns one at it away with the limit in the message', () => {

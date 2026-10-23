@@ -638,7 +638,7 @@ export class Behaviour {
       !this.given.some((a) => a.kind === 'cave') &&
       at(this.host.bodyLength, i) > this.nookLength;
     // Nooks sized for smaller fish have no room for this one, so they are found and dealt anew.
-    if (needsNooks) this.deal();
+    if (needsNooks) this.redealNooks();
     else this.anchor[i] = this.freeAnchor(i);
   }
 
@@ -884,6 +884,25 @@ export class Behaviour {
       // A gramma without a cave of its own holds a mid-water station instead of fighting for one.
       if (kind === 'cave' && pick >= matching.length) continue;
       this.anchor[i] = matching[pick % matching.length] ?? -1;
+    }
+  }
+
+  /**
+   * Finds the nooks again (the rock moved, or a longer cave-dweller came) and deals them out anew
+   * to the fish that take one. Every other fish keeps its anemone, cave or rest spot.
+   */
+  private redealNooks(): void {
+    const given = this.given;
+    this.nookLength = this.longestCaveDweller();
+    const nooks = this.nookLength > 0 ? this.nooksFor(this.nookLength, given) : [];
+    this.anchors = [...given, ...nooks];
+    const ordinal = new Map<string, number>();
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      if (!takesNook(sp)) continue;
+      const k = ordinal.get(sp.id) ?? 0;
+      ordinal.set(sp.id, k + 1);
+      this.anchor[i] = k < nooks.length ? given.length + k : -1;
     }
   }
 
@@ -1182,7 +1201,7 @@ export class Behaviour {
         this.restSpotSet[i] = 0;
       }
     }
-    if (this.nookLength > 0) this.deal();
+    if (this.nookLength > 0) this.redealNooks();
     this.brood.decorMoved();
     this.cleaning.decorMoved();
     this.banks.decorMoved();
