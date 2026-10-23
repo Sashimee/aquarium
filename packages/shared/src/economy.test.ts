@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { addFishRequestSchema } from './tank.js';
 import { DECOR_ASSET_IDS, VACATION_FEEDER_ASSET_ID } from './decorRules.js';
 import { diseaseKindSchema } from './fishState.js';
+import { plantContentSchema } from './plants.js';
 import {
   decorPrice,
   economySchema,
@@ -21,6 +22,14 @@ const placeableIds = [...new Set(Object.values(DECOR_ASSET_IDS).flatMap((ids) =>
 describe('content/economy.json', () => {
   const economy = economySchema.parse(readJson('economy.json'));
   const fixture = (): Economy => structuredClone(economy);
+
+  it('has a growth entry for every priced plant, so the sim never drops one', () => {
+    const grown = new Set(
+      plantContentSchema.parse(readJson('plants.json')).plants.map((p) => p.id),
+    );
+    const missing = Object.keys(economy.items.plant.prices).filter((id) => !grown.has(id));
+    expect(missing).toEqual([]);
+  });
 
   it('prices every species juvenile and adult, adult above juvenile', () => {
     const files = readdirSync(join(content, 'species')).filter((f) => f.endsWith('.json'));

@@ -4,7 +4,7 @@ import {
   paymentsStateSchema,
   PRIVACY_POLICY,
 } from '@aquarium/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from '../db/index.ts';
 import { MailThrottledError, SMTP_TIMEOUT_MS } from '../mail.ts';
@@ -127,16 +127,21 @@ describe('adult confirmation', () => {
         await h.database.db
           .select()
           .from(schema.adultConfirmations)
-          .where(eq(schema.adultConfirmations.userId, who.userId))
+          .where(
+            and(
+              eq(schema.adultConfirmations.userId, who.userId),
+              isNull(schema.adultConfirmations.withdrawnAt),
+            ),
+          )
       )[0];
     await confirm(who, { confirmed: true, password: PASSWORD });
-    expect((await row())?.withdrawnAt).toBeNull();
+    expect(await row()).toBeDefined();
     await confirm(who, { confirmed: false });
-    expect((await row())?.withdrawnAt).not.toBeNull();
+    expect(await row()).toBeUndefined();
     const state = await call(h, who, 'GET', '/api/payments/state');
     expect(paymentsStateSchema.parse(state.json()).adultConfirmed).toBe(false);
     await confirm(who, { confirmed: true, password: PASSWORD });
-    expect((await row())?.withdrawnAt).toBeNull();
+    expect(await row()).toBeDefined();
     expect(
       paymentsStateSchema.parse((await call(h, who, 'GET', '/api/payments/state')).json())
         .adultConfirmed,
@@ -339,25 +344,25 @@ describe('settlement failure log', () => {
 });
 
 describe('data export', () => {
-  it('keeps both adult confirmation timestamps after a withdrawal', async () => {
+  it('keeps every adult confirm and withdraw cycle, oldest first', async () => {
     const who = await account(h);
+    const exported = async () =>
+      dataExportSchema.parse((await call(h, who, 'POST', '/api/me/export')).json()).payments
+        .adultConfirmations;
     await confirm(who, { confirmed: true, password: PASSWORD });
-    await confirm(who, { confirmed: false });
-    const res = await call(h, who, 'POST', '/api/me/export');
-    expect(res.statusCode, res.body).toBe(200);
-    const { payments } = dataExportSchema.parse(res.json());
-    expect(payments.adultConfirmedAt).toEqual(expect.any(String));
-    expect(payments.adultWithdrawnAt).toEqual(expect.any(String));
-  });
+    const [open] = await exported();
+    expect(open?.withdrawnAt).toBeNull();
 
-  it('exports no withdrawal time while the confirmation stands', async () => {
-    const who = await account(h);
+    await confirm(who, { confirmed: false });
     await confirm(who, { confirmed: true, password: PASSWORD });
-    const { payments } = dataExportSchema.parse(
-      (await call(h, who, 'POST', '/api/me/export')).json(),
+    await confirm(who, { confirmed: true, password: PASSWORD });
+    const cycles = await exported();
+    expect(cycles).toHaveLength(2);
+    expect(cycles[0]).toEqual({ confirmedAt: open?.confirmedAt, withdrawnAt: expect.any(String) });
+    expect(cycles[1]?.withdrawnAt).toBeNull();
+    expect(Date.parse(cycles[1]?.confirmedAt ?? '')).toBeGreaterThanOrEqual(
+      Date.parse(cycles[0]?.withdrawnAt ?? ''),
     );
-    expect(payments.adultConfirmedAt).not.toBeNull();
-    expect(payments.adultWithdrawnAt).toBeNull();
   });
 
   it('bounds a stalled mail send well inside the receipt lease', () => {
@@ -383,7 +388,7 @@ describe('data export', () => {
     const res = await call(h, who, 'POST', '/api/me/export');
     expect(res.statusCode, res.body).toBe(200);
     const { payments } = dataExportSchema.parse(res.json());
-    expect(payments.adultConfirmedAt).not.toBeNull();
+    expect(payments.adultConfirmations).toHaveLength(1);
     expect(payments.charges.map((c) => c['id'])).toEqual(
       expect.arrayContaining([pack.session, sub.invoice]),
     );

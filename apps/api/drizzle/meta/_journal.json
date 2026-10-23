@@ -232,6 +232,13 @@
       "when": 1792712490943,
       "tag": "0032_receipt_retry_adult_withdrawn",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792717117681,
+      "tag": "0033_adult_confirmation_history",
+      "breakpoints": true
     }
   ]
 }

@@ -550,13 +550,24 @@ export const communityFeeds = pgTable(
   ],
 );
 
-export const adultConfirmations = pgTable('adult_confirmations', {
-  userId: text('user_id')
-    .primaryKey()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  confirmedAt: timestamptz('confirmed_at').notNull().defaultNow(),
-  withdrawnAt: timestamptz('withdrawn_at'),
-});
+// Append-only history: every confirm/withdraw cycle is a row, and at most one row per user is open.
+export const adultConfirmations = pgTable(
+  'adult_confirmations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    confirmedAt: timestamptz('confirmed_at').notNull().defaultNow(),
+    withdrawnAt: timestamptz('withdrawn_at'),
+  },
+  (t) => [
+    index('adult_confirmations_user_idx').on(t.userId, t.confirmedAt),
+    uniqueIndex('adult_confirmations_open_idx')
+      .on(t.userId)
+      .where(sql`${t.withdrawnAt} is null`),
+  ],
+);
 
 export const paymentChargeKindEnum = pgEnum('payment_charge_kind', ['pack', 'invoice']);
 
