@@ -10,6 +10,7 @@
     radial-gradient(120% 80% at 50% 0%, #14506f 0%, rgba(20, 80, 111, 0) 60%),
     linear-gradient(180deg, #0b2f47 0%, #071a2a 55%, #040d16 100%);
   pointer-events: auto;
+  touch-action: pan-x pan-y;
   opacity: 1;
 }
 
@@ -26,6 +27,7 @@
 
 .loading.failed .loading-card {
   pointer-events: auto;
+  touch-action: pan-x pan-y;
   padding: 1.25rem;
   border-radius: 1rem;
   background: rgba(7, 26, 42, 0.94);
