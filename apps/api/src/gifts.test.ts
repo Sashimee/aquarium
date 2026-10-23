@@ -571,6 +571,12 @@ describe('gifting and trading fish', () => {
       expect(errorOf(short).message).toContain('150 cm');
       expect((await offerRow(h, monoOffer)).status).toBe('open');
       expect(await fishRows(h, monoId)).toHaveLength(0);
+      await h.database.db.delete(schema.tanks).where(eq(schema.tanks.id, small));
+      const nanoB = await makeTank(h, b, { biome: 'mangrove', quarantine: true });
+      const tooLong = await accept(h, b, monoOffer, { toTankId: nanoB });
+      expect(tooLong.statusCode).toBe(409);
+      expect(errorOf(tooLong).message).toMatch(/only holds fish up to \d+ cm/);
+      expect((await offerRow(h, monoOffer)).status).toBe('open');
       expect((await accept(h, b, monoOffer, { toTankId: longB })).statusCode).toBe(200);
     });
 

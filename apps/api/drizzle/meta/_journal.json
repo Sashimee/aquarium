@@ -239,6 +239,13 @@
       "when": 1792717117681,
       "tag": "0033_adult_confirmation_history",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792720730920,
+      "tag": "0034_clamp_fish_length",
+      "breakpoints": true
     }
   ]
 }
