@@ -1,5 +1,5 @@
 {
-  "source": "apps/web on 2026-10-23, rounded to 1 \u00b5m: fitPresetToCatalog(loadPreset(\"blackwater\"), size), its hard colliders built as caves.collision.test.ts builds them (scene hulls, decor colliders), and demoTank(size, seed, \"blackwater\").config.fish",
+  "source": "apps/web on 2026-10-23, rounded to 1 \u00b5m: fitPresetToCatalog(loadPreset(\"blackwater\"), size), its hard colliders built as caves.collision.test.ts builds them (scene hulls, decor colliders), and demoTank(size, seed, \"blackwater\").config.fish. Regenerate it the same way after a preset or hull-fitting change.",
   "presets": {
     "standard": {
       "space": {

@@ -83,7 +83,8 @@ interface Grid {
  * at least `minCoverShare` of the 26 directions within `coverBodyLengths`. Each opens toward its
  * open directions, as a cave mouth does. They lie `spacingBodyLengths` apart. Those with
  * `turnRoom` of clearance, where the fish can turn round, come first, then the tighter ones to
- * fill up; the best covered first within each. Deterministic: a fixed grid, no RNG.
+ * fill up; the best covered first within each. Never fewer than the best covered alone would
+ * give. Deterministic: a fixed grid, no RNG.
  */
 export function findNooks(
   field: NookField,
@@ -274,18 +275,28 @@ function pick(
   turnRoom: number,
   idPrefix: string,
 ): Anchor[] {
-  const roomy: Candidate[] = [];
-  const tight: Candidate[] = [];
-  for (const c of verdicts) if (c !== null) (c.clearance >= turnRoom ? roomy : tight).push(c);
+  const candidates = verdicts.filter((c): c is Candidate => c !== null);
   // Stable sort: equal cover keeps grid order, so the choice never depends on the engine.
-  const order = (a: Candidate, b: Candidate): number => b.cover - a.cover || a.y - b.y;
-  roomy.sort(order);
-  tight.sort(order);
+  candidates.sort((a, b) => b.cover - a.cover || a.y - b.y);
+  const byCover = spaced(candidates, length, idPrefix);
   // Roomy first: a firefish that overshoots a tight slot cannot turn back into it (#1429). Most
-  // cave-dwellers still hold a tight one all night, so those fill the places left (#1440).
+  // cave-dwellers still hold a tight one all night, so those fill the places left (#1440), and a
+  // roomy one that crowds out more tight ones than it is worth loses to the cover order.
+  const roomyFirst = spaced(
+    [
+      ...candidates.filter((c) => c.clearance >= turnRoom),
+      ...candidates.filter((c) => c.clearance < turnRoom),
+    ],
+    length,
+    idPrefix,
+  );
+  return roomyFirst.length >= byCover.length ? roomyFirst : byCover;
+}
+
+function spaced(ordered: readonly Candidate[], length: number, idPrefix: string): Anchor[] {
   const spacing = NOOK.spacingBodyLengths * length;
   const nooks: Anchor[] = [];
-  for (const c of [...roomy, ...tight]) {
+  for (const c of ordered) {
     if (nooks.length >= NOOK.maxNooks) break;
     const apart = nooks.every(
       (k) => Math.hypot(k.position[0] - c.x, k.position[1] - c.y, k.position[2] - c.z) >= spacing,
