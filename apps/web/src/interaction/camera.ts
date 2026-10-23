@@ -38,8 +38,7 @@ export interface RoomVolume {
 
 const ROOM_MARGIN = 0.1;
 const ARC_ROOM_SAMPLES = 24;
-const ARC_RESET_YAW = 0.3;
-const RETARGET_SNAP = 1e-3;
+const ARC_KEEP_SIDE = 0.3;
 const ROOM_SEARCH_STEPS = 64;
 const ROOM_SAFE_PITCH = 0.1;
 
@@ -294,11 +293,8 @@ export class CameraRig {
     const alpha = this.reducedMotion ? 1 : 1 - Math.exp(-rate * dt);
     const from = this.eye;
     this.eye = this.chase(from, goal.eye, alpha);
-    if (this.modeValue === 'orbit' && !this.insideGlass(from) && this.insideGlass(this.eye)) {
-      this.eye = this.arcAroundGlass(from, goal.eye, alpha);
-    }
-    if (this.modeValue === 'orbit' && this.room && !this.roomAllows(this.eye)) {
-      this.eye = this.retarget(from);
+    if (this.modeValue === 'orbit' && !this.insideGlass(from)) {
+      this.eye = this.orbitStep(from, goal.eye, alpha) ?? this.eye;
     }
     goal = this.goal();
     if (length(sub(this.eye, goal.eye)) < SETTLED_EPSILON) this.arcSign = 0;
@@ -373,101 +369,64 @@ export class CameraRig {
     return p.x > min.x && p.x < max.x && p.y > min.y && p.y < max.y && p.z > min.z && p.z < max.z;
   }
 
-  /** A straight chase across the tank would pass through it; turn about the tank's middle instead. */
-  private arcAroundGlass(from: Vec3, to: Vec3, alpha: number): Vec3 {
-    const t = this.orbitTarget;
-    const a0 = Math.atan2(from.x - t.x, from.z - t.z);
-    const a1 = Math.atan2(to.x - t.x, to.z - t.z);
-    const r0 = Math.hypot(from.x - t.x, from.z - t.z);
-    const r1 = Math.hypot(to.x - t.x, to.z - t.z);
-    const turn = Math.PI * 2;
-    let delta = a1 - a0;
-    delta -= turn * Math.round(delta / turn);
-    const at = (fraction: number, d: number): Vec3 => {
-      const angle = a0 + d * fraction;
-      const radius = r0 + (r1 - r0) * fraction;
-      return {
-        x: t.x + Math.sin(angle) * radius,
-        y: from.y + (to.y - from.y) * fraction,
-        z: t.z + Math.cos(angle) * radius,
-      };
-    };
-    if (this.room) {
-      const [lo, hi] = this.roomLimits(this.room);
-      const tol = 1e-9;
-      const stays = (d: number): boolean => {
-        for (let i = 1; i <= ARC_ROOM_SAMPLES; i++) {
-          const p = at(i / ARC_ROOM_SAMPLES, d);
-          if (
-            p.x < lo.x - tol ||
-            p.x > hi.x + tol ||
-            p.y < lo.y - tol ||
-            p.y > hi.y + tol ||
-            p.z < lo.z - tol ||
-            p.z > hi.z + tol ||
-            !this.roomAllows(p)
-          ) {
-            return false;
-          }
-        }
-        return true;
-      };
-      const other = (d: number): number => d - (d < 0 ? -turn : turn);
-      if (this.arcSign !== 0 && Math.sign(delta) !== this.arcSign) delta = other(delta);
-      if (!stays(delta)) {
-        delta = other(delta);
-        if (!stays(delta)) return this.retarget(from);
-      }
-    }
-    this.arcSign = Math.sign(delta) || 1;
-    this.arcYaw = this.yaw;
-    const eye = at(alpha, delta);
-    if (!this.insideGlass(eye)) return this.acceptStep(from, this.keepInRoom(eye));
-    const offset = sub(eye, t);
-    const span = length(offset);
-    if (span < 1e-6) return this.retarget(from);
-    const dir = { x: offset.x / span, y: offset.y / span, z: offset.z / span };
-    const { min, max } = this.glassBox();
-    const reach = distanceToBoxExit(t, dir, min, max) + GLASS_CLEARANCE;
-    const pushed = this.keepInRoom({
-      x: t.x + dir.x * reach,
-      y: t.y + dir.y * reach,
-      z: t.z + dir.z * reach,
-    });
-    return this.acceptStep(from, pushed);
-  }
-
-  private acceptStep(from: Vec3, step: Vec3): Vec3 {
-    if (!this.room) return step;
-    return this.insideGlass(step) || !this.roomAllows(step) ? this.retarget(from) : step;
-  }
-
-  private roomAllows(p: Vec3): boolean {
-    const o = sub(p, this.orbitTarget);
-    const span = length(o);
-    if (span < 1e-9) return false;
-    const { min, max } = this.orbitLimits(
-      Math.atan2(o.x, o.z),
-      Math.asin(clamp(o.y / span, -1, 1)),
-    );
-    return max >= min;
-  }
-
   /**
-   * The eye cannot make progress toward the goal: make the pose it is at the goal, so the state
-   * stays consistent and any later drag or setOrbit moves it again. An eye that sits somewhere the
-   * room leaves no space for is moved to the nearest orbit pose that has some.
+   * Moves the outside eye in angle space about the tank's middle, so it never crosses the glass.
+   * The turn goes the short way unless the room leaves no space along it, and keeps its side while
+   * the goal heading barely moves.
    */
-  private retarget(from: Vec3): Vec3 {
-    const o = sub(from, this.orbitTarget);
-    const span = length(o);
-    this.distance = span;
-    this.yaw = Math.atan2(o.x, o.z);
-    this.pitch = clamp(Math.asin(clamp(o.y / Math.max(span, 1e-9), -1, 1)), PITCH_MIN, PITCH_MAX);
-    this.clampOrbit();
-    this.arcSign = 0;
-    const goal = this.goal().eye;
-    return length(sub(goal, from)) < RETARGET_SNAP ? from : goal;
+  private orbitStep(from: Vec3, goalEye: Vec3, alpha: number): Vec3 | null {
+    const t = this.orbitTarget;
+    const o = sub(from, t);
+    const r0 = length(o);
+    const g = sub(goalEye, t);
+    const rg = length(g);
+    if (r0 < 1e-6 || rg < 1e-6) return null;
+    const yaw0 = Math.atan2(o.x, o.z);
+    const pitch0 = Math.asin(clamp(o.y / r0, -1, 1));
+    const yawG = Math.atan2(g.x, g.z);
+    const pitchG = Math.asin(clamp(g.y / rg, -1, 1));
+    const turn = Math.PI * 2;
+    const branch = (sign: number): number => {
+      return sign * ((((sign * (yawG - yaw0)) % turn) + turn) % turn);
+    };
+    const fits = (d: number): boolean => {
+      for (let i = 1; i <= ARC_ROOM_SAMPLES; i++) {
+        const f = i / ARC_ROOM_SAMPLES;
+        const l = this.orbitLimits(yaw0 + d * f, pitch0 + (pitchG - pitch0) * f);
+        if (l.max < l.min) return false;
+      }
+      return true;
+    };
+    const wrapped = Math.atan2(Math.sin(yawG - this.arcYaw), Math.cos(yawG - this.arcYaw));
+    const kept =
+      this.arcSign !== 0 && Math.abs(wrapped) < ARC_KEEP_SIDE ? branch(this.arcSign) : NaN;
+    let d = Math.abs(kept) <= Math.PI + ARC_KEEP_SIDE ? kept : NaN;
+    if (Number.isNaN(d) || (this.room && Math.abs(wrapped) > 1e-9 && !fits(d))) {
+      const forward = branch(1);
+      const backward = branch(-1);
+      const [first, second] =
+        Math.abs(forward) <= Math.abs(backward) ? [forward, backward] : [backward, forward];
+      d =
+        !this.room || Math.abs(first) < 1e-6 || fits(first) ? first : fits(second) ? second : first;
+    }
+    this.arcSign = d < 0 ? -1 : 1;
+    this.arcYaw = yawG;
+    const yaw = yaw0 + d * alpha;
+    const pitch = pitch0 + (pitchG - pitch0) * alpha;
+    let r = r0 + (rg - r0) * alpha;
+    const limits = this.orbitLimits(yaw, pitch);
+    if (limits.max >= limits.min) {
+      const { min: glassMin, max: glassMax } = this.glassBox();
+      const clear =
+        distanceToBoxExit(t, sphericalOffset(yaw, pitch, 1), glassMin, glassMax) + GLASS_CLEARANCE;
+      r = clamp(r, Math.min(limits.min, clear), limits.max);
+    }
+    const offset = sphericalOffset(yaw, pitch, r);
+    return this.keepInRoom({
+      x: t.x + offset.x,
+      y: Math.max(EYE_FLOOR, t.y + offset.y),
+      z: t.z + offset.z,
+    });
   }
 
   /**
@@ -476,7 +435,6 @@ export class CameraRig {
    * the front view until there is.
    */
   private clampOrbit(): void {
-    if (Math.abs(this.yaw - this.arcYaw) > ARC_RESET_YAW) this.arcSign = 0;
     if (this.room) this.swingIntoRoom();
     const { min, max } = this.orbitLimits(this.yaw, this.pitch);
     this.distance = clamp(this.wantedDistance, min, Math.max(min, max));
