@@ -42,7 +42,7 @@ export interface FitModel {
   readonly swayReach: ((item: DecorItem) => number) | null;
 }
 
-const MIN_KEPT_PATCH = 3;
+export const MIN_KEPT_PATCH = 3;
 /**
  * Plants shrink with the tank only down to this share of their authored size; a smaller tank holds
  * fewer of them instead. Below it a plant would be miniature next to the life-size fish.
@@ -243,6 +243,15 @@ export function coverageCount(
   return Math.min(patch.count, Math.max(MIN_KEPT_PATCH, Math.round(wanted)));
 }
 
+/**
+ * Whether a patch centred `z` from the middle is one the glass squeezes: the plants a tank holds
+ * above its own scale (`MIN_PLANT_FIT`) are what the front glass leaves no room for.
+ */
+export function glassSqueezes(size: TankSize, z: number): boolean {
+  const { scale } = presetFit(size);
+  return Math.max(scale, MIN_PLANT_FIT) > scale && z > 0;
+}
+
 function fitPatch(
   patch: PlantPatch,
   size: TankSize,
@@ -273,7 +282,7 @@ function fitPatch(
   // Plants held above the tank's scale by MIN_PLANT_FIT are the ones the glass squeezes. Their
   // height is not given up for depth: a front disc shrinks to the room it has instead, and its
   // count follows its area so the ground stays as covered as authored.
-  const squeezed = plantScale > k && z > 0;
+  const squeezed = glassSqueezes(size, z);
   const fitted = squeezed
     ? fitDepth(nominal.radius, z, limitZ)
     : { radius: nominal.radius, depth: z };
