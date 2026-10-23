@@ -451,6 +451,46 @@ describe('anchored species', { timeout: LONG }, () => {
     }
   });
 
+  it('firefish hold crevices found in the rock all night, with room to turn in them (#1429)', () => {
+    const length = toSimSpecies(firefish).bodyLength;
+    for (let seed = 1; seed <= 4; seed++) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: [...ARCHETYPES, firefish],
+        decor: REEF_DECOR,
+        anchors: REEF_ANCHORS.filter((a) => a.kind !== 'cave'),
+        fish: spawnMany(firefish.id, 2),
+      });
+      const homes = Array.from(w.behaviour.anchor, (k) => {
+        const a = w.behaviour.homes[k];
+        if (a?.id.startsWith('nook:') !== true) throw new Error(`seed ${seed}: no crevice dealt`);
+        return a;
+      });
+      expect(new Set(homes).size, `seed ${seed}`).toBe(2);
+      for (const a of homes) {
+        const [x, y, z] = a.position;
+        expect(w.sceneSdf.sample(x, y, z, n3), `seed ${seed} ${a.id}`).toBeGreaterThanOrEqual(
+          w.bodyTurnRoom(length),
+        );
+      }
+      w.setLight(0);
+      const inside = [0, 0];
+      let night = 0;
+      for (let t = 0; t < 6000; t++) {
+        w.step();
+        if (t < 3000) continue;
+        night++;
+        homes.forEach((a, i) => {
+          if (distanceTo(w, i, a.position) < a.radius + length) inside[i] = (inside[i] ?? 0) + 1;
+        });
+      }
+      for (const [i, held] of inside.entries()) {
+        expect(held / night, `seed ${seed} fish ${i}`).toBeGreaterThan(0.8);
+      }
+    }
+  });
+
   it('yellow tangs graze close to the rock (Montgomery et al. 1989)', () => {
     const w = reefTank(spawnMany(yellowTang.id, 2), 9);
     const length = toSimSpecies(yellowTang).bodyLength;

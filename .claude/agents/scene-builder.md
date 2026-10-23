@@ -23,7 +23,7 @@ Model: sonnet — scoped scene construction against the renderer's conventions; 
 
 ## Owns
 
-`apps/web/src/scene/**`, `content/presets/*.json`.
+`apps/web/src/scene/**`, `content/presets/*.json`, `content/presets/rooms/*.json`.
 
 ## Mandate
 

@@ -238,6 +238,8 @@ export interface BehaviourHost {
    * of its own length clear to turn round in.
    */
   canTurnAt(i: number, x: number, y: number, z: number): boolean;
+  /** The clearance a level fish of `length` needs round it to turn about, as `canTurnAt` asks. */
+  bodyTurnRoom(length: number): number;
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number;
   /**
@@ -936,6 +938,7 @@ export class Behaviour {
     return this.nookSearch.find(
       { basin, cover: substrateSdf, water: sceneSdf, rock: decorSdf },
       length,
+      this.host.bodyTurnRoom(length),
       prefix,
       this.host.decorShapes,
     );

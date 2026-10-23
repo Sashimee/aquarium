@@ -31,7 +31,10 @@ export interface ControllerConfig {
    * sit near a threshold settles instead of rebuilding its pipelines back and forth.
    */
   reentryHoldMs: number;
-  /** Larger samples are hitches (tab switch, GC, shader compile) and are dropped. */
+  /**
+   * Larger samples are hitches (tab switch, GC, shader compile) and are dropped, unless nothing
+   * but hitches arrives for `downHoldMs`: then the device is overloaded, not hitching (#1456).
+   */
   ignoreAboveMs: number;
   minTier: Tier;
   maxTier: Tier;
@@ -56,6 +59,9 @@ export const DEFAULT_CONTROLLER_CONFIG: Omit<
   maxTier: 'ultra',
 };
 
+/** Fewer hitches in a row than this are a stall, however long they take together. */
+const SUSTAINED_HITCHES = 4;
+
 export interface TierChange {
   from: Tier;
   to: Tier;
@@ -69,6 +75,7 @@ export class TierController {
   private readonly window: number[] = [];
   private overSince: number | null = null;
   private underSince: number | null = null;
+  private hitches: { since: number; count: number } | null = null;
   private lastChangeAt = Number.NEGATIVE_INFINITY;
   private lastUpgrade: { tier: Tier; at: number } | null = null;
   private readonly upHold = new Map<Tier, number>();
@@ -134,8 +141,13 @@ export class TierController {
 
   sample(ms: number, nowMs: number): TierChange | null {
     const c = this.config;
-    if (!Number.isFinite(ms) || ms <= 0 || ms > c.ignoreAboveMs) return null;
-    if (nowMs - this.lastChangeAt < c.cooldownMs || nowMs < this.pausedUntil) return null;
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    if (nowMs - this.lastChangeAt < c.cooldownMs || nowMs < this.pausedUntil) {
+      this.hitches = null;
+      return null;
+    }
+    if (ms > c.ignoreAboveMs) return this.hitch(ms, nowMs);
+    this.hitches = null;
     this.resumeHolds(nowMs);
 
     this.window.push(ms);
@@ -165,6 +177,23 @@ export class TierController {
 
     this.underSince = null;
     return null;
+  }
+
+  /**
+   * A frame that took seconds is drawn every few hundred milliseconds, so the window never fills
+   * while the GPU is that far behind; a run of nothing else for the down hold steps down at once.
+   */
+  private hitch(ms: number, nowMs: number): TierChange | null {
+    const hitches = (this.hitches ??= { since: nowMs, count: 0 });
+    hitches.count++;
+    if (
+      hitches.count < SUSTAINED_HITCHES ||
+      nowMs - hitches.since < this.config.downHoldMs ||
+      this.current === this.config.minTier
+    ) {
+      return null;
+    }
+    return this.stepDown(ms, nowMs);
   }
 
   private resumeHolds(nowMs: number): void {
@@ -220,6 +249,7 @@ export class TierController {
 
   private restartWindow(nowMs: number): void {
     this.window.length = 0;
+    this.hitches = null;
     this.overSince = null;
     this.underSince = null;
     this.heldAtPause = null;
