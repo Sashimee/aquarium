@@ -52,7 +52,9 @@ import {
 } from './displayPreference';
 import { EffectsRecovery, EffectsSlot } from './effectsSlot';
 import { materialUse, PipelineFailureHandler, watchPipelineErrors } from './pipelineErrors';
-import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
+import { installRoomLighting, DEFAULT_HDRI_URL, type RoomLighting } from './environment';
+import { GltfPropSource } from './room/gltfPropSource';
+import { roomAssetsFrom, RoomStage } from './room/RoomStage';
 import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
@@ -69,7 +71,12 @@ import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
-import { MAX_SHADOW_MAP_SIZE, renderPixelRatio, type TierSettings } from './quality/tiers';
+import {
+  MAX_SHADOW_MAP_SIZE,
+  renderPixelRatio,
+  type Tier,
+  type TierSettings,
+} from './quality/tiers';
 import { posterTier, TankBackground } from './tank/background';
 import {
   defaultView,
@@ -182,6 +189,11 @@ export class Engine {
   private readonly daylightFeed: DaylightFeed;
   private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_SCHEDULE);
   private readonly dayRig: DayLightingRig;
+  private readonly roomLighting: RoomLighting;
+  /** Touch-first devices keep the room within the mobile GPU budget at any tier. */
+  private readonly touchFirst: boolean;
+  private roomStage: RoomStage | null = null;
+  private roomWanted: string | null = null;
   private readonly effects = new EffectsSlot(
     (message, cause) => this.reportError(message, cause),
     (on) => this.events.emit('engine:temporal-resolve', { on }),
@@ -295,7 +307,8 @@ export class Engine {
     this.clockPin = new ClockPin(config.options.clock);
     this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
-    const profile = qualityProfile(isTouchFirstDevice());
+    this.touchFirst = isTouchFirstDevice();
+    const profile = qualityProfile(this.touchFirst);
     const display = config.display ?? displayPreference;
     const chosenDisplay = (): DisplayChoice => ({
       frameRate: config.options.frameRate ?? display.snapshot().frameRate,
@@ -347,6 +360,7 @@ export class Engine {
       (message, cause) => this.reportError(message, cause),
     );
     cleanup.add(() => roomLighting.dispose());
+    this.roomLighting = roomLighting;
     const roomBackgroundIntensity = this.scene.backgroundIntensity;
 
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
@@ -456,6 +470,7 @@ export class Engine {
     this.fitHood(dimensions);
     if (!this.photo.active) this.frameTank(dimensions);
     this.effects.tankResized();
+    void this.showRoom();
     this.sceneRevisionValue++;
     this.events.emit('engine:tank-resized', { size, dimensions, litres: this.waterLitres });
   }
@@ -527,6 +542,56 @@ export class Engine {
     return this.background
       .useIndex(json)
       .catch((cause: unknown) => this.reportError('The tank background failed to load', cause));
+  }
+
+  /** The room around the tank, for `RoomLight` to light; null until `useRoomIndex`. */
+  get room(): RoomStage | null {
+    return this.roomStage;
+  }
+
+  /**
+   * Hands the room the scene's parsed `assets/index.json`, once; the room `setRoom` asked for
+   * then loads, and reloads at the level of detail of each new quality tier.
+   */
+  useRoomIndex(json: unknown): Promise<void> {
+    if (this.disposed || this.roomStage) return Promise.resolve();
+    let assets: ReturnType<typeof roomAssetsFrom>;
+    try {
+      assets = roomAssetsFrom(json);
+    } catch (cause) {
+      this.reportError('The room index could not be read', cause);
+      return Promise.resolve();
+    }
+    const stage = new RoomStage({
+      lighting: this.roomLighting,
+      props: new GltfPropSource(this.ktx2, assets.files),
+      catalog: assets.catalog,
+      hdriUrl: assets.hdriUrl,
+      mobile: this.touchFirst,
+    });
+    this.roomStage = stage;
+    this.scene.add(stage.group);
+    this.cleanup.add(() => stage.dispose());
+    this.cleanup.add(this.quality.register('room', (_settings, tier) => void this.showRoom(tier)));
+    return this.showRoom();
+  }
+
+  /**
+   * Shows `roomId` around the tank, or no room and the default studio for null. Only the room on
+   * show holds GPU memory. A failed load is reported on `engine:error` and keeps the room's shell.
+   */
+  setRoom(roomId: string | null): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    this.roomWanted = roomId;
+    return this.showRoom();
+  }
+
+  private showRoom(tier: Tier = this.quality.tier): Promise<void> {
+    const stage = this.roomStage;
+    if (!stage || this.disposed) return Promise.resolve();
+    return stage
+      .show(this.roomWanted, this.tank.dimensions, tier)
+      .catch((cause: unknown) => this.reportError('The room failed to load', cause));
   }
 
   /** Depth of field follows the focus camera, on tiers that allow it. */

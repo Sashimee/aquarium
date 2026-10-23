@@ -22,6 +22,10 @@ export interface PropSource {
 
 const UP = new Vector3(0, 1, 0);
 
+function isAbort(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 function disposeMaterial(material: Material): void {
   for (const value of Object.values(material)) {
     if ((value as Partial<Texture> | null)?.isTexture) (value as Texture).dispose();
@@ -75,7 +79,9 @@ export class RoomProps {
       for (const attempt of attempts) {
         attempt.then(
           (late) => this.release(late),
-          () => undefined,
+          (late: unknown) => {
+            if (!isAbort(late)) console.debug(`A ${plan.roomId} room prop load failed`, late);
+          },
         );
       }
       if (generation !== this.generation) return;
