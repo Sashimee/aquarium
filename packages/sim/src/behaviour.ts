@@ -577,7 +577,7 @@ export class Behaviour {
     return n;
   }
 
-  /** Fish holds on where they join a way that is no longer kept. */
+  /** Entry slots that still hold a dropped way. */
   get staleEntries(): number {
     const kept = new Set(
       [...this.routes.values()].flatMap((byClearance) => [...byClearance.values()]),
