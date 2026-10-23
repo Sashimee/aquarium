@@ -247,7 +247,7 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     minTriangles: 12,
     leafColourVariation: { spread: 0.14, yellowing: 0.1 },
     modifications: [
-      'scale normalised: the source is unitless and about 55 x 161 x 11 units, so the rosette is scaled to 0.3 m tall',
+      'the source is unitless and about 55 x 161 x 11 units',
       'colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower',
     ],
   },

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { httpUrlSchema, slugSchema } from '@aquarium/shared';
+import { manifestAssetCreditFieldsSchema } from '@aquarium/shared';
 import { z } from 'zod';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
@@ -68,23 +68,9 @@ export const manifestSchema = z.looseObject({
 });
 export type Manifest = z.infer<typeof manifestSchema>;
 
-const apiManifestAssetSchema = z.looseObject({
-  id: z.string().min(1),
-  kind: z.string().min(1),
-  title: z.string().min(1),
-  author: z.string().min(1),
-  author_url: httpUrlSchema,
-  source_url: httpUrlSchema,
-  licence: z.string().min(1),
-  licence_url: httpUrlSchema,
-  species: slugSchema.optional(),
-  modifications: z.array(z.string()),
-  status: z.string(),
-});
-
 /** The fields the API parses at startup (apps/api/src/credits.ts), built from the same shared primitives. */
 export function apiSchemaProblems(manifest: Manifest): string[] {
-  const result = z.array(apiManifestAssetSchema).safeParse(manifest.assets);
+  const result = z.array(manifestAssetCreditFieldsSchema).safeParse(manifest.assets);
   if (result.success) return [];
   return result.error.issues.map((issue) => {
     const [index, ...rest] = issue.path;
