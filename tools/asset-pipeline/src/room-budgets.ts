@@ -4,7 +4,7 @@ import type { AssetIndex, OutputAsset } from './index-schema.ts';
 /** PLAN section 9.2, Rooms. Shared props count toward every room that uses them. */
 export const ROOM_MAX_BYTES = 1_800_000;
 export const ALL_ROOMS_MAX_BYTES = 22_000_000;
-export const AMBIENCE_MAX_SPREAD_LU = 2;
+export const AMBIENCE_MAX_SPREAD_LU = 1;
 
 export const ROOM_GPU_BUDGETS = {
   mobile: { lod: 2, triangles: 15_000, drawCalls: 10 },
