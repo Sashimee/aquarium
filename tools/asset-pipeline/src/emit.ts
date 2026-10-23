@@ -75,6 +75,11 @@ export function texturePrefix(
   return materialCount > 1 ? `${assetId}_${slug(materialName)}` : assetId;
 }
 
+function textureKey(source: TextureSource): string {
+  const { width, height, data } = source.image;
+  return `${source.role}:${source.codec}:${width}x${height}:${sha256(data)}`;
+}
+
 function accessorFor(
   doc: Document,
   array: Float32Array<ArrayBuffer> | Uint32Array<ArrayBuffer>,
@@ -98,6 +103,7 @@ export function buildDocument(
   doc.getRoot().getAsset().generator = 'aquarium-asset-pipeline';
   const textures: TextureEntry[] = [];
   const materials = new Map<string, Material>();
+  const reusable = new Map<string, Texture>();
 
   for (const def of materialDefs) {
     const material = doc
@@ -113,13 +119,18 @@ export function buildDocument(
     const addTexture = (suffix: string, source: TextureSource | undefined): Texture | null => {
       if (!source) return null;
       const name = `${prefix}_${suffix}`;
+      const key = textureKey(source);
+      const existing = owner ? undefined : reusable.get(key);
+      if (existing) return existing;
       textures.push({
         name,
         source,
         colorSpace: source.role === 'baseColor' ? 'srgb' : 'linear',
         ...(owner ? { shared: { assetDir: owner.assetDir, name } } : {}),
       });
-      return doc.createTexture(name);
+      const texture = doc.createTexture(name);
+      if (!owner) reusable.set(key, texture);
+      return texture;
     };
     const base = addTexture('basecolor', def.baseColor);
     if (base) material.setBaseColorTexture(base);

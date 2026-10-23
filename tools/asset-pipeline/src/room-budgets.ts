@@ -4,7 +4,7 @@ import type { AssetIndex, OutputAsset } from './index-schema.ts';
 /** PLAN section 9.2, Rooms. Shared props count toward every room that uses them. */
 export const ROOM_MAX_BYTES = 1_800_000;
 export const ALL_ROOMS_MAX_BYTES = 22_000_000;
-export const AMBIENCE_MAX_SPREAD_LU = 2;
+export const AMBIENCE_MAX_SPREAD_LU = 1;
 
 export const ROOM_GPU_BUDGETS = {
   mobile: { lod: 2, triangles: 15_000, drawCalls: 10 },
@@ -35,24 +35,26 @@ function builtAsset(index: AssetIndex, kind: OutputAsset['kind'], id: string) {
 }
 
 function roomAssets(room: RoomEntry, index: AssetIndex) {
+  const shell =
+    room.assets.shell === null ? undefined : builtAsset(index, 'room-furniture', room.assets.shell);
   const furniture = room.assets.furniture.map((id) => builtAsset(index, 'room-furniture', id));
   const hdri = room.assets.hdri === null ? undefined : builtAsset(index, 'hdri', room.assets.hdri);
   const audio =
     room.ambience.asset === null ? undefined : builtAsset(index, 'audio', room.ambience.asset);
-  return { furniture, hdri, audio };
+  return { shell, furniture, hdri, audio };
 }
 
 export function roomStats(room: RoomEntry, refs: RoomRefs): RoomStats {
-  const { furniture, hdri, audio } = roomAssets(room, refs.index);
+  const { shell, furniture, hdri, audio } = roomAssets(room, refs.index);
   const files = new Map<string, number>();
-  for (const asset of [...furniture, hdri, audio])
+  for (const asset of [shell, ...furniture, hdri, audio])
     for (const file of asset?.files ?? []) files.set(file.file, file.bytes);
   const tiers = {} as Record<RoomGpuTier, RoomTierStats>;
   for (const tier of Object.keys(ROOM_GPU_BUDGETS) as RoomGpuTier[]) {
     const lod = ROOM_GPU_BUDGETS[tier].lod;
     let triangles = 0;
     let drawCalls = 0;
-    for (const asset of furniture) {
+    for (const asset of [shell, ...furniture]) {
       const level = asset?.lods[lod];
       if (!level) continue;
       triangles += level.triangles;
@@ -101,7 +103,11 @@ export function roomProblems(rooms: readonly RoomEntry[], refs: RoomRefs): strin
       if (id !== null && !refs.manifestIds.has(id))
         problems.push(`${at}: ${label} "${id}" is not in assets/manifest.json`);
 
-    const { furniture, hdri, audio } = roomAssets(room, refs.index);
+    const { shell, furniture, hdri, audio } = roomAssets(room, refs.index);
+    if (room.assets.shell !== null && !shell)
+      problems.push(
+        `${at}: shell "${room.assets.shell}" is not in the built index (run pnpm build:assets)`,
+      );
     room.assets.furniture.forEach((id, i) => {
       if (!furniture[i])
         problems.push(`${at}: furniture "${id}" is not in the built index (run pnpm build:assets)`);
@@ -134,7 +140,7 @@ export function roomProblems(rooms: readonly RoomEntry[], refs: RoomRefs): strin
           `${at}: ${tier} tier (LOD${budget.lod}) needs ${used.drawCalls} draw calls, over the ${budget.drawCalls} budget`,
         );
     }
-    for (const asset of [...furniture, hdri, audio])
+    for (const asset of [shell, ...furniture, hdri, audio])
       for (const file of asset?.files ?? []) unique.set(file.file, file.bytes);
   }
   problems.push(...ambienceLoudnessProblems(rooms, refs.index));

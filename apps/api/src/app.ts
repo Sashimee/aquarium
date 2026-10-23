@@ -821,19 +821,32 @@ interface ViteManifestEntry {
   assets?: string[];
 }
 
+const isStringList = (value: unknown): boolean =>
+  value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+
+function isManifestEntry(value: unknown): value is ViteManifestEntry {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const { file, css, assets } = value as Record<string, unknown>;
+  return typeof file === 'string' && isStringList(css) && isStringList(assets);
+}
+
 export function loadEmittedAssets(webRoot: string): ReadonlySet<string> {
   const path = resolve(webRoot, VITE_MANIFEST);
-  let manifest: Record<string, ViteManifestEntry>;
-  try {
-    manifest = JSON.parse(readFileSync(path, 'utf8')) as Record<string, ViteManifestEntry>;
-  } catch (cause) {
-    throw new Error(
-      `Cannot read the Vite manifest at ${path}; build the web app with build.manifest enabled or unset WEB_DIST.`,
+  const unusable = (cause?: unknown) =>
+    new Error(
+      `Cannot read the Vite manifest at ${path}; rebuild the web app with \`pnpm --filter web build\` (build.manifest enabled) or delete the stale dist directory.`,
       { cause },
     );
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (cause) {
+    throw unusable(cause);
   }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw unusable();
   const emitted = new Set<string>();
-  for (const entry of Object.values(manifest)) {
+  for (const entry of Object.values(parsed)) {
+    if (!isManifestEntry(entry)) throw unusable();
     for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) {
       if (file) emitted.add(file);
     }

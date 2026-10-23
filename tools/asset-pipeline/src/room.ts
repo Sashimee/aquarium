@@ -13,15 +13,21 @@ import type { MaterialDef, Part } from './parts.ts';
 import { RAW_ROOT, bakeToWorldSpace, readGltf } from './source.ts';
 import { decodeImage, resizeImage } from './textures.ts';
 
-export const ROOM_BUDGETS = {
-  mobile: { triangles: 15_000, drawCalls: 10, lod: 2 },
-  high: { triangles: 60_000, drawCalls: 30, lod: 0 },
-} as const;
-
 /** Per-room share of the mobile triangle budget the props may use; the rest is left to the procedural shell. */
 export const MOBILE_PROP_TRIANGLES = 14_000;
 export const LOD0_MAX_TRIANGLES = 7_000;
 export const ROOM_TEXTURE_PX = 512;
+
+/** room-shop is within 0.1 MB of its 1.8 MB budget; its props take a coarser metallic-roughness map, since roughness varies slowly over a surface. */
+export interface RoomPropTuning {
+  roughnessPx?: number;
+}
+
+export const ROOM_PROP_TUNING: Readonly<Record<string, RoomPropTuning>> = {
+  'polyhaven-steel-frame-shelves-03': { roughnessPx: 256 },
+  'polyhaven-cashregister-01': { roughnessPx: 256 },
+  'polyhaven-plastic-crate-02': { roughnessPx: 256 },
+};
 const TRANSMISSION_ALPHA = 0.35;
 
 export function loadRooms(repoRoot: string): RoomEntry[] {
@@ -55,7 +61,7 @@ function onlyFile(sourceId: string, extension: string): string {
   return file;
 }
 
-// Underscores only: staticCacheControl treats `name-<8 chars>.ext` under assets/ as a content-hashed bundle and marks it immutable.
+// staticCacheControl marks only files listed in the Vite manifest as immutable, not names matching `name-<8 chars>.ext`; underscores keep these ids out of any such pattern anyway.
 export function roomHdriOutput(id: string): string {
   return `${id.replaceAll('-', '_')}_1k.ktx2`;
 }
@@ -176,7 +182,7 @@ function recentreOnBase(parts: Part[]): void {
       part.positions[i] = v - (i % 3 === 0 ? x : i % 3 === 1 ? y : z);
 }
 
-async function roomMaterial(source: Material): Promise<MaterialDef> {
+async function roomMaterial(source: Material, roughnessPx: number): Promise<MaterialDef> {
   const def = await materialDefFrom(source, {
     roughness: source.getRoughnessFactor(),
     metallic: source.getMetallicFactor(),
@@ -184,17 +190,21 @@ async function roomMaterial(source: Material): Promise<MaterialDef> {
   const transmission = source.getExtension<Transmission>(KHRMaterialsTransmission.EXTENSION_NAME);
   const cap = async <T extends { image: Parameters<typeof resizeImage>[0] }>(
     texture: T | undefined,
+    px = ROOM_TEXTURE_PX,
   ): Promise<T | undefined> =>
-    texture ? { ...texture, image: await resizeImage(texture.image, ROOM_TEXTURE_PX) } : undefined;
+    texture ? { ...texture, image: await resizeImage(texture.image, px) } : undefined;
   const baseColor = await cap(def.baseColor);
   const normal = await cap(def.normal);
   const roughnessBytes = source.getMetallicRoughnessTexture()?.getImage();
   const metallicRoughness = roughnessBytes
-    ? await cap({
-        role: 'metallicRoughness' as const,
-        codec: 'etc1s' as const,
-        image: dropOcclusion(await decodeImage(roughnessBytes)),
-      })
+    ? await cap(
+        {
+          role: 'metallicRoughness' as const,
+          codec: 'etc1s' as const,
+          image: dropOcclusion(await decodeImage(roughnessBytes)),
+        },
+        roughnessPx,
+      )
     : undefined;
   const glass = transmission !== null && transmission.getTransmissionFactor() > 0;
   return {
@@ -231,12 +241,14 @@ export async function buildRoomProp(
   mobileTriangles: number,
   ctx: FishContext,
 ): Promise<OutputAsset> {
+  const tuning = ROOM_PROP_TUNING[id];
   const { doc, parts } = await loadParts(id, ctx);
   recentreOnBase(parts);
   const used = new Set(parts.map((p) => p.material));
   const materials: MaterialDef[] = [];
   for (const source of doc.getRoot().listMaterials())
-    if (used.has(source.getName())) materials.push(await roomMaterial(source));
+    if (used.has(source.getName()))
+      materials.push(await roomMaterial(source, tuning?.roughnessPx ?? ROOM_TEXTURE_PX));
 
   const triangles = parts.reduce((sum, p) => sum + p.indices.length / 3, 0);
   const plan: LodPlan = {
@@ -245,6 +257,10 @@ export async function buildRoomProp(
     sloppyFallback: true,
   };
   const built = buildDocument(id, parts, materials);
+  const slots = materials.reduce(
+    (sum, m) => sum + [m.baseColor, m.normal, m.metallicRoughness].filter(Boolean).length,
+    0,
+  );
   return emitAsset({
     outRoot: ctx.outRoot,
     kind: 'room-furniture',
@@ -258,7 +274,15 @@ export async function buildRoomProp(
       modifications: [
         'node transforms baked, meshes merged into one primitive per material, origin at the base centre, true scale in metres kept',
         `LOD0 capped at ${LOD0_MAX_TRIANGLES} triangles; LOD2 is the mobile level, sized so the props of every room using it stay within ${MOBILE_PROP_TRIANGLES} triangles together`,
-        `colour, normal and metallic-roughness maps capped at ${ROOM_TEXTURE_PX} px and re-encoded to KTX2 (ETC1S), one file for every quality tier`,
+        `${
+          tuning?.roughnessPx
+            ? `colour and normal maps capped at ${ROOM_TEXTURE_PX} px, metallic-roughness maps at ${tuning.roughnessPx} px`
+            : `colour, normal and metallic-roughness maps capped at ${ROOM_TEXTURE_PX} px`
+        } and re-encoded to KTX2 (ETC1S), one file for every quality tier${
+          built.textures.length < slots
+            ? '; identical maps of different materials are written once'
+            : ''
+        }`,
         ...(materials.some(
           (m) => m.alphaMode === 'BLEND' && m.baseColorFactor[3] === TRANSMISSION_ALPHA,
         )

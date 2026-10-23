@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 136170314,
+  "totalBytes": 135314113,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -3868,22 +3868,22 @@
       "lods": [
         {
           "file": "fish/guppy-female/lod0.glb",
-          "bytes": 82920,
-          "sha256": "ff8abeea2ec192a0ad2870aada60630b4d1da801c97629dfc83bce481b660aff",
+          "bytes": 82720,
+          "sha256": "b4f9aa429dc7a451abbe98f682d5e468f8469097a0cd564e8284d154645c20a1",
           "triangles": 5948,
           "vertices": 3389
         },
         {
           "file": "fish/guppy-female/lod1.glb",
-          "bytes": 41224,
-          "sha256": "bfbb2317e1a19bf1707dd1891c9037a9cae0e8942dfda33dc3ecd10c4369e48c",
+          "bytes": 41024,
+          "sha256": "7821feb5eac5f5b7f16e95bd72b35105b222ed2714afd8de0d65a123e39f2a29",
           "triangles": 2376,
           "vertices": 1400
         },
         {
           "file": "fish/guppy-female/lod2.glb",
-          "bytes": 24220,
-          "sha256": "7829da3804a3d53857284a9b4a974f15372f242bf5c2bdafe7b11efc25debe66",
+          "bytes": 24024,
+          "sha256": "5358fb2c763951be44adca77743ed64654b48f13f9fee7e90cafd91aaeb4cf6c",
           "triangles": 944,
           "vertices": 615
         }
@@ -3930,27 +3930,6 @@
               "codec": "etc1s"
             }
           }
-        },
-        {
-          "name": "guppy-female_guppy-layer2-f_basecolor",
-          "role": "baseColor",
-          "colorSpace": "srgb",
-          "variants": {
-            "1k": {
-              "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_1k.ktx2",
-              "bytes": 129084,
-              "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813",
-              "size": 1024,
-              "codec": "etc1s"
-            },
-            "2k": {
-              "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_2k.ktx2",
-              "bytes": 477000,
-              "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6",
-              "size": 2048,
-              "codec": "etc1s"
-            }
-          }
         }
       ],
       "files": [
@@ -3966,18 +3945,18 @@
         },
         {
           "file": "fish/guppy-female/lod0.glb",
-          "bytes": 82920,
-          "sha256": "ff8abeea2ec192a0ad2870aada60630b4d1da801c97629dfc83bce481b660aff"
+          "bytes": 82720,
+          "sha256": "b4f9aa429dc7a451abbe98f682d5e468f8469097a0cd564e8284d154645c20a1"
         },
         {
           "file": "fish/guppy-female/lod1.glb",
-          "bytes": 41224,
-          "sha256": "bfbb2317e1a19bf1707dd1891c9037a9cae0e8942dfda33dc3ecd10c4369e48c"
+          "bytes": 41024,
+          "sha256": "7821feb5eac5f5b7f16e95bd72b35105b222ed2714afd8de0d65a123e39f2a29"
         },
         {
           "file": "fish/guppy-female/lod2.glb",
-          "bytes": 24220,
-          "sha256": "7829da3804a3d53857284a9b4a974f15372f242bf5c2bdafe7b11efc25debe66"
+          "bytes": 24024,
+          "sha256": "5358fb2c763951be44adca77743ed64654b48f13f9fee7e90cafd91aaeb4cf6c"
         },
         {
           "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_1k.ktx2",
@@ -3986,16 +3965,6 @@
         },
         {
           "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_2k.ktx2",
-          "bytes": 477000,
-          "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6"
-        },
-        {
-          "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_1k.ktx2",
-          "bytes": 129084,
-          "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813"
-        },
-        {
-          "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_2k.ktx2",
           "bytes": 477000,
           "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6"
         },
@@ -12045,7 +12014,7 @@
       "modifications": [
         "node transforms baked, meshes merged into one primitive per material, origin at the base centre, true scale in metres kept",
         "LOD0 capped at 7000 triangles; LOD2 is the mobile level, sized so the props of every room using it stay within 14000 triangles together",
-        "colour, normal and metallic-roughness maps capped at 512 px and re-encoded to KTX2 (ETC1S), one file for every quality tier"
+        "colour and normal maps capped at 512 px, metallic-roughness maps at 256 px and re-encoded to KTX2 (ETC1S), one file for every quality tier"
       ],
       "bounds": {
         "min": [
@@ -12132,16 +12101,16 @@
           "variants": {
             "1k": {
               "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01_metallicroughness_1k.ktx2",
-              "bytes": 41847,
-              "sha256": "083e96ca6fe781ca85effc717a891f989a7a6dd381480e2b7ba83b72a9ee149f",
-              "size": 512,
+              "bytes": 12347,
+              "sha256": "1afc9a5e170ae105da8e7a4c5b37f6eaf699740b46ec9335bb460e1c400d2cae",
+              "size": 256,
               "codec": "etc1s"
             },
             "2k": {
               "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01_metallicroughness_1k.ktx2",
-              "bytes": 41847,
-              "sha256": "083e96ca6fe781ca85effc717a891f989a7a6dd381480e2b7ba83b72a9ee149f",
-              "size": 512,
+              "bytes": 12347,
+              "sha256": "1afc9a5e170ae105da8e7a4c5b37f6eaf699740b46ec9335bb460e1c400d2cae",
+              "size": 256,
               "codec": "etc1s"
             }
           }
@@ -12195,16 +12164,16 @@
           "variants": {
             "1k": {
               "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01-glass_metallicroughness_1k.ktx2",
-              "bytes": 22163,
-              "sha256": "97474d2c40c6d37593768b0e9d92ed305f6d913c2a57451d1e01f840dd097493",
-              "size": 512,
+              "bytes": 7436,
+              "sha256": "fcc962a47a189f4f454631a063b1e326e318e484edea6f51ba18aa3d4dda8e6e",
+              "size": 256,
               "codec": "etc1s"
             },
             "2k": {
               "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01-glass_metallicroughness_1k.ktx2",
-              "bytes": 22163,
-              "sha256": "97474d2c40c6d37593768b0e9d92ed305f6d913c2a57451d1e01f840dd097493",
-              "size": 512,
+              "bytes": 7436,
+              "sha256": "fcc962a47a189f4f454631a063b1e326e318e484edea6f51ba18aa3d4dda8e6e",
+              "size": 256,
               "codec": "etc1s"
             }
           }
@@ -12233,8 +12202,8 @@
         },
         {
           "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01-glass_metallicroughness_1k.ktx2",
-          "bytes": 22163,
-          "sha256": "97474d2c40c6d37593768b0e9d92ed305f6d913c2a57451d1e01f840dd097493"
+          "bytes": 7436,
+          "sha256": "fcc962a47a189f4f454631a063b1e326e318e484edea6f51ba18aa3d4dda8e6e"
         },
         {
           "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01-glass_normal_1k.ktx2",
@@ -12248,8 +12217,8 @@
         },
         {
           "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01_metallicroughness_1k.ktx2",
-          "bytes": 41847,
-          "sha256": "083e96ca6fe781ca85effc717a891f989a7a6dd381480e2b7ba83b72a9ee149f"
+          "bytes": 12347,
+          "sha256": "1afc9a5e170ae105da8e7a4c5b37f6eaf699740b46ec9335bb460e1c400d2cae"
         },
         {
           "file": "room-furniture/polyhaven-cashregister-01/textures/polyhaven-cashregister-01_cashregister-01_normal_1k.ktx2",
@@ -14642,7 +14611,7 @@
       "modifications": [
         "node transforms baked, meshes merged into one primitive per material, origin at the base centre, true scale in metres kept",
         "LOD0 capped at 7000 triangles; LOD2 is the mobile level, sized so the props of every room using it stay within 14000 triangles together",
-        "colour, normal and metallic-roughness maps capped at 512 px and re-encoded to KTX2 (ETC1S), one file for every quality tier"
+        "colour and normal maps capped at 512 px, metallic-roughness maps at 256 px and re-encoded to KTX2 (ETC1S), one file for every quality tier"
       ],
       "bounds": {
         "min": [
@@ -14729,16 +14698,16 @@
           "variants": {
             "1k": {
               "file": "room-furniture/polyhaven-plastic-crate-02/textures/polyhaven-plastic-crate-02_metallicroughness_1k.ktx2",
-              "bytes": 30572,
-              "sha256": "a3cb42bd57bd2643631d4f56e04f74a61053c91f35623016170d0fd9d553f13e",
-              "size": 512,
+              "bytes": 9224,
+              "sha256": "7c167e140d57ca2e9035ececd9d9e093fd8a21683d6798c78f8159ef9b4bc05b",
+              "size": 256,
               "codec": "etc1s"
             },
             "2k": {
               "file": "room-furniture/polyhaven-plastic-crate-02/textures/polyhaven-plastic-crate-02_metallicroughness_1k.ktx2",
-              "bytes": 30572,
-              "sha256": "a3cb42bd57bd2643631d4f56e04f74a61053c91f35623016170d0fd9d553f13e",
-              "size": 512,
+              "bytes": 9224,
+              "sha256": "7c167e140d57ca2e9035ececd9d9e093fd8a21683d6798c78f8159ef9b4bc05b",
+              "size": 256,
               "codec": "etc1s"
             }
           }
@@ -14767,8 +14736,8 @@
         },
         {
           "file": "room-furniture/polyhaven-plastic-crate-02/textures/polyhaven-plastic-crate-02_metallicroughness_1k.ktx2",
-          "bytes": 30572,
-          "sha256": "a3cb42bd57bd2643631d4f56e04f74a61053c91f35623016170d0fd9d553f13e"
+          "bytes": 9224,
+          "sha256": "7c167e140d57ca2e9035ececd9d9e093fd8a21683d6798c78f8159ef9b4bc05b"
         },
         {
           "file": "room-furniture/polyhaven-plastic-crate-02/textures/polyhaven-plastic-crate-02_normal_1k.ktx2",
@@ -15664,7 +15633,7 @@
       "modifications": [
         "node transforms baked, meshes merged into one primitive per material, origin at the base centre, true scale in metres kept",
         "LOD0 capped at 7000 triangles; LOD2 is the mobile level, sized so the props of every room using it stay within 14000 triangles together",
-        "colour, normal and metallic-roughness maps capped at 512 px and re-encoded to KTX2 (ETC1S), one file for every quality tier"
+        "colour, normal and metallic-roughness maps capped at 512 px and re-encoded to KTX2 (ETC1S), one file for every quality tier; identical maps of different materials are written once"
       ],
       "bounds": {
         "min": [
@@ -15681,22 +15650,22 @@
       "lods": [
         {
           "file": "room-furniture/polyhaven-sofa-03/lod0.glb",
-          "bytes": 97964,
-          "sha256": "cf7c933a355f6155a70986ecb59afcc91faee51984e628e57e539c38e0426a7d",
+          "bytes": 97324,
+          "sha256": "570da1d5532df6bf72feac40bba94fd8bde40e881a19afde5c673d3eb1f1b8dc",
           "triangles": 6999,
           "vertices": 5036
         },
         {
           "file": "room-furniture/polyhaven-sofa-03/lod1.glb",
-          "bytes": 66588,
-          "sha256": "69dd1f60c6e743ea5adf92d4f6d1c43a0feb3bded65c3ed9ed23350dc809376d",
+          "bytes": 65952,
+          "sha256": "96f5f6cfdf9f66ffe491f90fe73a348dfb103844020f408d20b1215abd7c4f26",
           "triangles": 4199,
           "vertices": 3271
         },
         {
           "file": "room-furniture/polyhaven-sofa-03/lod2.glb",
-          "bytes": 44704,
-          "sha256": "71e7c6dcda3d0bcbfc0239cedf6c19bc578b2254ed67b93b82ffd63995ddc709",
+          "bytes": 44064,
+          "sha256": "3496466c47b403a706f3772f1717a166e1c261261a897ef5a20947990625d184",
           "triangles": 2449,
           "vertices": 2072
         }
@@ -15764,101 +15733,23 @@
               "codec": "etc1s"
             }
           }
-        },
-        {
-          "name": "polyhaven-sofa-03_sofa-03-fringe_basecolor",
-          "role": "baseColor",
-          "colorSpace": "srgb",
-          "variants": {
-            "1k": {
-              "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_basecolor_1k.ktx2",
-              "bytes": 45002,
-              "sha256": "aad9cf8e72ad47734b4a35d8930a521369f0a92ea7313df2d4c8def95c231649",
-              "size": 512,
-              "codec": "etc1s"
-            },
-            "2k": {
-              "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_basecolor_1k.ktx2",
-              "bytes": 45002,
-              "sha256": "aad9cf8e72ad47734b4a35d8930a521369f0a92ea7313df2d4c8def95c231649",
-              "size": 512,
-              "codec": "etc1s"
-            }
-          }
-        },
-        {
-          "name": "polyhaven-sofa-03_sofa-03-fringe_normal",
-          "role": "normal",
-          "colorSpace": "linear",
-          "variants": {
-            "1k": {
-              "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_normal_1k.ktx2",
-              "bytes": 49259,
-              "sha256": "37f69c247fe98de44ecb0b6aadb7ca03f595ebe7b058d0cf77337aefc23883ab",
-              "size": 512,
-              "codec": "etc1s"
-            },
-            "2k": {
-              "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_normal_1k.ktx2",
-              "bytes": 49259,
-              "sha256": "37f69c247fe98de44ecb0b6aadb7ca03f595ebe7b058d0cf77337aefc23883ab",
-              "size": 512,
-              "codec": "etc1s"
-            }
-          }
-        },
-        {
-          "name": "polyhaven-sofa-03_sofa-03-fringe_metallicroughness",
-          "role": "metallicRoughness",
-          "colorSpace": "linear",
-          "variants": {
-            "1k": {
-              "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_metallicroughness_1k.ktx2",
-              "bytes": 43295,
-              "sha256": "1531c9d540583e454335aad4f3da3067ebbad7a8fd8b2ceff90819d021a146e9",
-              "size": 512,
-              "codec": "etc1s"
-            },
-            "2k": {
-              "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_metallicroughness_1k.ktx2",
-              "bytes": 43295,
-              "sha256": "1531c9d540583e454335aad4f3da3067ebbad7a8fd8b2ceff90819d021a146e9",
-              "size": 512,
-              "codec": "etc1s"
-            }
-          }
         }
       ],
       "files": [
         {
           "file": "room-furniture/polyhaven-sofa-03/lod0.glb",
-          "bytes": 97964,
-          "sha256": "cf7c933a355f6155a70986ecb59afcc91faee51984e628e57e539c38e0426a7d"
+          "bytes": 97324,
+          "sha256": "570da1d5532df6bf72feac40bba94fd8bde40e881a19afde5c673d3eb1f1b8dc"
         },
         {
           "file": "room-furniture/polyhaven-sofa-03/lod1.glb",
-          "bytes": 66588,
-          "sha256": "69dd1f60c6e743ea5adf92d4f6d1c43a0feb3bded65c3ed9ed23350dc809376d"
+          "bytes": 65952,
+          "sha256": "96f5f6cfdf9f66ffe491f90fe73a348dfb103844020f408d20b1215abd7c4f26"
         },
         {
           "file": "room-furniture/polyhaven-sofa-03/lod2.glb",
-          "bytes": 44704,
-          "sha256": "71e7c6dcda3d0bcbfc0239cedf6c19bc578b2254ed67b93b82ffd63995ddc709"
-        },
-        {
-          "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_basecolor_1k.ktx2",
-          "bytes": 45002,
-          "sha256": "aad9cf8e72ad47734b4a35d8930a521369f0a92ea7313df2d4c8def95c231649"
-        },
-        {
-          "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_metallicroughness_1k.ktx2",
-          "bytes": 43295,
-          "sha256": "1531c9d540583e454335aad4f3da3067ebbad7a8fd8b2ceff90819d021a146e9"
-        },
-        {
-          "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03-fringe_normal_1k.ktx2",
-          "bytes": 49259,
-          "sha256": "37f69c247fe98de44ecb0b6aadb7ca03f595ebe7b058d0cf77337aefc23883ab"
+          "bytes": 44064,
+          "sha256": "3496466c47b403a706f3772f1717a166e1c261261a897ef5a20947990625d184"
         },
         {
           "file": "room-furniture/polyhaven-sofa-03/textures/polyhaven-sofa-03_sofa-03_basecolor_1k.ktx2",
@@ -15888,7 +15779,7 @@
       "modifications": [
         "node transforms baked, meshes merged into one primitive per material, origin at the base centre, true scale in metres kept",
         "LOD0 capped at 7000 triangles; LOD2 is the mobile level, sized so the props of every room using it stay within 14000 triangles together",
-        "colour, normal and metallic-roughness maps capped at 512 px and re-encoded to KTX2 (ETC1S), one file for every quality tier"
+        "colour and normal maps capped at 512 px, metallic-roughness maps at 256 px and re-encoded to KTX2 (ETC1S), one file for every quality tier"
       ],
       "bounds": {
         "min": [
@@ -15975,16 +15866,16 @@
           "variants": {
             "1k": {
               "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03_metallicroughness_1k.ktx2",
-              "bytes": 36043,
-              "sha256": "f1e91799bf0b54a3457632f6376b0d2dab937514a16c2c5d81939c6f8f33dc68",
-              "size": 512,
+              "bytes": 10272,
+              "sha256": "868daa35949bad12319552ec75797d24297ce78c0d58817105c9d1c70c8fac5f",
+              "size": 256,
               "codec": "etc1s"
             },
             "2k": {
               "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03_metallicroughness_1k.ktx2",
-              "bytes": 36043,
-              "sha256": "f1e91799bf0b54a3457632f6376b0d2dab937514a16c2c5d81939c6f8f33dc68",
-              "size": 512,
+              "bytes": 10272,
+              "sha256": "868daa35949bad12319552ec75797d24297ce78c0d58817105c9d1c70c8fac5f",
+              "size": 256,
               "codec": "etc1s"
             }
           }
@@ -16038,16 +15929,16 @@
           "variants": {
             "1k": {
               "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03-drawers_metallicroughness_1k.ktx2",
-              "bytes": 27361,
-              "sha256": "248917506852e632b11c5b9c37139d481d45dab3427a27c4e7f13cce84e4e9e1",
-              "size": 512,
+              "bytes": 8658,
+              "sha256": "4dc18ff79dc29add6356571b578565f4516e928743d4c589cb0298005560d784",
+              "size": 256,
               "codec": "etc1s"
             },
             "2k": {
               "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03-drawers_metallicroughness_1k.ktx2",
-              "bytes": 27361,
-              "sha256": "248917506852e632b11c5b9c37139d481d45dab3427a27c4e7f13cce84e4e9e1",
-              "size": 512,
+              "bytes": 8658,
+              "sha256": "4dc18ff79dc29add6356571b578565f4516e928743d4c589cb0298005560d784",
+              "size": 256,
               "codec": "etc1s"
             }
           }
@@ -16076,8 +15967,8 @@
         },
         {
           "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03-drawers_metallicroughness_1k.ktx2",
-          "bytes": 27361,
-          "sha256": "248917506852e632b11c5b9c37139d481d45dab3427a27c4e7f13cce84e4e9e1"
+          "bytes": 8658,
+          "sha256": "4dc18ff79dc29add6356571b578565f4516e928743d4c589cb0298005560d784"
         },
         {
           "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03-drawers_normal_1k.ktx2",
@@ -16091,8 +15982,8 @@
         },
         {
           "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03_metallicroughness_1k.ktx2",
-          "bytes": 36043,
-          "sha256": "f1e91799bf0b54a3457632f6376b0d2dab937514a16c2c5d81939c6f8f33dc68"
+          "bytes": 10272,
+          "sha256": "868daa35949bad12319552ec75797d24297ce78c0d58817105c9d1c70c8fac5f"
         },
         {
           "file": "room-furniture/polyhaven-steel-frame-shelves-03/textures/polyhaven-steel-frame-shelves-03_steel-frame-shelves-03_normal_1k.ktx2",

@@ -20,7 +20,7 @@ import type { OutputAsset } from './index-schema.ts';
 
 export const AUDIO_BITRATE_KBPS = 64;
 export const PEAK_CEILING_DB = -1;
-/** AAC reconstruction overshoots the sample peak by about 0.5 dB, so limited clips stop short of the plain ceiling. */
+/** AAC reconstruction overshot the sample peak by up to 0.8 dB when measured, so limited clips stop 1.5 dB short of the plain ceiling. */
 const LIMITER_CEILING_DB = PEAK_CEILING_DB - 1.5;
 const LIMITER_LOOKAHEAD_S = 0.005;
 const SILENCE_THRESHOLD_DB = -50;
@@ -190,6 +190,7 @@ export function processAudio(source: Float32Array, recipe: AudioRecipe): Process
         recipe.targetLufs,
         LIMITER_CEILING_DB,
         Math.round(LIMITER_LOOKAHEAD_S * rate),
+        recipe.loop !== undefined,
       )
     : normaliseLoudness(samples, recipe.targetLufs, PEAK_CEILING_DB);
   return {
@@ -200,7 +201,7 @@ export function processAudio(source: Float32Array, recipe: AudioRecipe): Process
   };
 }
 
-function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): string[] {
+export function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): string[] {
   const notes: string[] = ['downmixed to mono and resampled to 48 kHz'];
   if (recipe.highpassHz) notes.push(`high-pass at ${recipe.highpassHz} Hz`);
   if (recipe.lowpassHz) notes.push(`low-pass at ${recipe.lowpassHz} Hz`);

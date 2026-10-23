@@ -671,6 +671,13 @@ function snailProblems(asset: OutputAsset, repoRoot: string, problems: string[])
   }
 }
 
+function sharedVariantPair(asset: OutputAsset, a: string, b: string): boolean {
+  return asset.textures.some((t) => {
+    const files = [t.variants['1k'].file, t.variants['2k'].file];
+    return files.includes(a) && files.includes(b);
+  });
+}
+
 export function duplicateTextureProblems(assets: readonly OutputAsset[]): string[] {
   const first = new Map<string, { file: string; asset: string }>();
   const problems: string[] = [];
@@ -680,9 +687,11 @@ export function duplicateTextureProblems(assets: readonly OutputAsset[]): string
       const key = `${asset.kind}/${asset.id}`;
       const earlier = first.get(file.sha256);
       if (earlier === undefined) first.set(file.sha256, { file: file.file, asset: key });
-      else if (earlier.asset !== key)
+      else if (earlier.file !== file.file && !sharedVariantPair(asset, earlier.file, file.file))
         problems.push(
-          `${file.file} is byte-identical to ${earlier.file}; reference the existing texture instead of shipping a copy`,
+          earlier.asset === key
+            ? `${file.file} is byte-identical to ${earlier.file} in the same asset; bind both materials to one texture`
+            : `${file.file} is byte-identical to ${earlier.file}; reference the existing texture instead of shipping a copy`,
         );
     }
   return problems;
@@ -734,6 +743,14 @@ export function unreferencedHdriProblems(
       (a) =>
         `asset hdri/${a.id}: apps/web never loads it (DEFAULT_HDRI_URL is hdri/${loaded.id}); remove its recipe or wire it to a use`,
     );
+}
+
+export function glbDrawCalls(assetsDir: string, file: string): number {
+  const path = join(assetsDir, file);
+  if (!existsSync(path))
+    throw new Error(`room model ${path} is missing; run pnpm build:assets or fix the index entry`);
+  const json = readGlbJson(new Uint8Array(readFileSync(path)));
+  return (json.meshes ?? []).reduce((sum, m) => sum + m.primitives.length, 0);
 }
 
 export function checkAssets(input: CheckInput): string[] {
@@ -871,12 +888,7 @@ export function checkAssets(input: CheckInput): string[] {
       ...roomProblems(input.rooms, {
         manifestIds: new Set(manifest.assets.map((a) => a.id)),
         index,
-        drawCallsOf: (file) => {
-          const path = join(assetsDir, file);
-          if (!existsSync(path)) return 0;
-          const json = readGlbJson(new Uint8Array(readFileSync(path)));
-          return (json.meshes ?? []).reduce((sum, m) => sum + m.primitives.length, 0);
-        },
+        drawCallsOf: (file) => glbDrawCalls(assetsDir, file),
       }),
     );
   }
