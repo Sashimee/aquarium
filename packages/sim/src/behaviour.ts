@@ -1606,6 +1606,9 @@ export class Behaviour {
     }
     if (rest > 0.5 && (plan.state === FishState.Cruise || plan.state === FishState.Station)) {
       plan.state = FishState.Rest;
+      // Burst-and-coast pays only at speed (Weihs 1974); a resting fish drifts on steady, slow
+      // fin beats rather than gliding tail-still between kicks.
+      plan.continuous = true;
     }
   }
 
