@@ -19,6 +19,8 @@ import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
 import { reachCurrent } from './current';
 import { loadPreset } from './preset';
 import { hullCorners } from '../fish/simColliders';
+import { isPerch } from './bank';
+import { isMudBankId, mudBankColliders } from './mudBank';
 import { boundsFromCatalog } from './presetFit';
 import { SURFACE_MARGIN } from './plants';
 import {
@@ -44,14 +46,28 @@ const GLASS_NUDGE_TOLERANCE = 0.06;
 const NANO_GLASS_NUDGE_TOLERANCE = 0.08;
 // A nano's hardscape colliders are looser than the model bounds the fit keeps off the glass.
 const NANO_COLLIDER_GLASS_SLACK = 0.003;
+// Mangrove driftwood and prop roots are fitted by their bounds, which sit up to this far inside their capsule chains.
+const MANGROVE_COLLIDER_GLASS_SLACK = 0.005;
 const MIN_NUDGED_SCALE_SHARE = 0.95;
 const MIN_PATCH_SCALE_SHARE = 0.95;
 const MIN_NANO_NUDGED_SCALE_SHARE = 0.7;
 // Equal to the measured maxima (standard sizes: reef 2/4/5/5, freshwater 1; nano: reef 7,
 // freshwater 2, blackwater 3) with no headroom: tripping it means a new item is being pushed off
 // the glass, so move it inwards rather than raising the cap.
-const MAX_NUDGED_ITEMS = { freshwater: 1, reef: 5, blackwater: 0 } as const;
-const MAX_NUDGED_NANO_ITEMS = { freshwater: 2, reef: 7, blackwater: 3 } as const;
+const MAX_NUDGED_ITEMS = {
+  freshwater: 1,
+  reef: 5,
+  blackwater: 0,
+  cichlid: 1,
+  mangrove: 2,
+} as const;
+const MAX_NUDGED_NANO_ITEMS = {
+  freshwater: 2,
+  reef: 7,
+  blackwater: 3,
+  cichlid: 2,
+  mangrove: 4,
+} as const;
 
 /**
  * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
@@ -68,6 +84,12 @@ const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>
  * the preset for the larger tanks; the nano plants the rest.
  */
 const KNOWN_BLOCKED_PATCHES: ReadonlySet<string> = new Set(['nano30:lotus']);
+
+/** Procedural decor has no catalog entry: the scene builds it from its id. */
+const isProcedural = (assetId: string) =>
+  parseEuphylliaId(assetId) !== null || isMudBankId(assetId);
+const mudBankHulls = (decor: readonly DecorItem[]) =>
+  decor.filter((item) => isMudBankId(item.assetId)).flatMap(mudBankColliders);
 
 let library: ModelLibrary;
 let catalog: AssetCatalog;
@@ -136,7 +158,7 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at the standard tank',
   });
 });
 
-describe.each(['freshwater', 'reef', 'blackwater'] as const)(
+describe.each(['freshwater', 'reef', 'blackwater', 'cichlid', 'mangrove'] as const)(
   '%s preset at every tank size',
   (biome) => {
     describe.each(SIZES)('%s', (size) => {
@@ -150,8 +172,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           layoutPlantKeys(
             decor
               .filter(
-                (item) =>
-                  !parseEuphylliaId(item.assetId) && catalog.get(item.assetId).kind === 'plant',
+                (item) => !isProcedural(item.assetId) && catalog.get(item.assetId).kind === 'plant',
               )
               .map((item) => ({
                 assetId: item.assetId,
@@ -181,7 +202,9 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           if (drift > 1e-9) {
             nudged.push(item.assetId);
             expect(drift, item.assetId).toBeLessThanOrEqual(
-              size === 'nano30' ? NANO_GLASS_NUDGE_TOLERANCE : GLASS_NUDGE_TOLERANCE,
+              size === 'nano30' || isPerch(item)
+                ? NANO_GLASS_NUDGE_TOLERANCE
+                : GLASS_NUDGE_TOLERANCE,
             );
             expect(Math.abs(mine.position[0]), item.assetId).toBeLessThanOrEqual(
               Math.abs(server.position[0]) + 1e-9,
@@ -190,11 +213,13 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
               Math.abs(server.position[2]) + 1e-9,
             );
           }
-          expect(mine.scale, item.assetId).toBeLessThanOrEqual(server.scale + 1e-9);
-          expect(mine.scale, item.assetId).toBeGreaterThanOrEqual(
-            server.scale *
-              (size === 'nano30' ? MIN_NANO_NUDGED_SCALE_SHARE : MIN_NUDGED_SCALE_SHARE),
-          );
+          if (!isPerch(item)) {
+            expect(mine.scale, item.assetId).toBeLessThanOrEqual(server.scale + 1e-9);
+            expect(mine.scale, item.assetId).toBeGreaterThanOrEqual(
+              server.scale *
+                (size === 'nano30' ? MIN_NANO_NUDGED_SCALE_SHARE : MIN_NUDGED_SCALE_SHARE),
+            );
+          }
           expect(mine.tintSeed, item.assetId).toBe(server.tintSeed);
           expect(mine.assetId).toBe(server.assetId);
           expect(mine.rotationY).toBe(server.rotationY);
@@ -210,7 +235,9 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           const model = boundsOf(item.assetId);
           if (!model) throw new Error(`${item.assetId} has no bounds`);
           const top = item.position[1] + (model.bounds.max[1] ?? 0) * item.scale;
-          expect(top, item.assetId).toBeLessThanOrEqual(waterTop - SURFACE_MARGIN + 1e-9);
+          if (!isPerch(item)) {
+            expect(top, item.assetId).toBeLessThanOrEqual(waterTop - SURFACE_MARGIN + 1e-9);
+          }
           expect(Math.abs(item.position[0]), item.assetId).toBeLessThan(extent.halfLength);
           expect(Math.abs(item.position[2]), item.assetId).toBeLessThan(extent.halfDepth);
         }
@@ -224,7 +251,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           if (procedural) {
             const { bounds } = generateEuphyllia(procedural.variant, procedural.seed, 2);
             expect(() => checkEuphylliaClearOfGlass(item, bounds, current, extent)).not.toThrow();
-          } else if (catalog.get(item.assetId).kind === 'anemone') {
+          } else if (!isMudBankId(item.assetId) && catalog.get(item.assetId).kind === 'anemone') {
             expect(() =>
               checkClearOfGlass(catalog.get(item.assetId), item, current, extent),
             ).not.toThrow();
@@ -235,20 +262,25 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
       it('keeps every hardscape collider inside the glass and under the waterline', async () => {
         const preset = fitted();
         const hard = preset.decor
-          .filter((item) => !parseEuphylliaId(item.assetId))
+          .filter((item) => !isProcedural(item.assetId))
           .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
           .filter(({ kind }) => kind !== 'anemone');
         const { colliders } = await movableColliders(library, hard, waterTop);
         const innerHalfLength = dimensions.length / 2 - dimensions.glass;
         const innerHalfDepth = dimensions.depth / 2 - dimensions.glass;
-        const slack = size === 'nano30' ? NANO_COLLIDER_GLASS_SLACK : 0;
+        const slack =
+          size === 'nano30'
+            ? NANO_COLLIDER_GLASS_SLACK
+            : biome === 'mangrove'
+              ? MANGROVE_COLLIDER_GLASS_SLACK
+              : 0;
         for (const c of colliders) {
           const ends = c.kind === 'capsule' ? [c.a, c.b] : hullCorners(c.planes);
           const pad = c.kind === 'capsule' ? c.radius : 0;
           for (const [x, y, z] of ends) {
             expect(Math.abs(x) + pad, c.kind).toBeLessThanOrEqual(innerHalfLength + slack);
             expect(Math.abs(z) + pad, c.kind).toBeLessThanOrEqual(innerHalfDepth + slack);
-            expect(y + pad, c.kind).toBeLessThanOrEqual(waterTop);
+            if (biome !== 'mangrove') expect(y + pad, c.kind).toBeLessThanOrEqual(waterTop);
           }
         }
       });
@@ -256,7 +288,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
   },
 );
 
-describe.each(['freshwater', 'reef', 'blackwater'] as const)(
+describe.each(['freshwater', 'reef', 'blackwater', 'cichlid', 'mangrove'] as const)(
   '%s plant patches at every tank size',
   (biome) => {
     describe.each(SIZES)('%s', (size) => {
@@ -268,10 +300,13 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
       it('builds hardscape colliders and places plants in every patch', async () => {
         const preset = fitted();
         const hard = preset.decor
-          .filter((item) => !parseEuphylliaId(item.assetId))
+          .filter((item) => !isProcedural(item.assetId))
           .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
           .filter(({ kind }) => kind !== 'anemone');
-        const { colliders } = await movableColliders(library, hard, waterTop);
+        const colliders = [
+          ...(await movableColliders(library, hard, waterTop)).colliders,
+          ...mudBankHulls(preset.decor),
+        ];
         expect(colliders.length).toBeGreaterThan(0);
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const placed = new Map<string, number>();
@@ -325,10 +360,13 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
       it.runIf(size === 'nano30')("roots no two patches' plants on top of each other", async () => {
         const preset = fitted();
         const hard = preset.decor
-          .filter((item) => !parseEuphylliaId(item.assetId))
+          .filter((item) => !isProcedural(item.assetId))
           .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
           .filter(({ kind }) => kind !== 'anemone');
-        const { colliders } = await movableColliders(library, hard, waterTop);
+        const colliders = [
+          ...(await movableColliders(library, hard, waterTop)).colliders,
+          ...mudBankHulls(preset.decor),
+        ];
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const roots: { id: string; x: number; z: number }[] = [];
         scatterPresetPatches(
@@ -353,10 +391,13 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
       it('keeps every patch at its authored depth', async () => {
         const preset = fitted();
         const hard = preset.decor
-          .filter((item) => !parseEuphylliaId(item.assetId))
+          .filter((item) => !isProcedural(item.assetId))
           .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
           .filter(({ kind }) => kind !== 'anemone');
-        const { colliders } = await movableColliders(library, hard, waterTop);
+        const colliders = [
+          ...(await movableColliders(library, hard, waterTop)).colliders,
+          ...mudBankHulls(preset.decor),
+        ];
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         // A nano's half-depth is barely wider than one plant's sway, so only half of a patch fits.
         const keptShare = size === 'nano30' ? 0.5 : 0.75;
