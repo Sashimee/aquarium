@@ -13,15 +13,12 @@ import type { MaterialDef, Part } from './parts.ts';
 import { RAW_ROOT, bakeToWorldSpace, readGltf } from './source.ts';
 import { decodeImage, resizeImage } from './textures.ts';
 
-export const ROOM_BUDGETS = {
-  mobile: { triangles: 15_000, drawCalls: 10, lod: 2 },
-  high: { triangles: 60_000, drawCalls: 30, lod: 0 },
-} as const;
-
 /** Per-room share of the mobile triangle budget the props may use; the rest is left to the procedural shell. */
 export const MOBILE_PROP_TRIANGLES = 14_000;
 export const LOD0_MAX_TRIANGLES = 7_000;
 export const ROOM_TEXTURE_PX = 512;
+/** Roughness and metal vary slowly over a surface, so the map can be coarser than the colour and normal maps. */
+export const ROOM_ROUGHNESS_PX = 256;
 const TRANSMISSION_ALPHA = 0.35;
 
 export function loadRooms(repoRoot: string): RoomEntry[] {
@@ -181,17 +178,21 @@ async function roomMaterial(source: Material): Promise<MaterialDef> {
   const transmission = source.getExtension<Transmission>(KHRMaterialsTransmission.EXTENSION_NAME);
   const cap = async <T extends { image: Parameters<typeof resizeImage>[0] }>(
     texture: T | undefined,
+    px = ROOM_TEXTURE_PX,
   ): Promise<T | undefined> =>
-    texture ? { ...texture, image: await resizeImage(texture.image, ROOM_TEXTURE_PX) } : undefined;
+    texture ? { ...texture, image: await resizeImage(texture.image, px) } : undefined;
   const baseColor = await cap(def.baseColor);
   const normal = await cap(def.normal);
   const roughnessBytes = source.getMetallicRoughnessTexture()?.getImage();
   const metallicRoughness = roughnessBytes
-    ? await cap({
-        role: 'metallicRoughness' as const,
-        codec: 'etc1s' as const,
-        image: dropOcclusion(await decodeImage(roughnessBytes)),
-      })
+    ? await cap(
+        {
+          role: 'metallicRoughness' as const,
+          codec: 'etc1s' as const,
+          image: dropOcclusion(await decodeImage(roughnessBytes)),
+        },
+        ROOM_ROUGHNESS_PX,
+      )
     : undefined;
   const glass = transmission !== null && transmission.getTransmissionFactor() > 0;
   return {
@@ -255,7 +256,7 @@ export async function buildRoomProp(
       modifications: [
         'node transforms baked, meshes merged into one primitive per material, origin at the base centre, true scale in metres kept',
         `LOD0 capped at ${LOD0_MAX_TRIANGLES} triangles; LOD2 is the mobile level, sized so the props of every room using it stay within ${MOBILE_PROP_TRIANGLES} triangles together`,
-        `colour, normal and metallic-roughness maps capped at ${ROOM_TEXTURE_PX} px and re-encoded to KTX2 (ETC1S), one file for every quality tier`,
+        `colour and normal maps capped at ${ROOM_TEXTURE_PX} px, metallic-roughness maps at ${ROOM_ROUGHNESS_PX} px, re-encoded to KTX2 (ETC1S), one file for every quality tier; identical maps of different materials are written once`,
         ...(materials.some(
           (m) => m.alphaMode === 'BLEND' && m.baseColorFactor[3] === TRANSMISSION_ALPHA,
         )

@@ -13,6 +13,7 @@ import {
   roomPropIds,
 } from './room.ts';
 import { resolve } from 'node:path';
+import { ROOM_GPU_BUDGETS } from './room-budgets.ts';
 
 const room = (id: string, furniture: string[]) =>
   ({ id, assets: { furniture } }) as Parameters<typeof mobileTriangleTargets>[0][number];
@@ -58,6 +59,26 @@ describe('mobileTriangleTargets', () => {
 
   it('refuses a prop without a triangle count', () => {
     expect(() => mobileTriangleTargets([room('a', ['missing'])], new Map())).toThrow('missing');
+  });
+});
+
+describe('MOBILE_PROP_TRIANGLES', () => {
+  it('leaves the procedural shell room under the mobile triangle budget', () => {
+    expect(MOBILE_PROP_TRIANGLES).toBeLessThan(ROOM_GPU_BUDGETS.mobile.triangles);
+  });
+
+  it('is the cap a room of heavier props is scaled down to', () => {
+    const targets = mobileTriangleTargets(
+      [room('a', ['x', 'y', 'z'])],
+      new Map([
+        ['x', 7000],
+        ['y', 7000],
+        ['z', 7000],
+      ]),
+    );
+    const total = [...targets.values()].reduce((a, b) => a + b, 0);
+    expect(total).toBeLessThanOrEqual(MOBILE_PROP_TRIANGLES);
+    expect(total).toBeGreaterThan(MOBILE_PROP_TRIANGLES - 3);
   });
 });
 

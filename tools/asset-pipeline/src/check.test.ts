@@ -7,6 +7,7 @@ import {
   borrowedTextureProblems,
   checkAssets,
   duplicateTextureProblems,
+  glbDrawCalls,
   intraAssetDuplicateTextureProblems,
   loadCheckInput,
   sharedKtx2Problems,
@@ -979,12 +980,25 @@ describe('duplicateTextureProblems', () => {
     expect(problems[0]).toContain('rock/rock-a/textures/a_basecolor_1k.ktx2');
   });
 
-  it('accepts distinct textures and repeats inside one asset', () => {
+  it('flags identical textures under different names inside one asset', () => {
+    const problems = duplicateTextureProblems([
+      asset('rock-a', [
+        ['rock/rock-a/textures/a_1k.ktx2', 'a'.repeat(64)],
+        ['rock/rock-a/textures/b_1k.ktx2', 'a'.repeat(64)],
+      ]),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/rock-a/textures/b_1k.ktx2');
+    expect(problems[0]).toContain('rock/rock-a/textures/a_1k.ktx2');
+    expect(problems[0]).toContain('same asset');
+  });
+
+  it('accepts distinct textures', () => {
     expect(
       duplicateTextureProblems([
         asset('rock-a', [
           ['rock/rock-a/textures/a_1k.ktx2', 'a'.repeat(64)],
-          ['rock/rock-a/textures/b_1k.ktx2', 'a'.repeat(64)],
+          ['rock/rock-a/textures/b_1k.ktx2', 'c'.repeat(64)],
         ]),
         asset('rock-b', [['rock/rock-b/textures/c_1k.ktx2', 'b'.repeat(64)]]),
       ]),
@@ -998,6 +1012,34 @@ describe('duplicateTextureProblems', () => {
         asset('b', [['rock/b/lod0.glb', 'c'.repeat(64)]]),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('glbDrawCalls', () => {
+  it('counts the primitives of every mesh', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'glb-draws-'));
+    try {
+      const json = {
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{}, {}] }, { primitives: [{}] }],
+      };
+      mkdirSync(join(dir, 'room-furniture/x'), { recursive: true });
+      writeFileSync(join(dir, 'room-furniture/x/lod2.glb'), packGlb(json, new Uint8Array(4)));
+      expect(glbDrawCalls(dir, 'room-furniture/x/lod2.glb')).toBe(3);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('fails with the missing path instead of counting zero', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'glb-draws-'));
+    try {
+      expect(() => glbDrawCalls(dir, 'room-furniture/gone/lod2.glb')).toThrow(
+        join(dir, 'room-furniture/gone/lod2.glb'),
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 });
 
