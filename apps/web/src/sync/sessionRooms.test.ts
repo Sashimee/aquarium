@@ -212,7 +212,7 @@ describe('the device room from before rooms', () => {
     api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-office', roomSetAt: 'now' }));
     await session.setUser(verified);
     await vi.waitFor(() => expect(api.ownedRooms).toHaveBeenCalledTimes(1));
-    await Promise.resolve();
+    await vi.waitFor(() => expect(session.getState().phase).toBe('ready'));
     expect(storage.store.get('aquarium.room')).toBe('office');
     expect(api.saveRoom).not.toHaveBeenCalled();
     await session.refreshRooms();
@@ -240,5 +240,53 @@ describe('the device room from before rooms', () => {
     await session.setUser(verified);
     await vi.waitFor(() => expect(storage.store.has('aquarium.room')).toBe(false));
     expect(api.saveRoom).not.toHaveBeenCalled();
+  });
+
+  it('never overwrites a room the player chose while the migration save was queued', async () => {
+    const storage = memoryStorage({ 'aquarium.room': 'none' });
+    const { session, api } = setup([tankFixture()], [], storage);
+    let release: (owned: RoomId[]) => void = () => undefined;
+    api.ownedRooms.mockReturnValue(new Promise<RoomId[]>((resolve) => (release = resolve)));
+    let finishChoice: (t: Tank) => void = () => undefined;
+    api.saveRoom.mockReturnValueOnce(new Promise<Tank>((resolve) => (finishChoice = resolve)));
+    await session.setUser(verified);
+    const choice = session.setRoom('room-bedroom');
+    await vi.waitFor(() => expect(api.saveRoom).toHaveBeenCalledTimes(1));
+    release([]);
+    await vi.waitFor(() => expect(api.ownedRooms).toHaveBeenCalled());
+    finishChoice(tankFixture({ roomId: 'room-bedroom', roomSetAt: 'now' }));
+    expect(await choice).toBe(true);
+    await vi.waitFor(() => expect(storage.store.has('aquarium.room')).toBe(false));
+    expect(api.saveRoom).toHaveBeenCalledTimes(1);
+    expect(session.getState().tanks[0]?.roomId).toBe('room-bedroom');
+  });
+
+  it('runs the migration of a new load after a stale one stops, never two at once', async () => {
+    const storage = memoryStorage({ 'aquarium.room': 'none' });
+    const { session, api } = setup([tankFixture()], [], storage);
+    let finishStale: (t: Tank) => void = () => undefined;
+    let active = 0;
+    let overlap = false;
+    api.saveRoom.mockImplementationOnce(() => {
+      active++;
+      return new Promise<Tank>((resolve) => {
+        finishStale = (t) => {
+          active--;
+          resolve(t);
+        };
+      });
+    });
+    api.saveRoom.mockImplementation(async () => {
+      if (active > 0) overlap = true;
+      return tankFixture({ roomId: null, roomSetAt: 'now' });
+    });
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(api.saveRoom).toHaveBeenCalledTimes(1));
+    const reload = session.load();
+    await reload;
+    finishStale(tankFixture({ roomId: null, roomSetAt: 'now' }));
+    await vi.waitFor(() => expect(storage.store.has('aquarium.room')).toBe(false));
+    expect(api.saveRoom).toHaveBeenCalledTimes(2);
+    expect(overlap).toBe(false);
   });
 });
