@@ -1,6 +1,12 @@
-import { newTankChemistry, speciesChemistrySchema, type DecorItem } from '@aquarium/shared';
+import {
+  keptPresetDecor,
+  newTankChemistry,
+  speciesChemistrySchema,
+  type DecorItem,
+} from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { CAVE_MOUTHS } from '../scene/caves';
+import { loadPreset } from '../scene/preset';
 import { FISH_1, fishFixture, speciesFixture, tankFixture } from './fixtures';
 import { purchaseWarning } from './economy';
 import {
@@ -164,6 +170,27 @@ describe('shelters', () => {
 
   it('counts the preset while the layout is unedited', () => {
     expect(shelterCount(tankFixture({ biome: 'cichlid' }))).toBeGreaterThanOrEqual(8);
+  });
+
+  it('counts only the preset decor a nano tank keeps', () => {
+    const preset = loadPreset('cichlid').decor;
+    const shelters = (items: readonly DecorItem[]) =>
+      items.filter((i) => isShelterAsset(i.assetId)).length;
+    const standard = shelterCount(tankFixture({ biome: 'cichlid', size: 'standard' }));
+    const nano = shelterCount(tankFixture({ biome: 'cichlid', size: 'nano30' }));
+    expect(standard).toBe(shelters(preset));
+    expect(nano).toBe(shelters(keptPresetDecor(preset, 'nano30')));
+    expect(nano).toBeGreaterThan(0);
+    expect(nano).toBeLessThan(standard);
+  });
+
+  it('does not shrink an edited layout by tank size', () => {
+    const layout = [item('neothauma-shell'), item('rock-pile-cave'), item('reef-arch')];
+    expect(
+      shelterCount(
+        tankFixture({ biome: 'cichlid', size: 'nano30', decorEdited: true, decorLayout: layout }),
+      ),
+    ).toBe(3);
   });
 
   it('counts the saved layout once edited, including an emptied tank', () => {
