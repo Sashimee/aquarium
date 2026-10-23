@@ -10,10 +10,18 @@ import {
   Vector3,
   type Node,
 } from 'three/webgpu';
-import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, WALK, type SimToy } from '@aquarium/sim';
+import {
+  CARCASS,
+  FishState,
+  SNAPSHOT_STRIDE,
+  SnapshotField,
+  WALK,
+  type SimToy,
+} from '@aquarium/sim';
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
+import { DAYLIGHT_INTERVAL_MS, DAYLIGHT_UNSEEN_GAP_MS, DaylightFeed } from '../engine/daylight';
 import { TIER_SETTINGS, type TierSettings } from '../engine/quality/tiers';
 import { EventBus, type EngineEvents } from '../engine/events';
 import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../engine/tank/dimensions';
@@ -27,7 +35,7 @@ import { FishMaterial } from './material';
 import { batchLocomotion, FishSystem, walkerLift } from './FishSystem';
 import { renderProfile, swimModeFor } from './profiles';
 import type { BallNudge, PickRay } from './start';
-import { SWIM_MODES } from './swim';
+import { PECK_JAB_BODY_LENGTHS, SWIM_MODES } from './swim';
 import { CRAB_GAIT, SHRIMP_GAIT, SNAIL_GAIT, type TailRig } from './walk';
 import { SimInitTimeout } from './simWorld';
 
@@ -207,6 +215,282 @@ describe('FishSystem.create', () => {
     fish.handle({ type: 'tank:none', payload: {} });
     expect(await lastSpecies(3)).toEqual(demo);
     fish.dispose();
+  });
+
+  function answerInits(worker: FakeWorker, from = 0): void {
+    for (const { request, config } of worker.inits().slice(from)) {
+      worker.emit({
+        type: 'ready',
+        request,
+        epoch: request,
+        fishIds: config.fish.map((f) => f.id),
+        stride: 8,
+        stepHz: 30,
+      });
+    }
+  }
+
+  it('takes a cave from the running world while a rock blocks it, and gives it back after', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const sent = (): string[][] =>
+      worker.sent
+        .filter((m): m is { type: 'anchors'; anchors: { id: string }[] } => m.type === 'anchors')
+        .map((m) => m.anchors.map((a) => a.id));
+    const rock = (x: number): Collider => ({
+      id: 'decor:boulder.0',
+      kind: 'sphere',
+      hard: true,
+      center: [x, 0.12, 0.05],
+      radius: 0.04,
+    });
+    fish.setAnchors([{ id: 'cave-1', kind: 'cave', position: [-0.1, 0.12, 0.05], radius: 0.03 }]);
+    expect(sent()).toEqual([['cave-1']]);
+
+    fish.setColliders([rock(0.2)]);
+    fish.setColliders([rock(0.25)]);
+    expect(sent()).toEqual([['cave-1']]);
+
+    fish.setColliders([rock(-0.1)]);
+    fish.setColliders([rock(-0.09)]);
+    expect(sent()).toEqual([['cave-1'], []]);
+
+    fish.setColliders([rock(0.2)]);
+    expect(sent()).toEqual([['cave-1'], [], ['cave-1']]);
+    fish.dispose();
+  });
+
+  it("hands the frame loop's hood light to the sim, settled only when nobody saw it change", async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const levels = { now: 1 };
+    const daylight = new DaylightFeed(() => levels.now, engine.events);
+    const page = { hidden: false, listener: (): void => undefined };
+    daylight.watch({
+      get hidden() {
+        return page.hidden;
+      },
+      addEventListener: (_type, listener) => (page.listener = listener),
+      removeEventListener: () => undefined,
+    });
+    const startLights = worker.sent.filter((m) => m.type === 'light').length;
+    const lights = (): unknown[] =>
+      worker.sent.filter((m) => m.type === 'light').slice(startLights);
+    let nowMs = 0;
+    const frame = (gapMs: number): void => {
+      nowMs += gapMs;
+      daylight.frame(nowMs, gapMs);
+    };
+
+    frame(0);
+    levels.now = 0;
+    frame(DAYLIGHT_INTERVAL_MS);
+    levels.now = 1;
+    frame(DAYLIGHT_UNSEEN_GAP_MS + 1);
+    levels.now = 0.5;
+    page.hidden = true;
+    page.listener();
+    frame(DAYLIGHT_INTERVAL_MS);
+    page.hidden = false;
+    page.listener();
+    levels.now = 0;
+    frame(DAYLIGHT_INTERVAL_MS);
+    levels.now = 1;
+    frame(DAYLIGHT_INTERVAL_MS);
+
+    expect(lights()).toEqual([
+      { type: 'light', level: 1, settle: true },
+      { type: 'light', level: 0, settle: false },
+      { type: 'light', level: 1, settle: true },
+      { type: 'light', level: 0.5, settle: true },
+      { type: 'light', level: 0, settle: true },
+      { type: 'light', level: 1, settle: false },
+    ]);
+    fish.dispose();
+  });
+
+  it("tells sim client listeners the current client, then a stuck worker's replacement", async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const clients: unknown[] = [];
+    const extensions: number[] = [];
+    const off = fish.onSimClient((client) => {
+      clients.push(client);
+      client.onPolyps((extension) => extensions.push(extension));
+    });
+    expect(clients).toHaveLength(1);
+    worker.emit({ type: 'polyps', epoch: 1, tick: 3, extension: 0.25 });
+    expect(extensions).toEqual([0.25]);
+
+    fish.handle({ type: 'tank:none', payload: {} });
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+      },
+    });
+    await vi.waitFor(() => {
+      if (worker.inits().length < 2) throw new Error('no second init yet');
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.waitFor(() => {
+      if (clients.length < 2) throw new Error('worker not replaced yet');
+    });
+    const replacement = FakeWorker.last;
+    expect(replacement).not.toBe(worker);
+    expect(clients[1]).not.toBe(clients[0]);
+    if (replacement === null) throw new Error('no replacement worker');
+    await vi.waitFor(() => {
+      if (replacement.inits().length === 0) throw new Error('no init on the replacement yet');
+    });
+    answerInits(replacement);
+    const epoch = replacement.inits()[0]?.request;
+    replacement.emit({ type: 'polyps', epoch, tick: 0, extension: 0.75 });
+    expect(extensions).toEqual([0.25, 0.75]);
+
+    off();
+    fish.dispose();
+    expect(clients).toHaveLength(2);
+  });
+
+  it('greets the owner once per tank:loaded, not again when the world is rebuilt', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const visitors = (): unknown[] => worker.sent.filter((m) => m.type === 'visitor');
+    const nextWorld = async (count: number): Promise<void> => {
+      await vi.waitFor(() => {
+        if (worker.inits().length < count) throw new Error('no new world yet');
+      });
+      answerInits(worker, count - 1);
+      await fish.synced();
+    };
+    const load = (recentVisitDays: number): void =>
+      fish.handle({
+        type: 'tank:loaded',
+        payload: {
+          backgroundId: 'bg-fw-planted-stream',
+          tankId: TANK_A,
+          biome: 'freshwater',
+          size: 'standard',
+          decorLayout: [],
+          decorEdited: false,
+          fish: [fishFixture(FISH_1)],
+          recentVisitDays,
+        },
+      });
+
+    load(3);
+    await nextWorld(2);
+    expect(visitors()).toEqual([{ type: 'visitor', visitor: { recentVisitDays: 3 } }]);
+
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    await nextWorld(3);
+    expect(worker.inits()).toHaveLength(3);
+    expect(visitors()).toHaveLength(1);
+
+    load(4);
+    await nextWorld(4);
+    expect(visitors()).toEqual([
+      { type: 'visitor', visitor: { recentVisitDays: 3 } },
+      { type: 'visitor', visitor: { recentVisitDays: 4 } },
+    ]);
+    fish.dispose();
+  });
+
+  it('greets once when a resize drops the loaded world before its init answers', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const initsAtLeast = (count: number): Promise<void> =>
+      vi.waitFor(() => {
+        if (worker.inits().length < count) throw new Error('no new world yet');
+      });
+
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+        recentVisitDays: 5,
+      },
+    });
+    await initsAtLeast(2);
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    answerInits(worker, 1);
+    await initsAtLeast(3);
+    answerInits(worker, 2);
+    await fish.synced();
+
+    expect(worker.inits()).toHaveLength(3);
+    expect(worker.sent.filter((m) => m.type === 'visitor')).toEqual([
+      { type: 'visitor', visitor: { recentVisitDays: 5 } },
+    ]);
+    fish.dispose();
+  });
+
+  it('tells world listeners the running world, that it stopped, and the next one', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const worlds: (number | null)[] = [];
+    fish.onWorld((epoch) => worlds.push(epoch));
+    expect(worlds).toEqual([worker.inits()[0]?.request]);
+
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+      },
+    });
+    expect(worlds.at(-1)).toBeNull();
+    await vi.waitFor(() => {
+      if (worker.inits().length < 2) throw new Error('no second init yet');
+    });
+    answerInits(worker, 1);
+    await fish.synced();
+    expect(worlds.at(-1)).toBe(worker.inits()[1]?.request);
+    expect(worlds.at(-1)).not.toBe(worlds[0]);
+
+    fish.handle({ type: 'tank:unloaded', payload: { tankId: TANK_A, reason: 'switch' } });
+    expect(worlds.at(-1)).toBeNull();
+
+    fish.dispose();
+    const after = worlds.length;
+    fish.handle({ type: 'tank:none', payload: {} });
+    expect(worlds).toHaveLength(after);
   });
 });
 
@@ -822,7 +1106,9 @@ describe('FishSystem toys and display', () => {
     const { engine, frames } = fakeEngine();
     if (tier !== null) {
       engine.quality.register = (name, apply) => {
-        if (name === 'fish-lod') apply({ ...TIER_SETTINGS.low, ...tier }, 'low');
+        if (name === 'fish-lod' || name === 'fish-shadows') {
+          apply({ ...TIER_SETTINGS.low, ...tier }, 'low');
+        }
         return () => undefined;
       };
     }
@@ -876,11 +1162,17 @@ describe('FishSystem toys and display', () => {
       await fish.synced();
     };
     let tick = 0;
-    const snapshot = (display: number, gillFlare: number, count = 1): void => {
+    const snapshot = (
+      display: number,
+      gillFlare: number,
+      count = 1,
+      state: FishState = FishState.Cruise,
+    ): void => {
       const data = new Float32Array(SNAPSHOT_STRIDE * count);
       for (let i = 0; i < count; i++) {
         const o = i * SNAPSHOT_STRIDE;
         data.set([...AT, 0, 0, 0, 1], o);
+        data[o + SnapshotField.State] = state;
         data[o + SnapshotField.Display] = display;
         data[o + SnapshotField.GillFlare] = gillFlare;
       }
@@ -928,6 +1220,25 @@ describe('FishSystem toys and display', () => {
     await nextWorld();
     const after = worker.sent.map((m) => m.type);
     expect(after.lastIndexOf('toys')).toBeLessThan(after.lastIndexOf('init'));
+    fish.dispose();
+  });
+
+  it('takes the sim clock from snapshots of the running world only', async () => {
+    const { fish, worker, load, nextWorld, epoch, snapshot } = await bettaTank();
+    load();
+    await nextWorld();
+    snapshot(0, 0);
+    snapshot(0, 0);
+    const running = fish.simTimeS;
+    expect(running).toBeGreaterThan(0);
+    worker.emit({
+      type: 'snapshot',
+      epoch: epoch() + 7,
+      tick: 1,
+      time: 0.01,
+      buffer: new Float32Array(SNAPSHOT_STRIDE).buffer,
+    });
+    expect(fish.simTimeS).toBe(running);
     fish.dispose();
   });
 
@@ -1069,6 +1380,55 @@ describe('FishSystem toys and display', () => {
     fish.dispose();
   });
 
+  it('keeps a fish held mid-peck where it was rather than creeping along the jab', async () => {
+    const { fish, engine, worker, load, nextWorld, snapshot, frames } = await bettaTank();
+    load();
+    await nextWorld();
+    const drawnZ = (): number => {
+      let mesh: InstancedMesh | null = null;
+      engine.scene.traverse((o) => {
+        if (mesh === null && o instanceof InstancedMesh && o.name.endsWith(':lod0')) mesh = o;
+      });
+      if (mesh === null) throw new Error('no betta mesh in the scene');
+      const matrix = new Matrix4();
+      (mesh as InstancedMesh).getMatrixAt(0, matrix);
+      return new Vector3().setFromMatrixPosition(matrix).z;
+    };
+    let jab = 0;
+    for (let i = 0; i < 30 && jab < 1e-4; i++) {
+      snapshot(0, 0, 1, FishState.Clean);
+      jab = drawnZ() - AT[2];
+    }
+    expect(jab).toBeGreaterThan(1e-4);
+
+    const inits = worker.inits().length;
+    fish.handle({
+      type: 'tank:fish-added',
+      payload: {
+        tankId: TANK_A,
+        fish: fishFixture(FISH_2, { species: 'royal-gramma', size: 0.06 }),
+        acclimate: false,
+      },
+    });
+    const request = await vi.waitFor(() => {
+      const add = worker.sent.find((m) => m.type === 'addFish');
+      if (add === undefined || !('request' in add)) throw new Error('no addFish yet');
+      return add.request;
+    });
+    worker.emit({ type: 'error', request, message: 'no room' });
+    await vi.waitFor(() => {
+      if (worker.inits().length === inits) throw new Error('the world was not rebuilt yet');
+    });
+    const held: number[] = [];
+    for (let i = 0; i < 144; i++) {
+      for (const frame of frames) frame(1 / 144, performance.now());
+      held.push(drawnZ() - AT[2]);
+    }
+    expect(Math.max(...held)).toBeLessThanOrEqual(PECK_JAB_BODY_LENGTHS * 0.06 + 1e-6);
+    expect(held.at(-1)).toBeCloseTo(0, 6);
+    fish.dispose();
+  });
+
   it.each([
     ['betta', BETTA, 'freshwater', false],
     [
@@ -1112,6 +1472,133 @@ describe('FishSystem toys and display', () => {
       snapshot(0.8, 0.6);
       expect(impostorWrites.mock.calls.length > 0).toBe(far);
       expect(meshWrites.mock.calls.length > 0).toBe(!far);
+      fish.dispose();
+    },
+  );
+
+  it('keeps an atlas texture another batch shares when a dropped batch finishes its load late', async () => {
+    const atlas: ImpostorAtlasInfo = {
+      grid: 8,
+      frameSize: 64,
+      pivot: [0, 0, 0],
+      radius: 0.04,
+      albedoFile: 'atlas-albedo.ktx2',
+      normalFile: 'atlas-normal.ktx2',
+    };
+    vi.mocked(FishAssetLoader.prototype.load).mockImplementation(() =>
+      Promise.resolve(bettaModel(atlas)),
+    );
+    const shared = new Map<string, CompressedTexture>();
+    const disposals = new Map<string, number>();
+    for (const file of [atlas.albedoFile, atlas.normalFile]) {
+      const texture = new CompressedTexture([], 1, 1);
+      texture.addEventListener('dispose', () =>
+        disposals.set(file, (disposals.get(file) ?? 0) + 1),
+      );
+      shared.set(`/assets/${file}`, texture);
+    }
+    let held: Promise<void> | null = null;
+    const loadAsync = vi
+      .spyOn(KTX2Loader.prototype, 'loadAsync')
+      .mockImplementation(async (url: string) => {
+        if (held !== null) await held;
+        const texture = shared.get(url);
+        if (texture === undefined) throw new Error(`unexpected atlas url ${url}`);
+        return texture;
+      });
+    const impostorWrites = vi.spyOn(ImpostorInstanceData.prototype, 'write');
+    const tier = {
+      fishLod: { midDistance: 0.01, impostorDistance: 0.02 },
+      fishImpostors: { fullMeshes: 0 },
+    };
+    const gramma = fishFixture(FISH_2, { species: 'royal-gramma', size: 0.06 });
+    const { fish, load, nextWorld, snapshot } = await bettaTank(gramma, 'freshwater', tier);
+    const show = (shown: ReturnType<typeof fishFixture>[]): void =>
+      fish.handle({
+        type: 'tank:loaded',
+        payload: {
+          backgroundId: 'bg-fw-planted-stream',
+          tankId: TANK_A,
+          size: 'standard',
+          biome: 'freshwater',
+          decorLayout: [],
+          decorEdited: false,
+          fish: shown,
+        },
+      });
+    load();
+    await nextWorld();
+    await vi.waitFor(() => {
+      snapshot(0, 0);
+      if (impostorWrites.mock.calls.length === 0) throw new Error('no gramma impostor yet');
+    });
+    const grammaLoads = loadAsync.mock.calls.length;
+
+    let finish = (): void => undefined;
+    held = new Promise<void>((resolve) => (finish = resolve));
+    show([BETTA, gramma]);
+    await nextWorld();
+    await vi.waitFor(() => {
+      snapshot(0, 0, 2);
+      if (loadAsync.mock.calls.length === grammaLoads) throw new Error('no betta atlas load yet');
+    });
+    show([gramma]);
+    await nextWorld();
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(disposals.size).toBe(0);
+    impostorWrites.mockClear();
+    snapshot(0, 0);
+    expect(impostorWrites).toHaveBeenCalled();
+    fish.dispose();
+    expect(Object.fromEntries(disposals)).toEqual({
+      [atlas.albedoFile]: 1,
+      [atlas.normalFile]: 1,
+    });
+  });
+
+  it.each([
+    ['without shadows', 0, 0, 1],
+    ['with shadows', 1024, 0, 1],
+    ['in display', 1024, 0.8, 0],
+  ])(
+    'draws a near fish with no atlas outside the mesh cap one level coarser, unless in display: %s',
+    async (_, shadowMapSize, display, drawnLevel) => {
+      const lodGeometries = [
+        new BoxGeometry(0.012, 0.026, 0.073),
+        new BoxGeometry(0.012, 0.026, 0.07),
+        new BoxGeometry(0.012, 0.026, 0.065),
+      ];
+      const model: FishModel = {
+        ...bettaModel(),
+        lods: lodGeometries.map((geometry) => [
+          { geometry, source: new MeshStandardMaterial(), legPivots: [], mouth: false },
+        ]),
+      };
+      vi.mocked(FishAssetLoader.prototype.load).mockResolvedValue(model);
+      const tier = {
+        fishLod: { midDistance: 100, impostorDistance: 200 },
+        fishImpostors: { fullMeshes: 0 },
+        shadowMapSize,
+      };
+      const { fish, engine, load, nextWorld, snapshot } = await bettaTank(
+        BETTA,
+        'freshwater',
+        tier,
+      );
+      load();
+      await nextWorld();
+      for (let i = 0; i < 3; i++) snapshot(display, 0);
+      const drawn = new Map<BoxGeometry, InstancedMesh>();
+      engine.scene.traverse((object) => {
+        if (object instanceof InstancedMesh && object.geometry instanceof BoxGeometry) {
+          if (object.count > 0) drawn.set(object.geometry, object);
+        }
+      });
+      const expected = lodGeometries[drawnLevel];
+      expect([...drawn.keys()]).toEqual([expected]);
+      expect(expected && drawn.get(expected)?.castShadow).toBe(shadowMapSize > 0);
       fish.dispose();
     },
   );

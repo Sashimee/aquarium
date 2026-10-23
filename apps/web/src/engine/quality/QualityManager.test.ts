@@ -30,10 +30,59 @@ function feed(q: QualityManager, frameMs: number, gpuMs: number | null, from: nu
   return t;
 }
 
+/** Feeds frames as long as `frameAt(i)` says from `from` until `to`, returning the end time. */
+function feedTrace(
+  q: QualityManager,
+  frameAt: (i: number) => { frameMs: number; gpuMs: number | null },
+  from: number,
+  to: number,
+) {
+  let t = from;
+  for (let i = 0; t <= to; i++) {
+    const { frameMs, gpuMs } = frameAt(i);
+    t += frameMs;
+    q.sample(frameMs, gpuMs, t);
+  }
+  return t;
+}
+
+/** Three frames in five stall for pipeline compiles; the others run at the display rate. */
+function compiling(i: number) {
+  return i % 5 < 3 ? { frameMs: 120, gpuMs: null } : { frameMs: TARGET, gpuMs: null };
+}
+
+function steady() {
+  return { frameMs: TARGET, gpuMs: null };
+}
+
 describe('QualityManager', () => {
   it('applies the current tier to a feature on registration', () => {
     const { applied } = setup();
     expect(applied).toEqual(['high']);
+  });
+
+  it('keeps 2k textures on high and ultra when nothing caps them', () => {
+    const { quality } = setup();
+    expect(quality.settings).toBe(TIER_SETTINGS.high);
+    quality.setTier('ultra', 0);
+    expect(quality.settings.textureSize).toBe(2048);
+  });
+
+  it('caps the texture size of every tier, a manual pick included, and nothing else', () => {
+    const { quality } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    const seen: number[] = [];
+    quality.register('textures', (s) => seen.push(s.textureSize));
+    for (const tier of ['low', 'high', 'ultra'] as const) {
+      quality.setTier(tier, 0);
+      expect(quality.settings).toEqual({ ...TIER_SETTINGS[tier], textureSize: 1024 });
+    }
+    expect(seen).toEqual([1024, 1024, 1024, 1024]);
+  });
+
+  it('caps a pinned tier too', () => {
+    const { quality } = setup({ pinned: 'ultra', maxTextureSize: 1024 });
+    expect(quality.settings.textureSize).toBe(1024);
+    expect(quality.settings.shadowMapSize).toBe(TIER_SETTINGS.ultra.shadowMapSize);
   });
 
   it('rejects duplicate feature names and allows unregistering', () => {
@@ -95,8 +144,26 @@ describe('QualityManager', () => {
     const { quality } = setup();
     quality.start(0);
     feed(quality, 200, 200, 0, 299);
-    feed(quality, TARGET, 4, 300, 2400);
+    feed(quality, TARGET, 3, 300, 2400);
     expect(quality.tier).toBe('ultra');
+  });
+
+  it('keeps a desktop on high when its gpu would run ultra over half the frame', () => {
+    const { quality } = setup();
+    quality.start(0);
+    feed(quality, TARGET, 6, 0, 2400);
+    expect(quality.tier).toBe('high');
+    feed(quality, TARGET, 6, 2400, 120_000);
+    expect(quality.tier).toBe('high');
+  });
+
+  it('never climbs to ultra on frame intervals alone, however well they keep up', () => {
+    const { quality, announced } = setup({ gpuTiming: false });
+    quality.start(0);
+    feed(quality, TARGET, null, 0, 120_000);
+    expect(quality.timingSignal).toBe('frame');
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
   });
 
   it('falls back to frame intervals when the gpu cannot be timed', () => {
@@ -287,7 +354,7 @@ describe('QualityManager', () => {
     const t = feed(quality, TARGET, 2, 0, 2400);
     expect(quality.tier).toBe('high');
     quality.contentReady(t);
-    feed(quality, TARGET, 4, t, t + 2400);
+    feed(quality, TARGET, 3, t, t + 2400);
     expect(quality.tier).toBe('ultra');
     expect(announced.at(-1)).toEqual({ from: 'high', to: 'ultra', reason: 'probe' });
   });
@@ -361,7 +428,7 @@ describe('QualityManager', () => {
   it('ignores content readiness after the probes have finished', () => {
     const { quality, announced } = setup({ awaitContent: true, contentTimeoutMs: 1000 });
     quality.start(0);
-    const t = feed(quality, TARGET, 4, 0, 6000);
+    const t = feed(quality, TARGET, 3, 0, 6000);
     expect(quality.probing).toBe(false);
     quality.contentReady(t);
     expect(quality.probing).toBe(false);
@@ -402,5 +469,100 @@ describe('QualityManager', () => {
     const { quality } = setup();
     quality.start(0);
     expect(() => quality.start(1)).toThrow(/already started/);
+  });
+
+  it('keeps high through the compile stalls after the content arrives, with no thrash', () => {
+    const { quality, announced } = setup({ awaitContent: true, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    quality.contentReady(t);
+    t = feedTrace(quality, compiling, t, t + 4000);
+    feedTrace(quality, steady, t, t + 120_000);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
+  });
+
+  it('decides from the frames between the stalls once another run would pass maxProbeMs', () => {
+    const { quality, announced } = setup({ gpuTiming: false, maxProbeMs: 6000 });
+    quality.start(0);
+    const t = feedTrace(quality, compiling, 0, 4000);
+    expect(quality.probing).toBe(true);
+    feedTrace(quality, compiling, t, 6000);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
+  });
+
+  it('restarts the probe when told of a stall while a whole run still fits in maxProbeMs', () => {
+    const { quality } = setup({ maxProbeMs: 4500 });
+    quality.start(0);
+    let t = feed(quality, TARGET, 14, 0, 2000);
+    quality.stall(t);
+    t = feed(quality, TARGET, 14, t, 2400);
+    expect(quality.probing).toBe(true);
+    t = feed(quality, TARGET, 14, t, 4100);
+    expect(quality.probing).toBe(true);
+    quality.stall(t);
+    feed(quality, TARGET, 14, t, 4500);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('ends a probe on uneven frames within maxProbeMs of its start', () => {
+    const { quality } = setup({ gpuTiming: false });
+    quality.start(0);
+    let t = 0;
+    for (let i = 0; quality.probing && t < 20_000; i++) {
+      const { frameMs } = compiling(i);
+      t += frameMs;
+      quality.sample(frameMs, null, t);
+    }
+    expect(quality.probing).toBe(false);
+    expect(t).toBeLessThanOrEqual(10_000);
+  });
+
+  it('does not stretch the probe past maxProbeMs for a stall it is told of late', () => {
+    const { quality } = setup({ maxProbeMs: 10_000 });
+    quality.start(0);
+    let t = 0;
+    for (let i = 0; quality.probing && t < 20_000; i++) {
+      const { frameMs } = compiling(i);
+      t += frameMs;
+      if (t > 9000 && t < 9200) quality.stall(t);
+      quality.sample(frameMs, null, t);
+    }
+    expect(quality.probing).toBe(false);
+    expect(t).toBeLessThanOrEqual(10_000);
+  });
+
+  it('does not let the controller step down on stalls it was told of', () => {
+    const { quality, announced } = setup({ gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    for (let i = 0; i < 10; i++) {
+      quality.stall(t);
+      t = feed(quality, 60, null, t, t + 1000);
+    }
+    feed(quality, TARGET, null, t, t + 10_000);
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
+  });
+
+  it('does not climb back into the tiers the content probe dropped from for a long hold', () => {
+    const { quality, announced } = setup({ awaitContent: true, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    quality.contentReady(t);
+    t = feed(quality, 3 * TARGET, null, t, t + 2400);
+    expect(quality.tier).toBe('low');
+    const droppedAt = t;
+    t = feed(quality, TARGET, null, t, t + 55_000);
+    expect(quality.tier).toBe('low');
+    feed(quality, TARGET, null, t, droppedAt + 120_000);
+    expect(announced.slice(1)).toEqual([
+      { from: 'high', to: 'low', reason: 'probe' },
+      { from: 'low', to: 'medium', reason: 'headroom' },
+      { from: 'medium', to: 'high', reason: 'headroom' },
+    ]);
   });
 });

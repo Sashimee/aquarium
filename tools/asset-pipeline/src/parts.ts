@@ -6,6 +6,7 @@ import {
 import {
   decodeImage,
   hasMeaningfulAlpha,
+  resizeImage,
   type Rgba,
   type TextureCodec,
   type TextureRole,
@@ -193,6 +194,8 @@ export interface MaterialOptions {
   roughness?: number;
   metallic?: number;
   keepNormal?: boolean;
+  /** Downscales the normal map before encoding; at or below the 1k tier's 512 px the asset ships one normal file. */
+  normalMaxPx?: number;
   /** Force alpha handling; otherwise a BLEND/MASK source keeps it only when the colour texture really has transparency. */
   alphaMode?: AlphaMode;
   doubleSided?: boolean;
@@ -210,10 +213,14 @@ export async function materialDefFrom(
     'baseColor',
     'etc1s',
   );
-  const normal =
+  const fullNormal =
     options.keepNormal === false
       ? undefined
       : await textureFrom(source.getNormalTexture(), 'normal', 'etc1s');
+  const normal =
+    fullNormal && options.normalMaxPx !== undefined
+      ? { ...fullNormal, image: await resizeImage(fullNormal.image, options.normalMaxPx) }
+      : fullNormal;
   const factor = specGloss ? specGloss.getDiffuseFactor() : source.getBaseColorFactor();
   let alphaMode: AlphaMode = options.alphaMode ?? 'OPAQUE';
   if (options.alphaMode === undefined && source.getAlphaMode() !== 'OPAQUE') {

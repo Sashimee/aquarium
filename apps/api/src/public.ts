@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   chemistrySchema,
   containsBlockedWord,
@@ -9,6 +8,7 @@ import {
   diseaseStateSchema,
   PUBLIC_NAME_FALLBACK,
   publicTankSchema,
+  seedOf,
   reactionStateSchema,
   setReactionRequestSchema,
   shareTokenSchema,
@@ -16,6 +16,7 @@ import {
   type PublicTank,
   type ReactionCounts,
 } from '@aquarium/shared';
+import { tankMaxFishLengthM } from './fishFit.ts';
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -52,10 +53,6 @@ const paramsSchema = z.object({ token: z.string().max(200) });
 
 const notFound = (reply: FastifyReply) =>
   reply.code(404).send(apiError('not_found', 'This tank is not shared.'));
-
-function seedOf(label: string, id: string): number {
-  return createHash('sha256').update(`${label}:${id}`).digest().readUInt32BE(0);
-}
 
 const HOUR_MS = 3_600_000;
 
@@ -163,6 +160,7 @@ export function registerPublicRoutes({
       size: tank.size,
       seed: seedOf('tank', tank.id),
       backgroundId: storedBackground(tank),
+      roomId: tank.roomId,
       decorLayout: (tank.decorLayout === null ? [] : decorLayoutSchema.parse(tank.decorLayout)).map(
         (item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) }),
       ),
@@ -180,7 +178,7 @@ export function registerPublicRoutes({
           personality: personalitySchema.parse(f.personality),
           disease: f.disease === null ? null : diseaseStateSchema.parse(f.disease),
           bornAt: f.bornAt.toISOString(),
-          size: f.size,
+          size: Math.min(f.size, tankMaxFishLengthM(tank.size)),
           hunger: f.hunger,
           health: f.health,
           status: f.status,

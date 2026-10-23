@@ -1,7 +1,7 @@
 import { HUNGER_PER_PORTION } from '../lifecycle/params.ts';
 import type { BehaviourHost } from './behaviour.ts';
 import type { FishResize } from './fishArrays.ts';
-import { MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
+import { FOOD_TYPES, MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
 import { clamp } from './math.ts';
 import { selectNearest } from './neighbours.ts';
 import type { Personalities } from './personality.ts';
@@ -122,6 +122,8 @@ export class Feeding {
   /** Each particle's distance to the sand, glass or rock nearest it. */
   private readonly surfaceDist = new Float64Array(MAX_FOOD_PARTICLES);
   private readonly settled = new Uint8Array(MAX_FOOD_PARTICLES);
+  /** Uneaten, unburied settled particles per `FOOD_TYPES` index. */
+  private readonly settledOfType = new Int32Array(FOOD_TYPES.length);
   private readonly n3 = new Float64Array(3);
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
   private readonly nbrDist = new Float64Array(FEEDING.followNeighbours);
@@ -154,6 +156,17 @@ export class Feeding {
   /** Per fish x, y, z, radius of the area it will leave home for; radius Infinity for none. */
   get leash(): Float64Array {
     return this._leash;
+  }
+
+  /**
+   * Whether uneaten food of a type in `sp`'s diet has settled on sand, rock or glass anywhere in
+   * the tank, as of the last update; food lodged inside rock or glass does not count.
+   */
+  settledFor(sp: SimSpecies): boolean {
+    for (let t = 0; t < FOOD_TYPES.length; t++) {
+      if (at(this.settledOfType, t) > 0 && at(sp.foodPreference, t) > 0) return true;
+    }
+    return false;
   }
 
   constructor(host: BehaviourHost, personality: Personalities) {
@@ -245,6 +258,7 @@ export class Feeding {
       this.retarget[i] = at(this.retarget, i) - DT;
       this.looked[i] = 0;
     }
+    this.settledOfType.fill(0);
     if (food.count === 0) {
       for (let i = 0; i < n; i++) this.drop(i);
       this.backingOut.fill(0);
@@ -264,6 +278,10 @@ export class Feeding {
       this.surfaceDist[k] = d;
       this.settled[k] =
         d <= FEEDING.settledHeightM && at(food.speed, k) < FEEDING.settledSpeedMps ? 1 : 0;
+      if (this.settled[k] === 1 && this.buried[k] === 0 && food.remaining(k) > EMPTY) {
+        const t = at(food.type, k);
+        this.settledOfType[t] = at(this.settledOfType, t) + 1;
+      }
     }
 
     for (let i = 0; i < n; i++) {
@@ -355,7 +373,8 @@ export class Feeding {
     return (this.host.species[at(this.host.speciesIndex, i)]?.walking ?? null) !== null;
   }
 
-  private hungry(i: number): boolean {
+  /** Whether fish `i` may feed and is not sated. */
+  hungry(i: number): boolean {
     return (
       this.eligible[i] === 1 &&
       this.motivation(i) > FEEDING.satiatedMotivation * this.personality.satiation(i)
@@ -380,12 +399,14 @@ export class Feeding {
 
   /**
    * A pursued particle is followed out to a wider range and outside the visual cone; a scavenger
-   * keeps settled food as far as it can smell it.
+   * keeps settled food as far as it can smell it, and a snail or crab lets go of food lifted off
+   * the surface again.
    */
   private keeps(i: number, k: number): boolean {
     const { food, position } = this.host;
     const sp = this.host.species[at(this.host.speciesIndex, i)];
     if (sp === undefined) return false;
+    if (sp.walking?.escape === 'withdraw' && this.settled[k] !== 1) return false;
     const x = at(food.position, k * 3);
     const y = at(food.position, k * 3 + 1);
     const z = at(food.position, k * 3 + 2);
@@ -471,6 +492,7 @@ export class Feeding {
     const cone = sp.perceptionFov >= 2 * Math.PI ? -2 : Math.cos(sp.perceptionFov / 2);
     const motivation = this.motivation(i) * this.personality.appetite(i);
     const walker = sp.walking !== null;
+    const settledOnly = sp.walking?.escape === 'withdraw';
     const surfaceReach = FEEDING.walkerReachBodyLengths * at(this.host.bodyLength, i);
     const found = food.near(px, py, pz, Math.max(range, chemoRange), this.candidates);
     let best = -1;
@@ -481,6 +503,8 @@ export class Feeding {
       if (id === at(this.ignoreId, i) || this.buried[k] === 1) continue;
       if (this.isUnreachable(k)) continue;
       if (walker && at(this.surfaceDist, k) > surfaceReach) continue;
+      // A snail or hermit crab cannot lift off its surface to snatch food sinking past it.
+      if (settledOnly && this.settled[k] !== 1) continue;
       const preference = at(sp.foodPreference, at(food.type, k));
       if (preference <= 0 || food.remaining(k) <= EMPTY) continue;
       const x = at(food.position, k * 3);

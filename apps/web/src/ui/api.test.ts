@@ -175,6 +175,8 @@ describe('api client', () => {
       decorLayout: layout,
       decorEdited: true,
       backgroundId: 'bg-fw-planted-stream',
+      roomId: 'room-living',
+      roomSetAt: null,
       water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
       lastTickAt: '2026-02-01T00:00:00.000Z',
       chemistry: newTankChemistry('freshwater'),
@@ -182,8 +184,10 @@ describe('api client', () => {
       quarantine: false,
       shared: false,
       inGallery: false,
+      acceptsGifts: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
+      co2OwnedTier: 0,
       recentVisitDays: 0,
       fish: [],
       memorials: [],
@@ -209,6 +213,29 @@ describe('api client', () => {
     await expect(
       createApiClient(vi.fn()).saveBackground('t', 'bg-nope' as never),
     ).rejects.toBeInstanceOf(ClientValidationError);
+  });
+
+  it('patches only the room id, null for no room, and refuses an id the contract does not know', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({}));
+    const api = createApiClient(fetcher);
+    await api.saveRoom('t', 'room-zen').catch(() => undefined);
+    await api.saveRoom('t', null).catch(() => undefined);
+    const bodies = fetcher.mock.calls.map(([, init]) =>
+      JSON.parse((init as RequestInit).body as string),
+    );
+    expect(bodies).toEqual([{ roomId: 'room-zen' }, { roomId: null }]);
+    expect((fetcher.mock.calls[0] as [string, RequestInit])[1].method).toBe('PATCH');
+    const unknown = vi.fn();
+    await expect(
+      createApiClient(unknown).saveRoom('t', 'room-nope' as never),
+    ).rejects.toBeInstanceOf(ClientValidationError);
+    expect(unknown).not.toHaveBeenCalled();
+  });
+
+  it('reads the paid rooms the account owns', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ owned: ['room-zen'] }));
+    await expect(createApiClient(fetcher).ownedRooms()).resolves.toEqual(['room-zen']);
+    expect((fetcher.mock.calls[0] as [string])[0]).toBe('/api/rooms');
   });
 
   it('refuses to send a layout the server would reject', async () => {
@@ -288,6 +315,57 @@ describe('api client sharing', () => {
     ]);
   });
 
+  it('puts the gallery toggle, validating the body', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture({ shared: true, inGallery: true })));
+    const api = createApiClient(fetcher);
+    expect((await api.setGallery(TANK_A, true)).inGallery).toBe(true);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/gallery`);
+    expect(init).toMatchObject({ method: 'PUT', body: '{"listed":true}' });
+    await expect(api.setGallery(TANK_A, 'yes' as never)).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the gallery page and sends the vote on the vote route', async () => {
+    const week = { weekStart: '2026-02-02T00:00:00.000Z', weekEnd: '2026-02-09T00:00:00.000Z' };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json({ ...week, total: 0, entries: [], myVote: null }))
+      .mockResolvedValueOnce(json({ ...week, myVote: TANK_A }))
+      .mockResolvedValueOnce(json({ ...week, myVote: null }));
+    const api = createApiClient(fetcher);
+    expect((await api.gallery({ limit: 24, offset: 24 })).total).toBe(0);
+    expect((await api.castVote(TANK_A)).myVote).toBe(TANK_A);
+    expect((await api.clearVote()).myVote).toBeNull();
+    const calls = fetcher.mock.calls as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/api/gallery?limit=24&offset=24');
+    expect(calls[1]?.[0]).toBe('/api/gallery/vote');
+    expect(calls[1]?.[1]).toMatchObject({ method: 'PUT', body: `{"tankId":"${TANK_A}"}` });
+    expect(calls[2]?.[1]).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('turns vote refusals into typed errors and rejects a bad tank id locally', async () => {
+    const reply = (status: number, code: string, headers: Record<string, string> = {}) =>
+      new Response(JSON.stringify({ error: { code, message: 'nope' } }), {
+        status,
+        headers: { 'content-type': 'application/json', ...headers },
+      });
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reply(429, 'rate_limited', { 'retry-after': '30' }))
+      .mockResolvedValueOnce(reply(403, 'own_tank'));
+    const api = createApiClient(fetcher);
+    await expect(api.castVote(TANK_A)).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 30,
+    });
+    await expect(api.castVote(TANK_A)).rejects.toMatchObject({ status: 403, code: 'own_tank' });
+    await expect(api.castVote('nope')).rejects.toBeInstanceOf(ClientValidationError);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it('sets and clears a reaction on the public path and reads the new state', async () => {
     const fetcher = vi.fn().mockImplementation(async () => json(state));
     const api = createApiClient(fetcher);
@@ -325,6 +403,124 @@ describe('api client sharing', () => {
       retryAfterSeconds: 17,
     });
     await expect(api.setReaction(TOKEN, 'star')).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('carries the conflict reason and posts a move to the fish route', async () => {
+    const refusal = new Response(
+      JSON.stringify({ error: { code: 'conflict', message: 'Full.', reason: 'tank_full' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = { toTankId: TANK_A, idempotencyKey: 'move-key-0001' };
+    await expect(
+      createApiClient(fetcher).moveFish(TANK_A, 'fish-1', request),
+    ).rejects.toMatchObject({ status: 409, reason: 'tank_full' });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/fish/fish-1/move`);
+    expect(JSON.parse(init.body as string)).toEqual(request);
+  });
+
+  it('keeps the coral_no_room reason of a refused frag through the error parser', async () => {
+    const refusal = new Response(
+      JSON.stringify({
+        error: { code: 'conflict', message: 'No room.', reason: 'coral_no_room' },
+      }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const request = { coralKey: 's7', idempotencyKey: 'frag-key-0002' };
+    await expect(
+      createApiClient(vi.fn().mockResolvedValue(refusal)).fragCoral(TANK_A, request),
+    ).rejects.toMatchObject({ status: 409, reason: 'coral_no_room' });
+  });
+
+  it('patches acceptsGifts on the tank', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture({ acceptsGifts: true })));
+    await createApiClient(fetcher).setAcceptsGifts(TANK_A, true);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ acceptsGifts: true });
+  });
+
+  it('carries the gifts_closed reason of a refused offer and posts to the gifts route', async () => {
+    const refusal = new Response(
+      JSON.stringify({ error: { code: 'conflict', message: 'Closed.', reason: 'gifts_closed' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = {
+      fromTankId: TANK_A,
+      fishId: '10000000-0000-4000-8000-000000000001',
+      toHandle: 'reef_fan',
+      idempotencyKey: 'gift-key-0001',
+    };
+    await expect(createApiClient(fetcher).createGift(request)).rejects.toMatchObject({
+      status: 409,
+      reason: 'gifts_closed',
+    });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/gifts');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      toHandle: 'reef_fan',
+      wantsReturn: false,
+    });
+  });
+
+  it('refuses a bad handle before sending anything', async () => {
+    const fetcher = vi.fn();
+    await expect(
+      createApiClient(fetcher).createGift({
+        fromTankId: TANK_A,
+        fishId: '10000000-0000-4000-8000-000000000001',
+        toHandle: 'X',
+        idempotencyKey: 'gift-key-0001',
+      }),
+    ).rejects.toBeInstanceOf(ClientValidationError);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('posts a trim to the plants route and refuses a size the server would not read', async () => {
+    const refusal = new Response(
+      JSON.stringify({
+        error: { code: 'conflict', message: 'Not grown.', reason: 'plant_not_grown' },
+      }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = { plantKey: 's7', size: 1, idempotencyKey: 'trim-key-0001' };
+    await expect(createApiClient(fetcher).trimPlant(TANK_A, request)).rejects.toMatchObject({
+      status: 409,
+      reason: 'plant_not_grown',
+    });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/plants/trim`);
+    expect(JSON.parse(init.body as string)).toEqual(request);
+    await expect(
+      createApiClient(fetcher).trimPlant(TANK_A, { ...request, size: -1 }),
+    ).rejects.toBeDefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('posts a frag to the corals route and refuses a request the server would not read', async () => {
+    const refusal = new Response(
+      JSON.stringify({
+        error: { code: 'conflict', message: 'Too bleached.', reason: 'coral_bleached' },
+      }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = { coralKey: 's7', idempotencyKey: 'frag-key-0001' };
+    await expect(createApiClient(fetcher).fragCoral(TANK_A, request)).rejects.toMatchObject({
+      status: 409,
+      reason: 'coral_bleached',
+    });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/corals/frag`);
+    expect(JSON.parse(init.body as string)).toEqual(request);
+    await expect(
+      createApiClient(fetcher).fragCoral(TANK_A, { ...request, coralKey: '' }),
+    ).rejects.toBeDefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a public tank response it cannot read', async () => {
@@ -681,6 +877,7 @@ describe('api client Pearls contract', () => {
   it('refuses bottled bacteria without a key before calling the server', async () => {
     const fetcher = vi.fn();
     const error = await createApiClient(fetcher)
+      // @ts-expect-error the key is required by the contract; this checks schema validation of untyped input
       .care(TANK_A, { type: 'bottled_bacteria' })
       .catch((e) => e);
     expect(error).toBeInstanceOf(ClientValidationError);
@@ -708,6 +905,15 @@ describe('api client Pearls contract', () => {
     });
   });
 
+  it('sets the CO2 tier with a PATCH carrying only co2, and accepts 0 for off', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture()));
+    await createApiClient(fetcher).setCo2(TANK_A, 0);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ co2: { tier: 0 } });
+  });
+
   it('refuses a lamp schedule whose on and off hours are equal', async () => {
     const fetcher = vi.fn();
     const error = await createApiClient(fetcher)
@@ -715,6 +921,53 @@ describe('api client Pearls contract', () => {
       .catch((e) => e);
     expect(error).toBeInstanceOf(ClientValidationError);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  describe('payments', () => {
+    const consent = { immediateDelivery: true, withdrawalWaiver: true } as const;
+
+    it('posts the pack and consent and returns the https checkout URL', async () => {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ url: 'https://checkout.stripe.com/c/pay/x' }));
+      const result = await createApiClient(fetcher).checkoutPack('pearls-550', consent);
+      expect(result.url).toBe('https://checkout.stripe.com/c/pay/x');
+      expect(fetcher.mock.calls[0]?.[0]).toBe('/api/payments/checkout/pack');
+      expect(JSON.parse(fetcher.mock.calls[0]?.[1].body)).toEqual({
+        packId: 'pearls-550',
+        consent,
+      });
+    });
+
+    it('refuses a checkout URL that is not https', async () => {
+      const fetcher = vi.fn().mockResolvedValue(json({ url: 'javascript:alert(1)' }));
+      await expect(createApiClient(fetcher).checkoutSubscription(consent)).rejects.toBeInstanceOf(
+        ApiRequestError,
+      );
+    });
+
+    it('carries a 503 payments_disabled as a typed error', async () => {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(
+          json({ error: { code: 'payments_disabled', message: 'Not available.' } }, 503),
+        );
+      await expect(createApiClient(fetcher).paymentsPacks()).rejects.toMatchObject({
+        status: 503,
+        code: 'payments_disabled',
+      });
+    });
+
+    it('carries a 409 on cancel', async () => {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ error: { code: 'conflict', message: 'No subscription.' } }, 409));
+      await expect(createApiClient(fetcher).cancelSubscription()).rejects.toMatchObject({
+        status: 409,
+        code: 'conflict',
+      });
+      expect(fetcher.mock.calls[0]?.[0]).toBe('/api/payments/subscription/cancel');
+    });
   });
 
   it('reads the balance and the purchased items from the wallet endpoint', async () => {
@@ -740,34 +993,8 @@ describe('api client Pearls contract', () => {
     expect(await createApiClient(fetcher).wallet()).toEqual({
       balance: 420,
       owned: ['plant:java-fern'],
-      released: [],
     });
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wallet');
-  });
-
-  it('treats a purchase whose newest entry is a refund as released', async () => {
-    const entry = (delta: number, reason: string, itemRef: string, key: string) => ({
-      id: crypto.randomUUID(),
-      userId: 'u1',
-      delta,
-      reason,
-      source: 'game',
-      itemRef,
-      idempotencyKey: key,
-      createdAt: '2026-02-01T12:00:00.000Z',
-    });
-    const ledger = [
-      entry(25, 'refund', 'plant:java-fern', 'key-aaaaaaaa'),
-      entry(-25, 'purchase', 'plant:java-fern', 'key-bbbbbbbb'),
-      entry(-80, 'purchase', 'decor:boulder-01', 'key-cccccccc'),
-    ];
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(json({ wallet: { balance: 420 }, ledger, owned: ['decor:boulder-01'] }));
-    expect(await createApiClient(fetcher).wallet()).toMatchObject({
-      owned: ['decor:boulder-01'],
-      released: ['plant:java-fern'],
-    });
   });
 
   describe('wallet ownership from the server list', () => {
@@ -792,11 +1019,10 @@ describe('api client Pearls contract', () => {
       expect(await createApiClient(fetcher).wallet()).toEqual({
         balance: 10,
         owned: ['decor:boulder-01', 'plant:anubias'],
-        released: [],
       });
     });
 
-    it('owns an item refunded and bought again, and releases one only refunded', async () => {
+    it('owns an item refunded and bought again, and not one only refunded', async () => {
       const ledger = [
         entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa'),
         entry(25, 'refund', 'plant:java-fern', 'key-bbbbbbbb'),
@@ -808,7 +1034,6 @@ describe('api client Pearls contract', () => {
       expect(await createApiClient(fetcher).wallet()).toEqual({
         balance: 10,
         owned: ['plant:java-fern'],
-        released: ['decor:boulder-01'],
       });
     });
 
@@ -820,13 +1045,14 @@ describe('api client Pearls contract', () => {
       expect(await createApiClient(fetcher).wallet()).toEqual({
         balance: 10,
         owned: [],
-        released: [],
       });
     });
 
     it('rejects a wallet response without an owned list', async () => {
       const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 10 }, ledger: [] }));
-      await expect(createApiClient(fetcher).wallet()).rejects.toThrow();
+      await expect(createApiClient(fetcher).wallet()).rejects.toMatchObject({
+        code: 'unexpected_response',
+      });
     });
   });
 

@@ -134,6 +134,27 @@ describe('normaliseFish attachments', () => {
     );
   });
 
+  it('throws when bodyScale is combined with attachments, naming the recipe', () => {
+    expect(() =>
+      normaliseFish({
+        ...input,
+        parts: [body],
+        attachments: [eyes],
+        hints: { bodyScale: { width: 0.6, depth: 0.5 } },
+      }),
+    ).toThrow(/test-fish.*bodyScale/);
+  });
+
+  it('scales the body alone when bodyScale has no attachments', () => {
+    const plain = normaliseFish({ ...input, parts: [body] });
+    const scaled = normaliseFish({
+      ...input,
+      parts: [body],
+      hints: { bodyScale: { width: 0.6, depth: 0.5 } },
+    });
+    expect(scaled.at(0)?.positions).not.toEqual(plain.at(0)?.positions);
+  });
+
   it('names the recipe when its caudalScale would fold the tail', () => {
     expect(() =>
       normaliseFish({

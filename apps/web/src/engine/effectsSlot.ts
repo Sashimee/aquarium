@@ -28,11 +28,57 @@ export interface FrameEffects {
 
 export type ReportError = (message: string, cause: unknown) => void;
 export type TemporalChanged = (on: boolean) => void;
+export type EffectsDropped = (cause: unknown) => void;
+
+/**
+ * A submit that used a freed resource fails the frame, not a pipeline, though an async compile
+ * whose error scope was open reports it as its own failure. Built again, the effects can work.
+ */
+const TRANSIENT_GPU_FAILURE = /used in a submit|Destroyed (?:texture|buffer)/i;
+
+export function isTransientFailure(cause: unknown): boolean {
+  return cause instanceof Error && TRANSIENT_GPU_FAILURE.test(cause.message);
+}
+
+export type Schedule = (run: () => void, delayMs: number) => () => void;
+
+/**
+ * Rebuilds effects dropped for a transient failure, after each of `delaysMs` in turn; a failure
+ * that is not transient, or one past the last delay, leaves them dropped for the session.
+ */
+export class EffectsRecovery {
+  private attempts = 0;
+  private cancel: (() => void) | null = null;
+
+  constructor(
+    private readonly rebuild: () => void,
+    private readonly schedule: Schedule,
+    private readonly delaysMs: readonly number[] = [1000, 5000, 30_000],
+  ) {}
+
+  /** Whether a rebuild is scheduled for this drop. */
+  dropped(cause: unknown): boolean {
+    if (this.cancel !== null || !isTransientFailure(cause)) return false;
+    const delay = this.delaysMs[this.attempts];
+    if (delay === undefined) return false;
+    this.attempts++;
+    this.cancel = this.schedule(() => {
+      this.cancel = null;
+      this.rebuild();
+    }, delay);
+    return true;
+  }
+
+  dispose(): void {
+    this.cancel?.();
+    this.cancel = null;
+  }
+}
 
 /**
  * Holds the optional effects and keeps a failure in them from stopping the scene. Their node
  * graphs build lazily on first use, so a shader error surfaces in `render()`: it is reported once,
- * the effects are torn down, and from then on every frame takes the plain render path.
+ * the effects are torn down, and frames take the plain render path until effects attach again.
  */
 export class EffectsSlot {
   private effects: FrameEffects | null = null;
@@ -40,10 +86,14 @@ export class EffectsSlot {
   private photo: PhotoPost | null = null;
   private temporalOn = false;
 
-  /** `temporalChanged` hears every change of `temporal`, whatever caused it. */
+  /**
+   * `temporalChanged` hears every change of `temporal`, whatever caused it; `dropped` hears each
+   * failure that tore the effects down, once they are gone.
+   */
   constructor(
     private readonly report: ReportError,
     private readonly temporalChanged: TemporalChanged = () => undefined,
+    private readonly dropped: EffectsDropped = () => undefined,
   ) {}
 
   get active(): boolean {
@@ -145,5 +195,6 @@ export class EffectsSlot {
     } catch (disposeCause) {
       this.report('Disposing the failed render effects failed', disposeCause);
     }
+    this.dropped(cause);
   }
 }

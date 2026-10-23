@@ -65,6 +65,9 @@ export const MAX_YOUNG_FRACTION = 0.5;
 /** Decor that counts as a spawning cave or shelter for species with `needsCave`. */
 export const BREEDING_SHELTER_ASSET_IDS: readonly string[] = [
   'reef-arch',
+  'rock-pile-cave',
+  'rock-pile-stack',
+  'neothauma-shell',
   'lambis-shell',
   'boulder-01',
   'coast-rocks-05',

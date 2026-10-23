@@ -21,10 +21,12 @@ export const WALKER_SWIMMING_MODES: readonly z.infer<typeof swimmingModeSchema>[
 export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage']);
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
 
-// `cleaner` is accepted but drives no behaviour until the cleaner station lands (T24 phase 2b).
+// `cleaner` on a swimmer keeps a cleaning station; on a walker it is accepted but drives nothing yet.
+// `amphibious`: an air-breather that hauls out onto an emergent bank (mudskippers).
 export const traitSchema = z.enum([
   'shoal',
   'air-gulp',
+  'amphibious',
   'glass-grazer',
   'rock-grazer',
   'anemone-host',
@@ -34,6 +36,10 @@ export const traitSchema = z.enum([
   'cleaner',
 ]);
 export type Trait = z.infer<typeof traitSchema>;
+
+/** When a species is awake: by lamp light, in the dark, or at dawn and dusk. */
+export const activitySchema = z.enum(['diurnal', 'nocturnal', 'crepuscular']);
+export type Activity = z.infer<typeof activitySchema>;
 
 export const behaviourSchema = z.strictObject({
   schooling: z
@@ -56,6 +62,7 @@ export const behaviourSchema = z.strictObject({
   curiosity: unitSchema,
   boldness: unitSchema,
   traits: z.array(traitSchema).default([]),
+  activity: activitySchema.optional().describe('when the species is awake; diurnal when left out'),
   airGulp: z.strictObject({ perHour: z.number().positive().max(120) }).optional(),
   grazing: z
     .strictObject({
@@ -323,12 +330,13 @@ export type Species = z.infer<typeof speciesSchema>;
 const SWIMMER_TRAITS: readonly Trait[] = [
   'shoal',
   'air-gulp',
+  'amphibious',
   'glass-grazer',
   'rock-grazer',
   'anemone-host',
   'flare-display',
 ];
-const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer', 'cleaner'];
+const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer'];
 
 export function checkSpeciesRules(
   species: {
@@ -341,6 +349,9 @@ export function checkSpeciesRules(
   const issue = (message: string, path: (string | number)[]): void =>
     ctx.addIssue({ code: 'custom', message, path });
   if (locomotion.walking === undefined) {
+    if (behaviour.traits.includes('amphibious') && !behaviour.traits.includes('air-gulp')) {
+      issue('trait "amphibious" requires trait "air-gulp"', ['behaviour', 'traits']);
+    }
     for (const t of WALKER_TRAITS) {
       if (behaviour.traits.includes(t)) {
         issue(`trait "${t}" requires locomotion.walking`, ['behaviour', 'traits']);

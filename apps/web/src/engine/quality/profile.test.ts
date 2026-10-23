@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONTROLLER_CONFIG } from './controller';
-import { DESKTOP_PROFILE, MOBILE_PROFILE, qualityProfile } from './profile';
+import { DESKTOP_PROFILE, isTouchFirst, MOBILE_PROFILE, qualityProfile } from './profile';
 import { renderPixelRatio, TIER_SETTINGS, TIERS, tierIndex } from './tiers';
 
 describe('qualityProfile', () => {
@@ -12,7 +12,16 @@ describe('qualityProfile', () => {
       probeTier: 'high',
       maxTier: 'ultra',
       gpuTiming: true,
+      frameCapFps: 60,
+      pixelRatioCeiling: 1.5,
+      maxTextureSize: 2048,
+      textureBudgetMiB: { low: 60, medium: 60, high: 156, ultra: 156 },
     });
+  });
+
+  it('leaves phones uncapped in frame rate and pixel ratio ceiling', () => {
+    expect(MOBILE_PROFILE.frameCapFps).toBeNull();
+    expect(MOBILE_PROFILE.pixelRatioCeiling).toBe(Number.POSITIVE_INFINITY);
   });
 
   it('probes touch devices at medium and lets them climb to high but not ultra', () => {
@@ -22,6 +31,10 @@ describe('qualityProfile', () => {
     expect(mobile.maxTier).toBe('high');
   });
 
+  it('keeps touch devices on 1k textures whatever the tier', () => {
+    expect(MOBILE_PROFILE.maxTextureSize).toBe(1024);
+  });
+
   it('adapts touch devices on frame time only', () => {
     expect(MOBILE_PROFILE.gpuTiming).toBe(false);
   });
@@ -29,6 +42,33 @@ describe('qualityProfile', () => {
   it('steps a phone down exactly when it falls under 30 fps', () => {
     const downAtMs = MOBILE_PROFILE.targetMs * DEFAULT_CONTROLLER_CONFIG.downRatio;
     expect(downAtMs).toBeCloseTo(1000 / 30, 6);
+  });
+});
+
+describe('isTouchFirst', () => {
+  it('takes a device whose primary pointer is a finger', () => {
+    expect(isTouchFirst({ coarsePointer: true, platform: 'iPhone', maxTouchPoints: 5 })).toBe(true);
+    expect(isTouchFirst({ coarsePointer: true, platform: 'Linux armv8l', maxTouchPoints: 5 })).toBe(
+      true,
+    );
+  });
+
+  it('takes an iPad driven by a trackpad, which reports a fine pointer as a Mac', () => {
+    expect(isTouchFirst({ coarsePointer: false, platform: 'MacIntel', maxTouchPoints: 5 })).toBe(
+      true,
+    );
+  });
+
+  it('leaves a Mac, a desktop and a Windows touch laptop on the desktop profile', () => {
+    expect(isTouchFirst({ coarsePointer: false, platform: 'MacIntel', maxTouchPoints: 0 })).toBe(
+      false,
+    );
+    expect(isTouchFirst({ coarsePointer: false, platform: 'Win32', maxTouchPoints: 0 })).toBe(
+      false,
+    );
+    expect(isTouchFirst({ coarsePointer: false, platform: 'Win32', maxTouchPoints: 10 })).toBe(
+      false,
+    );
   });
 });
 
@@ -59,6 +99,35 @@ describe('renderPixelRatio', () => {
     expect(renderPixelRatio(1, TIER_SETTINGS.high)).toBe(1);
     expect(renderPixelRatio(2, TIER_SETTINGS.ultra)).toBe(2);
     expect(renderPixelRatio(1.25, TIER_SETTINGS.medium)).toBe(1.25);
+  });
+
+  it('holds a high-density desktop at 1.5 on every tier unless the player opts out', () => {
+    for (const tier of TIERS) {
+      const capped = renderPixelRatio(2, TIER_SETTINGS[tier], DESKTOP_PROFILE.pixelRatioCeiling);
+      expect(capped).toBeLessThanOrEqual(1.5);
+    }
+    expect(renderPixelRatio(2, TIER_SETTINGS.ultra, DESKTOP_PROFILE.pixelRatioCeiling)).toBe(1.5);
+    expect(renderPixelRatio(2, TIER_SETTINGS.ultra, Number.POSITIVE_INFINITY)).toBe(2);
+    expect(renderPixelRatio(3, TIER_SETTINGS.ultra, Number.POSITIVE_INFINITY)).toBe(2);
+  });
+
+  it('leaves desktop displays at or under the ceiling as they were', () => {
+    const ceiling = DESKTOP_PROFILE.pixelRatioCeiling;
+    expect(renderPixelRatio(1, TIER_SETTINGS.ultra, ceiling)).toBe(1);
+    expect(renderPixelRatio(1.25, TIER_SETTINGS.high, ceiling)).toBe(1.25);
+    expect(renderPixelRatio(1.5, TIER_SETTINGS.ultra, ceiling)).toBe(1.5);
+    expect(renderPixelRatio(2, TIER_SETTINGS.low, ceiling)).toBe(1);
+  });
+
+  it('keeps phones at their tier caps, with no device class ceiling', () => {
+    const ceiling = MOBILE_PROFILE.pixelRatioCeiling;
+    expect(renderPixelRatio(3, TIER_SETTINGS.high, ceiling)).toBe(2);
+    expect(renderPixelRatio(3, TIER_SETTINGS.medium, ceiling)).toBe(1.5);
+  });
+
+  it('never lets a ceiling push the ratio under one pixel per CSS pixel', () => {
+    expect(renderPixelRatio(2, TIER_SETTINGS.high, 0.5)).toBe(1);
+    expect(renderPixelRatio(2, TIER_SETTINGS.high, Number.NaN)).toBe(1);
   });
 
   it('treats a missing or invalid device ratio as 1', () => {

@@ -1,10 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { speciesContentSchema, type Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { BEHAVIOUR, type Anchor } from './behaviour.ts';
+import { BEHAVIOUR, grazeSpotFor, lineClear, type Anchor, type GrazeProbe } from './behaviour.ts';
 import {
   ARCHETYPES,
   angelfish,
   betta,
   bronzeCorydoras,
+  cherryShrimp,
   clownfish,
   neonTetra,
   otocinclus,
@@ -17,11 +21,18 @@ import {
   spawnMany,
   yellowTang,
 } from './fixtures.ts';
+import { SIGHT_SAMPLES_PER_CELL, SIGHT_TRIES } from './routes.ts';
 import { FishState } from './snapshot.ts';
+import { TankSdf, type Sdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
 import { STEP_DT, World, type FishSpawn } from './world.ts';
 
 const LONG = 60_000;
+const firefish = speciesContentSchema.parse(
+  JSON.parse(
+    readFileSync(join(import.meta.dirname, '../../../content/species/firefish.json'), 'utf8'),
+  ),
+);
 const n3 = new Float64Array(3);
 
 function at(a: ArrayLike<number>, i: number): number {
@@ -62,6 +73,26 @@ function distanceTo(w: World, i: number, p: readonly number[]): number {
     at(w.position, i * 3 + 1) - (p[1] ?? 0),
     at(w.position, i * 3 + 2) - (p[2] ?? 0),
   );
+}
+
+/** Four full-height walls `thick` either side of a square `half` from (x0, z0) to its edges. */
+function walledIn(x0: number, z0: number, half: number, thick: number): Collider[] {
+  const wall = (id: string, dx: number, dz: number, hx: number, hz: number): Collider => ({
+    id,
+    hard: true,
+    kind: 'box',
+    center: [x0 + dx, REEF_TANK.height / 2, z0 + dz],
+    halfExtents: [hx, REEF_TANK.height / 2, hz],
+    rotationY: 0,
+    rounding: 0,
+  });
+  const span = half + thick;
+  return [
+    wall('n', 0, half, span, thick),
+    wall('s', 0, -half, span, thick),
+    wall('e', half, 0, thick, span),
+    wall('w', -half, 0, thick, span),
+  ];
 }
 
 function anchorOf(id: string): (typeof REEF_ANCHORS)[number] {
@@ -241,6 +272,74 @@ describe('territoriality', { timeout: LONG }, () => {
     expect(fastest).toBeLessThanOrEqual(cap * 1.05);
     expect(median(gaps)).toBeGreaterThan(0.5 * sp.bodyLength);
   });
+
+  /** A betta that cruises instead of keeping a station, so its territory centres on itself. */
+  const rover: SpeciesInput = { ...betta, locomotion: { ...betta.locomotion, gait: 'cruise' } };
+  const half = 0.4 * BEHAVIOUR.territoryBodyLengths * toSimSpecies(rover).bodyLength;
+
+  function rivals(decor: readonly Collider[]): World {
+    return new World({
+      seed: 3,
+      tank: SHOW_TANK,
+      species: [rover],
+      decor,
+      fish: spawnMany(rover.id, 2),
+    });
+  }
+
+  /**
+   * Holds two rovers 0.8 territory radii apart at height `y` and depth `z` for up to
+   * 3 s (six territory checks) and returns the step either first takes the other up, or -1.
+   */
+  function contest(w: World, y: number, z = 0): number {
+    for (let t = 0; t < 90; t++) {
+      w.position.set([-half, y, z, half, y, z]);
+      w.step();
+      if (w.behaviour.territoryTarget.some((j) => j >= 0)) return t;
+    }
+    return -1;
+  }
+
+  const rock = (x: number, z = 0): Collider => ({
+    id: 'rock',
+    hard: true,
+    kind: 'sphere',
+    center: [x, 0.25, z],
+    radius: 0.03,
+  });
+
+  it('ignores a rival with rock between them, and takes it up once the rock is out of line', () => {
+    expect(toSimSpecies(rover).home).toBe('none');
+    expect(contest(rivals([rock(0)]), 0.25)).toBe(-1);
+    expect(contest(rivals([rock(0, 0.15)]), 0.25)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('breaks off an approach when the rival slips behind rock', () => {
+    for (const [z, hidden] of [
+      [0.2, true],
+      [-0.2, false],
+    ] as const) {
+      const w = rivals([rock(0, 0.1)]);
+      expect(contest(w, 0.25)).toBeGreaterThanOrEqual(0);
+      let held = 0;
+      for (let t = 0; t < 15; t++) {
+        w.position.set([-half, 0.25, 0, half, 0.25, z]);
+        w.step();
+        if (w.behaviour.territoryTarget.some((j) => j >= 0)) held++;
+      }
+      if (hidden) expect(held, 'behind the rock').toBe(0);
+      else expect(held, 'in the open').toBe(15);
+    }
+  });
+
+  it('sees a rival along the sand: glass, sand and surface hide nothing', () => {
+    const skim = 0.5 * BEHAVIOUR.bodyThicknessBodyLengths * toSimSpecies(rover).bodyLength;
+    expect(contest(rivals([rock(0.4)]), skim)).toBeGreaterThanOrEqual(0);
+    expect(contest(rivals([rock(0.4)]), SHOW_TANK.height - skim)).toBeGreaterThanOrEqual(0);
+    expect(contest(rivals([rock(0.4)]), 0.25, SHOW_TANK.depth / 2 - skim)).toBeGreaterThanOrEqual(
+      0,
+    );
+  });
 });
 
 describe('anchored species', { timeout: LONG }, () => {
@@ -250,7 +349,7 @@ describe('anchored species', { timeout: LONG }, () => {
     const base = { id: 'a', kind: 'anemone', position: [0, 0.1, 0], radius: 0.05 };
     expect(() => w.setAnchors([forged({ ...base, id: 3 })])).toThrow(/non-empty string/);
     expect(() => w.setAnchors([forged({ ...base, kind: 'reef' })])).toThrow(
-      /anchor "a": kind must be "anemone" or "cave"/,
+      /anchor "a": kind must be "anemone", "cave" or "bank"/,
     );
     expect(() => w.setAnchors([forged({ ...base, position: 'here' })])).toThrow(
       /anchor "a": position must be an \[x, y, z\] array/,
@@ -340,6 +439,301 @@ describe('anchored species', { timeout: LONG }, () => {
       }
       expect(inside / night, `seed ${seed}`).toBeGreaterThan(0.6);
     }
+  });
+
+  it('a firefish leaves its shoal mate for its own cave at night (FishBase, N. magnifica)', () => {
+    const cave = anchorOf('cave');
+    const length = toSimSpecies(firefish).bodyLength;
+    for (let seed = 1; seed <= 3; seed++) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: [...ARCHETYPES, firefish],
+        decor: REEF_DECOR,
+        anchors: REEF_ANCHORS,
+        fish: spawnMany(firefish.id, 2),
+      });
+      // The reef has one cave: the first firefish holds it, the second keeps a station outside.
+      expect(Array.from(w.behaviour.anchor)).toEqual([
+        w.behaviour.homes.findIndex((a) => a.id === 'cave'),
+        -1,
+      ]);
+      w.setLight(0);
+      let inside = 0;
+      let night = 0;
+      for (let t = 0; t < 6000; t++) {
+        w.step();
+        if (t < 3000) continue;
+        const s = at(w.state, 0);
+        const d = distanceTo(w, 0, cave.position);
+        if ((s === FishState.Shelter || s === FishState.Rest) && d < cave.radius + length) inside++;
+        night++;
+      }
+      expect(inside / night, `seed ${seed}`).toBeGreaterThan(0.8);
+    }
+  });
+
+  it('firefish hold crevices found in the rock all night, with room to turn in them (#1429, #1499)', () => {
+    const length = toSimSpecies(firefish).bodyLength;
+    for (let seed = 1; seed <= 16; seed++) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: [...ARCHETYPES, firefish],
+        decor: REEF_DECOR,
+        anchors: REEF_ANCHORS.filter((a) => a.kind !== 'cave'),
+        fish: spawnMany(firefish.id, 2),
+      });
+      const homes = Array.from(w.behaviour.anchor, (k) => {
+        const a = w.behaviour.homes[k];
+        if (a?.id.startsWith('nook:') !== true) throw new Error(`seed ${seed}: no crevice dealt`);
+        return a;
+      });
+      expect(new Set(homes).size, `seed ${seed}`).toBe(2);
+      for (const a of homes) {
+        const [x, y, z] = a.position;
+        expect(w.sceneSdf.sample(x, y, z, n3), `seed ${seed} ${a.id}`).toBeGreaterThanOrEqual(
+          w.bodyTurnRoom(length),
+        );
+      }
+      w.setLight(0);
+      const inside = [0, 0];
+      let night = 0;
+      for (let t = 0; t < 6000; t++) {
+        w.step();
+        if (t < 3000) continue;
+        night++;
+        homes.forEach((a, i) => {
+          if (distanceTo(w, i, a.position) < a.radius + length) inside[i] = (inside[i] ?? 0) + 1;
+        });
+      }
+      for (const [i, held] of inside.entries()) {
+        expect(held / night, `seed ${seed} fish ${i}`).toBeGreaterThan(0.8);
+      }
+    }
+  });
+
+  it('finds the ways to many caves a bounded piece per step after the rock moves (#1505)', () => {
+    const budget = BEHAVIOUR.caveRouteBuildUnitsPerStep;
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, firefish],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS.filter((a) => a.kind !== 'cave'),
+      fish: spawnMany(firefish.id, 8),
+    });
+    const held = Array.from(w.behaviour.anchor).filter((k) => k >= 0);
+    expect(new Set(held).size).toBeGreaterThanOrEqual(4);
+    expect(w.behaviour.routesPending).toBe(held.length);
+
+    const drain = (): { steps: number; total: number } => {
+      let steps = 0;
+      let total = 0;
+      while (w.behaviour.routesPending > 0) {
+        w.step();
+        expect(w.behaviour.routeWork, `step ${steps}`).toBeLessThanOrEqual(budget);
+        total += w.behaviour.routeWork;
+        steps++;
+        if (steps > 2000) throw new Error('the ways were never all found');
+      }
+      return { steps, total };
+    };
+    const first = drain();
+    expect(first.total).toBeGreaterThan(5 * budget);
+    expect(first.steps).toBeGreaterThan(5);
+    w.setLight(0);
+    for (let t = 0; t < 300; t++) {
+      w.step();
+      expect(w.behaviour.routeWork).toBeLessThanOrEqual(budget);
+    }
+
+    w.setDecor(
+      REEF_DECOR.map((c) =>
+        c.id === 'rock-left' && c.kind === 'sphere' ? { ...c, center: [-0.5, 0, -0.08] } : c,
+      ),
+    );
+    const queued = w.behaviour.routesPending;
+    expect(queued).toBeGreaterThanOrEqual(4);
+    const again = drain();
+    expect(again.total).toBeGreaterThan(5 * budget);
+    expect(w.behaviour.routesKept).toBeGreaterThanOrEqual(queued);
+
+    const kept = w.behaviour.routesKept;
+    const holders = w.fishIds.filter((_, i) => at(w.behaviour.anchor, i) >= 0);
+    for (const id of holders.slice(1)) w.removeFish(id);
+    expect(w.behaviour.routesKept).toBeLessThan(kept);
+    expect(w.behaviour.routesKept).toBeGreaterThan(0);
+    for (const id of [...w.fishIds]) w.removeFish(id);
+    expect(w.behaviour.routesKept).toBe(0);
+    expect(w.behaviour.routesPending).toBe(0);
+  });
+
+  it('keeps where it joins the way for a while when no cell of it is in sight (#1515)', () => {
+    const steps = BEHAVIOUR.caveRouteEntrySteps;
+    expect(Number.isInteger(steps) && steps > 1).toBe(true);
+    const length = toSimSpecies(royalGramma).bodyLength;
+    const [x0, y0, z0] = [0.5, 0.15, 0];
+    const w = new World({
+      seed: 4,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor: walledIn(x0, z0, 0.08, 0.005),
+      anchors: [
+        { id: 'shut', kind: 'cave', position: [x0, y0, z0], radius: 0.03, facing: [0, 0, 1] },
+      ],
+      fish: [],
+    });
+    w.addFish(
+      { id: 'gramma', species: royalGramma.id },
+      { position: [x0 - 0.12, y0, z0], heading: 0 },
+    );
+    w.setLight(0);
+    const cell = Math.min(
+      0.5 * at(w.radius, 0),
+      0.5 * BEHAVIOUR.caveRouteClearanceBodyLengths * length,
+    );
+    const line = Math.hypot(
+      BEHAVIOUR.caveRouteReachBodyLengths * length,
+      BEHAVIOUR.caveRouteRiseBodyLengths * length,
+    );
+    const mostPerLookup = SIGHT_TRIES * (Math.ceil((SIGHT_SAMPLES_PER_CELL * line) / cell) + 1);
+    const work: number[] = [];
+    for (let t = 0; t < 900; t++) {
+      w.step();
+      const out = Math.max(Math.abs(at(w.position, 0) - x0), Math.abs(at(w.position, 2) - z0));
+      expect(out, `step ${t}: the fish got past the walls`).toBeGreaterThan(0.085);
+      work.push(w.behaviour.routeLookupWork);
+    }
+    const looked = work.filter((v) => v > 0);
+    expect(looked.length).toBeGreaterThan(10);
+    expect(Math.max(...looked)).toBeGreaterThan(SIGHT_TRIES * 4);
+    for (let t = 0; t + steps <= work.length; t++) {
+      const sum = work.slice(t, t + steps).reduce((a, b) => a + b, 0);
+      expect(sum, `steps ${t} to ${t + steps - 1}`).toBeLessThanOrEqual(2 * mostPerLookup);
+    }
+    expect(looked.length).toBeLessThanOrEqual(2 * Math.ceil(work.length / steps));
+  });
+
+  it('drops the way to a cave once no fish holds it any more (#1515)', () => {
+    const [x0, z0] = [0.5, 0];
+    const w = new World({
+      seed: 9,
+      tank: REEF_TANK,
+      species: [cherryShrimp],
+      decor: walledIn(x0, z0, 0.05, 0.01),
+      anchors: [
+        { id: 'shut', kind: 'cave', position: [x0, 0.03, z0], radius: 0.03, facing: [0, 0, 1] },
+      ],
+      fish: [],
+    });
+    w.addFish(
+      { id: 'shut-out', species: cherryShrimp.id },
+      { position: [0.2, 0.02, 0], heading: 1 },
+    );
+    w.setLight(0);
+    let kept = 0;
+    let t = 0;
+    while (at(w.behaviour.anchor, 0) === 0) {
+      w.step();
+      kept = Math.max(kept, w.behaviour.routesKept);
+      if (++t > (BEHAVIOUR.walkerCaveGiveUpS + 120) / STEP_DT) throw new Error('never gave up');
+    }
+    expect(kept).toBeGreaterThan(0);
+    expect(w.behaviour.routesKept).toBe(0);
+    expect(w.behaviour.routesPending).toBe(0);
+    expect(w.behaviour.staleEntries).toBe(0);
+  });
+
+  it('looks again where to join a way rebuilt while it kept a cell of the old one (#1521)', () => {
+    const tank = { width: 0.6, height: 0.25, depth: 0.3 } as const;
+    const [x0, y0, z0, half, thick] = [0.04, 0.08, 0, 0.06, 0.008];
+    const wall = (id: string, dx: number, dz: number, hx: number, hz: number): Collider => ({
+      id,
+      hard: true,
+      kind: 'box',
+      center: [x0 + dx, tank.height / 2, z0 + dz],
+      halfExtents: [hx, tank.height / 2, hz],
+      rotationY: 0,
+      rounding: 0,
+    });
+    const span = half + thick;
+    const open = [
+      wall('n', 0, half, span, thick),
+      wall('s', 0, -half, span, thick),
+      wall('e', half, 0, thick, span),
+    ];
+    const w = new World({
+      seed: 5,
+      tank,
+      species: ARCHETYPES,
+      decor: open,
+      anchors: [
+        { id: 'den', kind: 'cave', position: [x0, y0, z0], radius: 0.02, facing: [-1, 0, 0] },
+      ],
+      fish: [],
+    });
+    w.addFish(
+      { id: 'gramma', species: royalGramma.id },
+      { position: [x0 + half + 0.08, y0, z0], heading: 0 },
+    );
+    w.setLight(0);
+    const outside = (): boolean =>
+      Math.max(Math.abs(at(w.position, 0) - x0), Math.abs(at(w.position, 2) - z0)) > span;
+    let t = 0;
+    while (w.behaviour.routeLookupWork === 0 || !outside()) {
+      w.step();
+      if (++t > 3000) throw new Error('the fish never looked where to join its way in');
+    }
+
+    // Shutting the mouth cuts the fish off: the cell it kept has no way on the rebuilt route, so
+    // joining by it would make `Route.from` throw.
+    w.setDecor([...open, wall('w', -half, 0, thick, span)]);
+    expect(w.behaviour.routesPending).toBe(1);
+    expect(w.behaviour.staleEntries, 'no fish holds on to the dropped way').toBe(0);
+    let rebuilt = 0;
+    do {
+      w.step();
+      rebuilt++;
+    } while (w.behaviour.routesPending > 0 && rebuilt < BEHAVIOUR.caveRouteEntrySteps);
+    expect(rebuilt, 'rebuilt within the hold on the old cell').toBeLessThan(
+      BEHAVIOUR.caveRouteEntrySteps,
+    );
+    expect(w.behaviour.routeLookupWork, 'looked again on the rebuilt way').toBeGreaterThan(0);
+    for (let k = 0; k < 2 * BEHAVIOUR.caveRouteEntrySteps; k++) w.step();
+  });
+
+  it('keeps only the ways to held caves once the caves are dealt or the rock moves (#1515)', () => {
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, firefish],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: spawnMany(firefish.id, 3),
+    });
+    const heldWays = (): number =>
+      new Set(
+        Array.from(w.behaviour.anchor, (k, i) => {
+          const a = w.behaviour.homes[k];
+          return a?.kind === 'cave' && a.facing !== undefined ? `${k}:${at(w.radius, i)}` : '';
+        }).filter((key) => key !== ''),
+      ).size;
+    w.setLight(0);
+    for (let t = 0; t < 900; t++) w.step();
+    expect(w.behaviour.routesKept).toBeGreaterThan(0);
+
+    w.setAnchors(REEF_ANCHORS.filter((a) => a.kind !== 'cave'));
+    expect(w.behaviour.routesKept).toBe(heldWays());
+    expect(w.behaviour.routesPending).toBe(heldWays());
+    for (let t = 0; t < 900; t++) w.step();
+    expect(w.behaviour.routesKept).toBeGreaterThan(0);
+
+    w.setAnchors(REEF_ANCHORS);
+    expect(w.behaviour.routesKept).toBe(heldWays());
+    w.setDecor(REEF_DECOR.filter((c) => c.id !== 'rock-left'));
+    expect(w.behaviour.routesKept).toBe(heldWays());
+    expect(w.behaviour.routesPending).toBe(heldWays());
   });
 
   it('yellow tangs graze close to the rock (Montgomery et al. 1989)', () => {
@@ -581,13 +975,13 @@ describe('behaviour traits', () => {
     }
   });
 
-  it('rejects glass-grazer on a forage gait, whose bottom foraging takes precedence', () => {
-    expect(() => toSimSpecies(withGait(otocinclus, 'forage', ['glass-grazer']))).toThrow(
-      /species "otocinclus": trait "glass-grazer" needs a gait other than "forage"/,
-    );
-    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+  it('accepts glass-grazer on every gait, a forager grazing when no food has settled', () => {
+    for (const gait of ['burst-and-coast', 'cruise', 'hover', 'forage'] as const) {
       expect(toSimSpecies(withGait(otocinclus, gait, ['glass-grazer'])).grazer).toBe('glass');
     }
+    expect(
+      toSimSpecies(withGait(bronzeCorydoras, 'forage', ['glass-grazer', 'cave-dweller'])).home,
+    ).toBe('cave');
   });
 
   it('rejects anemone-host on a forager or glass grazer, which would never host', () => {
@@ -1030,4 +1424,108 @@ describe('per-trait parameters', () => {
       expect(run()).toEqual(gulps);
     },
   );
+});
+
+/** A sphere of rock, exact distance and outward normal. */
+class Ball implements Sdf {
+  private readonly c: readonly [number, number, number];
+  private readonly r: number;
+
+  constructor(c: readonly [number, number, number], r: number) {
+    this.c = c;
+    this.r = r;
+  }
+
+  sample(x: number, y: number, z: number, normal: Float64Array): number {
+    const dx = x - this.c[0];
+    const dy = y - this.c[1];
+    const dz = z - this.c[2];
+    const len = Math.hypot(dx, dy, dz) || 1;
+    normal[0] = dx / len;
+    normal[1] = dy / len;
+    normal[2] = dz / len;
+    return len - this.r;
+  }
+}
+
+/** The nearest of several fields, with its normal. */
+class Nearest implements Sdf {
+  private readonly scratch = new Float64Array(3);
+  private readonly parts: readonly Sdf[];
+
+  constructor(parts: readonly Sdf[]) {
+    this.parts = parts;
+  }
+
+  sample(x: number, y: number, z: number, normal: Float64Array): number {
+    let best = Infinity;
+    for (const part of this.parts) {
+      const d = part.sample(x, y, z, this.scratch);
+      if (d < best) {
+        best = d;
+        normal.set(this.scratch);
+      }
+    }
+    return best;
+  }
+}
+
+describe('lineClear', () => {
+  const ball = new Ball([0, 0.25, 0], 0.03);
+
+  it('is blocked by a body passing within its thickness and clear beside it', () => {
+    expect(lineClear(ball, -0.1, 0.25, 0, 0.1, 0.25, 0, 0.005, n3)).toBe(false);
+    expect(lineClear(ball, -0.1, 0.25, 0.04, 0.1, 0.25, 0.04, 0.005, n3)).toBe(true);
+    expect(lineClear(ball, -0.1, 0.25, 0.034, 0.1, 0.25, 0.034, 0.005, n3)).toBe(false);
+  });
+});
+
+describe('grazeSpotFor', () => {
+  const length = 0.1;
+  const tank = new TankSdf(SHOW_TANK);
+  const out = new Float64Array(3);
+  // A boulder floating mid-water, so only it and the probe decide what is rejected.
+  const R = 0.05;
+  const boulder = new Ball([0, 0.25, 0], R);
+  const probe = (
+    field: Sdf,
+    scene: Sdf,
+    pose: Pick<GrazeProbe, 'x' | 'y' | 'z' | 'fx' | 'fz'>,
+  ): GrazeProbe => ({ field, scene, maxY: SHOW_TANK.height, length, ...pose });
+  const standoff =
+    (BEHAVIOUR.bodyThicknessBodyLengths + BEHAVIOUR.grazeStandoffBodyLengths) * length;
+
+  it('takes the stand-off spot off the face the fish swims toward', () => {
+    const scene = new Nearest([tank, boulder]);
+    const p = probe(boulder, scene, { x: 0.3, y: 0.25, z: 0, fx: -1, fz: 0 });
+    expect(grazeSpotFor(p, R + 0.02, 0.25, 0, out, n3)).toBe(true);
+    expect(out[0]).toBeCloseTo(R + standoff, 6);
+    expect(out[1]).toBeCloseTo(0.25, 6);
+    expect(out[2]).toBeCloseTo(0, 6);
+  });
+
+  it('rejects a spot with a second rock across the straight path to it', () => {
+    const across = new Ball([R + 0.2, 0.25, 0], 0.03);
+    const rocks = new Nearest([boulder, across]);
+    const scene = new Nearest([tank, rocks]);
+    const pose = { x: 0.4, y: 0.25, z: 0, fx: -1, fz: 0 };
+    expect(grazeSpotFor(probe(rocks, scene, pose), R + 0.02, 0.25, 0, out, n3)).toBe(false);
+    const aside = new Ball([R + 0.2, 0.25, 0.15], 0.03);
+    const clear = new Nearest([boulder, aside]);
+    expect(
+      grazeSpotFor(probe(clear, new Nearest([tank, clear]), pose), R + 0.02, 0.25, 0, out, n3),
+    ).toBe(true);
+  });
+
+  it('rejects the underside of a rock the fish is above, though the path to it is clear', () => {
+    const scene = new Nearest([tank, boulder]);
+    const below = 0.25 - R - 0.02;
+    const spotY = 0.25 - R - standoff;
+    const beside = { x: 0.3, y: 0.25 - R + 0.005, z: 0, fx: -1, fz: 0 };
+    expect(lineClear(scene, beside.x, beside.y, 0, 0, spotY, 0, standoff, n3)).toBe(true);
+    expect(grazeSpotFor(probe(boulder, scene, beside), 0, below, 0, out, n3)).toBe(false);
+    const under = { ...beside, y: spotY - 0.01 };
+    expect(grazeSpotFor(probe(boulder, scene, under), 0, below, 0, out, n3)).toBe(true);
+    expect(out[1]).toBeCloseTo(spotY, 6);
+  });
 });

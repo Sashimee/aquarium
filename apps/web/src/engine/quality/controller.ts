@@ -1,5 +1,5 @@
 import type { TimingSignal } from './probe';
-import { TIER_COST, tierAt, tierIndex, type Tier } from './tiers';
+import { TIER_COST, TIER_GPU_SHARE, tierAt, tierIndex, type Tier } from './tiers';
 
 export interface ControllerConfig {
   targetMs: number;
@@ -7,9 +7,15 @@ export interface ControllerConfig {
   refreshMs: number;
   signal: TimingSignal;
   windowSize: number;
-  /** Step down when the rolling mean exceeds `targetMs * downRatio`. */
+  /**
+   * Step down when the rolling mean exceeds `targetMs * downRatio`; on the GPU signal, times the
+   * current tier's `TIER_GPU_SHARE`.
+   */
   downRatio: number;
-  /** GPU signal: step up when the next tier's predicted cost fits in `targetMs * upFitRatio`. */
+  /**
+   * GPU signal: step up when the next tier's predicted cost fits in `targetMs * upFitRatio` times
+   * that tier's `TIER_GPU_SHARE`.
+   */
   upFitRatio: number;
   /** Frame signal: step up when the rolling mean stays within `refreshMs * frameUpRatio`. */
   frameUpRatio: number;
@@ -20,7 +26,15 @@ export interface ControllerConfig {
   cooldownMs: number;
   /** A step down this soon after stepping up doubles the hold needed to retry that tier. */
   probationMs: number;
-  /** Larger samples are hitches (tab switch, GC, shader compile) and are dropped. */
+  /**
+   * A tier just stepped down from may not be re-entered for this long, so a device whose timings
+   * sit near a threshold settles instead of rebuilding its pipelines back and forth.
+   */
+  reentryHoldMs: number;
+  /**
+   * Larger samples are hitches (tab switch, GC, shader compile) and are dropped, unless nothing
+   * but hitches arrives for `downHoldMs`: then the device is overloaded, not hitching (#1456).
+   */
   ignoreAboveMs: number;
   minTier: Tier;
   maxTier: Tier;
@@ -39,10 +53,14 @@ export const DEFAULT_CONTROLLER_CONFIG: Omit<
   maxUpHoldMs: 120_000,
   cooldownMs: 3000,
   probationMs: 20_000,
+  reentryHoldMs: 60_000,
   ignoreAboveMs: 250,
   minTier: 'low',
   maxTier: 'ultra',
 };
+
+/** Fewer hitches in a row than this are a stall, however long they take together. */
+const SUSTAINED_HITCHES = 4;
 
 export interface TierChange {
   from: Tier;
@@ -57,9 +75,13 @@ export class TierController {
   private readonly window: number[] = [];
   private overSince: number | null = null;
   private underSince: number | null = null;
+  private hitches: { since: number; count: number } | null = null;
   private lastChangeAt = Number.NEGATIVE_INFINITY;
   private lastUpgrade: { tier: Tier; at: number } | null = null;
   private readonly upHold = new Map<Tier, number>();
+  private readonly blockedUntil = new Map<Tier, number>();
+  private pausedUntil = Number.NEGATIVE_INFINITY;
+  private heldAtPause: { overMs: number | null; underMs: number | null } | null = null;
 
   constructor(initial: Tier, config: ControllerConfig) {
     if (!(config.targetMs > 0)) throw new RangeError('TierController: targetMs must be > 0');
@@ -88,10 +110,45 @@ export class TierController {
     this.lastUpgrade = null;
   }
 
+  /** Keeps the controller from stepping up into `tier` or above it before `untilMs`. */
+  holdBelow(tier: Tier, untilMs: number): void {
+    for (let i = tierIndex(tier); i <= tierIndex(this.config.maxTier); i++) {
+      const held = tierAt(i);
+      this.blockedUntil.set(
+        held,
+        Math.max(this.blockedUntil.get(held) ?? Number.NEGATIVE_INFINITY, untilMs),
+      );
+    }
+  }
+
+  /**
+   * A load or pipeline compile is stalling frames now: they say nothing about the tier, so samples
+   * are ignored for a cooldown. The window keeps the samples taken before, and the holds resume
+   * where they stood, so periodic stalls cannot keep an overloaded device from stepping down.
+   * Holds saved by an earlier pause that no sample has resumed yet are kept as they are.
+   */
+  pause(nowMs: number): void {
+    if (this.heldAtPause === null) {
+      this.heldAtPause = {
+        overMs: this.overSince === null ? null : nowMs - this.overSince,
+        underMs: this.underSince === null ? null : nowMs - this.underSince,
+      };
+      this.overSince = null;
+      this.underSince = null;
+    }
+    this.pausedUntil = Math.max(this.pausedUntil, nowMs + this.config.cooldownMs);
+  }
+
   sample(ms: number, nowMs: number): TierChange | null {
     const c = this.config;
-    if (!Number.isFinite(ms) || ms <= 0 || ms > c.ignoreAboveMs) return null;
-    if (nowMs - this.lastChangeAt < c.cooldownMs) return null;
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    if (nowMs - this.lastChangeAt < c.cooldownMs || nowMs < this.pausedUntil) {
+      this.hitches = null;
+      return null;
+    }
+    if (ms > c.ignoreAboveMs) return this.hitch(ms, nowMs);
+    this.hitches = null;
+    this.resumeHolds(nowMs);
 
     this.window.push(ms);
     if (this.window.length > c.windowSize) this.window.shift();
@@ -99,7 +156,7 @@ export class TierController {
 
     const meanMs = this.window.reduce((sum, v) => sum + v, 0) / this.window.length;
 
-    if (meanMs > c.targetMs * c.downRatio) {
+    if (meanMs > c.targetMs * c.downRatio * this.share(this.current)) {
       this.underSince = null;
       this.overSince ??= nowMs;
       if (nowMs - this.overSince >= c.downHoldMs && this.current !== c.minTier) {
@@ -109,7 +166,7 @@ export class TierController {
     }
 
     this.overSince = null;
-    const next = this.nextUp();
+    const next = this.nextUp(nowMs);
     if (next !== null && this.hasHeadroomFor(next, meanMs)) {
       this.underSince ??= nowMs;
       if (nowMs - this.underSince >= this.upHoldFor(next)) {
@@ -122,18 +179,48 @@ export class TierController {
     return null;
   }
 
+  /**
+   * A frame that took seconds is drawn every few hundred milliseconds, so the window never fills
+   * while the GPU is that far behind; a run of nothing else for the down hold steps down at once.
+   */
+  private hitch(ms: number, nowMs: number): TierChange | null {
+    const hitches = (this.hitches ??= { since: nowMs, count: 0 });
+    hitches.count++;
+    if (
+      hitches.count < SUSTAINED_HITCHES ||
+      nowMs - hitches.since < this.config.downHoldMs ||
+      this.current === this.config.minTier
+    ) {
+      return null;
+    }
+    return this.stepDown(ms, nowMs);
+  }
+
+  private resumeHolds(nowMs: number): void {
+    const held = this.heldAtPause;
+    if (held === null) return;
+    this.heldAtPause = null;
+    this.overSince = held.overMs === null ? null : nowMs - held.overMs;
+    this.underSince = held.underMs === null ? null : nowMs - held.underMs;
+  }
+
   private hasHeadroomFor(next: Tier, meanMs: number): boolean {
     const c = this.config;
     if (c.signal === 'gpu') {
       const predicted = (meanMs * TIER_COST[next]) / TIER_COST[this.current];
-      return predicted <= c.targetMs * c.upFitRatio;
+      return predicted <= c.targetMs * c.upFitRatio * this.share(next);
     }
     return meanMs <= c.refreshMs * c.frameUpRatio;
   }
 
-  private nextUp(): Tier | null {
+  private share(tier: Tier): number {
+    return this.config.signal === 'gpu' ? TIER_GPU_SHARE[tier] : 1;
+  }
+
+  private nextUp(nowMs: number): Tier | null {
     if (this.current === this.config.maxTier) return null;
-    return tierAt(tierIndex(this.current) + 1);
+    const next = tierAt(tierIndex(this.current) + 1);
+    return nowMs < (this.blockedUntil.get(next) ?? Number.NEGATIVE_INFINITY) ? null : next;
   }
 
   private stepDown(meanMs: number, nowMs: number): TierChange {
@@ -146,6 +233,7 @@ export class TierController {
       this.upHold.set(from, Math.min(this.upHoldFor(from) * 2, this.config.maxUpHoldMs));
     }
     this.lastUpgrade = null;
+    this.holdBelow(from, nowMs + this.config.reentryHoldMs);
     this.current = tierAt(tierIndex(from) - 1);
     this.restartWindow(nowMs);
     return { from, to: this.current, reason: 'over-budget', meanMs };
@@ -161,8 +249,10 @@ export class TierController {
 
   private restartWindow(nowMs: number): void {
     this.window.length = 0;
+    this.hitches = null;
     this.overSince = null;
     this.underSince = null;
+    this.heldAtPause = null;
     this.lastChangeAt = nowMs;
   }
 

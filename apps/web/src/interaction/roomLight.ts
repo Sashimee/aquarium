@@ -1,0 +1,97 @@
+import type { RoomLight, LitRoom } from '../engine/room';
+import type { Tier } from '../engine/quality/tiers';
+import type { RoomId } from '@aquarium/shared';
+
+export interface RoomLightBinding {
+  readonly shown: {
+    snapshot(): RoomId | null;
+    subscribe(listener: () => void): () => void;
+  };
+  /** The engine's room; null until its index arrived, and `sync` picks it up then. */
+  room(): LitRoom | null;
+  /** Makes a light for the tank whose seed `seed` is. */
+  create(seed: number): RoomLight;
+  readonly seed: {
+    current(): number;
+    subscribe(listener: () => void): () => void;
+  };
+  tier(): Tier;
+  hood(): number;
+  /** The minute of day the sky is read at, already eased after a clock change. */
+  clock(): number;
+  now(): number;
+  onFrame(callback: () => void): () => void;
+}
+
+export interface RoomLightHandle {
+  readonly light: RoomLight | null;
+  /** Re-reads what is shown and what the engine has; call it when the engine room appears. */
+  sync(): void;
+  setTier(tier: Tier): void;
+  dispose(): void;
+}
+
+/**
+ * Keeps a `RoomLight` for as long as a room is chosen: made when one is shown, disposed when the
+ * choice goes back to none, and fed the clock and the weather every frame.
+ */
+export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
+  let light: RoomLight | null = null;
+
+  const mount = (): void => {
+    light = binding.create(binding.seed.current());
+    light.setTier(binding.tier());
+    const room = binding.room();
+    if (room) light.attach(room);
+  };
+
+  const sync = (): void => {
+    const shown = binding.shown.snapshot() !== null && binding.room() !== null;
+    if (shown && !light) {
+      mount();
+    } else if (!shown && light) {
+      light.dispose();
+      light = null;
+    }
+  };
+  sync();
+
+  const rebuild = (): void => {
+    if (!light) return;
+    light.dispose();
+    mount();
+  };
+
+  const stopPreference = binding.shown.subscribe(sync);
+  const stopSeed = binding.seed.subscribe(rebuild);
+  const stopFrames = binding.onFrame(() => {
+    if (!light) {
+      // Reading the clock advances its ease, so a room chosen mid-fade does not start from a stale minute.
+      binding.clock();
+      return;
+    }
+    const nowMs = binding.now();
+    light.update({
+      nowMs,
+      minute: binding.clock(),
+      hood: binding.hood(),
+    });
+  });
+
+  return {
+    get light() {
+      return light;
+    },
+    sync,
+    setTier(tier) {
+      light?.setTier(tier);
+    },
+    dispose() {
+      stopPreference();
+      stopSeed();
+      stopFrames();
+      light?.dispose();
+      light = null;
+    },
+  };
+}

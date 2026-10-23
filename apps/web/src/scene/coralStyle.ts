@@ -86,3 +86,5 @@ export function coralGlow(biome: Biome, assetId: string, key: number): Color | n
 export function fluorescenceLevel(excitation: number): number {
   return FLUORESCENCE_YIELD * Math.max(excitation, 0) ** 0.4;
 }
+
+export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));

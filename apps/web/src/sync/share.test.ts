@@ -5,8 +5,13 @@ import {
   type PublicTank,
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
+import type { LampSchedule } from '../engine/daylight';
+import { EventBus } from '../engine/events';
+import type { InteractionEvents } from '../interaction/events';
 import { ApiRequestError } from '../ui/api';
+import { LampFeed } from './lampFeed';
 import {
+  announcePublicTank,
   publicFishAsFish,
   publicPath,
   publicReportLines,
@@ -47,9 +52,10 @@ const tank = (overrides: Partial<PublicTank> = {}): PublicTank => ({
   size: 'standard',
   seed: 4096,
   backgroundId: 'bg-fw-planted-stream',
+  roomId: 'room-living',
   decorLayout: [],
   decorEdited: false,
-  water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
+  water: { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 },
   chemistry: newTankChemistry('freshwater'),
   equipment: DEFAULT_EQUIPMENT,
   fish: [fish()],
@@ -179,7 +185,25 @@ describe('public tank to scene', () => {
     expect(edited.decorEdited).toBe(true);
     expect(edited.decorLayout).toHaveLength(1);
     expect(edited.fish).toHaveLength(1);
+    expect(edited).not.toHaveProperty('recentVisitDays');
     expect(edited.biome).toBe('freshwater');
+  });
+
+  it('points the hood at the shared tank own lamp hours, not the viewer last tank', () => {
+    const bus = new EventBus<InteractionEvents>();
+    const feed = new LampFeed(bus);
+    const seen: LampSchedule[] = [];
+    feed.attach({ setLampSchedule: (h) => seen.push(h) });
+    bus.emit('tank:loaded', { ...publicTankLoaded(tank()), tankId: 'mine' });
+    bus.emit('tank:lamp', { tankId: 'mine', intensity: 1, onHour: 5, offHour: 9 });
+    const shared = tank({
+      equipment: {
+        ...tank().equipment,
+        light: { ...tank().equipment.light, intensity: 0.4, onHour: 14, offHour: 23 },
+      },
+    });
+    announcePublicTank(bus, shared);
+    expect(seen.at(-1)).toEqual({ intensity: 0.4, onHour: 14, offHour: 23 });
   });
 
   it('keeps an emptied layout empty instead of showing the preset', () => {
@@ -195,6 +219,7 @@ describe('public tank to scene', () => {
     expect(lines[0]).toContain('Reef of Ann, a shared freshwater tank');
     expect(lines[1]).toBe('1 fish alive: Zip the Neon tetra.');
     expect(lines[2]).toBe('Old has died.');
+    expect(lines[3]).toMatch(/^Room: /);
     expect(publicReportLines(tank({ fish: [] }))[1]).toBe('No fish are alive in this tank.');
   });
 });

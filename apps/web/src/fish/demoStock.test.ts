@@ -3,21 +3,43 @@ import {
   playableBiomeSchema,
   sampleFloor,
   speciesSchema,
+  TANK_SIZES,
+  tankLengthRefusal,
+  tankSizeSchema,
+  tankSpaceOfSize,
   tankWaterBounds,
   tankWaterTop,
+  type PlayableBiome,
 } from '@aquarium/shared';
 import { BEHAVIOUR, World } from '@aquarium/sim';
 import shippedIndex from '../../public/assets/index.json';
-import { DEFAULT_TANK, waterBounds } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import { anemoneAnchor, type SceneAnchor } from '../scene/anemone';
 import type { CatalogEntry } from '../scene/assets';
 import { loadPreset } from '../scene/preset';
-import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock';
+import {
+  DEMO_STOCKS,
+  demoStock,
+  demoStockFor,
+  demoTank,
+  NANO_DEMO_STOCKS,
+  sceneAnchorsToSim,
+  tankSpaceOf,
+} from './demoStock';
+import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import bettaContent from '../../../../content/species/betta.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
 const BIOMES = playableBiomeSchema.options;
+const SHOALS: Readonly<Record<PlayableBiome, readonly string[]>> = {
+  freshwater: ['neon-tetra', 'bronze-corydoras', 'guppy'],
+  reef: ['banggai-cardinalfish'],
+  mangrove: ['banded-archerfish', 'orange-chromide'],
+  // Rift lake cichlids hold territories on rock and shell; none of them schools.
+  cichlid: [],
+  blackwater: ['cardinal-tetra', 'rummy-nose-tetra', 'dwarf-pencilfish'],
+};
 // PLAN §2.7: the mobile tier draws at most 30 fish per tank, and the demo runs on mobile too.
 const MOBILE_FISH_BUDGET = 30;
 
@@ -131,13 +153,7 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
       const { schooling } = speciesSchema.partial({ render: true }).parse(raw).behaviour;
       return schooling === undefined ? [] : [{ id: species.id, minGroup: schooling.minGroup }];
     });
-    if (biome === 'freshwater') {
-      expect(schooling.map((s) => s.id)).toEqual(
-        expect.arrayContaining(['neon-tetra', 'bronze-corydoras']),
-      );
-    } else {
-      expect(schooling.map((s) => s.id)).toContain('banggai-cardinalfish');
-    }
+    expect(schooling.map((s) => s.id).sort()).toEqual([...SHOALS[biome]].sort());
     const spawned = demoTank(DEFAULT_TANK, 1, biome).config.fish;
     for (const { id, minGroup } of schooling) {
       expect(stock.counts[id] ?? 0, id).toBeGreaterThanOrEqual(minGroup);
@@ -153,6 +169,65 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
 
   it('builds a world the sim accepts', () => {
     expect(() => new World(demoTank(DEFAULT_TANK, 3, biome).config)).not.toThrow();
+  });
+});
+
+describe.each(tankSizeSchema.options)('the demo in a %s tank', (size) => {
+  const tank = TANK_DIMENSIONS[size];
+  const files = import.meta.glob('../../../../content/species/*.json', {
+    eager: true,
+    import: 'default',
+  });
+  const content = (id: string) =>
+    speciesSchema.partial({ render: true }).parse(files[`../../../../content/species/${id}.json`]);
+
+  it.each(BIOMES)('keeps %s within the size animal cap', (biome) => {
+    const { fish } = demoTank(tank, 1, biome).config;
+    expect(fish.length).toBeGreaterThan(0);
+    expect(fish.length).toBeLessThanOrEqual(TANK_SIZES[size].maxAnimals);
+  });
+
+  it.each(BIOMES)('stocks %s only with species the shop sells for the size', (biome) => {
+    for (const species of demoTank(tank, 1, biome).config.species) {
+      const refusal = tankLengthRefusal(
+        BUNDLED_ECONOMY,
+        species.id,
+        { size, quarantine: false },
+        species.id,
+      );
+      expect(refusal, species.id).toBeUndefined();
+    }
+  });
+
+  it.each(BIOMES)('keeps every %s shoal at its minGroup in a world the sim accepts', (biome) => {
+    const { fish, species } = demoTank(tank, 1, biome).config;
+    for (const { id } of species) {
+      const count = fish.filter((f) => f.species === id).length;
+      expect(count, id).toBeGreaterThanOrEqual(content(id).behaviour.schooling?.minGroup ?? 1);
+    }
+    expect(() => new World(demoTank(tank, 3, biome).config)).not.toThrow();
+  });
+
+  if (size === 'nano30') {
+    it.each(BIOMES)('stocks %s with no adult over a quarter of the 40 cm glass', (biome) => {
+      for (const { id } of demoTank(tank, 1, biome).config.species) {
+        expect(content(id).lifecycle.maxSizeM, id).toBeLessThanOrEqual(tank.length / 4);
+      }
+    });
+  }
+});
+
+describe('the nano demo', () => {
+  it('shows no angelfish in 30 l, and at most 12 fish', () => {
+    const { fish } = demoTank(TANK_DIMENSIONS.nano30, 1, 'freshwater').config;
+    expect(fish.map((f) => f.species)).not.toContain('angelfish');
+    expect(fish.length).toBeLessThanOrEqual(12);
+    expect(demoStockFor('freshwater', 'nano30')).toBe(NANO_DEMO_STOCKS.freshwater);
+    expect(demoStockFor('freshwater', 'standard')).toBe(DEMO_STOCKS.freshwater);
+  });
+
+  it('refuses a tank that is none of the shared sizes', () => {
+    expect(() => demoTank({ ...DEFAULT_TANK, length: 0.9 }, 1, 'reef')).toThrow(/TANK_DIMENSIONS/);
   });
 });
 
@@ -188,6 +263,40 @@ describe('reef stock', () => {
     expect((counts['yellow-tang'] ?? 0) + (counts['blue-tang'] ?? 0)).toBeGreaterThanOrEqual(1);
     expect(counts['royal-gramma']).toBeGreaterThanOrEqual(1);
     expect(counts['banggai-cardinalfish']).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('mangrove stock', () => {
+  it('leaves out the silver mono, which outgrows a 120 cm tank', () => {
+    expect(DEMO_STOCKS.mangrove.species.map((s) => s.id)).not.toContain('silver-mono');
+  });
+
+  it('keeps archerfish under the surface and gobies and mudskippers on the mud', () => {
+    const demo = demoTank(DEFAULT_TANK, 9, 'mangrove');
+    const world = new World(demo.config);
+    const { space } = demo.config;
+    const top = tankWaterTop(space);
+    const heights = new Map<string, number[]>();
+    for (let step = 0; step < 6000; step++) {
+      world.step();
+      if (step < 900 || step % 10 !== 0) continue;
+      demo.config.fish.forEach((f, i) => {
+        const x = world.position[i * 3] ?? 0;
+        const z = world.position[i * 3 + 2] ?? 0;
+        const ground = sampleFloor(space, x, z);
+        const h = ((world.position[i * 3 + 1] ?? 0) - ground) / (top - ground);
+        heights.set(f.species, [...(heights.get(f.species) ?? []), h]);
+      });
+    }
+    const median = (id: string): number => {
+      const hs = [...(heights.get(id) ?? [])].sort((a, b) => a - b);
+      if (hs.length === 0) throw new Error(`no ${id} in the mangrove demo`);
+      return hs[Math.floor(hs.length / 2)] ?? Number.NaN;
+    };
+    expect(median('banded-archerfish')).toBeGreaterThan(0.6);
+    expect(median('bumblebee-goby')).toBeLessThan(0.2);
+    expect(median('barred-mudskipper')).toBeLessThan(0.2);
+    expect(median('blue-spotted-mudskipper')).toBeLessThan(0.2);
   });
 });
 
@@ -260,6 +369,29 @@ describe('sceneAnchorsToSim', () => {
     ]);
   });
 
+  it('keeps a bank above the water where the scene put it', () => {
+    const bank: SceneAnchor = {
+      id: 'bank-1',
+      kind: 'bank',
+      position: [0.1, top + 0.08, 0.02],
+      radius: 0.007,
+    };
+    expect(sceneAnchorsToSim([bank], demo)).toEqual([
+      { id: 'bank-1', kind: 'bank', position: [0.1, top + 0.08, 0.02], radius: 0.007 },
+    ]);
+  });
+
+  it('carries a cave mouth facing through to the sim', () => {
+    const cave: SceneAnchor = {
+      id: 'c',
+      kind: 'cave',
+      position: [0.1, 0.25, 0],
+      radius: 0.03,
+      facing: [0, 0, 1],
+    };
+    expect(sceneAnchorsToSim([cave], demo)[0]?.facing).toEqual([0, 0, 1]);
+  });
+
   it('lifts an anchor sunk into the sand until its sphere clears it', () => {
     const low: SceneAnchor = { id: 'low', kind: 'anemone', position: [0, 0.02, 0], radius: 0.03 };
     const [sim] = sceneAnchorsToSim([low], demo);
@@ -316,5 +448,11 @@ describe('sceneAnchorsToSim', () => {
       }
     }
     expect(close / samples).toBeGreaterThan(0.75);
+  });
+});
+
+describe('tankSpaceOf', () => {
+  it.each(tankSizeSchema.options)('builds the shared tank space for %s', (size) => {
+    expect(tankSpaceOf(TANK_DIMENSIONS[size])).toEqual(tankSpaceOfSize(size));
   });
 });

@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BACKGROUND_IDS, DEFAULT_BACKGROUND_ID } from '@aquarium/shared';
+import { BACKGROUND_IDS, DEFAULT_BACKGROUND_ID, type Biome } from '@aquarium/shared';
 import {
   DepthTexture,
   FloatType,
@@ -29,6 +29,7 @@ import {
   backgroundFile,
   parseBackgroundFiles,
   pickBackgroundId,
+  posterTier,
   TankBackground,
   type BackgroundLoader,
 } from './background';
@@ -134,8 +135,13 @@ describe('pickBackgroundId', () => {
   });
 
   it('gives no picture to a biome that has none yet', () => {
-    expect(pickBackgroundId('cichlid', null)).toBeNull();
-    expect(pickBackgroundId('mangrove', STREAM)).toBeNull();
+    expect(pickBackgroundId('atlantis' as Biome, null)).toBeNull();
+    expect(pickBackgroundId('atlantis' as Biome, STREAM)).toBeNull();
+  });
+
+  it('picks the default for blackwater and mangrove', () => {
+    expect(pickBackgroundId('blackwater', null)).toBe(DEFAULT_BACKGROUND_ID.blackwater);
+    expect(pickBackgroundId('mangrove', STREAM)).toBe(DEFAULT_BACKGROUND_ID.mangrove);
   });
 });
 
@@ -197,6 +203,28 @@ describe('parseBackgroundFiles', () => {
 
   it('names the asset pipeline when a background is missing from the index', () => {
     expect(() => backgroundFile(new Map(), STREAM, 'low')).toThrow(/re-run the asset pipeline/);
+  });
+});
+
+describe('posterTier', () => {
+  const files = parseBackgroundFiles(assetIndex);
+  const width = (path: string): number =>
+    readFileSync(join(__dirname, '../../../public/assets', path)).readUInt32LE(20);
+
+  it("follows the tier where 2k maps are allowed, so desktops keep high's 2048x1024 poster", () => {
+    for (const tier of TIERS) expect(posterTier(tier, 2048)).toBe(tier);
+    expect(width(backgroundFile(files, STREAM, posterTier('high', 2048)))).toBe(2048);
+  });
+
+  it('caps a device held to 1k maps at the 1024x512 poster on every tier (PLAN §9.2)', () => {
+    expect(TIERS.map((t) => posterTier(t, 1024))).toEqual(['low', 'medium', 'medium', 'medium']);
+    for (const id of Object.values(BACKGROUND_IDS).flat()) {
+      for (const tier of TIERS) {
+        expect(width(backgroundFile(files, id, posterTier(tier, 1024))), `${id} ${tier}`).toBe(
+          tier === 'low' ? 512 : 1024,
+        );
+      }
+    }
   });
 });
 
@@ -326,7 +354,7 @@ describe('TankBackground', () => {
     const coral = loader.land(file(CORAL, 'high'));
     await shown;
     const coralGone = disposed(coral);
-    await background.show('cichlid', null);
+    await background.show('atlantis' as Biome, null);
     expect(background.id).toBeNull();
     expect(background.map.value).toBe(film);
     expect(coralGone()).toBe(true);

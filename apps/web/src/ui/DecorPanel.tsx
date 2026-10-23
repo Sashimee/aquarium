@@ -4,6 +4,7 @@ import { priceText } from '../sync/economy';
 import { VACATION_FEEDER_ASSET_ID } from '../interaction/decor/spec';
 import type { DecorCommand } from '../interaction/events';
 import { backgroundOptions } from './backgroundTitles';
+import { RoomPicker } from './RoomPicker';
 import {
   useBackgroundState,
   useBridge,
@@ -92,6 +93,8 @@ export default function DecorPanel() {
       </p>
 
       <BackgroundChooser />
+
+      <RoomPicker />
 
       <div className="block">
         <h3>Add a piece</h3>

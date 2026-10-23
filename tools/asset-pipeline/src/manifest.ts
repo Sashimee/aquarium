@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
+import { manifestAssetCreditFieldsSchema } from '@aquarium/shared';
 import { z } from 'zod';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
 export const SHARE_ALIKE_KIND = 'reference-photo';
-/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni, firefish, harlequin rasbora, six-line wrasse, bristlenose pleco) and nothing else. */
+/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni, firefish, harlequin rasbora, six-line wrasse, bristlenose pleco, fairy cichlid, peacock cichlid, shell-dweller) and nothing else. */
 export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; author: string }[] = [
   {
     id: 'wm-cory-aeneus-gabs-01',
@@ -25,6 +26,13 @@ export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; auth
   { id: 'wm-sixline-delso-63', species: 'six-line-wrasse', author: 'Diego Delso' },
   { id: 'wm-ancistrus-reis', species: 'bristlenose-pleco', author: 'Júlio Reis' },
   { id: 'wm-ancistrus-l144-adolfoi', species: 'bristlenose-pleco', author: 'Corydoras-adolfoi' },
+  { id: 'wm-brichardi-stang-1zz', species: 'neolamprologus-brichardi', author: 'David J. Stang' },
+  { id: 'wm-aulonocara-baenschi-rjcastillo', species: 'aulonocara-baenschi', author: 'Rjcastillo' },
+  {
+    id: 'wm-multifasciatus-ingebrigtsen-male',
+    species: 'neolamprologus-multifasciatus',
+    author: 'Richard A. Ingebrigtsen',
+  },
 ];
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lowercase hex characters');
@@ -59,6 +67,17 @@ export const manifestSchema = z.looseObject({
   assets: z.array(manifestAssetSchema),
 });
 export type Manifest = z.infer<typeof manifestSchema>;
+
+/** Checks the assets against manifestAssetCreditFieldsSchema, the shared schema the API parses at startup (apps/api/src/credits.ts). */
+export function apiSchemaProblems(manifest: Manifest): string[] {
+  const result = z.array(manifestAssetCreditFieldsSchema).safeParse(manifest.assets);
+  if (result.success) return [];
+  return result.error.issues.map((issue) => {
+    const [index, ...rest] = issue.path;
+    const id = typeof index === 'number' ? manifest.assets[index]?.id : undefined;
+    return `manifest asset ${id ?? String(index)}: ${rest.map(String).join('.') || 'entry'} fails the API schema: ${issue.message}`;
+  });
+}
 
 export const PENDING_STATUS = 'selected-pending-download';
 
@@ -114,7 +133,7 @@ export function requiresCredit(licence: string): boolean {
 }
 
 export function validateManifest(manifest: Manifest, credits: string): string[] {
-  const problems: string[] = [];
+  const problems: string[] = apiSchemaProblems(manifest);
   const seen = new Set<string>();
   for (const asset of manifest.assets) {
     const at = `manifest asset ${asset.id}`;

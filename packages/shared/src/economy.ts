@@ -6,8 +6,9 @@ import {
   slugSchema,
   timestampSchema,
 } from './common.js';
+import { roomPricesSchema } from './rooms.js';
 import { diseaseKindSchema } from './fishState.js';
-import { tankSizeSchema } from './tankSize.js';
+import { TANK_SIZES, tankSizeSchema, type TankSize } from './tankSize.js';
 
 // Tables and routes live in apps/api (T70, PLAN 9.2).
 //   wallet(user_id PK -> user ON DELETE CASCADE, balance integer): cache of the ledger sum, kept
@@ -31,7 +32,8 @@ import { tankSizeSchema } from './tankSize.js';
 // Ledger reasons:
 //   purchase      game spend, delta < 0
 //   earn          game reward, delta > 0
-//   grant         starting and migration grants, source game
+//   grant         starting and migration grants, source game; a grant may be 0 Pearls (the one-off
+//                 home office for accounts that predate rooms, itemRef room:room-office)
 //   pack          a Pearl pack bought, source stripe|apple
 //   subscription  the daily Pearls of the subscription, source stripe|apple, itemRef sub:<id>
 //   refund        a game purchase given back, source game, delta > 0
@@ -39,8 +41,6 @@ import { tankSizeSchema } from './tankSize.js';
 //                 delta < 0, itemRef names the original pack or subscription row
 //   restore       Pearls returned after a won dispute, source stripe|apple, delta > 0
 //
-// A request without stage is priced as DEFAULT_PURCHASE_STAGE and one without idempotencyKey gets a
-// server-made key, for clients that predate the shop (apps/api/src/legacyRequests.ts, #765).
 // A fish is bought through add-fish only; purchase rejects species:* refs.
 //
 // Plants and decor are priced by the ids of DECOR_ASSET_IDS (the ids a layout holds), not by
@@ -92,18 +92,20 @@ export const itemRefSchema = z
     'what was bought or earned, e.g. plant:java-fern or pack:pearls-550; purchase rejects species:* refs',
   );
 
-export const ledgerEntrySchema = z.strictObject({
-  id: idSchema,
-  userId: authIdSchema
-    .nullable()
-    .describe('null once the row is pseudonymised on account deletion'),
-  delta: pearlsSchema.refine((n) => n !== 0, 'a ledger entry moves Pearls'),
-  reason: ledgerReasonSchema,
-  source: ledgerSourceSchema,
-  itemRef: itemRefSchema.nullable(),
-  idempotencyKey: ledgerKeySchema,
-  createdAt: timestampSchema,
-});
+export const ledgerEntrySchema = z
+  .strictObject({
+    id: idSchema,
+    userId: authIdSchema
+      .nullable()
+      .describe('null once the row is pseudonymised on account deletion'),
+    delta: pearlsSchema,
+    reason: ledgerReasonSchema,
+    source: ledgerSourceSchema,
+    itemRef: itemRefSchema.nullable(),
+    idempotencyKey: ledgerKeySchema,
+    createdAt: timestampSchema,
+  })
+  .refine((e) => e.delta !== 0 || e.reason === 'grant', 'only a grant may move 0 Pearls');
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;
 
 export const ONE_TIME_REF = /^(plant|decor|background):/;
@@ -138,9 +140,6 @@ export type PurchaseResponse = z.infer<typeof purchaseResponseSchema>;
 export const purchasableStageSchema = z.enum(['juvenile', 'adult']);
 export type PurchasableStage = z.infer<typeof purchasableStageSchema>;
 
-// What add-fish did before the shop had stages: the fish.stage column default.
-export const DEFAULT_PURCHASE_STAGE: PurchasableStage = 'adult';
-
 const range = z
   .strictObject({ min: priceSchema, max: priceSchema })
   .refine((r) => r.max >= r.min, 'max must not be below min');
@@ -166,7 +165,15 @@ const pricedRange = (keys: z.ZodType<string>) =>
     );
 
 const speciesPriceSchema = z
-  .strictObject({ juvenile: priceSchema, adult: priceSchema })
+  .strictObject({
+    juvenile: priceSchema,
+    adult: priceSchema,
+    minTankLengthM: z
+      .number()
+      .positive()
+      .optional()
+      .describe('shortest tank, outer length in metres, the fish is sold for'),
+  })
   .refine((p) => p.adult > p.juvenile, 'an adult costs more than a juvenile');
 
 const dailyCap = z.int().positive();
@@ -180,6 +187,14 @@ export const packSchema = z.strictObject({
     .describe('false when Stripe fees make the pack unprofitable on the web'),
 });
 export type Pack = z.infer<typeof packSchema>;
+
+export const subscriptionOfferSchema = z.strictObject({
+  id: slugSchema,
+  priceCents: z.int().positive().describe('euro cents per month, VAT included'),
+  interval: z.literal('month'),
+  pearlsPerDay: priceSchema,
+});
+export type SubscriptionOffer = z.infer<typeof subscriptionOfferSchema>;
 
 export const economySchema = z
   .strictObject({
@@ -204,6 +219,8 @@ export const economySchema = z
         premiumFood: priceSchema,
         premiumMedicine: pricedRange(diseaseKindSchema).describe('prices keyed by disease kind'),
         bottledBacteria: priceSchema,
+        bufferDose: priceSchema,
+        botanicals: priceSchema,
         testKit: priceSchema,
       }),
       tankSlots: z.array(priceSchema).length(5).describe('extra tanks 2 to 6, in order'),
@@ -211,6 +228,9 @@ export const economySchema = z
         .partialRecord(tankSizeSchema, priceSchema)
         .describe('paid upgrades; standard is the free default size and is not listed'),
     }),
+    rooms: roomPricesSchema.describe(
+      'price of each room in Pearls, 0 for the free ones, keyed by room id',
+    ),
     earn: z.strictObject({
       dailyCare: z.strictObject({ reward: range, dailyCap }),
       healthyTankStreak: z.strictObject({
@@ -228,12 +248,7 @@ export const economySchema = z
       migration: priceSchema,
     }),
     packs: z.array(packSchema).min(1),
-    subscription: z.strictObject({
-      id: slugSchema,
-      priceCents: z.int().positive(),
-      interval: z.literal('month'),
-      pearlsPerDay: priceSchema,
-    }),
+    subscription: subscriptionOfferSchema,
   })
   .superRefine((e, ctx) => {
     if (e.items.euphyllia < e.items.decor.min || e.items.euphyllia > e.items.decor.max) {
@@ -257,6 +272,21 @@ export const economySchema = z
     });
   });
 export type Economy = z.infer<typeof economySchema>;
+
+export function tankLengthRefusal(
+  economy: Economy,
+  speciesId: string,
+  tank: { size: TankSize; quarantine: boolean },
+  commonName: string,
+): string | undefined {
+  if (tank.quarantine) return undefined;
+  const minLength = Object.hasOwn(economy.species, speciesId)
+    ? economy.species[speciesId]?.minTankLengthM
+    : undefined;
+  if (minLength === undefined || TANK_SIZES[tank.size].dimensions.length >= minLength)
+    return undefined;
+  return `${commonName} needs a tank at least ${Math.round(minLength * 100)} cm long.`;
+}
 
 export function decorPrice(economy: Economy, assetId: string): number | undefined {
   if (PROCEDURAL_EUPHYLLIA_ID.test(assetId)) return economy.items.euphyllia;

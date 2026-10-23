@@ -8,7 +8,16 @@ import { SHRIMP_RECIPES, buildShrimp } from './shrimp.ts';
 import { NERITE_RECIPES, buildNerite } from './nerite.ts';
 import { HERMIT_RECIPES, buildHermit } from './hermit.ts';
 import { buildEnvironment, buildHdri, buildSubstrate } from './environment.ts';
+import { BLACKWATER_FISH_RECIPES } from './blackwater-fish.ts';
+import { LEAF_CARD_RECIPES, buildLeafCard } from './leaf-card.ts';
+import { FRESHWATER_PUFFER_RECIPES } from './freshwater-puffer.ts';
 import { LOFT_FISH_RECIPES, buildLoftFish } from './loft-fish.ts';
+import {
+  MANGROVE_ENVIRONMENT_RECIPES,
+  MANGROVE_FISH_RECIPES,
+  MANGROVE_LOFT_RECIPES,
+  MANGROVE_SUBSTRATE_RECIPES,
+} from './mangrove.ts';
 import {
   CUSTOM_ATTRIBUTES_NOTE,
   TEXTURE_VARIANTS_NOTE,
@@ -25,7 +34,27 @@ import {
 } from './backgrounds.ts';
 import type { Rgba } from './textures.ts';
 import { RAW_ROOT, verifyRawSource } from './source.ts';
-import { ENVIRONMENT_RECIPES, FISH_RECIPES, HDRI_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
+import {
+  ENVIRONMENT_RECIPES,
+  FISH_RECIPES,
+  HDRI_RECIPES,
+  ROCK_PILE_RECIPES,
+  SUBSTRATE_RECIPES,
+} from './recipes.ts';
+import { buildRockPile } from './rock-pile.ts';
+import {
+  LOD0_MAX_TRIANGLES,
+  buildRoomProp,
+  loadRooms,
+  mobileTriangleTargets,
+  roomAmbienceIds,
+  roomAmbienceRecipe,
+  roomHdriIds,
+  roomHdriRecipe,
+  roomPropIds,
+  roomPropTriangles,
+} from './room.ts';
+import type { RoomEntry } from '@aquarium/shared';
 
 export interface BuildOptions {
   repoRoot: string;
@@ -52,15 +81,49 @@ const KIND_ORDER: OutputAsset['kind'][] = [
   'driftwood',
   'rock',
   'decor',
+  'room-furniture',
   'substrate',
   'hdri',
   'audio',
   'background',
 ];
 
-function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba>): Task[] {
+interface RoomPlan {
+  rooms: readonly RoomEntry[];
+  mobileTriangles(id: string, ctx: FishContext): Promise<number>;
+}
+
+function roomPlan(rooms: readonly RoomEntry[]): RoomPlan {
+  let targets: Promise<Map<string, number>> | undefined;
+  return {
+    rooms,
+    async mobileTriangles(id, ctx) {
+      targets ??= (async () => {
+        const counts = new Map<string, number>();
+        for (const propId of roomPropIds(rooms))
+          counts.set(propId, Math.min(LOD0_MAX_TRIANGLES, await roomPropTriangles(propId, ctx)));
+        return mobileTriangleTargets(rooms, counts);
+      })();
+      const target = (await targets).get(id);
+      if (target === undefined)
+        throw new Error(`${id}: not used by any room in content/rooms.json`);
+      return target;
+    },
+  };
+}
+
+function tasks(
+  backgrounds: readonly ManifestAsset[],
+  previews: Map<string, Rgba>,
+  rooms: RoomPlan,
+): Task[] {
   return [
     ...FISH_RECIPES.map((recipe) => ({
+      kind: 'fish' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildSourceFish(recipe, ctx),
+    })),
+    ...MANGROVE_FISH_RECIPES.map((recipe) => ({
       kind: 'fish' as const,
       id: recipe.id,
       run: (ctx: FishContext) => buildSourceFish(recipe, ctx),
@@ -86,6 +149,27 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       id: recipe.id,
       run: (ctx: FishContext) => buildEnvironment(recipe, ctx),
     })),
+    ...LEAF_CARD_RECIPES.map((recipe) => ({
+      kind: 'decor' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildLeafCard(recipe, ctx),
+    })),
+    ...ROCK_PILE_RECIPES.map((recipe) => ({
+      kind: 'rock' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) =>
+        buildRockPile(recipe, new Map(ENVIRONMENT_RECIPES.map((r) => [r.id, r])), ctx),
+    })),
+    ...MANGROVE_ENVIRONMENT_RECIPES.map((recipe) => ({
+      kind: recipe.kind,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildEnvironment(recipe, ctx),
+    })),
+    ...MANGROVE_SUBSTRATE_RECIPES.map((recipe) => ({
+      kind: 'substrate' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildSubstrate(recipe, ctx),
+    })),
     ...SUBSTRATE_RECIPES.map((recipe) => ({
       kind: 'substrate' as const,
       id: recipe.id,
@@ -96,17 +180,36 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       id: recipe.id,
       run: (ctx: FishContext) => buildHdri(recipe, ctx),
     })),
-    ...LOFT_FISH_RECIPES.map((recipe) => ({
+    ...[...LOFT_FISH_RECIPES, ...BLACKWATER_FISH_RECIPES, ...FRESHWATER_PUFFER_RECIPES].map(
+      (recipe) => ({
+        kind: 'fish' as const,
+        id: recipe.id,
+        run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
+      }),
+    ),
+    ...MANGROVE_LOFT_RECIPES.map((recipe) => ({
       kind: 'fish' as const,
       id: recipe.id,
       run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
     })),
-    ...AUDIO_RECIPES.map((recipe) => ({
-      kind: 'audio' as const,
-      id: recipe.id,
-      run: (ctx: FishContext) =>
-        Promise.resolve(buildAudio(recipe, ctx, RAW_ROOT, ctx.licenceOf(recipe.source))),
+    ...roomPropIds(rooms.rooms).map((id) => ({
+      kind: 'room-furniture' as const,
+      id,
+      run: async (ctx: FishContext) => buildRoomProp(id, await rooms.mobileTriangles(id, ctx), ctx),
     })),
+    ...roomHdriIds(rooms.rooms).map((id) => ({
+      kind: 'hdri' as const,
+      id,
+      run: (ctx: FishContext) => buildHdri(roomHdriRecipe(id), ctx),
+    })),
+    ...[...AUDIO_RECIPES, ...roomAmbienceIds(rooms.rooms).map(roomAmbienceRecipe)].map(
+      (recipe) => ({
+        kind: 'audio' as const,
+        id: recipe.id,
+        run: (ctx: FishContext) =>
+          Promise.resolve(buildAudio(recipe, ctx, RAW_ROOT, ctx.licenceOf(recipe.source))),
+      }),
+    ),
     ...backgrounds.map((entry) => ({
       kind: 'background' as const,
       id: entry.id,
@@ -160,18 +263,19 @@ export async function build(options: BuildOptions): Promise<void> {
   }
 
   const backgrounds = manifest.assets.filter((a) => a.kind === 'background');
-  const buildable = new Set(tasks(backgrounds, previews).map((t) => `${t.kind}/${t.id}`));
+  const rooms = roomPlan(loadRooms(repoRoot));
+  const buildable = new Set(tasks(backgrounds, previews, rooms).map((t) => `${t.kind}/${t.id}`));
   for (const key of [...previous.keys()].filter((k) => !buildable.has(k))) {
     console.log(`index.json: dropping ${key}, it has no build task any more`);
     previous.delete(key);
   }
 
   await readyCodecs();
-  const selected = tasks(backgrounds, previews).filter(
+  const selected = tasks(backgrounds, previews, rooms).filter(
     (t) => only.length === 0 || only.includes(t.id),
   );
   if (only.length > 0 && selected.length !== only.length) {
-    const known = tasks(backgrounds, previews).map((t) => t.id);
+    const known = tasks(backgrounds, previews, rooms).map((t) => t.id);
     throw new Error(`unknown asset id in [${only.join(', ')}]; known: ${known.join(', ')}`);
   }
   for (const task of selected) {

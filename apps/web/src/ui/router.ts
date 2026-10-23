@@ -1,6 +1,15 @@
 import type { User } from '@aquarium/shared';
 import { publicPath, tokenFromPath } from '../sync/share';
 
+const GALLERY_TANK_PREFIX = '/gallery/';
+const TANK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function galleryTankIdFromPath(path: string): string | null {
+  if (!path.startsWith(GALLERY_TANK_PREFIX)) return null;
+  const id = path.slice(GALLERY_TANK_PREFIX.length);
+  return TANK_ID.test(id) ? id.toLowerCase() : null;
+}
+
 export type Route =
   | { name: 'home' }
   | { name: 'sign-in' }
@@ -12,6 +21,9 @@ export type Route =
   | { name: 'settings' }
   | { name: 'privacy' }
   | { name: 'credits' }
+  | { name: 'gallery' }
+  | { name: 'community' }
+  | { name: 'gallery-tank'; id: string }
   | { name: 'public-tank'; token: string }
   | { name: 'not-found' };
 
@@ -20,6 +32,8 @@ export function parseRoute(href: string): Route {
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const token = tokenFromPath(path);
   if (token) return { name: 'public-tank', token };
+  const galleryId = galleryTankIdFromPath(path);
+  if (galleryId) return { name: 'gallery-tank', id: galleryId };
   switch (path) {
     case '/': {
       // Better Auth sends failed verifications to the bare callback root with ?error=.
@@ -38,6 +52,10 @@ export function parseRoute(href: string): Route {
       return { name: 'privacy' };
     case '/credits':
       return { name: 'credits' };
+    case '/gallery':
+      return { name: 'gallery' };
+    case '/community':
+      return { name: 'community' };
     case '/forgot-password':
       return { name: 'forgot-password' };
     case '/reset-password':
@@ -53,6 +71,16 @@ export function parseRoute(href: string): Route {
   }
 }
 
+/**
+ * Pages that show someone else's tank in the scene. They own the engine bus, so the player's own
+ * session must not load beside them.
+ */
+export function isReadOnlyView(route: Route): boolean {
+  return (
+    route.name === 'public-tank' || route.name === 'gallery-tank' || route.name === 'community'
+  );
+}
+
 export function routePath(route: Route): string {
   switch (route.name) {
     case 'home':
@@ -61,6 +89,8 @@ export function routePath(route: Route): string {
       return '/';
     case 'public-tank':
       return publicPath(route.token);
+    case 'gallery-tank':
+      return `${GALLERY_TANK_PREFIX}${route.id}`;
     case 'verify-email':
       return route.error
         ? `/verify-email?error=${encodeURIComponent(route.error)}`
@@ -149,7 +179,14 @@ export function currentHref(): string {
 export function returnPathFromState(state: unknown): string | null {
   if (typeof state !== 'object' || state === null || !('returnTo' in state)) return null;
   const { returnTo } = state;
-  return typeof returnTo === 'string' && tokenFromPath(returnTo) !== null ? returnTo : null;
+  if (typeof returnTo !== 'string') return null;
+  const name = parseRoute(returnTo).name;
+  return name === 'public-tank' ||
+    name === 'gallery' ||
+    name === 'gallery-tank' ||
+    name === 'community'
+    ? returnTo
+    : null;
 }
 
 export function currentReturnPath(): string | null {

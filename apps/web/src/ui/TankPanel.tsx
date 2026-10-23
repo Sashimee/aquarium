@@ -1,7 +1,7 @@
 import {
-  playableBiomeSchema,
+  creatableBiomeSchema,
   type Biome,
-  type PlayableBiome,
+  type CreatableBiome,
   type Tank,
   type TankSize,
   DEFAULT_TANK_SIZE,
@@ -17,12 +17,17 @@ import {
   waterReport,
   type SpeciesNames,
 } from '../sync/life';
-import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { doseButtonId, doseOptions } from '../sync/doses';
 import { priceOrFree, priceText, tankPrice } from '../sync/economy';
 import { checkTankName, suggestTankName } from '../sync/naming';
+import { salinityNotice, type SalinityNotice } from '../sync/salinityCare';
 import type { SessionState, TankSession } from '../sync/session';
-import { useAuth } from './context';
+import { useAuth, useBridge } from './context';
+import { Co2Control } from './Co2Control';
+import { CoralSection } from './Corals';
 import { FishCards } from './FishCard';
+import { AcceptsGiftsToggle, GiftFishButton, GiftNotice, GiftOffers } from './Gifts';
 import { Link } from './screens';
 import WaterTest from './WaterTest';
 import { ShareSection } from './ShareSection';
@@ -97,7 +102,7 @@ const needTank = (): ReactNode => (
   <p>You have no tank yet. Open My tank at the top to start one.</p>
 );
 
-export function TanksPanel({ newTankBiome }: { newTankBiome: PlayableBiome | null }) {
+export function TanksPanel({ newTankBiome }: { newTankBiome: CreatableBiome | null }) {
   return (
     <Gate
       noTank={(session, state) => (
@@ -114,6 +119,9 @@ export function TanksPanel({ newTankBiome }: { newTankBiome: PlayableBiome | nul
       {({ session, state, tank }) => (
         <>
           <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
+          <AcceptsGiftsToggle key={tank.id} session={session} state={state} tank={tank} />
+          <GiftOffers session={session} state={state} />
+          <Bag session={session} state={state} />
           <ShareSection key={tank.id} session={session} state={state} tank={tank} />
         </>
       )}
@@ -134,18 +142,37 @@ export function ShopPanel() {
   );
 }
 
-export function CarePanel() {
-  return <Gate noTank={needTank}>{(ready) => <CareSections {...ready} />}</Gate>;
+export function CarePanel({ onShop }: { onShop(): void }) {
+  return <Gate noTank={needTank}>{(ready) => <CareSections {...ready} onShop={onShop} />}</Gate>;
 }
 
-function CareSections({ session, state, tank }: Ready) {
+function CareSections({ session, state, tank, onShop }: Ready & { onShop(): void }) {
+  const { interaction } = useBridge();
   const names = useSpeciesNames();
   const water = waterReport(tank.water, tank, state.species);
   return (
     <>
-      <Care session={session} state={state} water={water} />
-      <WaterTest tank={tank} species={state.species} />
-      <FishCards fish={tank.fish} names={names} />
+      <Care
+        session={session}
+        state={state}
+        tank={tank}
+        water={water}
+        salinity={salinityNotice(tank, state.species)}
+      />
+      <WaterTest
+        tank={tank}
+        species={state.species}
+        onWaterChange={() => session.careAction({ type: 'water_change' })}
+        onCo2Off={() => session.setCo2(0)}
+      />
+      <Co2Control session={session} state={state} tank={tank} onShop={onShop} />
+      <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
+      <GiftNotice session={session} />
+      <FishCards
+        fish={tank.fish}
+        names={names}
+        actions={(fish) => <GiftFishButton session={session} tank={tank} fish={fish} />}
+      />
       <Treatment session={session} state={state} tank={tank} />
       <QuarantineSection session={session} state={state} tank={tank} />
       <DeadFish session={session} tank={tank} />
@@ -163,7 +190,7 @@ function TankSwitcher({
   session: TankSession;
   state: SessionState;
   tank: Tank;
-  newTankBiome: PlayableBiome | null;
+  newTankBiome: CreatableBiome | null;
 }) {
   const selectId = useId();
   const [adding, setAdding] = useState(newTankBiome !== null);
@@ -259,7 +286,7 @@ function RenameForm({
   );
 }
 
-function NewTankForm({
+export function NewTankForm({
   session,
   state,
   initialBiome,
@@ -267,11 +294,11 @@ function NewTankForm({
 }: {
   session: TankSession;
   state: SessionState;
-  initialBiome: PlayableBiome;
+  initialBiome: CreatableBiome;
   onDone?: () => void;
 }) {
   const id = useId();
-  const [biome, setBiome] = useState<PlayableBiome>(initialBiome);
+  const [biome, setBiome] = useState<CreatableBiome>(initialBiome);
   const [size, setSize] = useState<TankSize>(DEFAULT_TANK_SIZE);
   const taken = state.tanks.map((t) => t.name);
   const [name, setName] = useState(() => suggestTankName(initialBiome, taken));
@@ -302,12 +329,12 @@ function NewTankForm({
         id={`${id}-b`}
         value={biome}
         onChange={(e) => {
-          const next = playableBiomeSchema.parse(e.target.value);
+          const next = creatableBiomeSchema.parse(e.target.value);
           setBiome(next);
           setName(suggestTankName(next, taken));
         }}
       >
-        {playableBiomeSchema.options.map((b) => (
+        {creatableBiomeSchema.options.map((b) => (
           <option key={b} value={b}>
             {BIOME_LABEL[b]}
           </option>
@@ -358,16 +385,23 @@ function sizeExtra(size: TankSize): string {
 
 const QUALITY_LABEL = { good: 'Good', fair: 'Fair', poor: 'Poor' } as const;
 
-function Care({
+export function Care({
   session,
   state,
+  tank,
   water,
+  salinity,
 }: {
   session: TankSession;
   state: SessionState;
+  tank: Tank;
   water: ReturnType<typeof waterReport>;
+  salinity: SalinityNotice | null;
 }) {
   const id = useId();
+  const { spend, notice } = useSpend(session, state.balance);
+  const doses = doseOptions(tank, BUNDLED_CHEMISTRY, BUNDLED_ECONOMY);
+  const saltDose = doses.find((d) => d.type === 'salt_dose');
   return (
     <section aria-labelledby={`${id}-h`} className="block">
       <h3 id={`${id}-h`}>Water and chores</h3>
@@ -377,6 +411,22 @@ function Care({
         <li>Algae: {QUALITY_LABEL[water.algae]}</li>
         <li>Leftover food: {QUALITY_LABEL[water.leftoverFood]}</li>
       </ul>
+      {salinity && (
+        <p className={salinity.severity === 'danger' ? 'field-error' : 'hint'} role="status">
+          {salinity.text}
+          {saltDose && salinity.direction === 'low' && (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={() => document.getElementById(doseButtonId('salt_dose'))?.focus()}
+              >
+                Go to {saltDose.label.toLowerCase()}
+              </button>
+            </>
+          )}
+        </p>
+      )}
       <div className="care-actions">
         <button
           type="button"
@@ -401,6 +451,36 @@ function Care({
           Scrape the glass
         </button>
       </div>
+      {doses.length > 0 && (
+        <ul className="shop" aria-label="Water doses">
+          {doses.map((dose) => (
+            <li key={dose.type}>
+              <div>
+                <strong>{dose.label}</strong>{' '}
+                <span className="price">{priceOrFree(dose.price, BUNDLED_ECONOMY)}</span>
+                <p className="hint">{dose.disabledReason ?? dose.hint}</p>
+              </div>
+              <button
+                type="button"
+                id={doseButtonId(dose.type)}
+                data-action={dose.type}
+                disabled={state.busy || dose.disabledReason !== null}
+                onClick={() =>
+                  void spend({
+                    label: dose.label.toLowerCase(),
+                    price: dose.price,
+                    confirm: true,
+                    go: () => session.careAction({ type: dose.type }),
+                  })
+                }
+              >
+                {dose.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {notice}
       <p className="hint">
         Feed from the dock, a little at a time. Uneaten food rots and poisons the water; the gravel
         vacuum removes it.

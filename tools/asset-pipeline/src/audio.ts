@@ -8,6 +8,7 @@ import {
   fadeIn,
   fadeOut,
   integratedLoudness,
+  limitedNormalise,
   loopCrossfade,
   normaliseLoudness,
   stationaryStart,
@@ -19,6 +20,9 @@ import type { OutputAsset } from './index-schema.ts';
 
 export const AUDIO_BITRATE_KBPS = 64;
 export const PEAK_CEILING_DB = -1;
+/** AAC reconstruction overshot the sample peak by up to 0.8 dB when measured, so limited clips stop 1.5 dB short of the plain ceiling. */
+export const LIMITER_CEILING_DB = PEAK_CEILING_DB - 1.5;
+const LIMITER_LOOKAHEAD_S = 0.005;
 const SILENCE_THRESHOLD_DB = -50;
 const SILENCE_MARGIN_S = 0.005;
 const ONE_SHOT_FADE_IN_S = 0.002;
@@ -31,8 +35,10 @@ export interface AudioRecipe {
   highpassHz?: number;
   lowpassHz?: number;
   /** Loops are cut from a stationary window of `loopS` and joined with a `crossfadeS` crossfade. */
-  loop?: { crossfadeS: number; loopS?: number };
+  loop?: { crossfadeS: number; loopS?: number; searchS?: [number, number] };
   fadeOutS?: number;
+  /** Look-ahead peak limiting before the loudness target; for sources whose peaks cap the plain gain. */
+  limit?: boolean;
 }
 
 export const AUDIO_RECIPES: readonly AudioRecipe[] = [
@@ -166,7 +172,10 @@ export function processAudio(source: Float32Array, recipe: AudioRecipe): Process
     let segment = source;
     if (recipe.loop.loopS !== undefined) {
       const length = Math.round(recipe.loop.loopS * rate) + fade;
-      const start = stationaryStart(source, length);
+      const [from, to] = recipe.loop.searchS ?? [0, source.length / rate];
+      const offset = Math.round(from * rate);
+      const region = source.subarray(offset, Math.min(source.length, Math.round(to * rate)));
+      const start = offset + stationaryStart(region, length);
       segment = source.slice(start, start + length);
     }
     samples = loopCrossfade(segment, fade);
@@ -175,7 +184,15 @@ export function processAudio(source: Float32Array, recipe: AudioRecipe): Process
     samples = fadeIn(samples, Math.round(ONE_SHOT_FADE_IN_S * rate));
     if (recipe.fadeOutS) samples = fadeOut(samples, Math.round(recipe.fadeOutS * rate));
   }
-  const normalised = normaliseLoudness(samples, recipe.targetLufs, PEAK_CEILING_DB);
+  const normalised = recipe.limit
+    ? limitedNormalise(
+        samples,
+        recipe.targetLufs,
+        LIMITER_CEILING_DB,
+        Math.round(LIMITER_LOOKAHEAD_S * rate),
+        recipe.loop !== undefined,
+      )
+    : normaliseLoudness(samples, recipe.targetLufs, PEAK_CEILING_DB);
   return {
     samples: normalised.samples,
     gainDb: normalised.gainDb,
@@ -184,22 +201,26 @@ export function processAudio(source: Float32Array, recipe: AudioRecipe): Process
   };
 }
 
-function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): string[] {
+export function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): string[] {
   const notes: string[] = ['downmixed to mono and resampled to 48 kHz'];
   if (recipe.highpassHz) notes.push(`high-pass at ${recipe.highpassHz} Hz`);
   if (recipe.lowpassHz) notes.push(`low-pass at ${recipe.lowpassHz} Hz`);
   if (recipe.loop) {
     const window = recipe.loop.loopS
-      ? `trimmed to a ${recipe.loop.loopS} s stationary section; `
+      ? `trimmed to a ${recipe.loop.loopS} s stationary section${recipe.loop.searchS ? ` chosen between ${recipe.loop.searchS[0]} s and ${recipe.loop.searchS[1]} s of the recording` : ''}; `
       : '';
     notes.push(`${window}${recipe.loop.crossfadeS} s equal-power crossfade of the loop seam`);
   } else {
     notes.push(`trimmed leading and trailing silence, ${ONE_SHOT_FADE_IN_S * 1000} ms fade-in`);
     if (recipe.fadeOutS) notes.push(`${Math.round(recipe.fadeOutS * 1000)} ms fade-out`);
   }
+  if (recipe.limit)
+    notes.push(
+      `${LIMITER_LOOKAHEAD_S * 1000} ms look-ahead peak limiter at ${LIMITER_CEILING_DB} dBFS`,
+    );
   notes.push(
     processed.peakLimited
-      ? `gain limited by the ${PEAK_CEILING_DB} dBFS peak ceiling, so the loudness is ${processed.loudnessLufs.toFixed(1)} LUFS instead of the ${recipe.targetLufs} LUFS target`
+      ? `gain limited by the ${recipe.limit ? LIMITER_CEILING_DB : PEAK_CEILING_DB} dBFS peak ceiling, so the loudness is ${processed.loudnessLufs.toFixed(1)} LUFS instead of the ${recipe.targetLufs} LUFS target`
       : `normalised to ${recipe.targetLufs} LUFS`,
   );
   notes.push(`encoded as AAC-LC ${AUDIO_BITRATE_KBPS} kbit/s in .m4a`);

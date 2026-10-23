@@ -8,7 +8,8 @@ import {
 } from '@aquarium/shared';
 import { useEffect, useId, useState } from 'react';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
-import { euroText, heaterWarning, priceText, speciesPrice } from '../sync/economy';
+import { euroText, priceText, purchaseWarning, speciesPrice } from '../sync/economy';
+import { equipmentNote } from '../sync/blackwater';
 import { chooseEquipment, deviceOffers, equipmentRef, type DeviceOffer } from '../sync/equipment';
 import { checkLamp, clockText, hourOptions, lampSummary, localOffsetMinutes } from '../sync/lamp';
 import { canBuy, tankCapacity } from '../sync/life';
@@ -16,6 +17,7 @@ import { fishNeedsConfirm } from '../sync/spending';
 import { checkFishName, suggestFishName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { backgroundOptions } from './backgroundTitles';
+import { PaymentsShop } from './PaymentsShop';
 import { useSpend, type SpendRequest } from './spend';
 
 const economy = BUNDLED_ECONOMY;
@@ -56,6 +58,7 @@ export function ShopSections({ session, state, tank }: ShopProps) {
       <LampControl session={session} state={state} tank={tank} />
       <SuppliesShop session={session} state={state} spend={spend} />
       <PieceShop session={session} state={state} tank={tank} spend={spend} />
+      <PaymentsShop session={session} balance={state.balance} />
     </>
   );
 }
@@ -73,6 +76,9 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
   const taken = tank.fish.map((f) => f.name);
   const suggestion = suggestFishName(taken, tank.fish.length);
 
+  const warningFor = (s: SpeciesSummary) =>
+    purchaseWarning(tank, s, state.species, BUNDLED_CHEMISTRY.temperature.roomC);
+
   useEffect(() => setProblem(null), [name]);
   useEffect(() => setConfirming(null), [stage, tank.id, tank.equipment.heater.tier]);
 
@@ -81,10 +87,7 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
     if (!checked.ok) return setProblem(checked.message);
     const price = speciesPrice(economy, species.id, stage);
     if (price === undefined) return setProblem(`${species.commonName} is not for sale.`);
-    if (
-      heaterWarning(tank, species, BUNDLED_CHEMISTRY.temperature.roomC) &&
-      confirming !== species.id
-    ) {
+    if (warningFor(species) && confirming !== species.id) {
       return setConfirming(species.id);
     }
     setConfirming(null);
@@ -146,7 +149,7 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
         {offered.map((s) => {
           const verdict = canBuy(tank, s, state.species);
           const price = speciesPrice(economy, s.id, stage);
-          const warning = heaterWarning(tank, s, BUNDLED_CHEMISTRY.temperature.roomC);
+          const warning = warningFor(s);
           const asking = confirming === s.id && warning !== null;
           return (
             <li key={s.id}>
@@ -229,6 +232,11 @@ function DeviceRow({
                     downgrades.
                   </p>
                 )}
+                {t.state === 'owned' && (
+                  <p id={note} className="hint">
+                    You already own this tier. Pick it in Care, for free.
+                  </p>
+                )}
                 {t.skipped > 0 && (
                   <p id={note} className="hint">
                     This skips {t.skipped === 1 ? 'a tier' : `${t.skipped} tiers`}; you pay this
@@ -244,7 +252,9 @@ function DeviceRow({
                     ? `Buy ${offer.label} tier ${t.tier} for ${t.price} Pearls, about ${euroText(t.price, economy)}`
                     : t.state === 'installed'
                       ? `${offer.label} tier ${t.tier} is installed`
-                      : `${offer.label} tier ${t.tier} is not sold`
+                      : t.state === 'owned'
+                        ? `${offer.label} tier ${t.tier} is already owned`
+                        : `${offer.label} tier ${t.tier} is not sold`
                 }
                 aria-describedby={t.state === 'available' && t.skipped === 0 ? undefined : note}
                 onClick={() => onBuy(t.tier)}
@@ -253,7 +263,9 @@ function DeviceRow({
                   ? 'Installed'
                   : t.state === 'available'
                     ? 'Buy'
-                    : 'Not sold'}
+                    : t.state === 'owned'
+                      ? 'Owned'
+                      : 'Not sold'}
               </button>
             </li>
           );
@@ -280,6 +292,7 @@ function EquipmentShop({ session, state, tank, spend }: ShopProps & { spend: Spe
   return (
     <section aria-labelledby={`${id}-h`} className="block">
       <h3 id={`${id}-h`}>Equipment</h3>
+      {equipmentNote(tank.biome) && <p className="hint">{equipmentNote(tank.biome)}</p>}
       <ul className="equipment">
         {offers.map((o) => (
           <DeviceRow

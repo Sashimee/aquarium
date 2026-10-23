@@ -1,7 +1,21 @@
 import { DEFAULT_EQUIPMENT } from '@aquarium/shared';
+import { NIGHT } from '@aquarium/sim';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
+import { roomDaylightAt } from './room/timeOfDay';
+import { EventBus, type EngineEvents } from './events';
 import {
+  CLOCK_EASE_MS,
+  ClockPin,
+  assertClockSetting,
+  hoodMinute,
+  roomMinute,
+  DAYLIGHT_INTERVAL_MS,
+  DAYLIGHT_UNSEEN_GAP_MS,
+  DaylightAnnouncer,
+  DaylightFeed,
+  type DaylightChange,
+  type PageVisibility,
   DEFAULT_LAMP_HOURS,
   DEFAULT_PHOTOPERIOD,
   daylightAt,
@@ -133,5 +147,442 @@ describe('lampPhotoperiod', () => {
     ] as const) {
       expect(() => lampPhotoperiod({ onHour, offHour })).toThrow(RangeError);
     }
+  });
+});
+
+describe('DaylightAnnouncer', () => {
+  it('announces the first level settled and later visible changes unsettled', () => {
+    const announcer = new DaylightAnnouncer();
+    expect(announcer.next(1)).toEqual({ level: 1, settled: true });
+    announcer.frame(16);
+    expect(announcer.next(0)).toEqual({ level: 0, settled: false });
+  });
+
+  it('skips changes too small to announce, measured from the last announced level', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(0.5);
+    expect(announcer.next(0.503)).toBeNull();
+    expect(announcer.next(0.506)).toEqual({ level: 0.506, settled: false });
+  });
+
+  it('settles the first change after a frame gap longer than the limit, and only that one', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.frame(DAYLIGHT_UNSEEN_GAP_MS);
+    expect(announcer.next(0.8)?.settled).toBe(false);
+    announcer.frame(DAYLIGHT_UNSEEN_GAP_MS + 1);
+    expect(announcer.next(0.2)).toEqual({ level: 0.2, settled: true });
+    announcer.frame(16);
+    expect(announcer.next(1)?.settled).toBe(false);
+  });
+
+  it('forgets a gap that brought no change worth announcing', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.frame(60_000);
+    expect(announcer.next(1)).toBeNull();
+    expect(announcer.next(0)?.settled).toBe(false);
+  });
+
+  it('settles a change made while hidden, even across a gap shorter than the fallback', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.setHidden(true);
+    announcer.frame(200);
+    announcer.setHidden(false);
+    announcer.frame(16);
+    expect(announcer.next(0)).toEqual({ level: 0, settled: true });
+    announcer.frame(16);
+    expect(announcer.next(1)?.settled).toBe(false);
+  });
+
+  it('keeps settling while hidden frames still read the level', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.setHidden(true);
+    expect(announcer.next(0.5)?.settled).toBe(true);
+    expect(announcer.next(0.2)?.settled).toBe(true);
+    announcer.setHidden(false);
+    expect(announcer.next(0)?.settled).toBe(true);
+    expect(announcer.next(1)?.settled).toBe(false);
+  });
+
+  it('does not settle a visible stall shorter than the fallback gap', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.frame(1500);
+    expect(announcer.next(0)?.settled).toBe(false);
+  });
+});
+
+class FakePage implements PageVisibility {
+  hidden = false;
+  private readonly listeners = new Set<() => void>();
+  addEventListener(_type: 'visibilitychange', listener: () => void): void {
+    this.listeners.add(listener);
+  }
+  removeEventListener(_type: 'visibilitychange', listener: () => void): void {
+    this.listeners.delete(listener);
+  }
+  get listening(): number {
+    return this.listeners.size;
+  }
+  set(hidden: boolean): void {
+    this.hidden = hidden;
+    for (const listener of this.listeners) listener();
+  }
+}
+
+describe('DaylightFeed', () => {
+  function feed(levels: { now: number }): { daylight: DaylightFeed; emitted: DaylightChange[] } {
+    const emitted: DaylightChange[] = [];
+    const bus = new EventBus<EngineEvents>();
+    bus.on('engine:daylight', (change) => emitted.push(change));
+    return { daylight: new DaylightFeed(() => levels.now, bus), emitted };
+  }
+
+  it('reads at most once per interval and emits each change, the first one settled', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    levels.now = 0;
+    daylight.frame(DAYLIGHT_INTERVAL_MS - 1, 16);
+    expect(daylight.level).toBe(1);
+    daylight.frame(DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted).toEqual([
+      { level: 1, settled: true },
+      { level: 0, settled: false },
+    ]);
+    expect(daylight.level).toBe(0);
+  });
+
+  it('reads again on the next frame after a recheck', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    levels.now = 0.4;
+    daylight.recheck();
+    daylight.frame(16, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0.4, settled: false });
+  });
+
+  it('settles a change made during a frame gap past the fallback, read on the frame after it', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    levels.now = 0;
+    const back = DAYLIGHT_UNSEEN_GAP_MS + 1;
+    daylight.frame(back, back);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+    levels.now = 1;
+    daylight.frame(back + DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 1, settled: false });
+  });
+
+  it('settles a change made while the watched page was hidden, until it stops watching', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    const page = new FakePage();
+    const stop = daylight.watch(page);
+    daylight.frame(0, 0);
+    page.set(true);
+    levels.now = 0;
+    page.set(false);
+    daylight.frame(DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+
+    stop();
+    expect(page.listening).toBe(0);
+    page.set(true);
+    levels.now = 1;
+    daylight.frame(2 * DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 1, settled: false });
+  });
+
+  it('reads on the first frame after the page shows again, not an interval later', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    const page = new FakePage();
+    daylight.watch(page);
+    daylight.frame(0, 0);
+    page.set(true);
+    levels.now = 0;
+    page.set(false);
+    daylight.frame(16, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+    levels.now = 1;
+    daylight.frame(32, 16);
+    expect(emitted).toHaveLength(2);
+  });
+
+  it('settles from the start when the page is already hidden', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    const page = new FakePage();
+    page.hidden = true;
+    daylight.watch(page);
+    levels.now = 0;
+    daylight.frame(DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+  });
+});
+
+describe('ClockPin', () => {
+  const day = { hood: 1, room: 1 };
+  const night = { hood: 0, room: 0 };
+
+  it('shows the target at once on the first read', () => {
+    const pin = new ClockPin(null);
+    expect(pin.blend(night, 0)).toEqual(night);
+    expect(pin.easing).toBe(false);
+  });
+
+  it('fades from the shown level to a newly pinned clock instead of cutting', () => {
+    const pin = new ClockPin(null);
+    pin.blend(day, 0);
+    expect(pin.set(0, 1000)).toBe(true);
+    expect(pin.clock).toBe(0);
+    expect(pin.easing).toBe(true);
+    expect(pin.blend(night, 1000)).toEqual(day);
+    const mid = pin.blend(night, 1000 + CLOCK_EASE_MS / 2);
+    expect(mid.hood).toBeCloseTo(0.5);
+    expect(mid.room).toBeCloseTo(0.5);
+    expect(pin.easing).toBe(true);
+    expect(pin.blend(night, 1000 + CLOCK_EASE_MS)).toEqual(night);
+    expect(pin.easing).toBe(false);
+  });
+
+  it('fades back up when returning to the live clock', () => {
+    const pin = new ClockPin(0);
+    pin.blend(night, 0);
+    pin.set(null, 500);
+    const quarter = pin.blend(day, 500 + CLOCK_EASE_MS / 4);
+    expect(quarter.hood).toBeGreaterThan(0);
+    expect(quarter.hood).toBeLessThan(0.5);
+    expect(pin.blend(day, 500 + CLOCK_EASE_MS)).toEqual(day);
+  });
+
+  it('restarts from the partly faded level when switched mid-fade', () => {
+    const pin = new ClockPin(null);
+    pin.blend(day, 0);
+    pin.set(0, 0);
+    const partway = pin.blend(night, CLOCK_EASE_MS / 2);
+    pin.set(13 * 60, CLOCK_EASE_MS / 2);
+    expect(pin.blend(day, CLOCK_EASE_MS / 2)).toEqual(partway);
+  });
+
+  it('ignores setting the clock it already has', () => {
+    const pin = new ClockPin(0);
+    pin.blend(night, 0);
+    expect(pin.set(0, 10)).toBe(false);
+    expect(pin.easing).toBe(false);
+  });
+});
+
+describe('ClockPin room minute', () => {
+  it('shows the target at once until a clock change', () => {
+    const pin = new ClockPin(null);
+    expect(pin.blendMinute(10 * 60, 0)).toBe(10 * 60);
+  });
+
+  it('runs the sun forward from the shown minute to the new one over the ease', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 1000);
+    expect(pin.blendMinute(0, 1000)).toBeCloseTo(13 * 60);
+    expect(pin.blendMinute(0, 1000 + CLOCK_EASE_MS / 2)).toBeCloseTo(18.5 * 60);
+    expect(pin.blendMinute(0, 1000 + CLOCK_EASE_MS)).toBe(0);
+  });
+
+  it('keeps the direction chosen at the start when a live target creeps past 12 h away', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 1000);
+    pin.blendMinute(60, 1000);
+    const quarter = pin.blendMinute(60 + 10 / 60, 1000 + CLOCK_EASE_MS / 4);
+    expect(quarter).toBeGreaterThan(13 * 60);
+    expect(quarter).toBeLessThan(18 * 60);
+    expect(pin.blendMinute(60 + 20 / 60, 1000 + CLOCK_EASE_MS)).toBeCloseTo(60 + 20 / 60);
+  });
+
+  it('does not spin a day when the live target starts just behind the shown minute and passes it', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 0);
+    const live = 13 * 60 - 10 / 60;
+    for (let seconds = 0; seconds <= 20; seconds += 2) {
+      const minute = pin.blendMinute(live + seconds / 60, seconds * 1000);
+      expect(Math.abs(minute - 13 * 60)).toBeLessThan(1);
+    }
+  });
+
+  it('chooses the direction afresh for the next fade', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 0);
+    pin.blendMinute(60, 0);
+    pin.blendMinute(60, CLOCK_EASE_MS);
+    pin.set(13 * 60, 2 * CLOCK_EASE_MS);
+    const mid = pin.blendMinute(13 * 60, 2 * CLOCK_EASE_MS + CLOCK_EASE_MS / 2);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(13 * 60);
+  });
+
+  it('wraps past midnight on the way', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(23 * 60, 0);
+    pin.set(0, 0);
+    expect(pin.blendMinute(0, CLOCK_EASE_MS / 2)).toBeCloseTo(23.5 * 60);
+  });
+
+  const STEPS = 20;
+  const samples = (pin: ClockPin, target: number, from: number): number[] =>
+    Array.from({ length: STEPS + 1 }, (_, i) =>
+      pin.blendMinute(target, from + (CLOCK_EASE_MS * i) / STEPS),
+    );
+  const steps = (values: number[]): number[] => values.slice(1).map((v, i) => v - (values[i] ?? v));
+
+  it('reaches night in the room and the tank together, neither going the wrong way', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 0);
+    const hood: number[] = [];
+    const room: number[] = [];
+    for (let i = 0; i <= STEPS; i += 1) {
+      const nowMs = (CLOCK_EASE_MS * i) / STEPS;
+      hood.push(pin.blend({ hood: 0, room: 0 }, nowMs).hood);
+      room.push(roomDaylightAt(pin.blendMinute(0, nowMs)));
+    }
+    expect(hood.at(-1)).toBe(0);
+    expect(room.at(-1)).toBeCloseTo(roomDaylightAt(0));
+    expect(roomDaylightAt(0)).toBeLessThan(0.1);
+    expect(steps(hood).every((d) => d <= 1e-9)).toBe(true);
+    expect(steps(room).every((d) => d <= 1e-9)).toBe(true);
+    expect(room.some((v) => v > 0.1 && v < (room[0] ?? 0) - 0.1)).toBe(true);
+  });
+
+  it('goes back a little rather than round the day when the target is just behind', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(13 * 60 + 1, 0);
+    pin.set('day', 0);
+    const path = samples(pin, 13 * 60, 0);
+    expect(path.every((m) => m >= 13 * 60 && m <= 13 * 60 + 1)).toBe(true);
+    expect(path.at(-1)).toBe(13 * 60);
+  });
+
+  it('never passes through night going from the live afternoon to day', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(15 * 60, 0);
+    pin.set('day', 0);
+    const path = samples(pin, 13 * 60, 0);
+    expect(path.every((m) => m >= 13 * 60 && m <= 15 * 60)).toBe(true);
+    expect(Math.min(...path.map(roomDaylightAt))).toBeGreaterThan(0.5);
+    expect(steps(path).every((d) => d <= 1e-9)).toBe(true);
+  });
+
+  it('never passes through day going from night back to the live evening', () => {
+    const pin = new ClockPin('night');
+    pin.blendMinute(0, 0);
+    pin.set(null, 0);
+    const path = samples(pin, 23 * 60, 0);
+    expect(Math.max(...path.map(roomDaylightAt))).toBeLessThan(0.1);
+    expect(path.every((m) => m >= 23 * 60 || m === 0)).toBe(true);
+    expect(path.at(-1)).toBe(23 * 60);
+  });
+
+  it('restarts both the tank light and the sky from where they were on a second press', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 0);
+    const half = CLOCK_EASE_MS / 2;
+    const hoodBefore = pin.blend({ hood: 0, room: 0 }, half);
+    const minuteBefore = pin.blendMinute(0, half);
+    expect(minuteBefore).toBeGreaterThan(13 * 60);
+    pin.set('day', half);
+    expect(pin.blend({ hood: 1, room: 1 }, half)).toEqual(hoodBefore);
+    expect(pin.blendMinute(13 * 60, half)).toBeCloseTo(minuteBefore);
+    const later = pin.blend({ hood: 1, room: 1 }, half + CLOCK_EASE_MS / 2);
+    expect(later.hood).toBeGreaterThan(hoodBefore.hood);
+    expect(later.hood).toBeLessThan(1);
+    expect(pin.blendMinute(13 * 60, half + CLOCK_EASE_MS)).toBe(13 * 60);
+    expect(pin.blend({ hood: 1, room: 1 }, half + CLOCK_EASE_MS)).toEqual({ hood: 1, room: 1 });
+  });
+});
+
+describe('ClockPin against the fish eye', () => {
+  it('fades day to night slowly enough that no fish is startled', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.set('night', 0);
+    const dt = 1 / 30;
+    let adapted = 1;
+    let widest = 0;
+    for (let t = 0; t <= (CLOCK_EASE_MS / 1000) * 1.2; t += dt) {
+      const { hood } = pin.blend({ hood: 0, room: 0 }, t * 1000);
+      widest = Math.max(widest, Math.abs(hood - adapted));
+      adapted += (hood - adapted) * (1 - Math.exp(-dt / NIGHT.lightAdaptTauS));
+    }
+    expect(widest).toBeLessThan(NIGHT.lightStartleThreshold);
+  });
+
+  it('would startle at the old 3 s fade, so the guard test means something', () => {
+    const dt = 1 / 30;
+    let adapted = 1;
+    let widest = 0;
+    for (let t = 0; t <= 4; t += dt) {
+      const x = Math.min(1, t / 3);
+      const hood = 1 - x * x * (3 - 2 * x);
+      widest = Math.max(widest, Math.abs(hood - adapted));
+      adapted += (hood - adapted) * (1 - Math.exp(-dt / NIGHT.lightAdaptTauS));
+    }
+    expect(widest).toBeGreaterThan(NIGHT.lightStartleThreshold);
+  });
+});
+
+describe('clock settings', () => {
+  it('accepts null, day, night and minutes in a day', () => {
+    for (const ok of [null, 'day', 'night', 0, 779.5, 1439] as const) {
+      expect(() => assertClockSetting(ok)).not.toThrow();
+    }
+  });
+
+  it('rejects minutes that are not finite or outside [0, 1440)', () => {
+    for (const bad of [NaN, Infinity, -1, 1440, 2000]) {
+      expect(() => assertClockSetting(bad)).toThrow(RangeError);
+    }
+  });
+
+  it.each([
+    [8, 21],
+    [14, 22],
+    [20, 6],
+  ])('puts day in the light and night in the dark for a lamp %i to %i', (onHour, offHour) => {
+    const period = lampPhotoperiod({ onHour, offHour });
+    const day = hoodMinute('day', period);
+    const night = hoodMinute('night', period);
+    expect(day).not.toBeNull();
+    expect(night).not.toBeNull();
+    expect(daylightAt(day ?? 0, period)).toBeCloseTo(1);
+    expect(daylightAt(night ?? 0, period)).toBe(0);
+  });
+
+  it('centres day on the on period, across midnight too', () => {
+    expect(hoodMinute('day', lampPhotoperiod({ onHour: 8, offHour: 21 }))).toBe(14.5 * 60);
+    expect(hoodMinute('night', lampPhotoperiod({ onHour: 8, offHour: 21 }))).toBe(2.5 * 60);
+    expect(hoodMinute('day', lampPhotoperiod({ onHour: 20, offHour: 6 }))).toBe(60);
+    expect(hoodMinute('night', lampPhotoperiod({ onHour: 20, offHour: 6 }))).toBe(13 * 60);
+  });
+
+  it('passes minutes and the live clock through', () => {
+    const period = lampPhotoperiod({ onHour: 8, offHour: 21 });
+    expect(hoodMinute(300, period)).toBe(300);
+    expect(hoodMinute(null, period)).toBeNull();
+    expect(roomMinute('day')).toBe(13 * 60);
+    expect(roomMinute('night')).toBe(0);
+    expect(roomMinute(null)).toBeNull();
+    expect(roomMinute(90)).toBe(90);
   });
 });

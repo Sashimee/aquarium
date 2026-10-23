@@ -1,11 +1,24 @@
+import type { Ray } from 'three';
 import type { Material, MeshStandardNodeMaterial, Texture } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
+import {
+  legacyTintSeed,
+  type Biome,
+  type Coral,
+  type DecorItem,
+  type Plant,
+  type PlantPatch,
+  type PresetLayout,
+  type TankSize,
+} from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
 import { abortError } from './abortable';
+import { bankAnchors, type SceneBank } from './bank';
+import { isMudBankId, MudBank, mudBankColliders } from './mudBank';
+import { caveAnchors, waterReach } from './caves';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
   AnemoneGroup,
@@ -25,10 +38,13 @@ import {
   type EuphylliaDetail,
   type EuphylliaVariant,
 } from './euphyllia';
+import { trailingCall } from './trailingCall';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
 import type { FlowField } from '@aquarium/sim';
 import { CurrentField, reachCurrent, type CurrentParameters } from './current';
 import { fluorescenceLevel } from './coralStyle';
+import { PolypSignal } from './polyps';
+import { hasShelterParts } from './shelterParts';
 import {
   createCoralGlowNode,
   fitCollider,
@@ -36,12 +52,16 @@ import {
   HARDSCAPE_KINDS,
   PLANT_KIND,
 } from './hardscape';
-import { boundsFromCatalog, fitPresetToTank } from './presetFit';
+import { routeDecor } from './decorRouting';
+import { boundsFromCatalog, fitPresetToTank, glassSqueezes, MIN_KEPT_PATCH } from './presetFit';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
 import {
+  GLASS_SHRINK_FLOOR,
   MAX_TILT_RAD as MAX_PLANT_TILT,
+  openGround,
+  ROOT_DEPTH,
   scatterPatch,
   type ReachFn,
   type Extent,
@@ -51,13 +71,43 @@ import { RebuildQueue } from './rebuildQueue';
 import {
   PlantGroup,
   maxSway,
+  PLANT_LOD,
+  plantLodFor,
   surfaceScaleCeiling,
   SURFACE_MARGIN,
   type PlantEntry,
 } from './plants';
+import {
+  grownItem,
+  offsetEntries,
+  pickablePlants,
+  pickPlant,
+  type GrowthContext,
+  type LayoutPlantRef,
+  type PlantPick,
+} from './plantGrowth';
+import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
+import {
+  coralScaleCap,
+  coralSlotOrder,
+  grownCoralItem,
+  matchLayoutCorals,
+  placeFragments,
+  type CoralOrigin,
+  type CoralSlot,
+  type ScaleCap,
+  type PlacedFragment,
+} from './coralGrowth';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
 const FALLBACK_PLANT_HEIGHT = 0.2;
+const MIN_OFFSET_CAPACITY = 16;
+
+const COLLIDER_REFIT_DEBOUNCE_MS = 150;
+
+export function offsetCapacity(count: number): number {
+  return Math.max(MIN_OFFSET_CAPACITY, 2 ** Math.ceil(Math.log2(Math.max(1, count))));
+}
 
 export const DEFAULT_CURRENT: CurrentParameters = {
   direction: [1, 0],
@@ -66,7 +116,6 @@ export const DEFAULT_CURRENT: CurrentParameters = {
   gustDepth: 0.4,
 };
 
-const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
 const HARDSCAPE_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 0, ultra: 0 };
 const WALL_MARGIN = 0.005;
 const BLOCKED_CLEARANCE = 0.005;
@@ -140,17 +189,30 @@ export class TankScene {
     this.current.syncWaveMaker(simTimeS);
   }
 
+  /** Coral polyp extension; call `polyps.bind(simClient)` for the active tank's sim. */
+  readonly polyps = new PolypSignal();
   private readonly fluorescence = uniform(0);
   private readonly coralGlowNode = createCoralGlowNode(this.fluorescence);
   private hardscape: Hardscape | null = null;
   private anemones: AnemoneGroup[] = [];
   private euphyllias: EuphylliaGroup[] = [];
+  private readonly mudBanks: MudBank[];
   private plantGroups: PlantGroup[] = [];
+  private offsetGroups = new Map<string, PlantGroup>();
+  private plantState: ReadonlyMap<string, Plant> = new Map();
+  private coralState: readonly Coral[] = [];
+  private fragHardscape: Hardscape | null = null;
+  private fragEuphyllias: EuphylliaGroup[] = [];
+  private fragLayout = '';
+  private fragRun = 0;
+  private coralFit = '';
+  private coralFitRun = 0;
   private installedKey: VisualKey | null = null;
   private readonly queue: RebuildQueue<VisualKey>;
   private substrate: SubstrateInstall | null = null;
   private readonly placeholderSubstrate: Material | Material[];
   private disposed = false;
+  private readonly anchorListeners = new Set<(anchors: readonly SceneAnchor[]) => void>();
   private readonly presetMovable: readonly { item: DecorItem; kind: string }[];
   private movablePlants = false;
   private plantSlots = new Map<number, number>();
@@ -169,6 +231,7 @@ export class TankScene {
     private hardItems: readonly { item: DecorItem; kind: string }[],
     private readonly anemoneItems: readonly DecorItem[],
     private readonly euphylliaItems: readonly EuphylliaItem[],
+    private readonly mudBankItems: readonly DecorItem[],
     private readonly anchorData: readonly SceneAnchor[],
     options: SceneOptions,
   ) {
@@ -184,6 +247,10 @@ export class TankScene {
         }),
     );
     this.placeholderSubstrate = engine.tank.substrate.material;
+    this.mudBanks = mudBankItems.map(
+      (item) => new MudBank(item, engine.tank.dimensions, engine.tank.substrate.material),
+    );
+    for (const bank of this.mudBanks) engine.scene.add(bank.mesh);
     this.colliderField = new ColliderField(colliderData);
     this.overlay = new ColliderOverlay(colliderData);
     this.overlay.visible = options.colliders;
@@ -235,24 +302,11 @@ export class TankScene {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
     const dimensions = engine.tank.dimensions;
-    const preset = fitPresetToCatalog(authored, dimensions, catalog);
+    const preset = fitPresetToCatalog(authored, engine.tankSize, dimensions, catalog);
 
-    const hardItems: { item: DecorItem; kind: string }[] = [];
-    const layoutPlants: DecorItem[] = [];
-    const anemoneItems: DecorItem[] = [];
-    const euphylliaItems: EuphylliaItem[] = [];
-    for (const item of preset.decor) {
-      const procedural = parseEuphylliaId(item.assetId);
-      if (procedural) {
-        euphylliaItems.push({ item, ...procedural });
-        continue;
-      }
-      const kind = catalog.get(item.assetId).kind;
-      if (HARDSCAPE_KINDS.has(kind)) hardItems.push({ item, kind });
-      else if (kind === PLANT_KIND) layoutPlants.push(item);
-      else if (kind === 'anemone') anemoneItems.push(item);
-      else throw new Error(`Preset item "${item.assetId}" is a ${kind}, which a tank cannot hold`);
-    }
+    const routed = routeDecor(preset.decor, (assetId) => catalog.get(assetId).kind);
+    const { hardItems, layoutPlants, anemoneItems } = routed;
+    const euphylliaItems: EuphylliaItem[] = [...routed.euphylliaItems];
     for (const patch of preset.plantPatches) {
       if (catalog.get(patch.assetId).kind !== 'plant') {
         throw new Error(`Plant patch "${patch.id}" uses ${patch.assetId}, which is not a plant`);
@@ -280,12 +334,19 @@ export class TankScene {
     };
 
     colliders.push(
-      ...scatterPresetPatches(preset, catalog, hard, dimensions, (patch, instances) => {
-        const list = entriesFor(patch.assetId);
-        instances.forEach((instance, i) =>
-          list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
-        );
-      }),
+      ...scatterPresetPatches(
+        preset,
+        catalog,
+        hard,
+        dimensions,
+        engine.tankSize,
+        (patch, instances) => {
+          const list = entriesFor(patch.assetId);
+          instances.forEach((instance, i) =>
+            list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
+          );
+        },
+      ),
     );
     const anchors: SceneAnchor[] = [];
     anemoneItems.forEach((item, i) => {
@@ -299,6 +360,8 @@ export class TankScene {
       colliders.push(anemoneCollider(entry, item));
       anchors.push(anemoneAnchor(`anemone-${i + 1}`, entry, item));
     });
+
+    for (const item of routed.mudBankItems) colliders.push(...mudBankColliders(item));
 
     const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
     for (const [i, entry] of euphylliaItems.entries()) {
@@ -319,6 +382,7 @@ export class TankScene {
       hardItems,
       anemoneItems,
       euphylliaItems,
+      routed.mudBankItems,
       anchors,
       options,
     );
@@ -399,7 +463,7 @@ export class TankScene {
       await this.queue.settled();
       const key = this.installedKey;
       if (this.disposed || !key) return;
-      const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
+      const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode, this.polyps.node);
       let built: BuiltPlants = { groups: [], created: [] };
       try {
         for (const { item, kind } of next) {
@@ -408,7 +472,7 @@ export class TankScene {
           hardscape.add(catalog.get(item.assetId), model, item);
         }
         built = await this.buildPlantGroups(key, next, this.plantGroups);
-        const movable = await movableColliders(this.library, next, waterTop);
+        const movable = await movableColliders(this.library, this.withGrownCorals(next), waterTop);
         if (this.disposed || this.installedKey !== key) {
           hardscape.dispose();
           for (const group of built.created) group.dispose();
@@ -435,8 +499,364 @@ export class TankScene {
         group.setDensity(this.engine.quality.settings.plantDensity);
         this.engine.scene.add(group.object);
       }
-      await this.evictUnused();
+      this.syncGrowth();
+      try {
+        await this.evictUnused();
+      } catch (cause) {
+        this.reportError('Evicting unused models failed after the layout was applied', cause);
+      }
+      const anchors = this.anchors;
+      for (const listener of [...this.anchorListeners]) {
+        try {
+          listener(anchors);
+        } catch (cause) {
+          this.reportError('An anchor listener threw', cause);
+        }
+      }
       return;
+    }
+  }
+
+  /**
+   * Shows the growth state: layout plants at their grown size, offsets as extra instances at their
+   * positions. Moves instances in place; nothing is rebuilt unless an asset gets more offsets
+   * than its group has room for. Absent or empty `plants` is the layout as drawn.
+   */
+  setPlants(plants: readonly Plant[] | undefined): void {
+    this.plantState = new Map((plants ?? []).map((p) => [p.key, p]));
+    this.syncGrowth();
+  }
+
+  /** The plant whose stem `ray` (tank space) passes closest to, with the key and size to trim. */
+  pickPlant(ray: Ray): PlantPick | null {
+    const refs = this.plantRefs(this.hardItems).map(({ ref }) => ref);
+    return pickPlant(ray, pickablePlants(refs, this.growthContext()));
+  }
+
+  private growthContext(): GrowthContext {
+    return {
+      plants: this.plantState,
+      ground: (x, z) => this.groundHeight(x, z),
+      waterTop: this.waterTop,
+    };
+  }
+
+  private plantRefs(
+    items: readonly { item: DecorItem; kind: string }[],
+  ): { index: number; ref: LayoutPlantRef }[] {
+    const plants: { index: number; item: DecorItem }[] = [];
+    items.forEach(({ item, kind }, index) => {
+      if (kind === PLANT_KIND) plants.push({ index, item });
+    });
+    const growing = new Set<string>();
+    for (const plant of this.plantState.values()) growing.add(plant.assetId);
+    const growers = plants.filter(({ item }) => growing.has(item.assetId));
+    const keys = new Map(
+      layoutPlantKeys(
+        growers.map(({ item }) => ({
+          assetId: item.assetId,
+          position: item.position,
+          tintSeed: item.tintSeed ?? legacyTintSeed(item),
+        })),
+      ).map((key, i) => [growers[i]?.index, key]),
+    );
+    return plants.map(({ index, item }) => {
+      const bounds = this.library.catalog.get(item.assetId).bounds;
+      return {
+        index,
+        ref: {
+          key: keys.get(index) ?? `unkeyed:${index}`,
+          item,
+          height: bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT,
+          halfWidth: Math.max(bounds?.max[0] ?? 0.05, bounds?.max[2] ?? 0.05),
+        },
+      };
+    });
+  }
+
+  private grownLayoutItem(index: number, item: DecorItem): DecorItem {
+    const found = this.plantRefs(
+      this.hardItems.map((h, i) => (i === index ? { ...h, item } : h)),
+    ).find((r) => r.index === index);
+    return found ? grownItem(found.ref, this.growthContext()) : item;
+  }
+
+  private syncGrowth(): void {
+    if (this.disposed) return;
+    const context = this.growthContext();
+    const refs = this.plantRefs(this.hardItems);
+    let collidersChanged = false;
+    for (const { index, ref } of refs) {
+      const target = locateMovable(this.hardItems, index);
+      if (target?.kind !== 'plant') continue;
+      const group = this.plantGroups.find((g) => g.assetId === target.assetId);
+      const grown = grownItem(ref, context);
+      const next = layoutPlantEntry(grown);
+      if (group && group.entryAt(target.ordinal)?.scale !== next.scale) {
+        group.setGrown(target.ordinal, next);
+      }
+      const colliderIndex = this.plantSlots.get(index);
+      if (colliderIndex === undefined) continue;
+      const collider = layoutPlantCollider(this.library.catalog.get(ref.item.assetId), grown);
+      if (
+        collider &&
+        JSON.stringify(this.colliderData[colliderIndex]) !== JSON.stringify(collider)
+      ) {
+        this.colliderData = this.colliderData.map((c, i) => (i === colliderIndex ? collider : c));
+        collidersChanged = true;
+      }
+    }
+    if (collidersChanged) {
+      this.colliderField = new ColliderField(this.colliderData);
+      this.overlay.setColliders(this.colliderData);
+    }
+    this.syncOffsets(
+      offsetEntries(
+        refs.map(({ ref }) => ref),
+        context,
+      ),
+    );
+    this.syncCorals();
+  }
+
+  /**
+   * Shows the coral state: colonies at their grown size and bleached colour, and fragments as
+   * extra pieces on the substrate. Absent or empty `corals` is the layout as drawn. Colliders
+   * follow the grown size.
+   */
+  setCorals(corals: readonly Coral[] | undefined): void {
+    this.coralState = corals ?? [];
+    this.syncCorals();
+  }
+
+  /**
+   * The corals of the layout in the order the server numbers repeated tint seeds: the preset's own
+   * order, with edited pieces taking the place of the preset piece before them and any extra after.
+   */
+  private coralLayout(items: readonly { item: DecorItem; kind: string }[]): {
+    slots: CoralSlot[];
+    origins: CoralOrigin[];
+  } {
+    const order = coralSlotOrder(
+      this.preset.decor,
+      (assetId) => (isMudBankId(assetId) ? 'procedural' : this.library.catalog.get(assetId).kind),
+      items,
+      this.euphylliaItems.map((entry) => entry.item),
+    );
+    return {
+      slots: order.map(({ assetId, item }) => ({ assetId, item })),
+      origins: order.map(({ origin }) => origin),
+    };
+  }
+
+  private coralCapCache: ScaleCap | null = null;
+
+  get coralCap(): ScaleCap {
+    this.coralCapCache ??= coralScaleCap(
+      this.library.catalog,
+      this.engine.tank.dimensions,
+      reachCurrent(this.preset.current ?? DEFAULT_CURRENT, this.preset.biome),
+    );
+    return this.coralCapCache;
+  }
+
+  private withGrownCorals(
+    items: readonly { item: DecorItem; kind: string }[],
+  ): { item: DecorItem; kind: string }[] {
+    const { slots, origins } = this.coralLayout(items);
+    const matched = matchLayoutCorals(slots, this.coralState);
+    const grown = items.map((h) => h);
+    origins.forEach((origin, s) => {
+      if (!('hard' in origin)) return;
+      const entry = items[origin.hard];
+      if (!entry) return;
+      grown[origin.hard] = {
+        ...entry,
+        item: grownCoralItem(entry.item, matched.get(s), this.coralCap),
+      };
+    });
+    return grown;
+  }
+
+  private readonly refitSoon = trailingCall(() => this.refitCorals(), COLLIDER_REFIT_DEBOUNCE_MS);
+
+  private matchedCorals(): {
+    slots: CoralSlot[];
+    origins: CoralOrigin[];
+    matched: Map<number, Coral>;
+  } {
+    const { slots, origins } = this.coralLayout(this.hardItems);
+    return { slots, origins, matched: matchLayoutCorals(slots, this.coralState) };
+  }
+
+  private refitCorals(): void {
+    if (this.disposed) return;
+    const { slots, origins, matched } = this.matchedCorals();
+    this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
+  }
+
+  private syncCorals(deferRefit = false): void {
+    if (this.disposed) return;
+    const { slots, origins, matched } = this.matchedCorals();
+    slots.forEach((slot, s) => {
+      const origin = origins[s];
+      const coral = matched.get(s);
+      const grown = grownCoralItem(slot.item, coral, this.coralCap);
+      const bleach = coral?.bleach ?? 0;
+      if (origin && 'hard' in origin) {
+        const target = locateMovable(this.hardItems, origin.hard);
+        if (target?.kind !== 'hardscape') return;
+        this.hardscape?.setItem(target.index, grown);
+        this.hardscape?.setBleach(target.index, bleach);
+      } else if (origin) {
+        const group = this.euphyllias[origin.euphyllia];
+        group?.setItem(grown);
+        group?.setBleach(bleach);
+      }
+    });
+    if (deferRefit) {
+      this.refitSoon.schedule();
+    } else {
+      this.refitSoon.cancel();
+      this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
+    }
+    this.report(this.syncFragments(slots), 'fragments');
+  }
+
+  private report(work: Promise<void>, what: string): void {
+    work.catch((cause: unknown) =>
+      this.engine.events.emit('engine:error', {
+        message: `Could not update the coral ${what}`,
+        cause,
+      }),
+    );
+  }
+
+  private async refitCoralColliders(
+    slots: readonly CoralSlot[],
+    origins: readonly CoralOrigin[],
+    matched: ReadonlyMap<number, Coral>,
+  ): Promise<void> {
+    const grownItems = slots.map((slot, s) =>
+      grownCoralItem(slot.item, matched.get(s), this.coralCap),
+    );
+    const fit = grownItems.map((grown) => grown.scale).join(',');
+    if (fit === this.coralFit) return;
+    const run = ++this.coralFitRun;
+    const version = this.layoutVersion;
+    const movable = await movableColliders(
+      this.library,
+      this.withGrownCorals(this.hardItems),
+      this.waterTop,
+    );
+    if (this.disposed || run !== this.coralFitRun || version !== this.layoutVersion) return;
+    this.plantSlots = new Map(movable.plantSlots);
+    this.replaceMovableColliders(movable.colliders);
+    const first = this.colliderData.length - this.euphylliaItems.length;
+    const colliders = [...this.colliderData];
+    origins.forEach((origin, s) => {
+      const grown = grownItems[s];
+      if (!('euphyllia' in origin) || !grown) return;
+      const detail = this.euphylliaItems[origin.euphyllia]?.fullDetail;
+      if (detail) colliders[first + origin.euphyllia] = euphylliaCollider(detail.bounds, grown);
+    });
+    this.colliderData = colliders;
+    this.colliderField = new ColliderField(this.colliderData);
+    this.overlay.setColliders(this.colliderData);
+    this.coralFit = fit;
+    this.syncGrowth();
+  }
+
+  private async syncFragments(slots: readonly CoralSlot[]): Promise<void> {
+    const key = this.installedKey;
+    const placed = placeFragments(
+      slots,
+      this.coralState,
+      (x, z) => this.groundHeight(x, z),
+      this.coralCap,
+    );
+    const layout = placed
+      .map((f) => `${f.coral.key}:${f.coral.assetId}:${f.item.position.join(',')}`)
+      .join('|');
+    if (layout === this.fragLayout && (placed.length === 0 || key)) {
+      this.updateFragments(placed);
+      return;
+    }
+    if (!key) return;
+    const run = ++this.fragRun;
+    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode, this.polyps.node);
+    const euphyllias: EuphylliaGroup[] = [];
+    try {
+      for (const frag of placed) {
+        const procedural = parseEuphylliaId(frag.item.assetId);
+        if (procedural) {
+          const mesh = generateEuphyllia(procedural.variant, procedural.seed, key.euphylliaDetail);
+          euphyllias.push(new EuphylliaGroup(mesh, frag.item, this.current, this.polyps.node));
+        } else {
+          const entry = this.library.catalog.get(frag.item.assetId);
+          const model = await this.library.load(
+            frag.item.assetId,
+            key.hardscapeLod,
+            key.textureSize,
+          );
+          hardscape.add(entry, model, frag.item);
+        }
+      }
+    } catch (error) {
+      hardscape.dispose();
+      for (const coral of euphyllias) coral.dispose();
+      throw error;
+    }
+    if (this.disposed || run !== this.fragRun || this.installedKey !== key) {
+      hardscape.dispose();
+      for (const coral of euphyllias) coral.dispose();
+      return;
+    }
+    this.fragHardscape?.dispose();
+    for (const coral of this.fragEuphyllias) coral.dispose();
+    this.fragHardscape = hardscape;
+    this.fragEuphyllias = euphyllias;
+    this.fragLayout = layout;
+    this.engine.scene.add(hardscape.group);
+    for (const coral of euphyllias) this.engine.scene.add(coral.object);
+    this.updateFragments(placed);
+  }
+
+  private updateFragments(placed: readonly PlacedFragment[]): void {
+    let hard = 0;
+    let soft = 0;
+    for (const { item, coral } of placed) {
+      if (parseEuphylliaId(item.assetId)) {
+        const group = this.fragEuphyllias[soft++];
+        group?.setItem(item);
+        group?.setBleach(coral.bleach);
+      } else {
+        this.fragHardscape?.setItem(hard, item);
+        this.fragHardscape?.setBleach(hard++, coral.bleach);
+      }
+    }
+  }
+
+  private syncOffsets(entries: ReadonlyMap<string, readonly PlantEntry[]>): void {
+    const density = this.engine.quality.settings.plantDensity;
+    for (const assetId of new Set([...entries.keys(), ...this.offsetGroups.keys()])) {
+      const list = entries.get(assetId) ?? [];
+      const host = this.plantGroups.find((g) => g.assetId === assetId);
+      const existing = this.offsetGroups.get(assetId);
+      if (existing && host && existing.model === host.model && existing.setLive(list)) continue;
+      existing?.dispose();
+      this.offsetGroups.delete(assetId);
+      if (!host || list.length === 0) continue;
+      const group = new PlantGroup(
+        assetId,
+        host.model,
+        list,
+        this.current,
+        offsetCapacity(list.length),
+      );
+      group.setDensity(density);
+      this.offsetGroups.set(assetId, group);
+      this.engine.scene.add(group.object);
     }
   }
 
@@ -447,13 +867,15 @@ export class TankScene {
     this.hardItems = this.hardItems.map((h, i) => (i === index ? { item, kind: h.kind } : h));
     if (target.kind === 'hardscape') {
       this.hardscape?.setItem(target.index, item);
+      if (this.coralState.length > 0) this.syncCorals(true);
       return;
     }
     const group = this.plantGroups.find((g) => g.assetId === target.assetId);
-    group?.setEntry(target.ordinal, layoutPlantEntry(item));
+    const grown = this.grownLayoutItem(index, item);
+    group?.setEntry(target.ordinal, layoutPlantEntry(grown));
     const colliderIndex = this.plantSlots.get(index);
     if (colliderIndex === undefined) return;
-    const moved = layoutPlantCollider(this.library.catalog.get(item.assetId), item);
+    const moved = layoutPlantCollider(this.library.catalog.get(item.assetId), grown);
     if (!moved) return;
     this.colliderData = this.colliderData.map((c, i) => (i === colliderIndex ? moved : c));
     this.colliderField = new ColliderField(this.colliderData);
@@ -483,7 +905,31 @@ export class TankScene {
 
   /** Where species with a home (clownfish and their anemone) are drawn to. */
   get anchors(): readonly SceneAnchor[] {
-    return this.anchorData;
+    const d = this.engine.tank.dimensions;
+    const reach = waterReach(d);
+    return [
+      ...this.anchorData,
+      ...caveAnchors(
+        this.hardItems.map(({ item }) => item),
+        reach,
+      ),
+    ];
+  }
+
+  /** Dry perches above the water for amphibious fish, sent to the sim alongside `anchors`, so a bank follows the decor that makes it. */
+  get banks(): readonly SceneBank[] {
+    const d = this.engine.tank.dimensions;
+    return bankAnchors(
+      [...this.hardItems.map(({ item }) => item), ...this.mudBankItems],
+      d.height - d.freeboard,
+      waterReach(d),
+    );
+  }
+
+  /** Called with the anchors after a layout change moves, adds or removes shelter decor. */
+  onAnchorsChanged(listener: (anchors: readonly SceneAnchor[]) => void): () => void {
+    this.anchorListeners.add(listener);
+    return () => this.anchorListeners.delete(listener);
   }
 
   get plantCount(): number {
@@ -521,11 +967,11 @@ export class TankScene {
     reuse: readonly PlantGroup[] = [],
   ): Promise<BuiltPlants> {
     const layout = new Map<string, PlantEntry[]>();
-    for (const { item, kind } of movable) {
-      if (kind !== PLANT_KIND) continue;
-      const list = layout.get(item.assetId) ?? [];
-      list.push(layoutPlantEntry(item));
-      layout.set(item.assetId, list);
+    const context = this.growthContext();
+    for (const { ref } of this.plantRefs(movable)) {
+      const list = layout.get(ref.item.assetId) ?? [];
+      list.push(layoutPlantEntry(grownItem(ref, context)));
+      layout.set(ref.item.assetId, list);
     }
     const assetIds = new Set([...layout.keys(), ...this.patchEntries.keys()]);
     const groups: PlantGroup[] = [];
@@ -539,7 +985,11 @@ export class TankScene {
           groups.push(kept);
           continue;
         }
-        const model = await this.library.load(assetId, key.plantLod, key.textureSize);
+        const model = await this.library.load(
+          assetId,
+          plantLodFor(assetId, key.plantLod),
+          key.textureSize,
+        );
         const group = new PlantGroup(
           assetId,
           model,
@@ -610,7 +1060,7 @@ export class TankScene {
     version: number,
     items: readonly { item: DecorItem; kind: string }[],
   ): Promise<boolean | 'layout-changed'> {
-    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
+    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode, this.polyps.node);
     let built: BuiltPlants = { groups: [], created: [] };
     const anemones: AnemoneGroup[] = [];
     const euphyllias: EuphylliaGroup[] = [];
@@ -629,14 +1079,14 @@ export class TankScene {
       for (const item of this.anemoneItems) {
         const entry = this.library.catalog.get(item.assetId);
         const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
-        anemones.push(new AnemoneGroup(entry, model, item, this.current));
+        anemones.push(new AnemoneGroup(entry, model, item, this.current, this.polyps.node));
       }
       for (const { item, variant, seed, fullDetail } of this.euphylliaItems) {
         const mesh =
           key.euphylliaDetail === 2 && fullDetail
             ? fullDetail
             : generateEuphyllia(variant, seed, key.euphylliaDetail);
-        euphyllias.push(new EuphylliaGroup(mesh, item, this.current));
+        euphyllias.push(new EuphylliaGroup(mesh, item, this.current, this.polyps.node));
       }
     } catch (error) {
       hardscape.dispose();
@@ -674,13 +1124,17 @@ export class TankScene {
       group.setDensity(this.engine.quality.settings.plantDensity);
       this.engine.scene.add(group.object);
     }
+    this.syncGrowth();
     if (substrate) {
       const previous = this.substrate;
       this.engine.tank.substrate.material = substrate.material;
+      for (const bank of this.mudBanks) bank.setMaterial(substrate.material);
       this.substrate = substrate;
       if (previous) this.discardSubstrate(previous);
     }
     this.installedKey = key;
+    this.fragLayout = '';
+    this.syncCorals();
     await this.evictUnused();
     return true;
   }
@@ -690,29 +1144,43 @@ export class TankScene {
     const keep = new Set<string>();
     if (key) {
       for (const { item, kind } of this.hardItems) {
-        const lod = kind === PLANT_KIND ? key.plantLod : key.hardscapeLod;
+        const lod =
+          kind === PLANT_KIND ? plantLodFor(item.assetId, key.plantLod) : key.hardscapeLod;
         keep.add(this.library.modelKey(item.assetId, lod, key.textureSize));
       }
       for (const item of this.anemoneItems) {
         keep.add(this.library.modelKey(item.assetId, key.hardscapeLod, key.textureSize));
       }
       for (const assetId of this.patchEntries.keys()) {
-        keep.add(this.library.modelKey(assetId, key.plantLod, key.textureSize));
+        keep.add(
+          this.library.modelKey(assetId, plantLodFor(assetId, key.plantLod), key.textureSize),
+        );
       }
     }
     await this.library.retainOnly(keep);
   }
 
+  private reportError(message: string, cause: unknown): void {
+    this.engine.events.emit('engine:error', { message, cause });
+  }
+
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.refitSoon.cancel();
     for (const release of this.releases) release();
     this.releases.length = 0;
+    this.polyps.dispose();
     await this.queue.stop();
     this.hardscape?.dispose();
     for (const group of this.plantGroups) group.dispose();
+    for (const group of this.offsetGroups.values()) group.dispose();
+    this.offsetGroups.clear();
     for (const anemone of this.anemones) anemone.dispose();
     for (const coral of this.euphyllias) coral.dispose();
+    this.fragHardscape?.dispose();
+    for (const coral of this.fragEuphyllias) coral.dispose();
     this.overlay.dispose();
+    for (const bank of this.mudBanks) bank.dispose();
     if (this.substrate) {
       this.engine.tank.substrate.material = this.placeholderSubstrate;
       this.discardSubstrate(this.substrate);
@@ -724,12 +1192,18 @@ export class TankScene {
 
 export function fitPresetToCatalog(
   preset: PresetLayout,
+  size: TankSize,
   dimensions: TankDimensions,
   catalog: Pick<AssetCatalog, 'get'>,
 ): PresetLayout {
   const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
-  return fitPresetToTank(preset, dimensions, boundsFromCatalog(catalog, current), (patch, axis) =>
-    plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
+  return fitPresetToTank(
+    preset,
+    size,
+    dimensions,
+    boundsFromCatalog(catalog, current),
+    (patch, axis) =>
+      plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
   );
 }
 
@@ -738,6 +1212,7 @@ export function scatterPresetPatches(
   catalog: Pick<AssetCatalog, 'get'>,
   hard: ColliderField,
   dimensions: TankDimensions,
+  size: TankSize,
   onPatch: (patch: PlantPatch, instances: PlantInstance[]) => void,
 ): CapsuleCollider[] {
   const waterTop = dimensions.height - dimensions.freeboard;
@@ -755,7 +1230,27 @@ export function scatterPresetPatches(
       reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome),
     );
     const ceiling = surfaceScaleCeiling(waterTop, bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT);
-    const instances = scatterPatch(patch, ground, blocked, extent, reach, ceiling);
+    const smallest = patch.scale[0] * GLASS_SHRINK_FLOOR;
+    const rooted =
+      patch.count > MIN_KEPT_PATCH && glassSqueezes(size, patch.center[1])
+        ? {
+            ...patch,
+            center: openGround(
+              patch.center,
+              patch.radius,
+              Math.max(0, extent.halfLength - reach(smallest, 'x') - patch.radius),
+              Math.max(0, extent.halfDepth - reach(smallest, 'z') - patch.radius),
+              (x, z) =>
+                !blocked(x, ground(x, z) - ROOT_DEPTH, z) &&
+                !preset.plantPatches.some(
+                  (other) =>
+                    other !== patch &&
+                    Math.hypot(x - other.center[0], z - other.center[1]) < other.radius,
+                ),
+            ),
+          }
+        : patch;
+    const instances = scatterPatch(rooted, ground, blocked, extent, reach, ceiling);
     if (instances.length < patch.count) {
       console.warn(
         `Plant patch "${patch.id}" fitted ${instances.length} of ${patch.count} plants; move it clear of hardscape and glass`,
@@ -802,7 +1297,7 @@ export function fixedDecorOf(
   plantsMovable = false,
 ): DecorItem[] {
   return decor.filter((i) => {
-    if (parseEuphylliaId(i.assetId) !== null) return true;
+    if (parseEuphylliaId(i.assetId) !== null || isMudBankId(i.assetId)) return true;
     const kind = catalog.get(i.assetId).kind;
     return !HARDSCAPE_KINDS.has(kind) && !(plantsMovable && kind === PLANT_KIND);
   });
@@ -825,7 +1320,10 @@ export async function movableColliders(
         colliders.push(capsule);
       }
     } else {
-      colliders.push(...fitCollider(kind, await library.collisionGeometry(item.assetId), item));
+      const geometry = hasShelterParts(item.assetId)
+        ? []
+        : await library.collisionGeometry(item.assetId);
+      colliders.push(...fitCollider(kind, geometry, item));
     }
   }
   return { colliders, plantSlots };

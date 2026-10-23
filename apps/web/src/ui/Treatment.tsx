@@ -1,10 +1,12 @@
 import {
-  playableBiomeSchema,
+  creatableBiomeSchema,
   type DiseaseKind,
+  type Fish,
   type MedicinePotency,
   type Tank,
 } from '@aquarium/shared';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
+import { movableFish, moveTargets } from '../sync/moveFish';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { spendQuestion } from '../sync/economy';
 import type { SessionState, TankSession } from '../sync/session';
@@ -14,13 +16,15 @@ import {
   doseButtonText,
   doseSpend,
   heatTolerantSick,
-  heldFor,
+  emptyHeld,
+  type HeldDose,
   listNames,
   liveMedicine,
   medicineLine,
   OVERDOSE_WARNING,
   planDose,
   premiumPrice,
+  reconcileHeld,
   severityWord,
   sickFish,
   sickKinds,
@@ -34,36 +38,47 @@ import { useSpend } from './spend';
 const POTENCIES: readonly MedicinePotency[] = ['standard', 'premium'];
 
 interface Pending {
-  tankId: string;
   kind: DiseaseKind;
   potency: MedicinePotency;
   warnings: string[];
 }
 
 interface Refusal {
-  tankId: string;
   kind: DiseaseKind;
   message: string;
   waterChange: boolean;
+}
+
+interface FishMoverProps {
+  session: TankSession;
+  state: SessionState;
+  tank: Tank;
+  fish: Fish;
 }
 
 export function Treatment({
   session,
   state,
   tank,
+  initialHeld,
 }: {
   session: TankSession;
   state: SessionState;
   tank: Tank;
+  initialHeld?: HeldDose<Pending, Refusal>;
 }) {
   const id = useId();
   const { spend, notice } = useSpend(session, state.balance);
-  const [heldPending, setPending] = useState<Pending | null>(null);
-  const [heldRefusal, setRefusal] = useState<Refusal | null>(null);
-  useEffect(() => () => setPending(null), [tank.id]);
-  const pending = heldFor(heldPending, tank.id);
-  const refusal = heldFor(heldRefusal, tank.id);
-  const pendingCost = pending && doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
+  const [stored, setHeld] = useState<HeldDose<Pending, Refusal>>(
+    () => initialHeld ?? emptyHeld(tank.id),
+  );
+  const held = reconcileHeld(stored, tank.id);
+  if (held !== stored) setHeld(held);
+  const { pending, refusal } = held;
+  const setPending = (next: Pending | null) =>
+    setHeld((was) => ({ ...reconcileHeld(was, tank.id), pending: next }));
+  const setRefusal = (next: Refusal | null) =>
+    setHeld((was) => ({ ...reconcileHeld(was, tank.id), refusal: next }));
   const nowMs = Date.now();
   const kinds = sickKinds(tank);
   const medicine = liveMedicine(tank, nowMs);
@@ -73,10 +88,9 @@ export function Treatment({
       const outcome = await session.treat(kind, potency);
       if (!outcome.ok && outcome.refusal !== null) {
         setRefusal({
-          tankId: tank.id,
           kind,
           message: outcome.refusal,
-          waterChange: wantsWaterChange(outcome.refusal),
+          waterChange: wantsWaterChange(outcome.reason),
         });
       }
       return outcome.ok;
@@ -94,7 +108,6 @@ export function Treatment({
     const plan = planDose(tank, kind, potency, Date.now());
     if (plan.kind === 'blocked') {
       return setRefusal({
-        tankId: tank.id,
         kind,
         message: blockedText(plan.reason),
         waterChange: plan.reason !== 'nothing-to-treat',
@@ -104,7 +117,7 @@ export function Treatment({
       ...(plan.replaces ? [switchWarning(plan.replaces, kind)] : []),
       ...(plan.overdose ? [OVERDOSE_WARNING] : []),
     ];
-    if (warnings.length > 0) return setPending({ tankId: tank.id, kind, potency, warnings });
+    if (warnings.length > 0) return setPending({ kind, potency, warnings });
     run(kind, potency, false);
   };
 
@@ -119,6 +132,7 @@ export function Treatment({
           kind={kind}
           tank={tank}
           state={state}
+          session={session}
           refusal={refusal?.kind === kind ? refusal : null}
           onDose={start}
           onWaterChange={async () => {
@@ -130,26 +144,56 @@ export function Treatment({
       {notice}
       {pending && (
         <Dialog title="Before you dose" tone="loss" onClose={() => setPending(null)}>
-          <DoseWarning warnings={pending.warnings} cost={pendingCost} balance={state.balance} />
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                setPending(null);
-                run(pending.kind, pending.potency, true);
-              }}
-            >
-              Dose anyway
-            </button>
-            <button type="button" onClick={() => setPending(null)}>
-              Keep things as they are
-            </button>
-          </div>
+          <DoseConfirmation
+            pending={pending}
+            balance={state.balance}
+            onConfirm={() => {
+              setPending(null);
+              run(pending.kind, pending.potency, true);
+            }}
+            onCancel={() => setPending(null)}
+          />
         </Dialog>
       )}
     </section>
   );
+}
+
+export function DoseConfirmation({
+  pending,
+  balance,
+  onConfirm,
+  onCancel,
+}: {
+  pending: Pending;
+  balance: number | null;
+  onConfirm(): void;
+  onCancel(): void;
+}) {
+  return (
+    <>
+      <PendingDoseWarning pending={pending} balance={balance} />
+      <div className="row">
+        <button type="button" className="primary" onClick={onConfirm}>
+          Dose anyway
+        </button>
+        <button type="button" onClick={onCancel}>
+          Keep things as they are
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function PendingDoseWarning({
+  pending,
+  balance,
+}: {
+  pending: Pending;
+  balance: number | null;
+}) {
+  const cost = doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
+  return <DoseWarning warnings={pending.warnings} cost={cost} balance={balance} />;
 }
 
 export function DoseWarning({
@@ -175,6 +219,7 @@ function DiseaseCard({
   kind,
   tank,
   state,
+  session,
   refusal,
   onDose,
   onWaterChange,
@@ -182,6 +227,7 @@ function DiseaseCard({
   kind: DiseaseKind;
   tank: Tank;
   state: SessionState;
+  session: TankSession;
   refusal: Refusal | null;
   onDose(kind: DiseaseKind, potency: MedicinePotency): void;
   onWaterChange(): Promise<void>;
@@ -198,6 +244,7 @@ function DiseaseCard({
         {fish.map((f) => (
           <li key={f.id}>
             {f.name}: {severityWord(f.disease?.severity ?? 0)}
+            <FishMover session={session} state={state} tank={tank} fish={f} />
           </li>
         ))}
       </ul>
@@ -235,6 +282,42 @@ function DiseaseCard({
   );
 }
 
+function FishMover({ session, state, tank, fish }: FishMoverProps) {
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const species = state.species.find((s) => s.id === fish.species);
+  if (species === undefined) {
+    throw new Error(
+      `Species ${fish.species} is missing from the catalogue, so its move targets cannot be checked.`,
+    );
+  }
+  const targets = moveTargets(tank, state.tanks, species);
+  if (targets.length === 0) return null;
+  return (
+    <span className="fish-mover">
+      {targets.map((target) => (
+        <button
+          key={target.id}
+          type="button"
+          disabled={state.busy}
+          onClick={() => {
+            setRefusal(null);
+            void session.move(fish.id, target.id).then((outcome) => {
+              if (!outcome.ok) setRefusal(outcome.refusal);
+            });
+          }}
+        >
+          Move {fish.name} to {target.name}
+        </button>
+      ))}
+      {refusal && (
+        <span role="alert" className="field-error">
+          {refusal}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function HeatNote({ tank, state }: { tank: Tank; state: SessionState }) {
   const tolerant = heatTolerantSick(tank, state.species);
   return (
@@ -256,7 +339,7 @@ export function QuarantineSection({
   tank: Tank;
 }) {
   const id = useId();
-  const [biome, setBiome] = useState<(typeof playableBiomeSchema.options)[number]>(
+  const [biome, setBiome] = useState<(typeof creatableBiomeSchema.options)[number]>(
     tank.biome === 'reef' ? 'reef' : 'freshwater',
   );
   const quarantine = state.tanks.find((t) => t.quarantine);
@@ -265,9 +348,8 @@ export function QuarantineSection({
       <h3 id={`${id}-h`}>Quarantine tank</h3>
       <p className="hint">
         A small tank kept apart, so sick fish can be treated without dosing the whole display tank.
-        It is free and does not count toward your six tanks. Moving a fish into it and back needs a
-        server feature that is not built yet, so for now it is a separate tank you can dose and care
-        for on its own.
+        It is free and does not count toward your six tanks. Move a sick fish in, dose it there, and
+        move it back when it is well.
       </p>
       {quarantine === undefined && (
         <form
@@ -281,9 +363,9 @@ export function QuarantineSection({
           <select
             id={`${id}-b`}
             value={biome}
-            onChange={(e) => setBiome(playableBiomeSchema.parse(e.target.value))}
+            onChange={(e) => setBiome(creatableBiomeSchema.parse(e.target.value))}
           >
-            {playableBiomeSchema.options.map((b) => (
+            {creatableBiomeSchema.options.map((b) => (
               <option key={b} value={b}>
                 {b[0]?.toUpperCase()}
                 {b.slice(1)}
@@ -296,7 +378,19 @@ export function QuarantineSection({
         </form>
       )}
       {quarantine !== undefined && quarantine.id === tank.id && (
-        <p role="status">You are looking at the quarantine tank.</p>
+        <>
+          <p role="status">You are looking at the quarantine tank.</p>
+          <ul className="hint">
+            {movableFish(tank)
+              .filter((f) => f.disease === null)
+              .map((f) => (
+                <li key={f.id}>
+                  {f.name}
+                  <FishMover session={session} state={state} tank={tank} fish={f} />
+                </li>
+              ))}
+          </ul>
+        </>
       )}
       {quarantine !== undefined && quarantine.id !== tank.id && (
         <button

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { EffectsSlot, type FrameEffects, type PhotoPost } from './effectsSlot';
+import {
+  EffectsRecovery,
+  EffectsSlot,
+  isTransientFailure,
+  type FrameEffects,
+  type PhotoPost,
+} from './effectsSlot';
 import { PhotoLook } from './photo/look';
 
 class FakeEffects implements FrameEffects {
@@ -269,5 +275,112 @@ describe('EffectsSlot', () => {
     expect(() => slot.dispose()).toThrow('dispose');
     expect(slot.temporal).toBe(false);
     expect(temporal).toEqual([true, false]);
+  });
+
+  it('tells the owner which failure dropped the effects, after they are gone', () => {
+    const dropped: { cause: unknown; active: boolean }[] = [];
+    const slot: EffectsSlot = new EffectsSlot(
+      () => undefined,
+      () => undefined,
+      (cause) => dropped.push({ cause, active: slot.active }),
+    );
+    const effects = new FakeEffects();
+    slot.attach(effects);
+    effects.renderError = new Error('post failed');
+    slot.render();
+    slot.fail(new Error('late'));
+    expect(dropped).toEqual([{ cause: new Error('post failed'), active: false }]);
+  });
+});
+
+const SUBMIT_FAILURE = new Error(
+  'THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_fish:angelfish:' +
+    'texture_1_223): Destroyed texture [Texture "ShadowDepthTexture"] used in a submit.',
+);
+
+describe('isTransientFailure', () => {
+  it('tells a submit that used a freed texture from a pipeline that cannot build', () => {
+    expect(isTransientFailure(SUBMIT_FAILURE)).toBe(true);
+    expect(isTransientFailure(new Error('Invalid ShaderModule: unresolved sampler'))).toBe(false);
+    expect(isTransientFailure('used in a submit')).toBe(false);
+  });
+});
+
+describe('EffectsRecovery', () => {
+  function setup(delaysMs?: readonly number[]) {
+    const pending: { run: () => void; delayMs: number; cancelled: boolean }[] = [];
+    let rebuilds = 0;
+    const recovery = new EffectsRecovery(
+      () => rebuilds++,
+      (run, delayMs) => {
+        const entry = { run, delayMs, cancelled: false };
+        pending.push(entry);
+        return () => {
+          entry.cancelled = true;
+        };
+      },
+      delaysMs,
+    );
+    const fire = () => {
+      const entry = pending.shift();
+      if (entry !== undefined && !entry.cancelled) entry.run();
+    };
+    return { recovery, pending, fire, rebuilds: () => rebuilds };
+  }
+
+  it('brings the effects back after a transient failure dropped them', () => {
+    const slot: EffectsSlot = new EffectsSlot(
+      () => undefined,
+      () => undefined,
+      (cause) => recovery.dropped(cause),
+    );
+    const recovery = new EffectsRecovery(
+      () => slot.attach(new FakeEffects()),
+      (run) => {
+        queued.push(run);
+        return () => undefined;
+      },
+    );
+    const queued: (() => void)[] = [];
+    slot.attach(new FakeEffects());
+    slot.fail(SUBMIT_FAILURE);
+    expect(slot.active).toBe(false);
+    for (const run of queued.splice(0)) run();
+    expect(slot.active).toBe(true);
+    expect(slot.render()).toBe(true);
+  });
+
+  it('leaves the effects dropped after a failure that is not transient', () => {
+    const { recovery, pending } = setup();
+    expect(recovery.dropped(new Error('shader failed'))).toBe(false);
+    expect(pending).toEqual([]);
+  });
+
+  it('backs off between rebuilds and gives up after the last delay', () => {
+    const { recovery, pending, fire, rebuilds } = setup([10, 20]);
+    const delays: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const scheduled = recovery.dropped(SUBMIT_FAILURE);
+      delays.push(pending[0]?.delayMs ?? -1);
+      expect(scheduled).toBe(i < 2);
+      fire();
+    }
+    expect(delays).toEqual([10, 20, -1]);
+    expect(rebuilds()).toBe(2);
+  });
+
+  it('schedules one rebuild for drops that arrive while one is pending', () => {
+    const { recovery, pending } = setup();
+    recovery.dropped(SUBMIT_FAILURE);
+    expect(recovery.dropped(SUBMIT_FAILURE)).toBe(false);
+    expect(pending).toHaveLength(1);
+  });
+
+  it('cancels a pending rebuild on dispose', () => {
+    const { recovery, fire, rebuilds } = setup();
+    recovery.dropped(SUBMIT_FAILURE);
+    recovery.dispose();
+    fire();
+    expect(rebuilds()).toBe(0);
   });
 });

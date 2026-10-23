@@ -26,6 +26,12 @@ export const FishState = {
   Fall: 17,
   /** A parent at its clutch, fanning the eggs with its pectorals or mouthing them. */
   Tend: 18,
+  /** A client holding still at a cleaning station, fins spread, for the cleaner to inspect. */
+  Pose: 19,
+  /** A cleaner darting to and picking at a posing client. */
+  Clean: 20,
+  /** An amphibious fish out of the water: climbing onto a bank, perched on it or going back. */
+  Emerse: 21,
 } as const;
 export type FishState = (typeof FishState)[keyof typeof FishState];
 

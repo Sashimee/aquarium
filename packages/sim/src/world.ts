@@ -3,12 +3,13 @@ import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { sexCode, StageCode, stageCode, type SimBrood } from './brood.ts';
 import { algaeGrazer, grazeAreaRate, type CrewTally } from './crew.ts';
-import { DecorField, UnionSdf, type Point3 } from './decor.ts';
+import { DecorField, UnionSdf, type DecorBounds, type Point3 } from './decor.ts';
 import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
 import type { Visitor } from './greeting.ts';
 import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
+import type { NookDecor } from './nooks.ts';
 import {
   pairwiseDistanceSq,
   resetNeighbourOrder,
@@ -93,7 +94,7 @@ export const STEERING = {
   plantSlowdown: 0.3,
   spawnAttempts: 200,
   tiltClearanceThickness: 1.5,
-  liftOffPitchRad: 10 * DEG,
+  liftOffPitchRad: 5 * DEG,
   detourS: 1.5,
   minTurnRadiusBodyLengths: 0.4,
   pivotTurnRateRadPerS: 1,
@@ -106,6 +107,7 @@ export const STEERING = {
   backOutMaxBodyLengths: 2,
   backOutAlignedRad: 30 * DEG,
   backOutBlockedCos: 0.5,
+  backHomeBehindCos: 0.5,
   scrapeWindowS: 1,
   scrapeContactFraction: 0.2,
   scrapeDriftBodyLengths: 0.5,
@@ -244,6 +246,7 @@ interface Spot {
   readonly yaw: number;
 }
 const MAX_BODY_PUSHES = 8;
+const SPAWN_GRID_CELLS = 32;
 const STATION_MEMO = 8;
 
 const NO_ATE_EVENTS: readonly AteEvent[] = Object.freeze([]);
@@ -265,6 +268,8 @@ export class World {
   plantContacts = 0;
   /** Stand-off spots tested for room to face the food from; the bearing search behind them is cached. */
   stationChecks = 0;
+  /** Steps where a fish had to be moved off another's body (`Plan.keepOff`); steering keeps this rare. */
+  bodyPushes = 0;
   /** Fish-steps spent rising in place before crossing to a stand-off station over the top of a rock. */
   climbs = 0;
 
@@ -316,6 +321,7 @@ export class World {
   private cramped: Uint8Array;
   private wedged: Float64Array;
   private reverseLeft: Float64Array;
+  private backHomeBlocked: Float64Array;
   private scrapeAnchor: Float64Array;
   private scrapeTime: Float64Array;
   private scrapeHits: Uint16Array;
@@ -512,6 +518,7 @@ export class World {
     this.cramped = new Uint8Array(n);
     this.wedged = new Float64Array(n);
     this.reverseLeft = new Float64Array(n);
+    this.backHomeBlocked = new Float64Array(n);
     this.scrapeAnchor = new Float64Array(n * 3);
     this.scrapeTime = new Float64Array(n);
     this.scrapeHits = new Uint16Array(n);
@@ -573,6 +580,15 @@ export class World {
     return this.hardDecor.size > 0 ? this.hardDecor : null;
   }
 
+  get decorBounds(): DecorBounds[] {
+    return this.hardDecor.bounds();
+  }
+
+  /** The hard decor as the crevice search caches it: each collider's shape, and the field's reach. */
+  get decorShapes(): NookDecor {
+    return { shapes: this.hardDecor.shapes(), reach: this.hardDecor.reach };
+  }
+
   get plantSdf(): Sdf | null {
     return this.softDecor.size > 0 ? this.softDecor : null;
   }
@@ -588,6 +604,20 @@ export class World {
 
   setLight(level: number): void {
     this.behaviour.setLight(level);
+  }
+
+  /**
+   * Takes the current light as already adapted to, so a change made while the world was not
+   * stepping (paused) does not startle the fish when it runs again, and eases the polyps as far as
+   * `pausedS` seconds in the current darkness would have.
+   */
+  settleLight(pausedS = 0): void {
+    this.behaviour.lighting.settle(pausedS);
+  }
+
+  /** How far coral polyps are out, 0 (retracted) to 1 (fully out), following the darkness. */
+  get polypExtension(): number {
+    return this.behaviour.lighting.polypExtension;
   }
 
   /** Installs, changes or (with null) removes the wave maker. */
@@ -720,6 +750,7 @@ export class World {
       this.stationEpoch++;
       this.freeTrappedBodies();
       this.behaviour.decorMoved();
+      this.applyPoses();
     }
     return rebuilt;
   }
@@ -757,6 +788,7 @@ export class World {
 
   setAnchors(anchors: readonly Anchor[]): void {
     this.behaviour.setAnchors(anchors);
+    this.applyPoses();
   }
 
   /**
@@ -803,9 +835,13 @@ export class World {
     return events.length === 0 ? NO_ATE_EVENTS : events.splice(0);
   }
 
-  /** Smallest distance from fish `i`'s spine chain to the tank or hard decor, minus its thickness. */
+  /**
+   * Smallest distance from fish `i`'s spine chain to the tank or hard decor, minus its thickness.
+   * The water surface counts only for a fish in the water: one on a bank is out of it.
+   */
   bodyClearance(i: number): number {
-    return this.spineClearance(i, this.sceneSdf);
+    const emersed = this.behaviour.banks.emersed(i);
+    return this.spineClearance(i, emersed ? this.substrateSdf : this.sceneSdf);
   }
 
   private spineClearance(i: number, field: Sdf): number {
@@ -848,9 +884,11 @@ export class World {
       throw new RangeError(`fish "${spawn.id}": bodyLengthM must be positive, got ${length}`);
     }
     const r = length * STEERING.collisionRadiusBodyLengths;
-    const basin = this.basin;
-    if (2 * r >= Math.min(basin.width, basin.maxY - basin.floorMax, basin.depth)) {
-      throw new RangeError(`fish "${spawn.id}" (${length} m) does not fit in the tank`);
+    const longest = longestFitting(this.basin);
+    if (length >= longest) {
+      throw new RangeError(
+        `fish "${spawn.id}" (${length} m) does not fit in the tank, which holds fish shorter than ${longest.toFixed(3)} m`,
+      );
     }
     const { hunger, stage, sex } = spawn;
     if (stage !== undefined && stage !== 'fry' && stage !== 'juvenile' && stage !== 'adult') {
@@ -940,7 +978,46 @@ export class World {
       if (this.hardDecor.sample(x, y, z, this.normal) < pad) continue;
       return { x, y, z, yaw: this.rng.range(-Math.PI, Math.PI) };
     }
-    throw new RangeError(`fish "${fit.id}": no free water to spawn in, decor fills the tank`);
+    // A big fish in a small decorated tank (a tang in a nano) may have no spot a body length clear
+    // of everything; it still starts in the roomiest water as long as its body fits there.
+    const roomy = this.roomiestSpot(r);
+    if (roomy === null) {
+      throw new RangeError(`fish "${fit.id}": no free water to spawn in, decor fills the tank`);
+    }
+    const [x, y, z] = roomy;
+    return { x, y, z, yaw: this.rng.range(-Math.PI, Math.PI) };
+  }
+
+  /**
+   * The point of a grid over the water farthest from glass, sand, surface and hard decor, or null
+   * when even that leaves less than `r` (the fish's whole body in any pose). Draws nothing from
+   * the RNG.
+   */
+  private roomiestSpot(r: number): Point3 | null {
+    const basin = this.basin;
+    const span = Math.max(basin.width, basin.maxY - basin.minY, basin.depth);
+    const step = Math.max(0.5 * r, span / SPAWN_GRID_CELLS);
+    const xs = Math.floor((basin.width - 2 * r) / step) + 1;
+    const zs = Math.floor((basin.depth - 2 * r) / step) + 1;
+    let best: Point3 | null = null;
+    let bestClearance = -Infinity;
+    for (let ix = 0; ix < xs; ix++) {
+      const x = basin.minX + r + ix * step;
+      for (let iz = 0; iz < zs; iz++) {
+        const z = basin.minZ + r + iz * step;
+        const lo = basin.ground(x, z) + r;
+        const ys = Math.floor((basin.maxY - r - lo) / step) + 1;
+        for (let iy = 0; iy < ys; iy++) {
+          const y = lo + iy * step;
+          const d = this.sceneSdf.sample(x, y, z, this.normal);
+          if (d > bestClearance) {
+            bestClearance = d;
+            best = [x, y, z];
+          }
+        }
+      }
+    }
+    return bestClearance >= r ? best : null;
   }
 
   /**
@@ -1099,6 +1176,7 @@ export class World {
     this.cramped = edit.array(this.cramped);
     this.wedged = edit.array(this.wedged);
     this.reverseLeft = edit.array(this.reverseLeft);
+    this.backHomeBlocked = edit.array(this.backHomeBlocked);
     this.scrapeAnchor = edit.array(this.scrapeAnchor, 3);
     this.scrapeTime = edit.array(this.scrapeTime);
     this.scrapeHits = edit.array(this.scrapeHits);
@@ -1159,10 +1237,11 @@ export class World {
     this.currents.update(this, STEP_DT);
     this.behaviour.update();
     const walker = this.walker;
-    for (let i = 0; i < n; i++) if (walker[i] === 0) this.steer(i);
+    const posed = this.behaviour.banks.posed;
+    for (let i = 0; i < n; i++) if (walker[i] === 0 && posed[i] === 0) this.steer(i);
     for (let i = 0; i < n; i++) {
       if (walker[i] === 0) {
-        this.integrate(i);
+        if (posed[i] === 0) this.integrate(i);
         continue;
       }
       const plan = this.behaviour.plans[i];
@@ -1172,8 +1251,58 @@ export class World {
         this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
       }
     }
+    this.applyPoses();
+    for (let i = 0; i < n; i++) {
+      const plan = this.behaviour.plans[i];
+      if (plan !== undefined && plan.keepOffFish >= 0) this.keepOff(i, plan);
+    }
     if (this.algaeCover > 0) this.tallyGrazing();
     this.tick++;
+  }
+
+  /**
+   * Moves fish `i`'s centre out of the capsule round the spine of the fish its plan keeps off,
+   * once every fish has moved, unless that would put its body into glass or rock.
+   */
+  private keepOff(i: number, plan: Plan): void {
+    const j = plan.keepOffFish;
+    const o = i * 3;
+    const q = j * 3;
+    const cp = Math.cos(this.pitch[j] ?? 0);
+    const fx = Math.sin(this.yaw[j] ?? 0) * cp;
+    const fy = Math.sin(this.pitch[j] ?? 0);
+    const fz = Math.cos(this.yaw[j] ?? 0) * cp;
+    const px = this.position[o] ?? 0;
+    const py = this.position[o + 1] ?? 0;
+    const pz = this.position[o + 2] ?? 0;
+    const ex = px - (this.position[q] ?? 0);
+    const ey = py - (this.position[q + 1] ?? 0);
+    const ez = pz - (this.position[q + 2] ?? 0);
+    const along = clamp(ex * fx + ey * fy + ez * fz, -plan.keepOffHalf, plan.keepOffHalf);
+    let rx = ex - along * fx;
+    let ry = ey - along * fy;
+    let rz = ez - along * fz;
+    let d = Math.hypot(rx, ry, rz);
+    const r = plan.keepOffRadius;
+    if (d >= r) return;
+    if (d < 1e-9) {
+      // Dead on the spine: out over the back, square to the spine.
+      rx = -fy * fx;
+      ry = 1 - fy * fy;
+      rz = -fy * fz;
+      d = Math.hypot(rx, ry, rz);
+    }
+    const push = (r - d) / d;
+    this.position[o] = px + rx * push;
+    this.position[o + 1] = py + ry * push;
+    this.position[o + 2] = pz + rz * push;
+    if (this.bodyClearance(i) >= -PENETRATION_EPSILON) {
+      this.bodyPushes++;
+      return;
+    }
+    this.position[o] = px;
+    this.position[o + 1] = py;
+    this.position[o + 2] = pz;
   }
 
   private tallyGrazing(): void {
@@ -1359,6 +1488,9 @@ export class World {
       this.currents.shelter[i] === 1 &&
       !plan.homing &&
       plan.state !== FishState.Startle &&
+      // A fish going up for air has picked its way up already; the pull towards slack water
+      // would draw a climber's nose into the pane it climbs beside.
+      plan.state !== FishState.Gulp &&
       (this.behaviour.feeding.target[i] ?? -1) < 0 &&
       this.currents.refuge(this, i, flow)
     ) {
@@ -1572,11 +1704,16 @@ export class World {
       let ny = (nh[1] ?? 0) * aHere + (np[1] ?? 0) * aProbe;
       let nz = (nh[2] ?? 0) * aHere + (np[2] ?? 0) * aProbe;
       // With the floor or surface masked out, an overhang pushes a fish into the very surface it
-      // is hugging (a cory nosing under driftwood); only a sideways escape is possible there.
-      if (
-        (!plan.floor && ny < 0 && py - ground < clearance) ||
-        (!plan.surface && ny > 0 && top - py < clearance)
-      ) {
+      // is hugging (a cory nosing under driftwood); only a sideways escape is possible there. Nor
+      // may anything lift it into the overhang just above: every upward wish, from its depth band,
+      // a seek or a dash for air alike, fades as the wood nears, since pressed between wood and
+      // sand no turn has room for its body and it grinds there (#1257). So a fish under an
+      // overhang cannot rise in place at all; an air-breather due a breath slides out from under
+      // it first (`planSlideOut` in behaviour.ts, #1283).
+      if (!plan.floor && ny < 0 && py - ground < clearance) {
+        ny = 0;
+        if (dy > 0) dy *= 1 - aHere;
+      } else if (!plan.surface && ny > 0 && top - py < clearance) {
         ny = 0;
       }
       const nl = Math.hypot(nx, ny, nz);
@@ -2003,9 +2140,62 @@ export class World {
     return this.bodyCanTurnAt(this.bodyLength[i] ?? 0, this.thickness[i] ?? 0, x, y, z);
   }
 
+  bodyTurnRoom(length: number): number {
+    return bodyTurnRoom(length);
+  }
+
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number {
     return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
+  }
+
+  waterSpotNear(i: number, x: number, y: number, z: number): Point3 | null {
+    const spot = this.freeSpotNear(this.radius[i] ?? 0, {
+      position: [x, y, z],
+      heading: this.yaw[i] ?? 0,
+    });
+    return spot === null ? null : [spot.x, spot.y, spot.z];
+  }
+
+  /** Copies the poses the bank module set (`Banks.posed`) over the fish it placed. */
+  private applyPoses(): void {
+    const { posed, pose } = this.behaviour.banks;
+    for (let i = 0; i < this.count; i++) {
+      if (posed[i] !== 1) continue;
+      const p = i * 6;
+      const o = i * 3;
+      this.position[o] = pose[p] ?? 0;
+      this.position[o + 1] = pose[p + 1] ?? 0;
+      this.position[o + 2] = pose[p + 2] ?? 0;
+      const yaw = pose[p + 3] ?? 0;
+      const pitch = pose[p + 4] ?? 0;
+      const speed = pose[p + 5] ?? 0;
+      this.yaw[i] = yaw;
+      this.pitch[i] = pitch;
+      this.roll[i] = 0;
+      this.speed[i] = speed;
+      this.yawRate[i] = 0;
+      this.pitchRate[i] = 0;
+      this.thrust[i] = 0;
+      this.targetYaw[i] = yaw;
+      this.targetPitch[i] = pitch;
+      this.targetSpeed[i] = speed;
+      this.reverseLeft[i] = 0;
+      this.detourTimer[i] = 0;
+      this.backHomeBlocked[i] = 0;
+      this.wedged[i] = 0;
+      this.coasting[i] = 0;
+      this.scrapeAnchor.set(this.position.subarray(o, o + 3), o);
+      this.state[i] = FishState.Emerse;
+    }
+  }
+
+  /**
+   * Whether fish `i`, at no more than `effort` of its hold speed, could hold against the current
+   * everywhere straight up from (x, y, z) to height `top`.
+   */
+  holdsColumn(i: number, x: number, y: number, z: number, top: number, effort: number): boolean {
+    return this.currents.holdsColumn(this, i, x, y, z, top, effort);
   }
 
   /**
@@ -2049,10 +2239,7 @@ export class World {
   ): boolean {
     const sdf = this.steerSdf[0] ?? this.sceneSdf;
     const n = this.turnNormal;
-    const need =
-      (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length +
-      thickness +
-      STEERING.turnRoomMarginBodyLengths * length;
+    const need = turnRoomNeed(length, thickness);
     if (sdf.sample(x, y, z, n) >= need) return true;
     const { minX, maxX, minZ, maxZ } = this.basin;
     // Held off the glass on every pass: near a rock top the nearest surface is the rock, and its
@@ -2118,9 +2305,11 @@ export class World {
 
     const yaw = this.yaw[i] ?? 0;
     const pitch = this.pitch[i] ?? 0;
+    this.backHomeBlocked[i] = Math.max(0, (this.backHomeBlocked[i] ?? 0) - dt);
+    if (!reflex && (this.reverseLeft[i] ?? 0) <= 0) this.backHome(i, plan, yaw);
     if (!reflex && (this.reverseLeft[i] ?? 0) > 0) {
       this.behaviour.feeding.backedOut(i);
-      this.reverse(i, sp, plan, yaw, pitch);
+      if (this.reverse(i, sp, plan, yaw, pitch)) this.backHomeBlocked[i] = STEERING.detourS;
       return;
     }
     let yawError = wrapAngle((this.targetYaw[i] ?? 0) - yaw);
@@ -2318,6 +2507,34 @@ export class World {
     this.rememberDeadEnd(i);
   }
 
+  /**
+   * A fish that has slipped out of its cave along a slot too narrow to turn in (a gap between rock
+   * and glass) faces away from home, and swimming on only carries it further out until the gap
+   * opens (#1465). It backs home on its pectoral fins instead, as labriform swimmers can (Drucker
+   * & Lauder 1999), until it has room to turn or is back. The slot is its way home, so it is not
+   * remembered as a dead end.
+   */
+  private backHome(i: number, plan: Plan, yaw: number): void {
+    if (
+      (this.backHomeBlocked[i] ?? 0) > 0 ||
+      !plan.homing ||
+      plan.seekWeight <= 0 ||
+      this.cramped[i] !== 1
+    )
+      return;
+    const o = i * 3;
+    const ex = plan.seekX - (this.position[o] ?? 0);
+    const ez = plan.seekZ - (this.position[o + 2] ?? 0);
+    const reach = Math.hypot(ex, ez);
+    if (ex * Math.sin(yaw) + ez * Math.cos(yaw) > -STEERING.backHomeBehindCos * reach) return;
+    const length = this.bodyLength[i] ?? 0;
+    const room = this.turnRoom(i, this.steerSdf[0] ?? this.sceneSdf, yaw, Math.atan2(ex, ez));
+    if (room >= STEERING.turnRoomMarginBodyLengths * length) return;
+    this.wedged[i] = 0;
+    this.detourTimer[i] = 0;
+    this.reverseLeft[i] = Math.min(reach, STEERING.backOutMaxBodyLengths * length);
+  }
+
   private rememberDeadEnd(i: number): void {
     this.deadEnd[i * 3] = this.position[i * 3] ?? 0;
     this.deadEnd[i * 3 + 1] = this.position[i * 3 + 1] ?? 0;
@@ -2331,8 +2548,9 @@ export class World {
    * stopping as soon as it is free would just send it nose-first back into the same slot. It
    * backs out level, since a fish pitched up to climb past an overhang would otherwise sink back
    * under it, and slides along a surface its tail comes up against rather than grinding into it.
+   * Returns whether something behind it stopped it.
    */
-  private reverse(i: number, sp: SimSpecies, plan: Plan, yaw: number, pitchIn: number): void {
+  private reverse(i: number, sp: SimSpecies, plan: Plan, yaw: number, pitchIn: number): boolean {
     const o = i * 3;
     const dt = STEP_DT;
     const prev = this.previous;
@@ -2366,7 +2584,7 @@ export class World {
       const nz = n[2] ?? 0;
       if (fx * nx + fy * ny + fz * nz > STEERING.backOutBlockedCos) {
         this.reverseLeft[i] = 0;
-        return;
+        return true;
       }
       const along = bx * nx + bz * nz;
       if (along < 0) {
@@ -2386,14 +2604,14 @@ export class World {
     if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
       this.position.set(prev, o);
       this.reverseLeft[i] = 0;
-      return;
+      return true;
     }
     const left = Math.max(0, (this.reverseLeft[i] ?? 0) - step);
     const length = this.bodyLength[i] ?? 0;
     const backed = (STEERING.backOutMaxBodyLengths - STEERING.backOutBodyLengths) * length;
     if (into !== null && into > STEERING.backOutBlockedCos) {
       this.reverseLeft[i] = 0;
-      return;
+      return true;
     }
     if (into !== null && into > 0) {
       const nl = Math.hypot(n[0] ?? 0, n[2] ?? 0);
@@ -2414,7 +2632,7 @@ export class World {
     }
     if (left > backed) {
       this.reverseLeft[i] = left;
-      return;
+      return false;
     }
 
     const want = this.targetYaw[i] ?? 0;
@@ -2423,9 +2641,9 @@ export class World {
       this.turnRoom(i, this.steerSdf[0] ?? this.sceneSdf, heading, want) >=
         STEERING.turnRoomMarginBodyLengths * length;
     this.reverseLeft[i] = free ? 0 : left;
+    return false;
   }
 
-  /** Clearance of the spine sample nearest a surface, with that surface's normal in `nrm`. */
   /**
    * How far the current carries fish `i` this step, into `out`: its local flow, less any push
    * into a surface the body is about to touch, so the water slides it along glass and rock
@@ -2457,6 +2675,7 @@ export class World {
     out[2] = vz;
   }
 
+  /** Clearance of the spine sample nearest a surface, with that surface's normal in `nrm`. */
   private nearestSurface(i: number, fx: number, fy: number, fz: number, nrm: Float64Array): number {
     const o = i * 3;
     const length = this.bodyLength[i] ?? 0;
@@ -2555,6 +2774,34 @@ export class World {
       out[o + 16] = this.behaviour.brood.fan[i] ?? 0;
     }
   }
+}
+
+/** The clearance a level fish of `length` and flank `thickness` needs to turn round where it is. */
+function turnRoomNeed(length: number, thickness: number): number {
+  return (
+    (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length +
+    thickness +
+    STEERING.turnRoomMarginBodyLengths * length
+  );
+}
+
+/** `turnRoomNeed` for a fish of `length` with the usual flank. */
+export function bodyTurnRoom(length: number): number {
+  return turnRoomNeed(length, BEHAVIOUR.bodyThicknessBodyLengths * length);
+}
+
+/**
+ * The body length a fish must stay under for a tank to hold it: its whole body, in any pose, has
+ * to clear the glass, the highest sand and the surface. `World` refuses a longer fish, so a tank
+ * must not be stocked with one, nor a fish in it grown past this.
+ */
+export function maxFishLengthM(tank: TankSpace | TankDimensions): number {
+  return longestFitting('floor' in tank ? Basin.fromSpace(tank) : Basin.fromTank(tank));
+}
+
+function longestFitting(basin: Basin): number {
+  const room = Math.min(basin.width, basin.maxY - basin.floorMax, basin.depth);
+  return room / (2 * STEERING.collisionRadiusBodyLengths);
 }
 
 function basinOfConfig(config: AnyWorldConfig): Basin {

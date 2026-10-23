@@ -6,18 +6,24 @@ import type {
   DecorLayout,
   Fish,
   FoodType,
+  Coral,
+  Plant,
+  RoomId,
   TankSize,
   Water,
 } from '@aquarium/shared';
+import type { ClockSetting } from '../engine/daylight';
 import type { PhotoFilter } from '../engine/photo/grade';
 import type { PhotoState } from '../engine/photo/PhotoMode';
-import type { CameraMode } from './camera';
+import type { PlantPick } from '../scene/plantGrowth';
+import type { CameraMode, Vec3 } from './camera';
 import type { GameView } from './play/game';
 
 /** A pinch, not a pile: leftovers poison the tank, so hand-feeding stays small. */
 export const HAND_FEED_PORTION = 0.5;
 
-export type PlayTool = 'tap' | 'feed' | 'laser' | 'wand' | 'net' | 'mirror' | 'ball' | 'game';
+export type PlayTool =
+  'tap' | 'feed' | 'laser' | 'wand' | 'net' | 'trim' | 'mirror' | 'ball' | 'game';
 
 export type Toy = 'mirror' | 'ball';
 
@@ -95,12 +101,16 @@ export interface PhotoView {
 export interface InteractionEvents {
   'camera:request-mode': { mode: CameraMode };
   'camera:mode-changed': { mode: CameraMode };
+  /** The UI pins the tank's clock, or null to follow local time; see `Engine.setClock`. */
+  'clock:request': { clock: ClockSetting };
   /** Follow was requested but there is no fish to follow. */
   'camera:follow-unavailable': Record<string, never>;
   /** Focus the camera on the middle of these fish (server ids); the ones not on screen are skipped. */
   'camera:focus-fish': { fishIds: readonly string[] };
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
+  /** A tank the player may not feed locally (the shared tank): taps never drop food while locked. */
+  'play:feed-lock': { locked: boolean };
   /** Which toys are in the tank; the play panel offers to remove them. */
   'toys:changed': { mirror: boolean; ball: boolean };
   'toys:remove': { toy: Toy };
@@ -112,7 +122,8 @@ export interface InteractionEvents {
   'feed:select': { food: FoodType };
   /** The tank scene is built and the play tools work. */
   'play:ready': Record<string, never>;
-  'feed:request': { food: FoodType; portion: number };
+  /** `keepSelection` drops food for someone else's feed without changing the food the player picked. */
+  'feed:request': { food: FoodType; portion: number; keepSelection?: boolean };
   /** Food went into the water; the persistence layer posts the feed action. */
   'feed:dropped': { food: FoodType; portion: number; particles: number };
   'feed:rejected': { reason: 'rate-limited' | 'tank-full' | 'unreachable'; retryAfterMs: number };
@@ -135,6 +146,11 @@ export interface InteractionEvents {
     decorEdited: boolean;
     backgroundId: BackgroundId;
     /**
+     * The room around the tank, null for the plain studio. Left out, the tank keeps the room it
+     * already had, or the default living room if it was not on show.
+     */
+    roomId?: RoomId | null;
+    /**
      * Distinct days of the last `VISIT_WINDOW_DAYS` the owner opened the tank. The fish know the
      * owner from it and come to the glass. Left out for tanks the viewer does not own.
      */
@@ -148,6 +164,10 @@ export interface InteractionEvents {
   'background:state': { tankId: string | null; biome: Biome; backgroundId: BackgroundId | null };
   /** The player chose a background for a saved tank; the persistence layer saves it. */
   'background:save': { tankId: string; backgroundId: BackgroundId };
+  /** The server's room for the tank changed: this tab's own save, or another device. */
+  'tank:room': { tankId: string; roomId: RoomId | null };
+  /** The room on show, or null for the plain studio; `tankId` is null for the demo tank. */
+  'room:state': { tankId: string | null; roomId: RoomId | null };
   /** The server's layout changed outside this tab's own edits (another device). */
   'tank:decor': { tankId: string; layout: DecorLayout; edited: boolean };
   /**
@@ -174,10 +194,19 @@ export interface InteractionEvents {
   /** Netted, or removed on another device. */
   'tank:fish-removed': { tankId: string; fishId: string; reason: 'netted' | 'gone' };
   'tank:water': { tankId: string; water: Water };
+  /** The growing plants of the tank, sent after each load and whenever they change. */
+  'tank:plants': { tankId: string; plants: readonly Plant[] };
+  /** The reef corals of the tank with their size and bleaching, sent after each load and whenever they change. */
+  'tank:corals': { tankId: string; corals: readonly Coral[] };
   /** The tank's wave maker tier, sent after each load and whenever a purchase changes it; 0 is none. */
   'tank:wave-maker': { tankId: string; tier: number };
-  /** The tank's lamp hours in UTC, sent after each load and whenever the schedule changes. */
-  'tank:lamp': { tankId: string; onHour: number; offHour: number };
+  /**
+   * The tank's lamp hours in UTC and strength (0..1), sent after each load and whenever either
+   * changes.
+   */
+  'tank:lamp': { tankId: string; intensity: number; onHour: number; offHour: number };
+  /** The lamp hours the hood light is running on, for the day/night button's label. */
+  'lamp:schedule': { intensity: number; onHour: number; offHour: number };
   /** The loading screen: from app start, and from each tank switch, until the tank has drawn. */
   'load:state': LoadState;
   /** The failure card was closed; the loading screen stays away until the next load begins. */
@@ -216,6 +245,12 @@ export interface InteractionEvents {
   'replay:time-scale': { scale: number };
   /** Emitted by the fish system when the net tool taps a dead fish. */
   'net:tap': { fishId: string };
+  /** The trim tool tapped; `pick` is the plant under the ray, or null when none is. */
+  'plant:picked': { pick: PlantPick | null };
+  /** A tap reached the tank while the play layer owned taps (not decorating, not in photo mode). */
+  'play:tapped': { ray: { origin: Vec3; dir: Vec3 } };
+  /** The coral under a tap in the tank, by its state key, or null when the tap hit none. */
+  'coral:picked': { key: string | null };
 }
 
 export interface LoadState {
@@ -238,8 +273,10 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'demo:biome-changed',
   'decor:state',
   'background:state',
+  'room:state',
   'decor:save-state',
   'decor:load-failed',
   'load:state',
   'photo:view',
+  'lamp:schedule',
 ];

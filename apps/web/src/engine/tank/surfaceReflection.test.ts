@@ -15,9 +15,15 @@ import {
   type Object3D,
   type Vector2,
 } from 'three/webgpu';
+import { float, uniform } from 'three/tsl';
+import { evaluate } from '../shaderFixtures';
 import {
+  blendCoverage,
+  COVERAGE_FALLOFF,
   mirrorCamera,
   SurfaceReflection,
+  TANK_TOLERANCE,
+  tankCoverage,
   type ReflectionRenderer,
   UNREFLECTED_LAYER,
   WATERLINE_MARGIN,
@@ -256,5 +262,65 @@ describe('SurfaceReflection', () => {
     const reflection = new SurfaceReflection(surface);
     expect(() => reflection.setResolutionScale(scale)).toThrow(RangeError);
     expect(reflection.enabled).toBe(false);
+  });
+});
+
+describe('tankCoverage', () => {
+  const boxMin = uniform(new Vector3(-0.5, 0.01, -0.2));
+  const boxMax = uniform(new Vector3(0.5, 0.45, 0.2));
+
+  function coverage(x: number, y: number, z: number): number {
+    const [c] = evaluate(tankCoverage(uniform(new Vector3(x, y, z)), boxMin, boxMax));
+    if (c === undefined) throw new Error('tankCoverage evaluated to nothing');
+    return c;
+  }
+
+  it('counts the water, the glass and the backdrop behind the back pane as the tank', () => {
+    expect(coverage(0, 0.2, 0)).toBe(1);
+    expect(coverage(0.5, 0.01, -0.2)).toBe(1);
+    expect(coverage(0.2, 0.3, -0.2 - TANK_TOLERANCE)).toBeCloseTo(1, 9);
+    expect(coverage(-0.5 - TANK_TOLERANCE, 0.3, 0)).toBeCloseTo(1, 9);
+  });
+
+  it('fades linearly to nothing over the falloff past the tolerance', () => {
+    const half = coverage(0.5 + TANK_TOLERANCE + COVERAGE_FALLOFF / 2, 0.3, 0);
+    expect(half).toBeCloseTo(0.5, 6);
+    let previous = 1;
+    for (let d = 0; d <= TANK_TOLERANCE + COVERAGE_FALLOFF * 1.5; d += 0.005) {
+      const c = coverage(0, 0.3, 0.2 + d);
+      expect(c).toBeLessThanOrEqual(previous);
+      expect(c).toBeGreaterThanOrEqual(0);
+      previous = c;
+    }
+    expect(coverage(0.5 + TANK_TOLERANCE + COVERAGE_FALLOFF, 0.3, 0)).toBeCloseTo(0, 9);
+  });
+
+  it('gives the room and the far plane, seen through an undrawn pane, nothing', () => {
+    expect(coverage(1.5, 0.3, 0.1)).toBe(0);
+    expect(coverage(0, -0.4, 3)).toBe(0);
+    expect(coverage(-40, -20, -30)).toBe(0);
+  });
+});
+
+describe('blendCoverage', () => {
+  const fallback = uniform(new Vector3(0.1, 0.2, 0.3));
+
+  function blend(colour: [number, number, number], covered: number, taps: number): number[] {
+    return evaluate(blendCoverage(uniform(new Vector3(...colour)), float(covered), fallback, taps));
+  }
+
+  it('shows the pass where every tap is covered', () => {
+    const mirror = blend([2.5, 5, 7.5], 5, 5);
+    [0.5, 1, 1.5].forEach((v, i) => expect(mirror[i]).toBeCloseTo(v, 9));
+  });
+
+  it('shows the fallback where no tap is', () => {
+    const mirror = blend([0, 0, 0], 0, 5);
+    [0.1, 0.2, 0.3].forEach((v, i) => expect(mirror[i]).toBeCloseTo(v, 9));
+  });
+
+  it('mixes the two by the covered share across an edge', () => {
+    const mirror = blend([1, 1, 1], 2, 4);
+    [0.25 + 0.05, 0.25 + 0.1, 0.25 + 0.15].forEach((v, i) => expect(mirror[i]).toBeCloseTo(v, 9));
   });
 });

@@ -1,0 +1,138 @@
+{
+  "params": {
+    "co2GrowthPerTier": [1, 1.3, 1.6, 1.6],
+    "algaeSuppressionPerHour": 0.004,
+    "offsetStartSize": 0.4,
+    "maxOffsetsPerTank": 60,
+    "offsetSpacingM": 0.03,
+    "edgeMarginM": 0.03,
+    "sources": {
+      "growth": [
+        "Barko & Smart 1981, Aquatic Botany 10: sediment and light effects on submerged macrophyte growth",
+        "Tropica plant database (growth speed, light and CO2 demand per species)",
+        "Tropica, Echinodorus bleheri (Amazon sword): medium light, medium growth, heavy root feeder that takes much of its nutrients from the substrate"
+      ],
+      "uptake": [
+        "Madsen & Cedergreen 2002, Freshwater Biology 47: nitrate and ammonium uptake of submersed macrophytes follows Michaelis-Menten kinetics"
+      ],
+      "algae": [
+        "Barko & Smart 1981: rooted plants out-compete algae for nitrogen and light in planted tanks"
+      ]
+    }
+  },
+  "plants": [
+    {
+      "id": "amazon-sword",
+      "form": "rosette",
+      "growthPerDay": 0.1,
+      "minSize": 0.4,
+      "maxSize": 2.4,
+      "lightDemand": 0.75,
+      "co2Response": 0.4,
+      "nitratePerSize": 1.45,
+      "nitrateHalfSaturation": 4,
+      "coverage": 1,
+      "spread": null
+    },
+    {
+      "id": "java-fern",
+      "form": "epiphyte",
+      "growthPerDay": 0.05,
+      "minSize": 0.4,
+      "maxSize": 2.2,
+      "lightDemand": 0.4,
+      "co2Response": 0.1,
+      "nitratePerSize": 1.2,
+      "nitrateHalfSaturation": 4,
+      "coverage": 0.6,
+      "spread": null
+    },
+    {
+      "id": "pond-weed",
+      "form": "stem",
+      "growthPerDay": 0.3,
+      "minSize": 0.4,
+      "maxSize": 2.5,
+      "lightDemand": 0.8,
+      "co2Response": 0.5,
+      "nitratePerSize": 1.6,
+      "nitrateHalfSaturation": 4,
+      "coverage": 0.8,
+      "spread": null
+    },
+    {
+      "id": "red-tiger-lotus",
+      "form": "rosette",
+      "growthPerDay": 0.12,
+      "minSize": 0.4,
+      "maxSize": 2,
+      "lightDemand": 1.2,
+      "co2Response": 0.6,
+      "nitratePerSize": 1.5,
+      "nitrateHalfSaturation": 4,
+      "coverage": 1,
+      "spread": null
+    },
+    {
+      "id": "staurogyne-repens",
+      "form": "carpet",
+      "growthPerDay": 0.18,
+      "minSize": 0.4,
+      "maxSize": 2,
+      "lightDemand": 1.1,
+      "co2Response": 0.7,
+      "nitratePerSize": 1.2,
+      "nitrateHalfSaturation": 4,
+      "coverage": 0.8,
+      "spread": { "intervalDays": 5, "cap": 6, "radiusM": 0.1, "minParentSize": 0.8 }
+    },
+    {
+      "id": "universal-plant",
+      "form": "stem",
+      "growthPerDay": 0.25,
+      "minSize": 0.4,
+      "maxSize": 2.4,
+      "lightDemand": 0.8,
+      "co2Response": 0.5,
+      "nitratePerSize": 1.5,
+      "nitrateHalfSaturation": 4,
+      "coverage": 0.8,
+      "spread": null
+    },
+    {
+      "id": "vallisneria",
+      "form": "runner",
+      "growthPerDay": 0.22,
+      "minSize": 0.4,
+      "maxSize": 2.2,
+      "lightDemand": 0.6,
+      "co2Response": 0.4,
+      "nitratePerSize": 1.4,
+      "nitrateHalfSaturation": 4,
+      "coverage": 0.9,
+      "spread": { "intervalDays": 4, "cap": 8, "radiusM": 0.18, "minParentSize": 0.8 }
+    },
+    {
+      "id": "water-plant",
+      "form": "stem",
+      "growthPerDay": 0.3,
+      "minSize": 0.4,
+      "maxSize": 2.5,
+      "lightDemand": 0.8,
+      "co2Response": 0.5,
+      "nitratePerSize": 1.6,
+      "nitrateHalfSaturation": 4,
+      "coverage": 0.8,
+      "spread": null
+    }
+  ],
+  "hardscape": [
+    { "id": "boulder-01", "halfX": 0.12163, "halfZ": 0.175 },
+    { "id": "coast-rocks-05", "halfX": 0.2, "halfZ": 0.185588 },
+    { "id": "dead-quiver-trunk", "halfX": 0.038422, "halfZ": 0.03361 },
+    { "id": "dead-tree-trunk-02", "halfX": 0.3, "halfZ": 0.078205 },
+    { "id": "driftwood-branch", "halfX": 0.2, "halfZ": 0.10615 },
+    { "id": "lambis-shell", "halfX": 0.075, "halfZ": 0.040082 },
+    { "id": "reef-arch", "halfX": 0.15, "halfZ": 0.050608 }
+  ]
+}

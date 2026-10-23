@@ -1,5 +1,7 @@
 import type { EnvironmentRecipe, HdriRecipe, SubstrateRecipe } from './environment.ts';
 import type { FishRecipe } from './fish.ts';
+import { paintBlackPhantom } from './scan-paint.ts';
+import type { RockPileRecipe } from './rock-pile.ts';
 
 export const FISH_RECIPES: FishRecipe[] = [
   {
@@ -136,6 +138,42 @@ export const FISH_RECIPES: FishRecipe[] = [
       'orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them',
     ],
   },
+  {
+    id: 'pseudotropheus-demasoni',
+    species: 'pseudotropheus-demasoni',
+    sourceId: 'sketchfab-f7f3faca',
+    axes: { forward: '+z', up: '+y' },
+    skinPose: 'rest',
+    dropMeshes: /^Cube_helper/,
+    keepMaterial: /^Pseudotropheus$/,
+    fallbackLengthM: 0.0625,
+  },
+  {
+    id: 'black-phantom-tetra',
+    species: 'black-phantom-tetra',
+    sourceId: 'sketchfab-92b5b5bb',
+    axes: { forward: '-z', up: '-x' },
+    dropMeshes: /^Cube\.00[13]$/,
+    keepMaterial: /./,
+    hints: {
+      resolution: 200,
+      openingRadius: 5,
+      finThresholdVoxels: 3,
+      skip: ['pectoral'],
+      rigidSnout: true,
+      peduncleFromSnout: 0.76,
+      bodyScale: { width: 0.6, depth: 0.36 },
+    },
+    fallbackLengthM: 0.036,
+    paint: { paint: paintBlackPhantom, width: 1024, height: 512, roughness: 0.4 },
+    lodPlan: { ratios: [1, 0.4, 0.15], minTriangles: 150, sloppyFallback: true },
+    modifications: [
+      'source is flat-coloured: UVs projected from the side and the colour map painted from the species pattern (black humeral blotch, black dorsal, reddish pelvic and anal fins)',
+      'no adipose fin: the source mesh has none and the fin schema has no adipose id',
+      'dropped two detached fragments (a floating chin sliver and a stray tail-base shard)',
+      'source drawn upside down and about twice as deep as the species: flipped, and body scaled to 60% width and 36% depth before the fins are classified',
+    ],
+  },
 ];
 
 const polyhaven = (name: string): string => `${name}_2k.gltf`;
@@ -198,6 +236,18 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     material: { doubleSided: true },
     modifications: [
       'KHR_materials_pbrSpecularGlossiness converted to metallic-roughness, alpha cut-out kept',
+    ],
+  },
+  {
+    id: 'amazon-sword',
+    kind: 'plant',
+    sourceId: 'sketchfab-3701243a',
+    longestM: 0.3,
+    maxTriangles: 4000,
+    minTriangles: 12,
+    leafColourVariation: { spread: 0.14, yellowing: 0.1 },
+    modifications: [
+      'colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower',
     ],
   },
   {
@@ -331,6 +381,34 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     ],
   },
   {
+    id: 'driftwood-scan-a',
+    kind: 'driftwood',
+    sourceId: 'sketchfab-07422ed7',
+    longestM: 0.45,
+    maxTriangles: 10000,
+    maxTexturePx: 1024,
+    modifications: [
+      '23.8k-triangle scan decimated, 4096 px textures downscaled to 1024 px (normal 512 px) so the 2k tier carries no more detail than the 1k tier',
+    ],
+  },
+  {
+    id: 'driftwood-scan-b',
+    kind: 'driftwood',
+    sourceId: 'sketchfab-mJUa0nux',
+    longestM: 0.5,
+    maxTriangles: 12000,
+    modifications: ['68k-triangle scan decimated, 4096 px base colour downscaled, no normal map'],
+  },
+  {
+    id: 'dry-branches',
+    kind: 'driftwood',
+    sourceId: 'polyhaven-dry_branches_medium_01',
+    gltf: 'dry_branches_medium_01_2k.gltf',
+    longestM: 0.3,
+    maxTriangles: 4000,
+    modifications: ['16.8k-triangle twig cluster decimated'],
+  },
+  {
     id: 'boulder-01',
     kind: 'rock',
     sourceId: 'polyhaven-boulder_01',
@@ -348,12 +426,89 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     maxTriangles: 15000,
     modifications: ['771k-triangle scan decimated'],
   },
+  {
+    id: 'malawi-boulder-03',
+    kind: 'rock',
+    sourceId: 'polyhaven-namaqualand_boulder_03',
+    gltf: polyhaven('namaqualand_boulder_03'),
+    longestM: 0.36,
+    maxTriangles: 12000,
+    lod1Fraction: 0.25,
+    modifications: ['121k-triangle scan decimated'],
+  },
+  {
+    id: 'malawi-boulder-05',
+    kind: 'rock',
+    sourceId: 'polyhaven-namaqualand_boulder_05',
+    gltf: polyhaven('namaqualand_boulder_05'),
+    longestM: 0.28,
+    maxTriangles: 8000,
+    lod1Fraction: 0.25,
+    modifications: ['118k-triangle scan decimated'],
+  },
+  {
+    id: 'malawi-rock-07',
+    kind: 'rock',
+    sourceId: 'polyhaven-rock_07',
+    gltf: polyhaven('rock_07'),
+    longestM: 0.16,
+    maxTriangles: 4000,
+    lod1Fraction: 0.25,
+    modifications: ['28k-triangle scan decimated'],
+  },
+  {
+    id: 'neothauma-shell',
+    kind: 'decor',
+    sourceId: 'sketchfab-1bedca25',
+    longestM: 0.045,
+    maxTriangles: 3727,
+    material: { roughness: 0.55 },
+    maxTexturePx: 1024,
+    modifications: ['land-snail shell scan scaled to Neothauma size (4.5 cm)'],
+  },
+];
+
+export const ROCK_PILE_RECIPES: RockPileRecipe[] = [
+  {
+    id: 'rock-pile-stack',
+    placements: [
+      { recipeId: 'malawi-boulder-03', x: 0, z: 0, y: 0, yawDeg: 0, scale: 1 },
+      { recipeId: 'malawi-boulder-05', x: 0.22, z: 0.02, y: -0.01, yawDeg: 20, scale: 1 },
+      { recipeId: 'malawi-rock-07', x: -0.02, z: 0, y: 0.13, yawDeg: 40, scale: 1 },
+    ],
+    modifications: [
+      'arrangement: anchor boulder with a flatter boulder against it and a rock on top',
+    ],
+  },
+  {
+    id: 'rock-pile-cave',
+    placements: [
+      { recipeId: 'malawi-boulder-03', x: -0.12, z: 0, y: 0, yawDeg: 90, scale: 1 },
+      { recipeId: 'malawi-boulder-05', x: 0.1, z: 0.05, y: -0.01, yawDeg: 160, scale: 0.9 },
+      { recipeId: 'malawi-rock-07', x: 0, z: 0.03, y: 0.1, yawDeg: 80, scale: 1.2 },
+      { recipeId: 'malawi-rock-07', x: 0.25, z: -0.1, y: 0, yawDeg: 10, scale: 0.8 },
+    ],
+    modifications: [
+      'arrangement: two boulders with a rock bridging the gap above a cave and one loose rock',
+    ],
+  },
 ];
 
 export const SUBSTRATE_RECIPES: SubstrateRecipe[] = [
   { id: 'clean-pebbles', sourceId: 'polyhaven-clean_pebbles', prefix: 'clean_pebbles' },
   { id: 'coast-sand-01', sourceId: 'polyhaven-coast_sand_01', prefix: 'coast_sand_01' },
   { id: 'coast-sand-04', sourceId: 'polyhaven-coast_sand_04', prefix: 'coast_sand_04' },
+  {
+    id: 'leaf-litter',
+    sourceId: 'ambientcg-ScatteredLeaves009',
+    files: {
+      diff: 'ScatteredLeaves009_2K-JPG_Color.jpg',
+      normal: 'ScatteredLeaves009_2K-JPG_NormalGL.jpg',
+      occlusion: 'ScatteredLeaves009_2K-JPG_AmbientOcclusion.jpg',
+      roughness: 'ScatteredLeaves009_2K-JPG_Roughness.jpg',
+    },
+  },
+  { id: 'dry-decay-leaves', sourceId: 'polyhaven-dry_decay_leaves', prefix: 'dry_decay_leaves' },
   {
     id: 'reef-sand',
     sourceId: 'ambientcg-Ground101',
@@ -367,12 +522,6 @@ export const SUBSTRATE_RECIPES: SubstrateRecipe[] = [
 ];
 
 export const HDRI_RECIPES: HdriRecipe[] = [
-  {
-    id: 'kloofendal-48d-partly-cloudy-puresky',
-    sourceId: 'polyhaven-kloofendal_48d_partly_cloudy_puresky',
-    file: 'kloofendal_48d_partly_cloudy_puresky_2k.hdr',
-    output: 'kloofendal_48d_partly_cloudy_puresky_2k.ktx2',
-  },
   {
     id: 'studio-small-09',
     sourceId: 'polyhaven-studio_small_09',

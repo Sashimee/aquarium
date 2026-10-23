@@ -8,6 +8,7 @@ import {
   type ReplayLine,
   type ReplaySpeed,
 } from '../sync/replay';
+import { isTouchFirstDevice } from '../engine/displayPreference';
 import { ReplayController } from '../sync/replayController';
 import { replayModeFor, type ReplayMode } from '../sync/replayPlayback';
 import { useApi, useBridge, useEngineReady } from './context';
@@ -16,12 +17,6 @@ import { useSpeciesNames } from './session';
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    : false;
-}
-
-function hasCoarsePointer(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia('(pointer: coarse)').matches
     : false;
 }
 
@@ -131,7 +126,7 @@ export function ReplayView({
   const { interaction } = useBridge();
   const ready = useEngineReady();
   // Fixed for the replay: a tier change mid-watch must not refetch or restart it.
-  const [mode] = useState(() => replayModeFor(ready?.tier ?? 'medium', hasCoarsePointer()));
+  const [mode] = useState(() => replayModeFor(ready?.tier ?? 'medium', isTouchFirstDevice()));
   const latestTank = useRef(tank);
   latestTank.current = tank;
   const [controller, setController] = useState<ReplayController | null>(null);

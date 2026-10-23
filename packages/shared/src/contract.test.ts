@@ -13,6 +13,7 @@ import {
   memorialSchema,
   waterParametersSchema,
   createTankRequestSchema,
+  treatRequestSchema,
   fishSchema,
   httpUrlSchema,
   presetLayoutSchema,
@@ -23,6 +24,7 @@ import {
   speciesSchema,
   tankSchema,
   updateTankRequestSchema,
+  waterSchema,
   userSchema,
 } from './index.js';
 
@@ -173,6 +175,8 @@ describe('tank and fish', () => {
       decorLayout: [{ assetId: 'rock-1', position: [0, 0, 0] }],
       decorEdited: true,
       backgroundId: 'bg-reef-coral-wall',
+      roomId: 'room-living',
+      roomSetAt: null,
       water: { ammonia: 0, nitrate: 2, algae: 0.1, uneatenFood: 0 },
       lastTickAt: ts,
       chemistry: newTankChemistry('freshwater'),
@@ -180,6 +184,8 @@ describe('tank and fish', () => {
       quarantine: false,
       shared: false,
       inGallery: false,
+      acceptsGifts: false,
+      co2OwnedTier: 0,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       recentVisitDays: 3,
@@ -193,6 +199,8 @@ describe('tank and fish', () => {
     expect(tankSchema.safeParse({ ...tank, recentVisitDays: -1 }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, decorEdited: undefined }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, backgroundId: 'nope' }).success).toBe(false);
+    expect(tankSchema.safeParse({ ...tank, roomId: null }).success).toBe(true);
+    expect(tankSchema.safeParse({ ...tank, roomId: 'room-attic' }).success).toBe(false);
     expect(
       tankSchema.parse({ ...tank, futureField: 1, fish: [{ ...fish, futureField: 1 }] }),
     ).toEqual(parsed);
@@ -207,25 +215,66 @@ describe('tank and fish', () => {
     );
   });
 
-  it('validates tank and fish requests', () => {
-    expect(createTankRequestSchema.safeParse({ name: 'T', biome: 'freshwater' }).success).toBe(
+  it('requires an idempotency key on treat and bottled bacteria', () => {
+    expect(treatRequestSchema.safeParse({ kind: 'ich' }).success).toBe(false);
+    expect(treatRequestSchema.safeParse({ kind: 'ich', idempotencyKey: 'abcdefgh1' }).success).toBe(
       true,
     );
+    expect(careActionSchema.safeParse({ type: 'bottled_bacteria' }).success).toBe(false);
+    expect(
+      careActionSchema.safeParse({ type: 'bottled_bacteria', idempotencyKey: 'abcdefgh1' }).success,
+    ).toBe(true);
+  });
+
+  it('validates tank and fish requests', () => {
+    expect(
+      createTankRequestSchema.safeParse({
+        name: 'T',
+        biome: 'freshwater',
+        idempotencyKey: 'abcdefgh1',
+      }).success,
+    ).toBe(true);
     expect(createTankRequestSchema.safeParse({ name: '', biome: 'freshwater' }).success).toBe(
       false,
     );
     expect(updateTankRequestSchema.safeParse({ name: 'New' }).success).toBe(true);
     expect(updateTankRequestSchema.safeParse({}).success).toBe(false);
-    expect(addFishRequestSchema.safeParse({ species: 'neon-tetra', name: 'Blip' }).success).toBe(
-      true,
-    );
-    expect(addFishRequestSchema.safeParse({ species: 'Neon Tetra', name: 'Blip' }).success).toBe(
-      false,
-    );
+    const buy = { stage: 'adult', idempotencyKey: 'abcdefgh1' };
+    expect(
+      addFishRequestSchema.safeParse({ species: 'neon-tetra', name: 'Blip', ...buy }).success,
+    ).toBe(true);
+    expect(
+      addFishRequestSchema.safeParse({ species: 'Neon Tetra', name: 'Blip', ...buy }).success,
+    ).toBe(false);
   });
 });
 
 describe('care events', () => {
+  it('accepts a bare salt_dose action and event and rejects extra fields', () => {
+    expect(careActionSchema.safeParse({ type: 'salt_dose' }).success).toBe(true);
+    expect(careActionSchema.safeParse({ type: 'salt_dose', amount: 3 }).success).toBe(false);
+    const event = { id, tankId: id2, at: '2026-01-01T00:00:00.000Z', kind: 'salt_dose' };
+    expect(careEventSchema.safeParse({ ...event, payload: {} }).success).toBe(true);
+    expect(careEventSchema.safeParse({ ...event, payload: { grams: 1 } }).success).toBe(false);
+  });
+
+  it('requires an idempotency key on buffer_dose and add_botanicals and logs bare events', () => {
+    for (const type of ['buffer_dose', 'add_botanicals'] as const) {
+      expect(careActionSchema.safeParse({ type }).success).toBe(false);
+      expect(careActionSchema.safeParse({ type, idempotencyKey: 'abcdefgh1' }).success).toBe(true);
+      const event = { id, tankId: id2, at: ts, kind: type };
+      expect(careEventSchema.safeParse({ ...event, payload: {} }).success).toBe(true);
+    }
+  });
+
+  it('defaults water tannin to 0 so saved tanks still parse', () => {
+    expect(waterSchema.parse({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 }).tannin).toBe(0);
+    expect(
+      waterSchema.safeParse({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0, tannin: 2 })
+        .success,
+    ).toBe(false);
+  });
+
   it('discriminates on type', () => {
     expect(careActionSchema.safeParse({ type: 'feed', food: 'flakes', portion: 1 }).success).toBe(
       true,
@@ -267,6 +316,16 @@ describe('care events', () => {
         kind: 'water_alert',
         payload: { metric: 'ph', state: 'high' },
       }).success,
+    ).toBe(false);
+    const moved = {
+      ...base,
+      kind: 'fish_moved',
+      payload: { fishId: id, direction: 'out', otherTankId: id2 },
+    };
+    expect(careEventSchema.safeParse(moved).success).toBe(true);
+    expect(
+      careEventSchema.safeParse({ ...moved, payload: { ...moved.payload, direction: 'up' } })
+        .success,
     ).toBe(false);
     expect(replayQuerySchema.parse({ since: ts }).limit).toBe(200);
     expect(replayQuerySchema.safeParse({ since: ts, limit: '501' }).success).toBe(false);

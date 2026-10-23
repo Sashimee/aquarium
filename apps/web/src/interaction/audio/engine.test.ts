@@ -584,3 +584,129 @@ describe('AudioEngine settings', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('AudioEngine room ambience', () => {
+  const WITH_ROOMS = {
+    assets: [
+      ...INDEX.assets,
+      audioAsset('room-a', 'room-ambience', true, 672000),
+      audioAsset('room-b', 'room-ambience', true, 336000),
+    ],
+  };
+  type Rig = ReturnType<typeof setup>;
+  const roomLoops = (t: Rig) => t.sources.slice(3);
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  async function running() {
+    const t = setup({}, WITH_ROOMS);
+    await t.gesture();
+    await settle();
+    return t;
+  }
+
+  it('fetches nothing for a room until one is asked for', async () => {
+    const t = await running();
+    const fetched = (t.deps.fetchBytes as Mock).mock.calls.map((c) => String(c[0]));
+    expect(fetched.some((u) => u.includes('room-a'))).toBe(false);
+    expect(roomLoops(t)).toHaveLength(0);
+  });
+
+  it('loops the room tone on the pipeline frame count', async () => {
+    const t = await running();
+    t.engine.setAmbience('room-a');
+    await settle();
+    const loop = at(roomLoops(t), 0);
+    expect(loop.loop).toBe(true);
+    expect(loop.loopEnd).toBeCloseTo(14);
+    expect(loop.start).toHaveBeenCalled();
+  });
+
+  it('crossfades into the next room and stops the last one', async () => {
+    const t = await running();
+    t.engine.setAmbience('room-a');
+    await settle();
+    t.engine.setAmbience('room-b');
+    await settle();
+    const [first, second] = roomLoops(t);
+    expect(second?.start).toHaveBeenCalled();
+    expect(first?.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start a second loop for the room already playing', async () => {
+    const t = await running();
+    t.engine.setAmbience('room-a');
+    await settle();
+    t.engine.setAmbience('room-a');
+    await settle();
+    expect(roomLoops(t)).toHaveLength(1);
+  });
+
+  it('stops the room tone for no room and can play it again', async () => {
+    const t = await running();
+    t.engine.setAmbience('room-a');
+    await settle();
+    t.engine.setAmbience(null);
+    await settle();
+    expect(at(roomLoops(t), 0).stop).toHaveBeenCalledTimes(1);
+    t.engine.setAmbience('room-a');
+    await settle();
+    expect(roomLoops(t)).toHaveLength(2);
+  });
+
+  it('plays a room asked for before the first gesture', async () => {
+    const t = setup({}, WITH_ROOMS);
+    t.engine.setAmbience('room-b');
+    await t.gesture();
+    await settle();
+    expect(roomLoops(t)).toHaveLength(1);
+  });
+
+  it('plays no room tone while muted and starts it once unmuted', async () => {
+    const t = await running();
+    t.engine.setMuted(true);
+    t.engine.setAmbience('room-a');
+    await settle();
+    expect(roomLoops(t)).toHaveLength(0);
+    t.engine.setMuted(false);
+    await settle();
+    expect(roomLoops(t)).toHaveLength(1);
+  });
+
+  it('warns about a room with no sound in the catalog and stays quiet', async () => {
+    const t = await running();
+    t.engine.setAmbience('room-missing');
+    await settle();
+    expect(t.warn).toHaveBeenCalledWith(expect.stringContaining('room-missing'));
+    expect(roomLoops(t)).toHaveLength(0);
+  });
+
+  it('warns once about a room with no sound and not again on later changes', async () => {
+    const t = await running();
+    t.engine.setAmbience('room-missing');
+    await settle();
+    t.engine.setAmbience('room-a');
+    await settle();
+    t.engine.setAmbience('room-missing');
+    await settle();
+    t.engine.setMuted(true);
+    t.engine.setMuted(false);
+    await settle();
+    const warned = t.warn.mock.calls.filter((c) => String(c[0]).includes('room-missing'));
+    expect(warned).toHaveLength(1);
+  });
+
+  it('does not decode a room that failed to decode a second time', async () => {
+    const t = await running();
+    const decode = vi.mocked(t.ctx.decodeAudioData);
+    decode.mockRejectedValueOnce(new Error('bad data'));
+    t.engine.setAmbience('room-a');
+    await settle();
+    const calls = decode.mock.calls.length;
+    t.engine.setAmbience('room-b');
+    await settle();
+    t.engine.setAmbience('room-a');
+    await settle();
+    expect(decode.mock.calls.length).toBe(calls + 1);
+    expect(roomLoops(t)).toHaveLength(1);
+  });
+});

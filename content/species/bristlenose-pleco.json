@@ -1,5 +1,6 @@
 {
   "behaviour": {
+    "activity": "nocturnal",
     "boldness": 0.3,
     "curiosity": 0.3,
     "depthBand": [0, 0.2],
@@ -7,7 +8,7 @@
     "perceptionRangeM": 0.25,
     "preferredZone": "bottom",
     "territorial": false,
-    "traits": ["cave-dweller"]
+    "traits": ["cave-dweller", "glass-grazer"]
   },
   "biome": "freshwater",
   "breeding": {

@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { FlowField } from '@aquarium/sim';
-import { WaveMakerFeed, type PumpScene } from './waveMakerFeed';
+import { MAX_EQUIPMENT_TIER } from '@aquarium/shared';
+import { CurrentField } from '../scene/current';
+import { TANK_DIMENSIONS } from '../engine/tank/dimensions';
+import { pumpFieldFor } from './pumpField';
+import { bindPump, WaveMakerFeed, type PumpScene } from './waveMakerFeed';
 
 function setup() {
   const bus = new EventBus<InteractionEvents>();
@@ -125,6 +129,75 @@ describe('WaveMakerFeed', () => {
       feed.detachScene();
       feed.syncScene();
       expect(calls).toEqual(['sync @1.5', 'sync @1.55']);
+    });
+  });
+
+  describe('bindPump', () => {
+    function mounted() {
+      const t = setup();
+      const frames = new Set<() => void>();
+      const host = {
+        onFrame: (cb: () => void) => {
+          frames.add(cb);
+          return () => frames.delete(cb);
+        },
+        tank: { dimensions: TANK_DIMENSIONS.standard },
+      };
+      let simTime = 0;
+      const current = new CurrentField();
+      const unbind = bindPump(t.feed, host, current, pumpFieldFor, () => simTime);
+      return {
+        ...t,
+        current,
+        unbind,
+        frame: () => frames.forEach((cb) => cb()),
+        frameCount: () => frames.size,
+        setSimTime: (v: number) => (simTime = v),
+      };
+    }
+
+    it('moves the pump with the sim clock on every frame', () => {
+      const { current, loaded, bus, frame, setSimTime } = mounted();
+      loaded('a');
+      bus.emit('tank:wave-maker', { tankId: 'a', tier: 3 });
+      const seen = new Set<number>();
+      for (const t of [0.5, 1.7, 3.1, 4.9]) {
+        setSimTime(t);
+        frame();
+        seen.add(current.pumpAmplitude.value);
+      }
+      expect(seen.size).toBeGreaterThan(1);
+      expect(current.waveMaker).not.toBeNull();
+    });
+
+    it('builds the field in the tank dimensions now on show', () => {
+      const { current, loaded, bus } = mounted();
+      loaded('a');
+      bus.emit('tank:wave-maker', { tankId: 'a', tier: 2 });
+      const expected = pumpFieldFor(2, TANK_DIMENSIONS.standard);
+      expect(current.waveMaker?.settings).toEqual(expected?.settings);
+    });
+
+    it('stops syncing and drops the scene on unbind', () => {
+      const { unbind, frameCount, loaded, bus, current } = mounted();
+      loaded('a');
+      bus.emit('tank:wave-maker', { tankId: 'a', tier: 1 });
+      expect(frameCount()).toBe(1);
+      unbind();
+      expect(frameCount()).toBe(0);
+      bus.emit('tank:wave-maker', { tankId: 'a', tier: 3 });
+      expect(current.waveMaker?.settings).toEqual(
+        pumpFieldFor(1, TANK_DIMENSIONS.standard)?.settings,
+      );
+    });
+
+    it('installs every tier on a real CurrentField without throwing', () => {
+      const { current, loaded, bus } = mounted();
+      loaded('a');
+      for (let tier = 0; tier <= MAX_EQUIPMENT_TIER; tier++) {
+        expect(() => bus.emit('tank:wave-maker', { tankId: 'a', tier })).not.toThrow();
+      }
+      expect(current.waveMaker).not.toBeNull();
     });
   });
 });

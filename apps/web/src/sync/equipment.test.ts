@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from './bundledEconomy';
 import {
   chooseEquipment,
+  co2Choices,
   deviceOffers,
   devicesForBiome,
   effectText,
@@ -125,14 +126,131 @@ describe('effect text', () => {
     expect(effectText('co2', 2, cp)).toMatch(/Lowers the pH by 1 /);
   });
 
-  it('is honest that a stronger heater changes nothing the fish can feel', () => {
+  it('says a stronger heater warms a cold tank faster but settles on the same temperature', () => {
     expect(effectText('heater', 1, cp)).toContain('31');
-    expect(effectText('heater', 3, cp)).toMatch(/adds headroom and nothing else/);
+    expect(effectText('heater', 2, cp)).toMatch(/2 times as fast as tier 1.*same temperature/);
+    expect(effectText('heater', 3, cp)).toMatch(/3 times as fast as tier 1.*same temperature/);
+    expect(effectText('heater', 3, cp)).not.toMatch(/nothing else/);
+  });
+
+  it('falls back to the headroom sentence when the warm-up rate gives no speed-up', () => {
+    const withRate = (rate: number, drift = cp.temperature.driftPerHour) => ({
+      ...cp,
+      temperature: { ...cp.temperature, driftPerHour: drift, heaterWarmupRatePerHourPerTier: rate },
+    });
+    expect(effectText('heater', 3, withRate(0))).toMatch(/adds headroom and nothing else/);
+    expect(effectText('heater', 2, withRate(0.1, 0.2))).toMatch(/adds headroom and nothing else/);
+    const flat = effectText('heater', 2, withRate(0, 0));
+    expect(flat).toMatch(/adds headroom and nothing else/);
+    expect(flat).not.toMatch(/NaN/);
+  });
+
+  it('weighs the speed-up against drift, not just the tier number', () => {
+    const tuned = {
+      ...cp,
+      temperature: { ...cp.temperature, driftPerHour: 0.15, heaterWarmupRatePerHourPerTier: 0.1 },
+    };
+    expect(effectText('heater', 2, tuned)).toMatch(/1\.33 times as fast as tier 1/);
   });
 
   it('gives the filter media share of a full colony, capped at all of it', () => {
     expect(effectText('filter', 1, cp)).toContain('40%');
     expect(effectText('filter', 2, cp)).toContain('80%');
     expect(effectText('filter', 3, cp)).toContain('100%');
+  });
+});
+
+describe('co2Choices', () => {
+  const states = (tank: Parameters<typeof co2Choices>[0]) =>
+    co2Choices(tank, economy).map((c) => [c.label, c.state]);
+
+  it('marks the running tier, free owned tiers, and tiers still to buy', () => {
+    const tank = { ...withTiers({ co2: 1 }), co2OwnedTier: 1 };
+    expect(states(tank)).toEqual([
+      ['Off', 'available'],
+      ['Tier 1', 'running'],
+      ['Tier 2', 'shop'],
+    ]);
+  });
+
+  it('keeps a tier bought earlier free after the CO2 was turned off', () => {
+    const tank = { ...withTiers({ co2: 0 }), co2OwnedTier: 2 };
+    expect(states(tank)).toEqual([
+      ['Off', 'running'],
+      ['Tier 1', 'available'],
+      ['Tier 2', 'available'],
+    ]);
+  });
+
+  it('sends every tier of a tank that owns none to the shop', () => {
+    expect(states({ ...withTiers({}), co2OwnedTier: 0 }).map(([, s]) => s)).toEqual([
+      'running',
+      'shop',
+      'shop',
+    ]);
+  });
+
+  it('greys out every tier a blackwater tank refuses, and keeps Off pickable', () => {
+    const tank = { ...tankFixture({ biome: 'blackwater' }), co2OwnedTier: 2 };
+    const choices = co2Choices(tank, economy);
+    expect(choices.map((c) => c.state)).toEqual(['running', 'refused', 'refused']);
+    expect(choices[1]?.reason).toMatch(/not used in blackwater/);
+  });
+
+  it('lets a blackwater tank that still runs CO2 switch it off', () => {
+    const tank = {
+      ...tankFixture({ biome: 'blackwater', equipment: withTiers({ co2: 1 }).equipment }),
+      co2OwnedTier: 1,
+    };
+    const choices = co2Choices(tank, economy);
+    expect(choices[0]?.state).toBe('available');
+    expect(choices[1]?.state).toBe('running');
+  });
+});
+
+describe('the shop with CO2 owned but switched off', () => {
+  const tank = { ...withTiers({ co2: 0 }), co2OwnedTier: 2 };
+
+  it('shows owned tiers as owned and counts skips from the owned tier', () => {
+    const offer = deviceOffers(tank, economy, cp).find((o) => o.device === 'co2');
+    expect(offer?.tiers.map((t) => [t.tier, t.state, t.skipped])).toEqual([
+      [1, 'owned', 0],
+      [2, 'owned', 0],
+    ]);
+  });
+
+  it('refuses to sell an owned tier and points to Care', () => {
+    const choice = chooseEquipment(tank, economy, 'co2', 1);
+    expect(choice.ok).toBe(false);
+    expect(choice.ok === false && choice.reason).toMatch(/Care/);
+  });
+
+  it('counts a skipped tier from the owned tier, not the running one', () => {
+    const owned1 = { ...withTiers({ co2: 0 }), co2OwnedTier: 1 };
+    const choice = chooseEquipment(owned1, economy, 'co2', 2);
+    expect(choice).toMatchObject({ ok: true, skipped: 0 });
+  });
+});
+
+describe('the CO2 purchase baseline is the larger of running and owned', () => {
+  const co2States = (running: number, owned: number) =>
+    deviceOffers({ ...withTiers({ co2: running }), co2OwnedTier: owned }, economy, cp)
+      .find((o) => o.device === 'co2')
+      ?.tiers.map((t) => t.state);
+
+  it('uses the owned tier when it is above the running one', () => {
+    expect(co2States(1, 2)).toEqual(['installed', 'owned']);
+  });
+
+  it('uses the running tier when nothing else was ever bought', () => {
+    expect(co2States(1, 0)).toEqual(['installed', 'available']);
+  });
+
+  it('treats equal running and owned tiers as one baseline', () => {
+    expect(co2States(1, 1)).toEqual(['installed', 'available']);
+  });
+
+  it('offers every tier when none is running or owned', () => {
+    expect(co2States(0, 0)).toEqual(['available', 'available']);
   });
 });

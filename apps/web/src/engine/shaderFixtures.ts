@@ -1,4 +1,22 @@
-import { PerspectiveCamera, Scene, WebGPURenderer, type Light, type Mesh } from 'three/webgpu';
+import {
+  Color,
+  ConstNode,
+  ConvertNode,
+  JoinNode,
+  MathNode,
+  OperatorNode,
+  PerspectiveCamera,
+  Scene,
+  SplitNode,
+  UniformNode,
+  VarNode,
+  Vector2,
+  Vector3,
+  WebGPURenderer,
+  type Light,
+  type Mesh,
+  type Node,
+} from 'three/webgpu';
 
 export type ShaderBackend = 'webgpu' | 'webgl';
 
@@ -111,4 +129,97 @@ export function mainBodyDepths(source: string): { line: string; depth: number }[
     if (depth < 0 && out.length > 0) break;
   }
   return out;
+}
+
+/**
+ * Evaluates the arithmetic subset of a TSL graph on the CPU, so a JS mirror of shader maths can be
+ * held to the graph itself instead of to a third copy of the formula. `inputs` stand in for nodes
+ * only a draw can produce, such as `positionWorld` or `diffuseContribution`.
+ */
+export function evaluate(
+  node: Node,
+  inputs: ReadonlyMap<Node, readonly number[]> = new Map(),
+): number[] {
+  return evaluateShared(node, new Map([...inputs].map(([n, v]) => [n, [...v]])));
+}
+
+// A graph reuses a node wherever it is read (a `toVar` above all), so each is worked out once.
+function evaluateShared(node: Node, done: Map<Node, number[]>): number[] {
+  const known = done.get(node);
+  if (known !== undefined) return known;
+  const value = evaluateNode(node, (part) => evaluateShared(part, done));
+  done.set(node, value);
+  return value;
+}
+
+function evaluateNode(node: Node, of: (part: Node) => number[]): number[] {
+  if (node instanceof UniformNode || node instanceof ConstNode) {
+    const value: unknown = node.value;
+    if (typeof value === 'number') return [value];
+    if (value instanceof Vector2 || value instanceof Vector3) return value.toArray();
+    if (value instanceof Color) return value.toArray();
+    throw new Error(`evaluate: unsupported ${node.type} value`);
+  }
+  if (node instanceof VarNode || node instanceof ConvertNode) return of(node.node);
+  if (node instanceof JoinNode) return node.nodes.flatMap((part) => of(part));
+  if (node instanceof SplitNode) {
+    const v = of(node.node);
+    return [...node.components].map((c) => v['xyzw'.indexOf(c)] ?? Number.NaN);
+  }
+  const zip = (a: number[], b: number[], f: (x: number, y: number) => number): number[] =>
+    Array.from({ length: Math.max(a.length, b.length) }, (_, i) =>
+      f(a.length === 1 ? (a[0] ?? 0) : (a[i] ?? 0), b.length === 1 ? (b[0] ?? 0) : (b[i] ?? 0)),
+    );
+  if (node instanceof OperatorNode) {
+    const a = of(node.aNode);
+    const b = of(node.bNode);
+    if (node.op === '+') return zip(a, b, (x, y) => x + y);
+    if (node.op === '-') return zip(a, b, (x, y) => x - y);
+    if (node.op === '*') return zip(a, b, (x, y) => x * y);
+    if (node.op === '/') return zip(a, b, (x, y) => x / y);
+    throw new Error(`evaluate: unsupported operator ${node.op}`);
+  }
+  if (node instanceof MathNode) {
+    const a = of(node.aNode);
+    if (node.method === MathNode.EXP) return a.map(Math.exp);
+    if (node.method === MathNode.NEGATE) return a.map((x) => -x);
+    if (node.method === MathNode.ABS) return a.map(Math.abs);
+    if (node.method === MathNode.ONE_MINUS) return a.map((x) => 1 - x);
+    if (node.method === MathNode.SQRT) return a.map(Math.sqrt);
+    if (node.method === MathNode.LENGTH) return [Math.hypot(...a)];
+    if (node.method === MathNode.NORMALIZE) {
+      const length = Math.hypot(...a);
+      return a.map((x) => x / length);
+    }
+    if (node.bNode === null) throw new Error(`evaluate: unsupported math ${node.method}`);
+    const b = of(node.bNode);
+    if (node.method === MathNode.MAX) return zip(a, b, Math.max);
+    if (node.method === MathNode.MIN) return zip(a, b, Math.min);
+    if (node.method === MathNode.POW) return zip(a, b, Math.pow);
+    if (node.method === MathNode.DOT) return [zip(a, b, (x, y) => x * y).reduce((s, x) => s + x)];
+    // GLSL step(edge, x): 0 where x < edge.
+    if (node.method === MathNode.STEP) return zip(a, b, (edge, x) => (x < edge ? 0 : 1));
+    if (node.method === MathNode.CLAMP && node.cNode !== null) {
+      return zip(zip(a, b, Math.max), of(node.cNode), Math.min);
+    }
+    if (node.method === MathNode.SMOOTHSTEP && node.cNode !== null) {
+      const edge = zip(a, b, (low, high) => high - low);
+      const t = zip(
+        zip(of(node.cNode), a, (x, low) => x - low),
+        edge,
+        (x, span) => Math.min(1, Math.max(0, x / span)),
+      );
+      return t.map((x) => x * x * (3 - 2 * x));
+    }
+    if (node.method === MathNode.MIX && node.cNode !== null) {
+      const t = of(node.cNode);
+      return zip(
+        zip(a, t, (x, s) => x * (1 - s)),
+        zip(b, t, (y, s) => y * s),
+        (x, y) => x + y,
+      );
+    }
+    throw new Error(`evaluate: unsupported math ${node.method}`);
+  }
+  throw new Error(`evaluate: unsupported node ${node.type}`);
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { TANK_SIZES, tankSizeSchema, type TankSize } from '@aquarium/shared';
+import {
+  TANK_SIZES,
+  tankSizeSchema,
+  tankSpaceOfSize,
+  tankWaterBounds,
+  type TankSize,
+  WATER_INSET,
+} from '@aquarium/shared';
 import { Box3, PerspectiveCamera, Vector3 } from 'three/webgpu';
 import {
   DEFAULT_TANK,
@@ -9,7 +16,6 @@ import {
   TANK_DIMENSIONS,
   type TankDimensions,
   validateTank,
-  WATER_INSET,
   waterBounds,
   waterLitres,
 } from './dimensions';
@@ -41,6 +47,13 @@ describe('waterBounds', () => {
     expect(b.min.y).toBeCloseTo(glass + WATER_INSET, 9);
     expect(b.max.y).toBeCloseTo(height - freeboard, 9);
   });
+
+  it.each(tankSizeSchema.options)('matches the sim water box of the %s tank', (size) => {
+    const { min, max } = tankWaterBounds(tankSpaceOfSize(size));
+    const b = waterBounds(TANK_DIMENSIONS[size]);
+    expect(b.min.toArray()).toEqual([...min]);
+    expect(b.max.toArray()).toEqual([...max]);
+  });
 });
 
 describe('TANK_DIMENSIONS', () => {
@@ -48,6 +61,11 @@ describe('TANK_DIMENSIONS', () => {
     const d = TANK_DIMENSIONS[size];
     expect(() => validateTank(d)).not.toThrow();
     expect(d).toMatchObject(TANK_SIZES[size].dimensions);
+  });
+
+  it.each(tankSizeSchema.options)('puts the %s waterline at the shared freeboard', (size) => {
+    const { height, freeboard } = TANK_SIZES[size].dimensions;
+    expect(waterBounds(TANK_DIMENSIONS[size]).max.y).toBe(height - freeboard);
   });
 
   it('keeps the standard tank as the default one', () => {

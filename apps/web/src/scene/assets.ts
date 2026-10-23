@@ -12,6 +12,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { rewritingKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
+import { sharperTextures } from '../fish/assetIndex';
 
 export const ASSET_BASE = `${import.meta.env.BASE_URL}assets/`;
 
@@ -37,15 +38,35 @@ export interface CatalogEntry {
   };
   readonly textures?: readonly {
     readonly role: string;
-    readonly variants: Readonly<Record<string, { readonly file: string }>>;
+    readonly variants: Readonly<
+      Record<string, { readonly file: string; readonly size?: number } | undefined>
+    >;
   }[];
 }
 
 export class AssetCatalog {
   private readonly byId = new Map<string, CatalogEntry>();
+  /** Per asset, 1k map → its 2k map where the 2k really is larger; paths relative to the assets root. */
+  private readonly sharper = new Map<string, ReadonlyMap<string, string>>();
+  /** The same pairs as URLs under ASSET_BASE, for rewriting what a GLB references. */
+  private readonly sharperUrls = new Map<string, string>();
 
   constructor(entries: readonly CatalogEntry[]) {
-    for (const entry of entries) this.byId.set(entry.id, entry);
+    for (const entry of entries) {
+      this.byId.set(entry.id, entry);
+      const pairs = sharperTextures(entry.textures, `assets[${entry.id}].textures`);
+      this.sharper.set(entry.id, pairs);
+      for (const [small, large] of pairs) {
+        const url = `${ASSET_BASE}${small}`;
+        const earlier = this.sharperUrls.get(url);
+        if (earlier !== undefined && earlier !== `${ASSET_BASE}${large}`) {
+          throw new Error(
+            `assets/index.json: ${small} has two different 2k variants (${earlier}, ${large}); re-run the asset pipeline`,
+          );
+        }
+        this.sharperUrls.set(url, `${ASSET_BASE}${large}`);
+      }
+    }
   }
 
   static async fetch(url = `${ASSET_BASE}index.json`, signal?: AbortSignal): Promise<AssetCatalog> {
@@ -79,13 +100,47 @@ export class AssetCatalog {
   entries(): IterableIterator<CatalogEntry> {
     return this.byId.values();
   }
+
+  /** The size a load of `assetId` really gets: one with no larger 2k map is the same at 2048. */
+  textureSizeFor(assetId: string, textureSize: 1024 | 2048): 1024 | 2048 {
+    this.get(assetId);
+    return (this.sharper.get(assetId)?.size ?? 0) > 0 ? textureSize : 1024;
+  }
+
+  /** The 2k file of the `role` map at 2048 where the index lists a larger one, else the 1k file. */
+  textureFile(assetId: string, role: string, textureSize: 1024 | 2048): string | undefined {
+    const small = this.get(assetId).textures?.find((t) => t.role === role)?.variants['1k']?.file;
+    if (small === undefined || textureSize === 1024) return small;
+    return this.sharper.get(assetId)?.get(small) ?? small;
+  }
+
+  /** Swaps a GLB's 1k map URL for the 2k one at 2048, only where the index lists a larger 2k. */
+  materialTextureUrl(url: string, textureSize: 1024 | 2048): string {
+    if (textureSize === 1024) return url;
+    const query = url.indexOf('?');
+    const path = query < 0 ? url : url.slice(0, query);
+    const large = this.sharperUrls.get(collapseDotSegments(path));
+    return large === undefined ? url : `${large}${query < 0 ? '' : url.slice(query)}`;
+  }
 }
 
-/** Picks the 1k or 2k variant of a material texture. Only `textures/` has both; an HDRI may not. */
-export function materialTextureUrl(url: string, textureSize: 1024 | 2048): string {
-  if (textureSize === 2048)
-    return url.replace(/(\/textures\/[^/?]+)_1k\.ktx2(\?.*)?$/, '$1_2k.ktx2$2');
-  return url;
+/** GLTFLoader joins a map's relative URI onto the GLB's folder as is, so a borrowed `../x/` map arrives uncollapsed. */
+export function collapseDotSegments(path: string): string {
+  const out: string[] = [];
+  for (const segment of path.split('/')) {
+    if (segment === '.') continue;
+    if (
+      segment === '..' &&
+      out.length > 0 &&
+      out[out.length - 1] !== '..' &&
+      out[out.length - 1] !== ''
+    ) {
+      out.pop();
+      continue;
+    }
+    out.push(segment);
+  }
+  return out.join('/');
 }
 
 export interface LoadedPrimitive {
@@ -110,16 +165,34 @@ class SkipKTX2Loader extends KTX2Loader {
   }
 }
 
+/** A model texture shared by every model that references its resolved URL, so it uploads once. */
+interface SharedTexture {
+  readonly url: string;
+  readonly texture: Promise<CompressedTexture>;
+  users: number;
+  freed: boolean;
+}
+
+/** The shared textures one model load holds; closed once the load failed and gave them back. */
+interface TextureHold {
+  readonly entries: Set<SharedTexture>;
+  closed: boolean;
+}
+
 /** One GLTF + KTX2 + meshopt pipeline, caching every (asset, lod, texture size) it loads. */
 export class ModelLibrary {
   private readonly ktx2: KTX2Loader;
-  private readonly gltf = new GLTFLoader();
   private readonly geometryGltf = new GLTFLoader().setKTX2Loader(new SkipKTX2Loader());
   private readonly cache = new Map<string, Promise<LoadedModel>>();
   private readonly finished = new Map<string, LoadedModel>();
   private readonly collision = new Map<string, Promise<readonly BufferGeometry[]>>();
   private textureSize: 1024 | 2048 = 1024;
   private readonly textures: Texture[] = [];
+  private readonly sharedTextures = new Map<string, SharedTexture>();
+  private readonly sharedTextureObjects = new WeakSet<Texture>();
+  private readonly holds = new WeakMap<LoadedModel, TextureHold>();
+  private readonly freedModels = new WeakSet<LoadedModel>();
+  private disposed = false;
   private inflight = 0;
   private idleWaiters: (() => void)[] = [];
 
@@ -128,9 +201,9 @@ export class ModelLibrary {
     ktx2: Ktx2Textures,
     readonly catalog: AssetCatalog,
   ) {
-    this.ktx2 = rewritingKtx2Loader(ktx2, (url) => materialTextureUrl(url, this.textureSize));
-    this.gltf.setKTX2Loader(this.ktx2);
-    this.gltf.setMeshoptDecoder(MeshoptDecoder);
+    this.ktx2 = rewritingKtx2Loader(ktx2, (url) =>
+      catalog.materialTextureUrl(url, this.textureSize),
+    );
     this.geometryGltf.setMeshoptDecoder(MeshoptDecoder);
   }
 
@@ -142,16 +215,19 @@ export class ModelLibrary {
   }
 
   modelKey(assetId: string, lod: ModelLod, textureSize: 1024 | 2048): string {
-    return `${this.lodFile(assetId, lod)}@${textureSize}`;
+    return `${this.lodFile(assetId, lod)}@${this.catalog.textureSizeFor(assetId, textureSize)}`;
   }
 
-  load(assetId: string, lod: ModelLod, textureSize: 1024 | 2048): Promise<LoadedModel> {
+  /** A model loaded after `dispose()` comes back already freed. */
+  load(assetId: string, lod: ModelLod, requestedSize: 1024 | 2048): Promise<LoadedModel> {
     const file = this.lodFile(assetId, lod);
+    const textureSize = this.catalog.textureSizeFor(assetId, requestedSize);
     const key = `${file}@${textureSize}`;
     let pending = this.cache.get(key);
     if (!pending) {
+      const hold: TextureHold = { entries: new Set(), closed: false };
       pending = this.enter(textureSize)
-        .then(() => this.gltf.loadAsync(`${ASSET_BASE}${file}`))
+        .then(() => this.modelLoader(hold).loadAsync(`${ASSET_BASE}${file}`))
         .finally(() => this.leave())
         .then((gltf) => {
           gltf.scene.updateMatrixWorld(true);
@@ -166,13 +242,93 @@ export class ModelLibrary {
           });
           if (primitives.length === 0) throw new Error(`${file} contains no meshes`);
           const model = { primitives };
-          if (this.cache.get(key) === pending) this.finished.set(key, model);
+          this.holds.set(model, hold);
+          if (this.disposed) {
+            this.freeModels([model]);
+            if (this.cache.get(key) === pending) this.cache.delete(key);
+          } else if (this.cache.get(key) === pending) this.finished.set(key, model);
           return model;
+        })
+        .catch((error: unknown) => {
+          hold.closed = true;
+          this.releaseShared(hold.entries);
+          throw error;
         });
       this.cache.set(key, pending);
-      pending.catch(() => this.cache.delete(key));
+      pending.catch(() => {
+        if (this.cache.get(key) === pending) this.cache.delete(key);
+      });
     }
     return pending;
+  }
+
+  /**
+   * A GLTFLoader per model load, because the KTX2 loader it uses records which shared textures
+   * that model holds. GLTFLoader only dedupes textures within one file, and the WebGPU backend
+   * uploads per Texture object, so a map two GLBs borrow is shared here by its resolved URL.
+   */
+  private modelLoader(hold: TextureHold): GLTFLoader {
+    const load: KTX2Loader['load'] = (url, onLoad, _onProgress, onError) => {
+      if (hold.closed) {
+        onError?.(new Error(`${url}: the model that requested it already failed to load`));
+        return;
+      }
+      const resolved = collapseDotSegments(this.catalog.materialTextureUrl(url, this.textureSize));
+      let entry = this.sharedTextures.get(resolved);
+      if (!entry) {
+        const texture = this.ktx2.loadAsync(resolved).then((loaded) => {
+          this.sharedTextureObjects.add(loaded);
+          return loaded;
+        });
+        const created: SharedTexture = { url: resolved, texture, users: 0, freed: false };
+        texture.catch(() => {
+          if (this.sharedTextures.get(resolved) === created) this.sharedTextures.delete(resolved);
+        });
+        this.sharedTextures.set(resolved, created);
+        entry = created;
+      }
+      if (!hold.entries.has(entry)) {
+        hold.entries.add(entry);
+        entry.users++;
+      }
+      if (onError) entry.texture.then(onLoad, onError);
+      else void entry.texture.then(onLoad);
+    };
+    const ktx2 = new Proxy(this.ktx2, {
+      get: (target, key, receiver) => (key === 'load' ? load : Reflect.get(target, key, receiver)),
+    });
+    return new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
+  }
+
+  private releaseShared(entries: Iterable<SharedTexture>): void {
+    for (const entry of entries) {
+      if (--entry.users > 0) continue;
+      if (this.sharedTextures.get(entry.url) === entry) this.sharedTextures.delete(entry.url);
+      this.freeShared(entry);
+    }
+  }
+
+  private freeShared(entry: SharedTexture): Promise<void> {
+    if (entry.freed) return Promise.resolve();
+    entry.freed = true;
+    return entry.texture.then(
+      (texture) => texture.dispose(),
+      // A failed load was already reported to every model that requested it.
+      () => undefined,
+    );
+  }
+
+  /** Idempotent per model: retainOnly, dispose and a late-resolving load may all reach the same one. */
+  private freeModels(models: Iterable<LoadedModel>): void {
+    const resources = new Set<Texture | Material | BufferGeometry>();
+    for (const model of models) {
+      if (this.freedModels.has(model)) continue;
+      this.freedModels.add(model);
+      this.collectOwned(model, resources);
+      const hold = this.holds.get(model);
+      if (hold) this.releaseShared(hold.entries);
+    }
+    for (const resource of resources) resource.dispose();
   }
 
   /** Geometry of the cheapest LOD, so every client fits identical colliders whatever its tier. Fetches no textures. */
@@ -182,7 +338,7 @@ export class ModelLibrary {
       const entry = this.catalog.get(assetId);
       const file = this.lodFile(assetId, Math.min(2, entry.lods.length - 1) as ModelLod);
       const model = this.finishedRenderModel(file);
-      pending = model
+      const source = model
         ? Promise.resolve(model.primitives.map((p) => p.geometry.clone()))
         : this.geometryGltf.loadAsync(`${ASSET_BASE}${file}`).then((gltf) => {
             gltf.scene.updateMatrixWorld(true);
@@ -196,8 +352,18 @@ export class ModelLibrary {
             if (geometries.length === 0) throw new Error(`${file} contains no meshes`);
             return geometries;
           });
+      const owned: Promise<readonly BufferGeometry[]> = source.then((geometries) => {
+        if (this.disposed && this.collision.get(assetId) === owned) {
+          this.collision.delete(assetId);
+          for (const geometry of geometries) geometry.dispose();
+        }
+        return geometries;
+      });
+      pending = owned;
       this.collision.set(assetId, pending);
-      pending.catch(() => this.collision.delete(assetId));
+      owned.catch(() => {
+        if (this.collision.get(assetId) === owned) this.collision.delete(assetId);
+      });
     }
     return pending;
   }
@@ -216,17 +382,16 @@ export class ModelLibrary {
     textureSize: 1024 | 2048,
     anisotropy: number,
   ): Promise<Texture> {
-    const variant = this.catalog.get(assetId).textures?.find((t) => t.role === role)?.variants[
-      textureSize === 2048 ? '2k' : '1k'
-    ];
-    if (!variant) throw new Error(`Asset "${assetId}" has no ${role} texture`);
+    const file = this.catalog.textureFile(assetId, role, textureSize);
+    if (file === undefined) throw new Error(`Asset "${assetId}" has no ${role} texture`);
     await this.enter(textureSize);
     try {
-      const texture = await this.ktx2.loadAsync(`${ASSET_BASE}${variant.file}`);
+      const texture = await this.ktx2.loadAsync(`${ASSET_BASE}${file}`);
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
       texture.anisotropy = anisotropy;
-      this.textures.push(texture);
+      if (this.disposed) texture.dispose();
+      else this.textures.push(texture);
       return texture;
     } finally {
       this.leave();
@@ -257,11 +422,7 @@ export class ModelLibrary {
       this.finished.delete(key);
     }
     const settled = await Promise.allSettled(stale.map(([, pending]) => pending));
-    const resources = new Set<Texture | Material | BufferGeometry>();
-    for (const result of settled) {
-      if (result.status === 'fulfilled') collectResources(result.value, resources);
-    }
-    for (const resource of resources) resource.dispose();
+    this.freeModels(settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
     await this.pruneCollision(keep);
   }
 
@@ -286,28 +447,33 @@ export class ModelLibrary {
   }
 
   async dispose(): Promise<void> {
-    const models = await Promise.allSettled(this.cache.values());
-    const seen = new Set<Texture | Material | BufferGeometry>();
-    for (const result of models) {
-      if (result.status === 'fulfilled') collectResources(result.value, seen);
-    }
-    for (const item of seen) item.dispose();
-    for (const texture of this.textures) texture.dispose();
-    this.textures.length = 0;
+    this.disposed = true;
+    const pendingModels = [...this.cache.values()];
     this.cache.clear();
     this.finished.clear();
-    const collision = await Promise.allSettled(this.collision.values());
+    const pendingCollision = [...this.collision.values()];
+    this.collision.clear();
+    const models = await Promise.allSettled(pendingModels);
+    this.freeModels(models.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])));
+    const shared = [...this.sharedTextures.values()];
+    this.sharedTextures.clear();
+    await Promise.all(shared.map((entry) => this.freeShared(entry)));
+    for (const texture of this.textures) texture.dispose();
+    this.textures.length = 0;
+    const collision = await Promise.allSettled(pendingCollision);
     for (const result of collision) {
       if (result.status === 'fulfilled') for (const geometry of result.value) geometry.dispose();
     }
-    this.collision.clear();
   }
-}
 
-function collectResources(model: LoadedModel, out: Set<Texture | Material | BufferGeometry>): void {
-  for (const { geometry, material } of model.primitives) {
-    out.add(geometry);
-    out.add(material);
-    for (const value of Object.values(material)) if (value instanceof Texture) out.add(value);
+  /** The model's own geometry, materials and textures; shared textures are freed by reference count. */
+  private collectOwned(model: LoadedModel, out: Set<Texture | Material | BufferGeometry>): void {
+    for (const { geometry, material } of model.primitives) {
+      out.add(geometry);
+      out.add(material);
+      for (const value of Object.values(material)) {
+        if (value instanceof Texture && !this.sharedTextureObjects.has(value)) out.add(value);
+      }
+    }
   }
 }

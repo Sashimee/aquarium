@@ -25,6 +25,7 @@ export function stepTank(
       chemistryParams: ctx.chemistryParams,
       vacationFeeder: ctx.vacationFeeder,
       grace: ctx.grace,
+      ...(ctx.maxFishLengthM !== undefined && { maxFishLengthM: ctx.maxFishLengthM }),
       medicine,
       contagion,
     });

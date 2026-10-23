@@ -2,7 +2,19 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BUDGET_BYTES, checkAssets, loadCheckInput, type CheckInput } from './check.ts';
+import {
+  BUDGET_BYTES,
+  borrowedTextureProblems,
+  checkAssets,
+  duplicateTextureProblems,
+  glbDrawCalls,
+  intraAssetDuplicateTextureProblems,
+  loadCheckInput,
+  sharedKtx2Problems,
+  unreferencedHdriProblems,
+  type GlbDocument,
+  type CheckInput,
+} from './check.ts';
 import { packGlb, sha256 } from './glb.ts';
 import {
   FIN_ID_ATTRIBUTE,
@@ -98,6 +110,14 @@ describe('validateManifest', () => {
       ['wm-sixline-delso-63', 'six-line-wrasse', 'Diego Delso', 'CC-BY-SA-4.0'],
       ['wm-ancistrus-reis', 'bristlenose-pleco', 'Júlio Reis', 'CC-BY-SA-4.0'],
       ['wm-ancistrus-l144-adolfoi', 'bristlenose-pleco', 'Corydoras-adolfoi', 'CC-BY-SA-4.0'],
+      ['wm-brichardi-stang-1zz', 'neolamprologus-brichardi', 'David J. Stang', 'CC-BY-SA-4.0'],
+      ['wm-aulonocara-baenschi-rjcastillo', 'aulonocara-baenschi', 'Rjcastillo', 'CC-BY-SA-4.0'],
+      [
+        'wm-multifasciatus-ingebrigtsen-male',
+        'neolamprologus-multifasciatus',
+        'Richard A. Ingebrigtsen',
+        'CC-BY-SA-3.0',
+      ],
     ])('accepts the roster photo %s', (id, species, author, licence) => {
       const photo = manifestAsset({ id, kind: 'reference-photo', species, author, licence });
       expect(validateManifest(manifestOf(photo), `\`${id}\` ${author}`)).toEqual([]);
@@ -143,6 +163,21 @@ describe('validateManifest', () => {
     expect(validateManifest(manifestOf(good), '')).toEqual([]);
     expect(validateManifest(manifestOf({ ...good, sha256: DIGEST }), '').join('\n')).toContain(
       'not the aggregate',
+    );
+  });
+
+  it('fails an entry the API schema would refuse at startup', () => {
+    const species = validateManifest(
+      manifestOf(manifestAsset({ id: 'sword', species: 'Echinodorus sp. (Amazon sword)' })),
+      '',
+    );
+    expect(species.join('\n')).toMatch(/manifest asset sword: species fails the API schema/);
+    const url = validateManifest(manifestOf(manifestAsset({ author_url: 'not a url' })), '');
+    expect(url.join('\n')).toMatch(/author_url fails the API schema/);
+    const title = validateManifest(manifestOf(manifestAsset({ title: '' })), '');
+    expect(title.join('\n')).toMatch(/title fails the API schema/);
+    expect(validateManifest(manifestOf(manifestAsset({ species: 'echinodorus-sp' })), '')).toEqual(
+      [],
     );
   });
 
@@ -442,7 +477,7 @@ describe('checkAssets', () => {
       lods,
       files: lods.map(({ file, bytes, sha256: digest }) => ({ file, bytes, sha256: digest })),
       shrimp: undefined,
-      crab: { ...prawn.shrimp, pleopodPairs: 0 },
+      crab: { ...prawn.shrimp, origin: 'hip', pleopodPairs: 0 },
     };
     expect(checkAssets(inputFor([crab]))).toEqual([]);
     expect(checkAssets(inputFor([{ ...crab, crab: undefined }])).join('\n')).toContain(
@@ -878,6 +913,16 @@ describe('checkAssets', () => {
       expect(problemsFor(unscaled)).toContain('differs from content/species');
     });
 
+    it('applies the lengthFactor of a loft recipe (aulonocara-baenschi male is 1.33 of the female)', () => {
+      speciesFile(SPECIES_LENGTH);
+      const asset = (standardLengthM: number): OutputAsset => ({
+        ...guppy({ lengthSource: 'species-json', standardLengthM }, 'aulonocara-baenschi'),
+        species: 'guppy',
+      });
+      expect(problemsFor(asset(SPECIES_LENGTH * 1.33))).not.toContain('bodyLengthM');
+      expect(problemsFor(asset(SPECIES_LENGTH))).toContain('differs from content/species');
+    });
+
     it('fails a species-json fish whose species file lost bodyLengthM', () => {
       speciesFile(null);
       const asset = guppy({ lengthSource: 'species-json', standardLengthM: SPECIES_LENGTH });
@@ -892,8 +937,354 @@ describe('checkAssets', () => {
   });
 });
 
+describe('unreferencedHdriProblems', () => {
+  const hdri = (id: string) => ({ id, kind: 'hdri' }) as OutputAsset;
+  const loaded = { id: 'studio-small-09', file: 'hdri/studio-small-09/env.ktx2' };
+
+  it('passes when the only hdri is the one the web app loads', () => {
+    expect(unreferencedHdriProblems([hdri('studio-small-09')], loaded)).toEqual([]);
+  });
+
+  it('flags a shipped hdri that nothing loads', () => {
+    const problems = unreferencedHdriProblems([hdri('studio-small-09'), hdri('sky')], loaded);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('hdri/sky');
+  });
+
+  it('lets a room hdri ship without the web app loading it', () => {
+    const problems = unreferencedHdriProblems(
+      [hdri('studio-small-09'), hdri('polyhaven-cabin')],
+      loaded,
+      new Set(['polyhaven-cabin']),
+    );
+    expect(problems).toEqual([]);
+  });
+});
+
+describe('duplicateTextureProblems', () => {
+  function asset(
+    id: string,
+    files: [string, string][],
+    textures: { '1k': string; '2k': string }[] = [],
+  ): OutputAsset {
+    return {
+      id,
+      kind: 'rock',
+      files: files.map(([file, sha]) => ({ file, bytes: 1, sha256: sha })),
+      textures: textures.map((t) => ({
+        variants: { '1k': { file: t['1k'] }, '2k': { file: t['2k'] } },
+      })),
+    } as unknown as OutputAsset;
+  }
+
+  it('flags a texture byte-identical to another asset texture', () => {
+    const problems = duplicateTextureProblems([
+      asset('rock-a', [['rock/rock-a/textures/a_basecolor_1k.ktx2', 'x'.repeat(64)]]),
+      asset('pile', [['rock/pile/textures/a_basecolor_1k.ktx2', 'x'.repeat(64)]]),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/pile/textures/a_basecolor_1k.ktx2');
+    expect(problems[0]).toContain('rock/rock-a/textures/a_basecolor_1k.ktx2');
+  });
+
+  it('flags identical textures under different names inside one asset', () => {
+    const problems = duplicateTextureProblems([
+      asset('rock-a', [
+        ['rock/rock-a/textures/a_1k.ktx2', 'a'.repeat(64)],
+        ['rock/rock-a/textures/b_1k.ktx2', 'a'.repeat(64)],
+      ]),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/rock-a/textures/b_1k.ktx2');
+    expect(problems[0]).toContain('rock/rock-a/textures/a_1k.ktx2');
+    expect(problems[0]).toContain('same asset');
+  });
+
+  it('leaves a 1k/2k pair of one texture to the intra-asset check', () => {
+    const pair = {
+      '1k': 'rock/r/textures/a_1k.ktx2',
+      '2k': 'rock/r/textures/a_2k.ktx2',
+    };
+    const r = asset(
+      'r',
+      [
+        [pair['1k'], 'a'.repeat(64)],
+        [pair['2k'], 'a'.repeat(64)],
+      ],
+      [pair],
+    );
+    expect(duplicateTextureProblems([r])).toEqual([]);
+  });
+
+  it('accepts distinct textures', () => {
+    expect(
+      duplicateTextureProblems([
+        asset('rock-a', [
+          ['rock/rock-a/textures/a_1k.ktx2', 'a'.repeat(64)],
+          ['rock/rock-a/textures/b_1k.ktx2', 'c'.repeat(64)],
+        ]),
+        asset('rock-b', [['rock/rock-b/textures/c_1k.ktx2', 'b'.repeat(64)]]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('ignores non-texture files', () => {
+    expect(
+      duplicateTextureProblems([
+        asset('a', [['rock/a/lod0.glb', 'c'.repeat(64)]]),
+        asset('b', [['rock/b/lod0.glb', 'c'.repeat(64)]]),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe('glbDrawCalls', () => {
+  it('counts the primitives of every mesh', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'glb-draws-'));
+    try {
+      const json = {
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{}, {}] }, { primitives: [{}] }],
+      };
+      mkdirSync(join(dir, 'room-furniture/x'), { recursive: true });
+      writeFileSync(join(dir, 'room-furniture/x/lod2.glb'), packGlb(json, new Uint8Array(4)));
+      expect(glbDrawCalls(dir, 'room-furniture/x/lod2.glb')).toBe(3);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('fails with the missing path instead of counting zero', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'glb-draws-'));
+    try {
+      expect(() => glbDrawCalls(dir, 'room-furniture/gone/lod2.glb')).toThrow(
+        join(dir, 'room-furniture/gone/lod2.glb'),
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe('borrowedTextureProblems', () => {
+  const variant = (file: string) => ({ file, bytes: 1, sha256: 'a'.repeat(64) });
+  function owner(sources: string[]): OutputAsset {
+    return {
+      id: 'owner',
+      kind: 'rock',
+      sources,
+      files: [{ file: 'rock/owner/textures/t_1k.ktx2', bytes: 1, sha256: 'a'.repeat(64) }],
+      textures: [],
+    } as unknown as OutputAsset;
+  }
+  function borrower(sources: string[]): OutputAsset {
+    const shared = variant('rock/owner/textures/t_1k.ktx2');
+    return {
+      id: 'borrower',
+      kind: 'rock',
+      sources,
+      files: [],
+      textures: [{ variants: { '1k': shared, '2k': shared } }],
+    } as unknown as OutputAsset;
+  }
+
+  it('fails a borrower that does not list the owner source', () => {
+    const problems = borrowedTextureProblems([owner(['cc-by-sa-rock']), borrower(['cc0-rock'])]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('cc-by-sa-rock');
+  });
+
+  it('accepts a borrower whose sources include the owner sources', () => {
+    expect(borrowedTextureProblems([owner(['rock']), borrower(['other', 'rock'])])).toEqual([]);
+  });
+});
+
+describe('intraAssetDuplicateTextureProblems', () => {
+  const texture = (small: string, large: string, sameSha: boolean) => ({
+    variants: {
+      '1k': { file: small, sha256: 'a'.repeat(64) },
+      '2k': { file: large, sha256: (sameSha ? 'a' : 'b').repeat(64) },
+    },
+  });
+
+  it('flags a 2k file that duplicates the 1k bytes', () => {
+    const asset = {
+      id: 'x',
+      kind: 'decor',
+      textures: [texture('t_1k.ktx2', 't_2k.ktx2', true)],
+    } as unknown as OutputAsset;
+    expect(intraAssetDuplicateTextureProblems([asset])).toHaveLength(1);
+  });
+
+  it('accepts an aliased 2k and a genuinely larger one', () => {
+    const asset = {
+      id: 'x',
+      kind: 'decor',
+      textures: [texture('t_1k.ktx2', 't_1k.ktx2', true), texture('n_1k.ktx2', 'n_2k.ktx2', false)],
+    } as unknown as OutputAsset;
+    expect(intraAssetDuplicateTextureProblems([asset])).toEqual([]);
+  });
+});
+
 describe('the committed assets', () => {
   it('pass assets:check', () => {
     expect(checkAssets(loadCheckInput(REPO_ROOT))).toEqual([]);
+  });
+});
+
+describe('sharedKtx2Problems', () => {
+  function glb(
+    file: string,
+    slot: string,
+    uri: string,
+    sampler: Record<string, number> = { wrapS: 10497, wrapT: 10497 },
+  ): GlbDocument {
+    return {
+      file,
+      json: {
+        materials: [{ pbrMetallicRoughness: { [slot]: { index: 0 } } }],
+        textures: [{ sampler: 0, extensions: { KHR_texture_basisu: { source: 0 } } }],
+        samplers: [sampler],
+        images: [{ uri }],
+      },
+    };
+  }
+
+  it('accepts a shared URI with matching sampler and colour role', () => {
+    expect(
+      sharedKtx2Problems([
+        glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+        glb('rock/b/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('flags a shared URI with different samplers, naming both files', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'baseColorTexture', '../shared/t.ktx2', {
+        wrapS: 33071,
+        wrapT: 10497,
+      }),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/shared/t.ktx2');
+    expect(problems[0]).toContain('rock/a/lod0.glb');
+    expect(problems[0]).toContain('rock/b/lod0.glb');
+  });
+
+  it('flags a shared URI read as sRGB in one GLB and linear in another', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('sRGB');
+    expect(problems[0]).toContain('linear');
+    expect(problems[0]).toContain('rock/a/lod0.glb');
+    expect(problems[0]).toContain('rock/b/lod0.glb');
+  });
+
+  it('ignores a URI used by only one GLB', () => {
+    expect(
+      sharedKtx2Problems([
+        glb('rock/a/lod0.glb', 'baseColorTexture', 'textures/a.ktx2'),
+        glb('rock/b/lod0.glb', 'normalTexture', 'textures/b.ktx2'),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('treats an unset sampler filter as three defaults', () => {
+    const unset = glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2');
+    const explicit = glb('rock/b/lod0.glb', 'baseColorTexture', '../shared/t.ktx2', {
+      wrapS: 10497,
+      wrapT: 10497,
+      magFilter: 9729,
+      minFilter: 9987,
+    });
+    expect(sharedKtx2Problems([unset, explicit])).toEqual([]);
+  });
+
+  it('flags a conflict that only appears at the 2k URI', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t_1k.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t_2k.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/shared/t_2k.ktx2');
+    expect(problems[0]).toContain('as linear by rock/b/lod0.glb');
+  });
+
+  it('reports a 1k-only conflict once, not again under the derived 2k name', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t_1k.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t_1k.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/shared/t_1k.ktx2 is read as');
+    expect(problems[0]).not.toContain('t_2k.ktx2');
+  });
+
+  it('reports a derived-vs-direct conflict hidden behind a derived first use', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t_1k.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t_1k.ktx2'),
+      glb('rock/c/lod0.glb', 'baseColorTexture', '../shared/t_2k.ktx2'),
+    ]);
+    expect(problems).toHaveLength(2);
+    expect(problems.some((p) => p.includes('rock/shared/t_1k.ktx2'))).toBe(true);
+    expect(problems).toContainEqual(
+      expect.stringContaining(
+        'rock/shared/t_2k.ktx2 is read as sRGB by rock/c/lod0.glb but as linear by rock/b/lod0.glb',
+      ),
+    );
+  });
+
+  it('does not treat diffuseTexture as sRGB', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'diffuseTexture', '../shared/t.ktx2'),
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(
+      'read as sRGB by rock/a/lod0.glb but as linear by rock/b/lod0.glb',
+    );
+  });
+
+  it('reports both the colour role and the sampler when both differ', () => {
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'baseColorTexture', '../shared/t.ktx2'),
+      glb('rock/b/lod0.glb', 'normalTexture', '../shared/t.ktx2', { wrapS: 33071, wrapT: 10497 }),
+    ]);
+    expect(problems).toHaveLength(2);
+    expect(problems.join('\n')).toContain('sRGB');
+    expect(problems.join('\n')).toContain('sampler');
+  });
+
+  it('does not conflate the same relative name in different folders', () => {
+    expect(
+      sharedKtx2Problems([
+        glb('rock/a/lod0.glb', 'baseColorTexture', 'textures/t.ktx2'),
+        glb('rock/b/lod0.glb', 'normalTexture', 'textures/t.ktx2'),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('reads textures nested inside a material extension', () => {
+    const nested: GlbDocument = {
+      file: 'rock/b/lod0.glb',
+      json: {
+        materials: [{ extensions: { KHR_materials_sheen: { sheenColorTexture: { index: 0 } } } }],
+        textures: [{ sampler: 0, extensions: { KHR_texture_basisu: { source: 0 } } }],
+        samplers: [{ wrapS: 10497, wrapT: 10497 }],
+        images: [{ uri: '../shared/t.ktx2' }],
+      },
+    };
+    const problems = sharedKtx2Problems([
+      glb('rock/a/lod0.glb', 'normalTexture', '../shared/t.ktx2'),
+      nested,
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('rock/b/lod0.glb');
   });
 });

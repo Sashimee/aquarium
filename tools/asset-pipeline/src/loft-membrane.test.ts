@@ -23,8 +23,19 @@ const finTexture: FinTexture = (fin, u, v, variant) => [
 ];
 
 describe('membrane lofts', () => {
-  it('covers the three roster lofts', () => {
-    expect(recipes).toHaveLength(3);
+  it('covers the membrane roster lofts', () => {
+    expect(recipes.map((r) => r.id)).toEqual([
+      'harlequin-rasbora',
+      'six-line-wrasse',
+      'firefish',
+      'labidochromis-caeruleus',
+      'melanochromis-auratus-female',
+      'altolamprologus-calvus',
+      'neolamprologus-brichardi',
+      'aulonocara-baenschi',
+      'aulonocara-baenschi-female',
+      'neolamprologus-multifasciatus',
+    ]);
   });
 
   for (const recipe of recipes) {

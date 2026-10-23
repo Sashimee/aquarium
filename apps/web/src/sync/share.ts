@@ -1,3 +1,4 @@
+import { roomTitle } from './roomCatalog';
 import {
   shareTokenSchema,
   type Fish,
@@ -6,6 +7,7 @@ import {
   type ReactionKind,
   type Tank,
 } from '@aquarium/shared';
+import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import { ApiRequestError } from '../ui/api';
 import { bundledCommonName } from './bundledSpecies';
@@ -133,8 +135,14 @@ export function reactionButtonName(kind: ReactionKind, count: number, mine: bool
   return `${REACTION_LABEL[kind]}, ${count} ${noun}${mine ? ', your choice' : ''}`;
 }
 
+const PUBLIC_ID_PREFIX = 'public:';
+
 export function publicTankId(tank: Pick<PublicTank, 'seed'>): string {
-  return `public:${tank.seed.toString(16)}`;
+  return `${PUBLIC_ID_PREFIX}${tank.seed.toString(16)}`;
+}
+
+export function isPublicTankId(tankId: string): boolean {
+  return tankId.startsWith(PUBLIC_ID_PREFIX);
 }
 
 /** Visitors get fish without ids; the stable per-fish seed stands in so the sim keeps them apart. */
@@ -155,7 +163,21 @@ export function publicTankLoaded(tank: PublicTank): InteractionEvents['tank:load
     decorLayout: tank.decorLayout,
     decorEdited: tank.decorEdited,
     backgroundId: tank.backgroundId,
+    roomId: tank.roomId,
   };
+}
+
+/** The lamp hours are the owner's: `tank:lamp` is how the hood follows a tank other than the viewer's own. */
+export function announcePublicTank(
+  interaction: EventBus<InteractionEvents>,
+  tank: PublicTank,
+): string {
+  const tankId = publicTankId(tank);
+  const { intensity, onHour, offHour } = tank.equipment.light;
+  interaction.emit('tank:loaded', publicTankLoaded(tank));
+  interaction.emit('tank:water', { tankId, water: tank.water });
+  interaction.emit('tank:lamp', { tankId, intensity, onHour, offHour });
+  return tankId;
 }
 
 export function publicReportLines(tank: PublicTank): string[] {
@@ -172,5 +194,6 @@ export function publicReportLines(tank: PublicTank): string[] {
   if (dead.length > 0) {
     lines.push(`${dead.map((f) => f.name).join(', ')} ${dead.length === 1 ? 'has' : 'have'} died.`);
   }
+  lines.push(`Room: ${roomTitle(tank.roomId)}.`);
   return lines;
 }

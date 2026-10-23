@@ -1,5 +1,7 @@
 import {
   apiErrorSchema,
+  biomeSchema,
+  creatableBiomeSchema,
   decorLayoutSchema,
   DEFAULT_EQUIPMENT,
   personalitySchema,
@@ -21,7 +23,8 @@ import { MAX_FISH_PER_TANK } from '@aquarium/sim/lifecycle';
 import { schema } from './db/index.ts';
 import { personalityFromFishId } from './personality.ts';
 import { hashShareToken } from './shareToken.ts';
-import { DEFAULT_CARE_LIMITS } from './tanks.ts';
+import { loadPresets } from './presets.ts';
+import { DEFAULT_CARE_LIMITS, hasShelter } from './tanks.ts';
 import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
@@ -146,6 +149,7 @@ describe('tanks and fish', () => {
     const tank = await createTank(h, cookie);
     expect(tank.chemistry).toEqual(newTankChemistry('freshwater'));
     expect(tank.equipment).toEqual(DEFAULT_EQUIPMENT);
+    expect(tank.co2OwnedTier).toBe(0);
     const stocked = await addFish(h, cookie, tank.id);
     expect(stocked.fish[0]).toMatchObject({
       stage: 'adult',
@@ -196,19 +200,40 @@ describe('tanks and fish', () => {
     expect(read.equipment.light).toEqual({ tier: 1, ...light });
   });
 
-  it('gives a new tank of every biome a heater', async () => {
+  it('gives a new tank of every biome a heater, and finds its preset shelter', async () => {
     const cookie = await signedIn(h);
     for (const biome of ['freshwater', 'reef'] as const) {
       const created = await createTank(h, cookie, biome);
       expect(created.equipment.heater.tier, biome).toBeGreaterThanOrEqual(1);
     }
+    const presets = loadPresets();
+    const tank = await createTank(h, cookie);
+    const readRow = async () => {
+      const [row] = await h.database.db
+        .select()
+        .from(schema.tanks)
+        .where(eq(schema.tanks.id, tank.id));
+      if (!row) throw new Error('no tank row');
+      return row;
+    };
+    const unedited = await readRow();
+    expect(unedited.decorLayout).toBeNull();
+    expect(hasShelter(unedited, presets)).toBe(true);
+    expect(hasShelter({ ...unedited, biome: 'cichlid' }, presets)).toBe(true);
+    expect(hasShelter({ ...unedited, biome: 'cichlid', size: 'nano30' }, presets)).toBe(true);
+
+    await h.database.db
+      .update(schema.tanks)
+      .set({ decorLayout: [] })
+      .where(eq(schema.tanks.id, tank.id));
+    expect(hasShelter(await readRow(), presets)).toBe(false);
   });
 
   it('creates, lists, renames and re-lays-out a tank, and validates input', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
     expect(tank).toMatchObject({ name: 'Home', biome: 'freshwater', fish: [], memorials: [] });
-    expect(tank.water).toEqual({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 });
+    expect(tank.water).toEqual({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 });
 
     const list = tankListSchema.parse((await call(h, cookie, 'GET', '/api/tanks')).json());
     expect(list.map((t) => t.id)).toEqual([tank.id]);
@@ -273,6 +298,54 @@ describe('tanks and fish', () => {
     expect(JSON.stringify(wrongBiome.json())).toContain('backgroundId');
     const after = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
     expect(after.backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
+  });
+
+  it('moves a tank only into rooms the owner holds', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    expect(tank.roomId).toBe('room-living');
+    expect(tank.roomSetAt).toBeNull();
+
+    const bedroom = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-bedroom',
+    });
+    expect(bedroom.statusCode).toBe(200);
+    expect(tankSchema.parse(bedroom.json()).roomId).toBe('room-bedroom');
+    expect(tankSchema.parse(bedroom.json()).roomSetAt).not.toBeNull();
+
+    const locked = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-library',
+    });
+    expect(locked.statusCode).toBe(409);
+    const error = apiErrorSchema.parse(locked.json()).error;
+    expect(error.code).toBe('conflict');
+    expect(error.reason).toBe('room_not_owned');
+    const afterRefusal = tankSchema.parse(
+      (await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json(),
+    );
+    expect(afterRefusal.roomId).toBe('room-bedroom');
+    expect(afterRefusal.roomSetAt).toBe(tankSchema.parse(bedroom.json()).roomSetAt);
+
+    const [owner] = await h.database.db
+      .select({ ownerId: schema.tanks.ownerId })
+      .from(schema.tanks)
+      .where(eq(schema.tanks.id, tank.id));
+    if (!owner?.ownerId) throw new Error('the tank row or its owner is missing');
+    await h.database.db
+      .insert(schema.ownedRooms)
+      .values({ userId: owner.ownerId, roomId: 'room-library' });
+    const unlocked = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-library',
+    });
+    expect(tankSchema.parse(unlocked.json()).roomId).toBe('room-library');
+
+    const studio = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { roomId: null });
+    expect(tankSchema.parse(studio.json()).roomId).toBeNull();
+
+    const unknownRoom = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-x',
+    });
+    expect(unknownRoom.statusCode).toBe(400);
   });
 
   it('leaves the name alone when the background in the same PATCH is rejected', async () => {
@@ -404,6 +477,20 @@ describe('tanks and fish', () => {
     expect(unknown.statusCode).toBe(400);
   });
 
+  it.each(['stage', 'idempotencyKey'])(
+    'rejects add-fish without %s and names it',
+    async (field) => {
+      const cookie = await signedIn(h);
+      const tank = await createTank(h, cookie);
+      const payload = Object.fromEntries(
+        Object.entries(fishPayload('neon-tetra', 'Blip')).filter(([key]) => key !== field),
+      );
+      const res = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, payload);
+      expect(res.statusCode).toBe(400);
+      expect(JSON.stringify(res.json())).toContain(field);
+    },
+  );
+
   it('enforces the bioload capacity of a tank', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
@@ -491,6 +578,28 @@ describe('server-authoritative lifecycle', () => {
     const lagMs = h.clock.now() - (row?.lastTickAt.getTime() ?? 0);
     expect(lagMs).toBeGreaterThanOrEqual(0);
     expect(lagMs).toBeLessThan(10 * 60_000 + 5_000);
+  });
+
+  it('lets the clean-up crew graze algae while the owner is away', async () => {
+    const cookie = await signedIn(h);
+    const withCrew = await createTank(h, cookie);
+    const without = await createTank(h, cookie);
+    for (let i = 0; i < 8; i++) {
+      await addFish(h, cookie, withCrew.id, 'nerite-snail', `Snail ${i}`);
+    }
+    await addFish(h, cookie, without.id, 'neon-tetra');
+    for (const id of [withCrew.id, without.id]) {
+      await h.database.db
+        .update(schema.tanks)
+        .set({ water: { ammonia: 0, nitrate: 0, algae: 0.6, uneatenFood: 3 } })
+        .where(eq(schema.tanks.id, id));
+    }
+    await advance(h, 1 * DAY);
+    const read = async (id: string) =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json());
+    const crewed = await read(withCrew.id);
+    const bare = await read(without.id);
+    expect(crewed.water.algae).toBeLessThan(bare.water.algae);
   });
 
   it('breeds a fed pair in range, stores the fry and reports them as away', async () => {
@@ -624,7 +733,7 @@ describe('server-authoritative lifecycle', () => {
       { tankId: tank.id, day: iso(14) },
       { tankId: tank.id, day: iso(40) },
     ]);
-    await pruneExpired(h.database);
+    await pruneExpired(h.database, h.clock);
     const kept = await h.database.db
       .select()
       .from(schema.tankVisits)
@@ -762,6 +871,7 @@ describe('care actions and feeding validation', () => {
         wallet: { max: 100, windowMs: 60_000 },
         purchase: { max: 100, windowMs: 60_000 },
         replay: { max: 100, windowMs: 60_000 },
+        gift: { max: 100, windowMs: 60_000 },
       },
     });
   });
@@ -894,7 +1004,7 @@ describe('care actions and feeding validation', () => {
         batchId: old,
         createdAt: new Date(Date.now() - 2 * DAY * 60_000),
       });
-      await pruneExpired(h.database);
+      await pruneExpired(h.database, h.clock);
       const stale = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/ate`, {
         batchId: old,
         reports: [
@@ -940,7 +1050,7 @@ describe('care actions and feeding validation', () => {
         batchId: old,
         createdAt: new Date(Date.now() - 2 * DAY * 60_000),
       });
-      await pruneExpired(h.database);
+      await pruneExpired(h.database, h.clock);
       const left = await h.database.db
         .select()
         .from(schema.ateBatches)
@@ -1377,15 +1487,21 @@ describe('tank sizes, quarantine and sharing', () => {
     }
   });
 
-  it('refuses a non-nano quarantine tank, an unknown size and an unplayable biome', async () => {
+  it('refuses a bad quarantine, size or biome and creates a mangrove tank', async () => {
     const cookie = await signedIn(h);
     for (const body of [
       { name: 'Q', biome: 'freshwater', quarantine: true },
       { name: 'Q', biome: 'freshwater', size: 'huge' },
-      { name: 'Q', biome: 'mangrove' },
+      { name: 'Q', biome: 'tundra' },
+      ...biomeSchema.options
+        .filter((biome) => !creatableBiomeSchema.safeParse(biome).success)
+        .map((biome) => ({ name: 'Q', biome })),
     ]) {
       expect((await create(cookie, body)).statusCode).toBe(400);
     }
+    const res = await create(cookie, { name: 'Roots', biome: 'mangrove' });
+    expect(res.statusCode).toBe(201);
+    expect(tankSchema.parse(res.json()).biome).toBe('mangrove');
   });
 
   it('does not count the quarantine tank towards the six', async () => {

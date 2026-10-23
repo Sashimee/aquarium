@@ -30,6 +30,7 @@ import {
   type Stimulus,
   type TankSpaceWorldConfig,
 } from '@aquarium/sim';
+import type { DaylightChange } from '../engine/daylight';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import { releaseAll } from '../engine/lifecycle';
@@ -58,20 +59,24 @@ import {
 } from './instances';
 import {
   drawsAsImpostor,
-  effectiveDistance,
-  markNearest,
+  IMPOSTOR_LOD,
+  inDisplay,
+  meshLod,
+  modelFraming,
   mouthFade,
+  rankMeshes,
   selectLod,
+  type AtlasFraming,
   type ImpostorChoice,
   type LodThresholds,
 } from './lod';
 import { writeDiseaseSigns } from './disease';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import {
-  disposeImpostorAtlas,
   ImpostorInstanceData,
   impostorStrip,
   loadImpostorAtlas,
+  releaseImpostorAtlas,
   type ImpostorAtlas,
   type ImpostorValues,
 } from './impostor';
@@ -114,6 +119,7 @@ import {
   SimErrorGate,
   SimInitTimeout,
   SimWorldSpec,
+  sendLight,
   stageChanges,
   staleStages,
   startWorld,
@@ -121,7 +127,7 @@ import {
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesGrowth, speciesInput } from './species';
 import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
-import { isFinned, SWIM_MODES, SwimState, type SwimModeParams } from './swim';
+import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimSample } from './swim';
 import {
   CRAB_GAIT,
   curlAboveFloor,
@@ -224,7 +230,7 @@ interface FishRuntime {
   lod: number;
   /** Camera distance this frame, in metres. */
   cameraDistance: number;
-  /** Length-normalised camera distance this frame. */
+  /** `atlasDistance` this frame, set by `rankMeshes`. */
   distance: number;
   /** One of the tier's nearest fish, drawn as a mesh at any LOD short of lod2. */
   full: boolean;
@@ -250,6 +256,15 @@ interface FishRuntime {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
+
+/**
+ * A tier that caps its meshes draws the fish outside the cap at lod2 rather than drop their shadow
+ * (`drawsAsImpostor`), so lod2 casts there too.
+ */
+function castsAtLevel(settings: Readonly<TierSettings> | null, level: number): boolean {
+  if (settings === null || settings.shadowMapSize <= 0) return false;
+  return level < (settings.fishImpostors === null ? SHADOW_LODS : IMPOSTOR_LOD + 1);
+}
 /** The away replay's fast-forward, per PLAN §9.2. */
 const MAX_TIME_SCALE = 20;
 const MAX_OWED_STEPS = 60;
@@ -268,6 +283,10 @@ const SICK_PALING = 0.7;
 function youthOfFish(fish: RosterFish): number {
   const growth = speciesGrowth(fish.species)?.fryGrowth;
   return youthOf(maturityOf(fish.stage, ageDaysAt(fish.bornAtMs, Date.now()), growth));
+}
+
+function atlasFramingOf(rt: FishRuntime): AtlasFraming {
+  return modelFraming(rt.batch.model.entry);
 }
 
 function capacityFor(needed: number): number {
@@ -421,7 +440,7 @@ export class FishSystem {
   private readonly batches = new BatchCache<SpeciesBatch>(
     (batch) => {
       this.disposeLods(batch);
-      if (batch.atlas.kind === 'ready') disposeImpostorAtlas(batch.atlas.atlas);
+      if (batch.atlas.kind === 'ready') releaseImpostorAtlas(batch.atlas.atlas);
       batch.atlas = { kind: 'failed' };
       disposeFishModel(batch.model);
     },
@@ -443,6 +462,10 @@ export class FishSystem {
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
   private readonly nudgeListeners = new Set<(nudge: BallNudge) => void>();
+  private readonly simClientListeners = new Set<(client: SimClient) => void>();
+  private readonly worldListeners = new Set<(epoch: number | null) => void>();
+  /** The running world's epoch at `ready`, or null with no world. */
+  private worldEpoch: number | null = null;
   private readonly nudge: { toyId: string | null; ix: number; iz: number } = {
     toyId: null,
     ix: 0,
@@ -498,6 +521,7 @@ export class FishSystem {
   private readonly quat = new Float32Array(4);
   private readonly toCamera = new Vector3();
   private readonly liftUp = new Vector3();
+  private readonly jabAhead = new Vector3();
   private readonly viewDirection: [number, number, number] = [1, 0, 0];
   private readonly frames: FrameSelection = { i: 0, j: 0, fx: 0, fy: 0 };
   private readonly impostorValues: ImpostorValues = {
@@ -521,6 +545,7 @@ export class FishSystem {
     velvet: 0,
   };
   private readonly pose = createPose();
+  private readonly swimSample: SwimSample = { speed: 0, yawRate: 0, thrust: 1, state: -1 };
   private readonly walkSample: WalkSample = {
     speed: 0,
     state: -1,
@@ -643,10 +668,10 @@ export class FishSystem {
         this.timeScale = Number.isFinite(scale) ? Math.min(Math.max(scale, 1), MAX_TIME_SCALE) : 1;
         this.extraSteps = 0;
       }),
-      engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),
+      engine.events.on('engine:daylight', (change) => this.setDaylight(change)),
       engine.events.on('engine:temporal-resolve', () => this.applyFeatures(engine.quality.tier)),
     );
-    this.setDaylight(engine.daylight);
+    this.setDaylight({ level: engine.daylight, settled: true });
   }
 
   /** Applies a saved-tank event; see `InteractionEvents` for the contract. */
@@ -704,7 +729,8 @@ export class FishSystem {
 
   /**
    * Moves the swimming space to `tank`: the fish box and the sim's world are rebuilt around it, so
-   * nobody swims outside the new glass. Stock and the saved tank stay as they are.
+   * nobody swims outside the new glass. The demo stock is re-picked for the new size and shown if no
+   * tank is loaded; a loaded tank's stock and the saved tank stay as they are.
    */
   setTank(tank: TankDimensions): void {
     if (this.disposed || sameTank(tank, this.tank)) return;
@@ -773,8 +799,11 @@ export class FishSystem {
    */
   setColliders(colliders: readonly Collider[]): void {
     if (this.disposed) return;
-    this.spec.setDecor(colliders);
-    if (this.simReady) this.sim.setDecor(colliders);
+    const anchors = this.spec.setDecor(colliders);
+    if (this.simReady) {
+      this.sim.setDecor(colliders);
+      if (anchors !== null) this.sim.setAnchors(anchors);
+    }
     this.support = new CarcassSupport(colliders);
     this.resettleCarcasses();
   }
@@ -830,6 +859,28 @@ export class FishSystem {
   onAte(listener: (events: readonly FishBite[]) => void): () => void {
     this.ateListeners.add(listener);
     return () => this.ateListeners.delete(listener);
+  }
+
+  /** Called with the sim client now and with each one that replaces a stuck worker's. */
+  onSimClient(listener: (client: SimClient) => void): () => void {
+    this.simClientListeners.add(listener);
+    listener(this.sim);
+    return () => this.simClientListeners.delete(listener);
+  }
+
+  /**
+   * Called with the running world's epoch at `ready` now and whenever a world begins, and with null
+   * now if none runs and whenever one stops. Events from the client before that epoch are stale.
+   */
+  onWorld(listener: (epoch: number | null) => void): () => void {
+    this.worldListeners.add(listener);
+    listener(this.worldEpoch);
+    return () => this.worldListeners.delete(listener);
+  }
+
+  private setWorldEpoch(epoch: number | null): void {
+    this.worldEpoch = epoch;
+    for (const listener of this.worldListeners) listener(epoch);
   }
 
   /** The nearest dead fish along `ray` that the server knows, or null. */
@@ -918,10 +969,10 @@ export class FishSystem {
   }
 
   /** Fish pale at night by their species' sensitivity, and the sim lets them rest. */
-  private setDaylight(level: number): void {
-    this.light = level;
-    this.night = 1 - level;
-    if (!this.disposed && this.simReady) this.sim.setLight(level);
+  private setDaylight(change: DaylightChange): void {
+    this.light = change.level;
+    this.night = 1 - change.level;
+    if (!this.disposed && this.simReady) sendLight(this.sim, change);
   }
 
   dispose(): void {
@@ -930,6 +981,8 @@ export class FishSystem {
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
     this.nudgeListeners.clear();
+    this.simClientListeners.clear();
+    this.worldListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
     releaseAll(this.cleanups.splice(0), 'FishSystem');
   }
@@ -1144,7 +1197,7 @@ export class FishSystem {
     loadImpostorAtlas(this.engine.ktx2, this.options.assetRoot, info).then(
       (atlas) => {
         if (this.disposed || batch.atlas.kind !== 'loading') {
-          disposeImpostorAtlas(atlas);
+          releaseImpostorAtlas(atlas);
           return;
         }
         batch.atlas = { kind: 'ready', atlas };
@@ -1417,6 +1470,7 @@ export class FishSystem {
     this.stream.reset();
     this.held.releaseAll();
     for (const rt of this.runtimes.values()) rt.finsSettling = true;
+    this.setWorldEpoch(null);
   }
 
   /** Every swimming fish on screen waits where it is for the next world. */
@@ -1511,11 +1565,12 @@ export class FishSystem {
         current: () => !this.disposed && generation === this.generation,
         light: () => this.light,
         stage: (simId) => this.roster.get(simId)?.stage,
-        visitDays: () => this.roster.recentVisitDays,
+        visitDays: () => this.roster.takeVisitDays(),
         begin: (ready) => {
           this.simReady = true;
           this.inWorld = new Set(ready.fishIds);
           this.stream.begin(ready.epoch, ready.fishIds);
+          this.setWorldEpoch(ready.epoch);
         },
       });
       if (this.pausedAtMs !== null && !this.disposed && generation === this.generation) {
@@ -1533,8 +1588,7 @@ export class FishSystem {
     worker.addEventListener('error', this.simErrors.workerFailed);
     sim.onSnapshot((snapshot) => {
       this.stepAwaitingSnapshot = false;
-      this.latestSimTimeS = snapshot.time;
-      this.stream.push(snapshot, performance.now());
+      if (this.stream.push(snapshot, performance.now())) this.latestSimTimeS = snapshot.time;
     });
     sim.onAte((events) => {
       for (const { fishId } of events) {
@@ -1567,12 +1621,12 @@ export class FishSystem {
     this.worker.terminate();
     this.worker = spawnSimWorker();
     this.sim = this.connectSim(this.worker);
+    for (const listener of this.simClientListeners) listener(this.sim);
   }
 
   private applyShadows(batch: SpeciesBatch): void {
-    const cast = (this.shadows?.shadowMapSize ?? 0) > 0;
     batch.lods.forEach((lod, level) => {
-      const castShadow = cast && level < SHADOW_LODS;
+      const castShadow = castsAtLevel(this.shadows, level);
       for (const mesh of lod.meshes) {
         if (mesh.castShadow !== castShadow) lod.warmed = false;
         mesh.castShadow = castShadow;
@@ -1621,7 +1675,9 @@ export class FishSystem {
     const { fish } = rt;
     pose.thrust = 1;
     const walk = this.walkSample;
+    const swim = this.swimSample;
     walk.state = -1;
+    swim.state = -1;
     walk.legPhase = rt.motion instanceof WalkState ? rt.motion.legPhase : 0;
     walk.flip = 0;
     walk.attached = 1;
@@ -1665,6 +1721,7 @@ export class FishSystem {
         pose.liveliness = 1;
         pose.thrust = frame[o + SnapshotField.Thrust] ?? 1;
         walk.state = frame[o + SnapshotField.State] ?? -1;
+        swim.state = walk.state;
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
         walk.flip = frame[o + SnapshotField.Flip] ?? 0;
         walk.attached = frame[o + SnapshotField.Attached] ?? 1;
@@ -1786,7 +1843,11 @@ export class FishSystem {
         this.walkSample.speed = this.pose.speed;
         motion.advance(deltaS * liveliness, this.walkSample);
       } else {
-        motion.advance(deltaS * liveliness, this.pose);
+        const swim = this.swimSample;
+        swim.speed = this.pose.speed;
+        swim.yawRate = this.pose.yawRate;
+        swim.thrust = this.pose.thrust;
+        motion.advance(deltaS * liveliness, swim);
       }
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
@@ -1794,14 +1855,12 @@ export class FishSystem {
       rt.liveliness = liveliness;
       const distance = this.position.distanceTo(camera);
       rt.cameraDistance = distance;
-      rt.distance = effectiveDistance(distance, rt.length);
       rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, rt.batch.lods.length);
-      if (rt.batch.impostor !== null) ranked.push(rt);
-      else rt.full = true;
+      ranked.push(rt);
     }
     this.bags.end();
-    if (impostors !== null) markNearest(ranked, impostors.fullMeshes);
-    const castsShadow = (this.shadows?.shadowMapSize ?? 0) > 0;
+    if (impostors !== null) rankMeshes(ranked, atlasFramingOf, impostors.fullMeshes);
+    else for (const rt of ranked) rt.full = true;
 
     for (const rt of this.runtimes.values()) {
       if (!rt.shown) continue;
@@ -1809,17 +1868,24 @@ export class FishSystem {
       this.quaternion.copy(rt.lastQuaternion);
       const { impostor } = rt.batch;
       const { motion } = rt;
+      // Only the drawn pose takes the peck's jab: a held fish restarts from `lastPosition` every
+      // frame and would otherwise creep forward by the jab again and again.
+      if (motion instanceof SwimState && motion.jab > 0) {
+        this.jabAhead.set(0, 0, motion.jab * rt.length).applyQuaternion(this.quaternion);
+        this.position.add(this.jabAhead);
+      }
       const choice = this.impostorChoice;
       choice.tierImpostors = impostors !== null;
       choice.available = impostor !== null && motion instanceof SwimState;
       choice.lod = rt.lod;
       choice.full = rt.full;
-      choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
+      choice.castsShadow = castsAtLevel(this.shadows, rt.lod);
       choice.display = rt.batch.displays ? Math.max(rt.display, rt.gillFlare) : 0;
       if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
         this.drawImpostor(rt, motion, impostor, camera);
       } else {
-        this.drawMesh(rt);
+        const full = rt.full || inDisplay(choice.display);
+        this.drawMesh(rt, meshLod(rt.lod, full, rt.batch.lods.length));
       }
     }
 
@@ -1860,9 +1926,9 @@ export class FishSystem {
     );
   }
 
-  /** Draws the runtime placed in `position`/`quaternion` with its LOD's mesh. */
-  private drawMesh(rt: FishRuntime): void {
-    const lod = rt.batch.lods[rt.lod];
+  /** Draws the runtime placed in `position`/`quaternion` with its mesh at `level`. */
+  private drawMesh(rt: FishRuntime, level: number): void {
+    const lod = rt.batch.lods[level];
     if (lod === undefined) return;
     const slot = this.placeInstance(lod, rt);
     const { motion, liveliness } = rt;

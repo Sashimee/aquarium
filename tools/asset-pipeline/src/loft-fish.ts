@@ -25,6 +25,7 @@ import { RAW_ROOT } from './source.ts';
 import { cropImage, decodeImage, type Rgba } from './textures.ts';
 import { MOUTH_ATTRIBUTE, FIN_ID_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
 import { bakeMouthMask } from './mouth.ts';
+import { CICHLID_LOFT_RECIPES } from './loft-cichlid-recipes.ts';
 
 interface PhotoSource {
   kind: 'photo';
@@ -54,6 +55,8 @@ interface SyntheticSource {
   tailPixel: [number, number];
   /** Reference photos the colours were painted by eye from. Verified to exist but not listed as sources: no pixels are reused, so the asset is CC0. */
   references?: string[];
+  /** Painted, translucent, ray-textured fins; needs `spec.membrane`. Roots cannot sample a photo here. */
+  finPalette?: FinPalette;
   paint(tn: number, yn: number): [number, number, number];
 }
 
@@ -61,13 +64,15 @@ export interface LoftFishRecipe {
   id: string;
   species: string;
   fallbackLengthM: number;
+  /** Multiplies the species-JSON length, for sexes that differ from the species value. */
+  lengthFactor?: number;
   spec: Omit<LoftSpec, 'standardLengthM'>;
   texture: PhotoSource | SyntheticSource;
   roughness: number;
   note: string;
 }
 
-function mix(
+export function mix(
   a: [number, number, number],
   b: [number, number, number],
   t: number,
@@ -75,7 +80,7 @@ function mix(
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
-function smooth(edge0: number, edge1: number, x: number): number {
+export function smooth(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
 }
@@ -256,7 +261,7 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
       data[o + 3] = 255;
     }
   const crop = { left: 0, top: 0, width: source.width, height: source.height };
-  const project = sideProjection({
+  const projectBody = sideProjection({
     standardLengthM: length,
     snoutY,
     tailY,
@@ -264,7 +269,24 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
     tailPixel: source.tailPixel,
     crop,
   });
-  return { image: { width: source.width, height: source.height, data }, project, sources: [] };
+  const body: Rgba = { width: source.width, height: source.height, data };
+  if (!source.finPalette) return { image: body, project: projectBody, sources: [] };
+  if (!spec.membrane) throw new Error(`${recipe.id}: a fin palette needs spec.membrane`);
+  const palette = source.finPalette;
+  for (const paint of Object.values(palette))
+    if (paint.rootFromPhoto)
+      throw new Error(`${recipe.id}: a synthetic texture has no photo to take fin roots from`);
+  const { image, finTexture, bodyVMax } = appendFinAtlas(body, palette);
+  const project: Projection = (behind, y) => {
+    const [u, v] = projectBody(behind, y);
+    return [u, Math.min(1, Math.max(0, v)) * bodyVMax];
+  };
+  return {
+    image,
+    project,
+    sources: [],
+    finTexture,
+  };
 }
 
 /** Royal gramma colours painted from the species' known pattern; no photo pixels are reused. */
@@ -374,7 +396,7 @@ export function paintWrasse(tn: number, yn: number): [number, number, number] {
   return colour;
 }
 
-export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
+const BASE_LOFT_FISH_RECIPES: LoftFishRecipe[] = [
   {
     id: 'bronze-corydoras',
     species: 'bronze-corydoras',
@@ -1087,6 +1109,11 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
   },
 ];
 
+export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
+  ...BASE_LOFT_FISH_RECIPES,
+  ...CICHLID_LOFT_RECIPES,
+];
+
 export function loftFishPart(
   recipe: LoftFishRecipe,
   standardLengthM: number,
@@ -1108,7 +1135,8 @@ export async function buildLoftFish(
   ctx: FishContext,
 ): Promise<OutputAsset> {
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
-  const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
+  const standardLengthM =
+    fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
   if (recipe.texture.kind === 'photo') ctx.verifySource(recipe.texture.sourceId);
   else for (const id of recipe.texture.references ?? []) ctx.verifySource(id);
   const { image, project, finUv, finTexture, sources } = await loadTexture(recipe);

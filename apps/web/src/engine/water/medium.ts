@@ -54,7 +54,7 @@ const DEFAULT_FIXTURE_HEIGHT = 1.2;
 const MIN_EXTINCTION = 1e-6;
 
 export interface WaterQuality {
-  /** CDOM absorption at 440 nm (1/m): ~0 for reef water, 0.1-0.5 for tannin-stained water. */
+  /** CDOM absorption at 440 nm (1/m): ~0 for reef water, a few 1/m for tannin-stained water. */
   cdom440: number;
   /** Scattering coefficient (1/m) from suspended particles. */
   turbidity: number;
@@ -225,20 +225,39 @@ export class WaterMedium {
     return this.segment(target, false).path;
   }
 
-  /** Distance from `origin` inside the water box to where a ray along `dir` leaves it. */
-  exitDistance(origin: Node<'vec3'>, dir: Node<'vec3'>): Node<'float'> {
+  /**
+   * Where a ray from `origin` inside the water box along `dir` leaves it: the distance, and the
+   * outward normal of the face it leaves through.
+   */
+  exit(origin: Node<'vec3'>, dir: Node<'vec3'>): { distance: Node<'float'>; normal: Node<'vec3'> } {
     const ahead = step(vec3(0), dir).toVar();
     const wall = mix(this.boxMin, this.boxMax, ahead);
     const t = wall
       .sub(origin)
       .mul(ahead.mul(2).sub(1))
-      .div(max(abs(dir), 1e-6));
-    return max(min(min(t.x, t.y), t.z), 0);
+      .div(max(abs(dir), 1e-6))
+      .toVar();
+    const nearest = min(min(t.x, t.y), t.z).toVar();
+    const onX = step(t.x, nearest);
+    const onY = step(t.y, nearest).mul(onX.oneMinus());
+    const onZ = onX.oneMinus().mul(onY.oneMinus());
+    const normal = vec3(onX, onY, onZ).mul(ahead.mul(2).sub(1));
+    return { distance: max(nearest, 0), normal };
   }
 
   /** Length of the camera ray through the whole box, for fragments on its far faces. */
   pathThroughBox(): Node<'float'> {
     return this.segment(positionWorld, true).path;
+  }
+
+  /**
+   * What the water between the camera and `target` does to the light from it: the transmittance,
+   * and the light scattered in on the way. Both are neutral for a target beyond the box.
+   */
+  fogTowardsCamera(target: Node<'vec3'>): { transmittance: Node<'vec3'>; inScatter: Node<'vec3'> } {
+    const { path, depth } = this.segment(target, false);
+    const transmittance = this.transmittance(path).toVar();
+    return { transmittance, inScatter: this.inScatter(transmittance, depth) };
   }
 
   /** Scene fog node: attenuates and in-scatters the material output of anything in the water. */

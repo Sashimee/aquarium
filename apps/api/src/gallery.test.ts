@@ -56,7 +56,7 @@ type Account = Awaited<ReturnType<typeof account>>;
 async function call(
   h: Harness,
   cookie: string | null,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   payload?: object,
 ) {
@@ -266,7 +266,8 @@ describe('gallery opt-in', () => {
     const rows = await h.database.db
       .select()
       .from(schema.auditLog)
-      .where(and(eq(schema.auditLog.tankId, id), eq(schema.auditLog.actorId, owner.userId)));
+      .where(and(eq(schema.auditLog.tankId, id), eq(schema.auditLog.actorId, owner.userId)))
+      .orderBy(schema.auditLog.id);
     expect(rows.filter((r) => r.action.startsWith('gallery_')).map((r) => r.action)).toEqual([
       'gallery_listed',
       'gallery_unlisted',
@@ -416,7 +417,7 @@ describe('voting', () => {
       { userId: old.userId, tankId: id, weekStart: weekAgo(91) },
       { userId: recent.userId, tankId: id, weekStart: weekAgo(89) },
     ]);
-    await pruneExpired(h.database);
+    await pruneExpired(h.database, h.clock);
     const left = await h.database.db
       .select({ userId: schema.tankVotes.userId })
       .from(schema.tankVotes)
@@ -463,6 +464,10 @@ describe('weekly winner', () => {
     const popular = await newTank(h, owner, 'Popular');
     const quiet = await newTank(h, owner, 'Quiet');
     const lastWeek = galleryWeekStart(h.clock.now());
+    expect(
+      (await call(h, owner.cookie, 'PATCH', `/api/tanks/${popular}`, { roomId: 'room-bedroom' }))
+        .statusCode,
+    ).toBe(200);
     await vote(h, voter, popular);
     await vote(h, other, popular);
     await vote(h, await account(h), quiet);
@@ -478,6 +483,7 @@ describe('weekly winner', () => {
     const [winner] = await winners(h);
     expect(winner).toMatchObject({ id: popular, votes: 2, weekStart: lastWeek });
     expect(winner?.weekEnd).toBe(thisWeek);
+    expect(winner?.roomId).toBe('room-bedroom');
 
     expect((await vote(h, voter, quiet)).statusCode).toBe(200);
     expect((await gallery(h, voter)).myVote).toBe(quiet);

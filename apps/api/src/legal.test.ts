@@ -350,6 +350,15 @@ describe('privacy and credits', () => {
       ).not.toThrow();
     });
 
+    it.each([
+      ['neolamprologus-brichardi', 'David J. Stang', 'CC-BY-SA-4.0'],
+      ['aulonocara-baenschi', 'Rjcastillo', 'CC-BY-SA-4.0'],
+      ['neolamprologus-multifasciatus', 'Richard A. Ingebrigtsen', 'CC-BY-SA-3.0'],
+    ])('accepts the approved %s photo and rejects another author', (species, author, licence) => {
+      expect(build({ ...photo, species, author, licence })).not.toThrow();
+      expect(build({ ...photo, species, author: 'Someone Else', licence })).toThrow(/not allowed/);
+    });
+
     it('accepts both approved pleco authors and rejects a third', () => {
       const pleco = { ...photo, species: 'bristlenose-pleco', licence: 'CC-BY-SA-4.0' };
       expect(build({ ...pleco, author: 'Júlio Reis' })).not.toThrow();
@@ -799,7 +808,7 @@ describe('maintenance', () => {
       expiresAt: new Date(Date.now() - 1000),
       updatedAt: new Date(),
     });
-    const { sessions } = await pruneExpired(h.database);
+    const { sessions } = await pruneExpired(h.database, h.clock);
     expect(sessions).toBe(1);
     expect((await counts(h, gina.userId)).sessions).toBe(1);
   });
@@ -811,9 +820,21 @@ describe('maintenance', () => {
         ('old', now() - interval '25 hours'),
         ('recent', now() - interval '23 hours')`,
     );
-    await pruneExpired(h.database);
+    await pruneExpired(h.database, h.clock);
     const rows = await h.database.pool.query('select key from mail_limit_hits');
     expect(rows.rows).toEqual([{ key: 'recent' }]);
+  });
+
+  it('prunes by the app clock: advancing time expires rows the database still considers fresh', async () => {
+    await h.database.pool.query('delete from mail_limit_hits');
+    await h.database.pool.query(`insert into mail_limit_hits (key, at) values ('fresh', now())`);
+    await pruneExpired(h.database, h.clock);
+    expect((await h.database.pool.query('select key from mail_limit_hits')).rows).toEqual([
+      { key: 'fresh' },
+    ]);
+    h.clock.advance(25 * 60 * 60_000);
+    await pruneExpired(h.database, h.clock);
+    expect((await h.database.pool.query('select key from mail_limit_hits')).rows).toEqual([]);
   });
 
   it('has an index on mail_limit_hits.at for the prune', async () => {

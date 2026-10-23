@@ -1,0 +1,30 @@
+{
+  "roomId": "room-beach",
+  "layout": [
+    {
+      "asset": "polyhaven-outdoor-table-chair-set-01",
+      "position": [-2.2, -0.75, 0.9],
+      "rotationY": 1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-lifebuoy",
+      "position": [-1.5, 0.25, -0.27],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-painted-wooden-bench",
+      "position": [1.3, -0.75, -0.1],
+      "rotationY": 0,
+      "scale": 1
+    }
+  ],
+  "light": {
+    "keyColor": "#fff8e0",
+    "keyIntensity": 3.2,
+    "ambientColor": "#d9f0ff",
+    "ambientIntensity": 0.65,
+    "windowPosition": [1.2, 0.8, -0.37]
+  }
+}

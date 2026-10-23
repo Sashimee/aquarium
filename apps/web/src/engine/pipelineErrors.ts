@@ -1,4 +1,13 @@
-import { getConsoleFunction, Material, setConsoleFunction, type Object3D } from 'three/webgpu';
+import {
+  getConsoleFunction,
+  Light,
+  LightShadow,
+  Material,
+  setConsoleFunction,
+  type Object3D,
+} from 'three/webgpu';
+import { isTransientFailure } from './effectsSlot';
+import { TierShadowNode } from './tierShadow';
 
 /**
  * A pipeline three failed to build. It logs the failure and from then on skips every draw that
@@ -192,16 +201,33 @@ export function materialIdOf(material: Material): number | null {
   return 'id' in material && typeof material.id === 'number' ? material.id : null;
 }
 
-/** Whether any object under `root`, hidden ones included, draws with material `id`. */
-export function usesMaterial(root: Object3D, id: number): boolean {
-  let found = false;
+/** How the scene draws a material: on an object or in a light's shadow pass; null if it does not. */
+export type MaterialUse = 'object' | 'shadow' | null;
+
+/**
+ * How anything under `root`, hidden ones included, draws with material `id`. A light's shadow
+ * passes draw its casters with the light's shadow material, so three labels their pipelines with
+ * that; it counts for a light that casts through a TierShadow node that has drawn, and is read
+ * from the node, as `getShadowMaterial` would create one for a light that has none.
+ */
+export function materialUse(root: Object3D, id: number): MaterialUse {
+  let use: MaterialUse = null;
   root.traverse((object) => {
-    if (found || !('material' in object)) return;
+    if (use !== null) return;
+    if (object instanceof Light) {
+      const shadow: unknown = 'shadow' in object ? object.shadow : undefined;
+      const node =
+        object.castShadow && shadow instanceof LightShadow ? shadow.shadowNode : undefined;
+      const drawn = node instanceof TierShadowNode ? node.shadowMaterial : null;
+      if (drawn !== null && materialIdOf(drawn) === id) use = 'shadow';
+      return;
+    }
+    if (!('material' in object)) return;
     const material: unknown = object.material;
     const materials: unknown[] = Array.isArray(material) ? material : [material];
-    found = materials.some((m) => m instanceof Material && materialIdOf(m) === id);
+    if (materials.some((m) => m instanceof Material && materialIdOf(m) === id)) use = 'object';
   });
-  return found;
+  return use;
 }
 
 export interface FailureContext {
@@ -217,8 +243,8 @@ export interface FailureContext {
 
 /**
  * Whether a failure is the effects' to answer for, by dropping them for the plain render. Their
- * post passes draw materials that are not in the scene; so do shadow maps, which this cannot tell
- * apart, but the plain render is the safe answer to those too. Under a temporal resolve a scene
+ * post passes draw materials that are not in the scene, and so may another offscreen pass, which
+ * this cannot tell apart, but the plain render is the safe answer to those too. Under a temporal resolve a scene
  * material may fail only for the velocity output, so the plain render is tried for it as well. An
  * unnamed failure is put on the effects only once: the next one may be a scene material.
  */
@@ -240,16 +266,25 @@ export interface DroppableEffects {
 
 export type ReportFailure = (message: string, cause: unknown) => void;
 
+/** Queues a rebuild of the scene's materials; false once that has been tried too often. */
+export type RebuildMaterials = () => boolean;
+
 /**
  * Answers each pipeline failure once: by dropping the effects while that can still help, otherwise
  * by reporting it. The materials blamed on dropped effects stay quiet afterwards, as their pending
  * builds may still fail, except a scene material, which is reported if it fails without them too.
- * A material already reported is broken without the effects' help, so it never drops them.
+ * A material already reported is broken without the effects' help, so it never drops them. A
+ * transient failure (a submit that bound a freed resource, reported by whichever async compile had
+ * its error scope open) says nothing about the material, so for a scene material, or one it cannot
+ * name, it rebuilds the scene's materials instead, which three would otherwise skip for the
+ * session; a shadow pass counts as the scene's (`materialUse`), since its render objects go with
+ * their casters' materials. A transient failure outside the scene is answered like any other.
  *
- * Dropped effects are never re-attached, so under a temporal resolve (ultra) one broken scene
- * material costs the post effects for the session: only the plain render tells it from a
- * velocity-only failure. On WebGPU that test can misfire: failures arrive asynchronously, labelled
- * by material alone, so a late one from the earlier velocity build reads as the plain one failing.
+ * The engine rebuilds dropped effects only after a transient failure, so under a temporal resolve
+ * (ultra) one broken scene material costs the post effects for the session: only the plain render
+ * tells it from a velocity-only failure. On WebGPU that test can misfire: failures arrive
+ * asynchronously, labelled by material alone, so a late one from the earlier velocity build reads
+ * as the plain one failing.
  */
 export class PipelineFailureHandler {
   private dropping = false;
@@ -260,14 +295,18 @@ export class PipelineFailureHandler {
 
   constructor(
     private readonly effects: DroppableEffects,
-    private readonly inScene: (materialId: number) => boolean,
+    private readonly sceneUse: (materialId: number) => MaterialUse,
     private readonly report: ReportFailure,
+    private readonly rebuild: RebuildMaterials,
   ) {}
+
+  private readonly inScene = (materialId: number): boolean => this.sceneUse(materialId) !== null;
 
   handle(failure: PipelineFailure): void {
     const id = failure.materialId;
     const cause = new Error(failure.message);
     if (id !== null && this.reported.has(id)) return;
+    if (this.rebuildsFor(failure, cause)) return;
     if (id !== null && this.blamed.has(id)) {
       if (this.effects.active || !this.suspects.has(id)) return;
       this.suspects.delete(id);
@@ -277,7 +316,15 @@ export class PipelineFailureHandler {
     const key = id ?? failure.message;
     if (this.reported.has(key)) return;
     this.reported.add(key);
-    this.report(reportMessage(failure, id !== null && !this.inScene(id)), cause);
+    this.report(reportMessage(failure, id === null ? 'object' : this.sceneUse(id)), cause);
+  }
+
+  private rebuildsFor(failure: PipelineFailure, cause: Error): boolean {
+    if (failure.kind !== 'render' || !isTransientFailure(cause)) return false;
+    const id = failure.materialId;
+    // Rebuilding releases only the scene's render objects, so it cannot reach a pass outside it.
+    if (id !== null && (this.effects.ownsMaterial(id) || !this.inScene(id))) return false;
+    return this.rebuild();
   }
 
   private blame(failure: PipelineFailure, cause: Error): boolean {
@@ -297,15 +344,23 @@ export class PipelineFailureHandler {
     if (!this.dropping) {
       this.dropping = true;
       // WebGL reports from inside the draw; tearing the post chain down mid-render is not safe.
-      queueMicrotask(() => this.effects.fail(cause));
+      queueMicrotask(() => {
+        try {
+          this.effects.fail(cause);
+        } finally {
+          // Effects attached again later are answered for afresh.
+          this.dropping = false;
+        }
+      });
     }
     return true;
   }
 }
 
-function reportMessage(failure: PipelineFailure, outsideScene: boolean): string {
+function reportMessage(failure: PipelineFailure, use: MaterialUse): string {
   if (failure.kind === 'compute') return 'A GPU compute pass failed to build and does not run';
-  // Left over from dropped effects or a shadow map: nothing tells the two apart.
-  if (outsideScene) return 'A pass outside the scene failed to build and is skipped';
+  if (use === 'shadow') return "An object's shadow failed to build and is not drawn";
+  // Left over from dropped effects or another offscreen pass: nothing tells them apart.
+  if (use === null) return 'A pass outside the scene failed to build and is skipped';
   return 'A material failed to build and is not drawn';
 }

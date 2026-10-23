@@ -10,6 +10,8 @@ describe('parseEngineOptions', () => {
       clock: null,
       stats: false,
       tankSize: 'standard',
+      frameRate: null,
+      pixelRatio: null,
     });
   });
 
@@ -26,6 +28,8 @@ describe('parseEngineOptions', () => {
       clock: null,
       stats: false,
       tankSize: 'standard',
+      frameRate: null,
+      pixelRatio: null,
     });
     expect(parseEngineOptions('?tier=low&adaptive=1').adaptive).toBe(false);
   });
@@ -38,6 +42,8 @@ describe('parseEngineOptions', () => {
       clock: null,
       stats: false,
       tankSize: 'standard',
+      frameRate: null,
+      pixelRatio: null,
     });
   });
 
@@ -58,6 +64,16 @@ describe('parseEngineOptions', () => {
     expect(parseEngineOptions('?size=standard').tankSize).toBe('standard');
   });
 
+  it('reads the frame rate and pixel ratio overrides', () => {
+    expect(parseEngineOptions('?fps=display')).toMatchObject({ frameRate: 'display' });
+    expect(parseEngineOptions('?fps=capped')).toMatchObject({ frameRate: 'capped' });
+    expect(parseEngineOptions('?dpr=device')).toMatchObject({ pixelRatio: 'device' });
+    expect(parseEngineOptions('?dpr=capped&fps=display')).toMatchObject({
+      frameRate: 'display',
+      pixelRatio: 'capped',
+    });
+  });
+
   it('rejects unknown values with a message naming the valid ones', () => {
     expect(() => parseEngineOptions('?size=huge')).toThrow(/nano30, standard, std200, long300/);
     expect(() => parseEngineOptions('?backend=vulkan')).toThrow(/auto, webgpu, webgl/);
@@ -65,5 +81,7 @@ describe('parseEngineOptions', () => {
     expect(() => parseEngineOptions('?adaptive=yes')).toThrow(/0 or 1/);
     expect(() => parseEngineOptions('?stats=yes')).toThrow(/0 or 1/);
     expect(() => parseEngineOptions('?clock=noon')).toThrow(/HH:MM, day or night/);
+    expect(() => parseEngineOptions('?fps=144')).toThrow(/capped, display/);
+    expect(() => parseEngineOptions('?dpr=2')).toThrow(/capped, device/);
   });
 });

@@ -374,7 +374,7 @@ describe('committed backgrounds', () => {
   const backgrounds = manifest.assets.filter((a) => a.kind === 'background');
 
   it('builds every manifest background, each tier within the size budget', () => {
-    expect(backgrounds).toHaveLength(10);
+    expect(backgrounds).toHaveLength(25);
     for (const entry of backgrounds) {
       const built = index.assets.find((a) => a.kind === 'background' && a.id === entry.id);
       expect(built, `${entry.id} is not in index.json`).toBeDefined();

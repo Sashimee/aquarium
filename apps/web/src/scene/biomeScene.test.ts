@@ -242,6 +242,7 @@ describe('BiomeScene', () => {
         tanks: vi.fn().mockResolvedValue(tanks),
         tank: vi.fn((id: string) => Promise.resolve(tanks.find((t) => t.id === id))),
         wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+        ownedRooms: vi.fn().mockResolvedValue([]),
         reportAte: vi.fn(
           () => new Promise<Tank>((resolve) => setTimeout(() => resolve(reefA), 15)),
         ),

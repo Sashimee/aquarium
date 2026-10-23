@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { describe, expect, it } from 'vitest';
-import { createMailer, escapeHtml, ipBucket, MailThrottledError } from './mail.ts';
+import { createMailer, escapeHtml, ipBucket, MailThrottledError, receiptMessage } from './mail.ts';
 import { memoryHitStore } from './rate-limit.ts';
 
 const TOKEN = `eyJhbGciOiJIUzI1NiJ9.${'abcDEF0123456789_-'.repeat(18)}.sig`;
@@ -366,5 +366,57 @@ describe('consumeIp bucketing', () => {
     const m = mailer();
     for (let i = 0; i < 5; i++) await m.consumeIp('2001:db8:0:1::/64');
     expect((await m.consumeIp('2001:db8:0:1::5')).wait).toBe(0);
+  });
+});
+
+describe('receipt mail', () => {
+  const receipt = {
+    description: '550 Pearls',
+    amountCents: 499,
+    pearls: 550,
+    consentAt: new Date('2026-10-22T10:00:00Z'),
+  };
+
+  it('states the price, the Pearls, and both consents in text and html', () => {
+    const { text, html } = receiptMessage(receipt);
+    for (const body of [text, html]) {
+      expect(body).toContain('550 Pearls');
+      expect(body).toContain('€4.99');
+      expect(body).toContain('immediate delivery');
+      expect(body).toContain('right of withdrawal');
+      expect(body).toContain('2026-10-22T10:00:00.000Z');
+      expect(body).toContain('lost when you delete your account');
+    }
+  });
+
+  it('leaves out the Pearls line for a subscription and the date when it is unknown', () => {
+    const { text } = receiptMessage({ ...receipt, pearls: null, consentAt: null });
+    expect(text).not.toContain('Pearls added');
+    expect(text).not.toContain('Confirmed on');
+  });
+
+  it('is never throttled, whatever the recipient cap, cooldown or global cap', async () => {
+    const now = 0;
+    const sent: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async (data: { to: string }) => {
+      sent.push(data.to);
+    }) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => now),
+      log: () => undefined,
+      limits: {
+        perRecipient: { max: 2, windowMs: 3_600_000 },
+        verificationCooldown: { max: 1, windowMs: 60_000 },
+        perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 1, windowMs: 60_000 },
+      },
+    });
+    await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
+    await mailer.sendReceipt('a@bas.lu', receipt);
+    await mailer.sendReceipt('a@bas.lu', receipt);
+    await mailer.sendReceipt('a@bas.lu', receipt);
+    await mailer.sendReceipt('a@bas.lu', receipt);
+    expect(sent).toHaveLength(5);
   });
 });

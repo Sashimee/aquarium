@@ -12,6 +12,7 @@ import { speciesNameMap, type SpeciesNames } from '../sync/speciesNames';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
 import type { TankSession } from '../sync/session';
 import { useApi, useAuth, useBridge, useRoute } from './context';
+import { isReadOnlyView } from './router';
 
 interface SessionContextValue {
   session: TankSession | null;
@@ -36,10 +37,8 @@ export function useTankSession(): TankSession {
 
 export function useSessionState(): SessionState {
   const { session, loading } = useContext(SessionContext);
-  return useSyncExternalStore(
-    session ? session.subscribe : noopSubscribe,
-    session ? session.getState : () => (loading ? LOADING_STATE : INITIAL_STATE),
-  );
+  const getState = session ? session.getState : () => (loading ? LOADING_STATE : INITIAL_STATE);
+  return useSyncExternalStore(session ? session.subscribe : noopSubscribe, getState, getState);
 }
 
 export function useActiveTank(): Tank | null {
@@ -58,7 +57,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const { interaction } = useBridge();
   const { user, status } = useAuth();
   const [session, setSession] = useState<TankSession | null>(null);
-  const viewing = useRoute().name === 'public-tank';
+  const viewing = isReadOnlyView(useRoute());
   const verified = !viewing && status !== 'loading' && user?.emailVerified === true;
   const [needed, setNeeded] = useState(false);
   useEffect(() => {

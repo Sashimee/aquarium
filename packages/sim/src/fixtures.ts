@@ -1,8 +1,10 @@
 import { createTankSpace, type Collider, type TankSpace } from '@aquarium/shared';
 import { basinOf, type Basin, type TankDimensions } from './basin.ts';
 import type { Anchor } from './behaviour.ts';
+import type { SimClient } from './bridge.ts';
 import { FOOD_PARTICLES, FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
 import type { Sdf } from './sdf.ts';
+import type { Snapshot } from './snapshot.ts';
 import type { SpeciesInput } from './species.ts';
 import type { FishSpawn, WorldConfig } from './world.ts';
 
@@ -378,6 +380,36 @@ export const hermitCrab: SpeciesInput = {
   lifecycle: { diet: ['pellets', 'algae-wafer', 'flakes'] },
 };
 
+/**
+ * The cleaner wrasse, from content/species/cleaner-wrasse.json plus the `cleaner` trait; not in
+ * `ARCHETYPES`, so the benchmark is unchanged.
+ */
+export const cleanerWrasse: SpeciesInput = {
+  id: 'cleaner-wrasse',
+  behaviour: {
+    territorial: false,
+    preferredZone: 'mid',
+    depthBand: [0.15, 0.65],
+    perceptionRangeM: 0.5,
+    perceptionFovDeg: 300,
+    curiosity: 0.8,
+    boldness: 0.8,
+    traits: ['cave-dweller', 'cleaner'],
+  },
+  locomotion: {
+    swimmingMode: 'labriform',
+    gait: 'hover',
+    maxSpeedMps: 0.8,
+    cruiseSpeedMps: 0.08,
+    massKg: 0.009,
+    maxTurnRateDegPerS: 400,
+    maxPitchDeg: 45,
+    strouhal: 0.3,
+    bodyLengthM: 0.085,
+  },
+  lifecycle: { diet: ['brine-shrimp', 'bloodworms', 'flakes', 'pellets'] },
+};
+
 export const ARCHETYPES: readonly SpeciesInput[] = [
   neonTetra,
   angelfish,
@@ -490,6 +522,19 @@ export const SHOW_DECOR: readonly Collider[] = [
 
 export function spawnMany(species: string, count: number, prefix = species): FishSpawn[] {
   return Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, species }));
+}
+
+/** Steps by `steps` and resolves with the snapshot of the world at `tick`. */
+export function stepTo(client: SimClient, steps: number, tick: number): Promise<Snapshot> {
+  const reached = new Promise<Snapshot>((resolve) => {
+    const off = client.onSnapshot((snapshot) => {
+      if (snapshot.tick < tick) return;
+      off();
+      resolve(snapshot);
+    });
+  });
+  client.step(steps);
+  return reached;
 }
 
 /**

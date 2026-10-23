@@ -1,12 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  biomeSchema,
   chemistryParametersSchema,
   DEFAULT_EQUIPMENT,
+  equipmentProblems,
   isWarmWater,
   newTankChemistry,
   speciesContentSummarySchema,
   TANK_SIZES,
+  type Biome,
   type Chemistry,
   type Equipment,
   type SpeciesChemistry,
@@ -79,7 +82,7 @@ const NO_BREEDING = {
     },
   },
 };
-const cleanWater: Water = { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 };
+const cleanWater: Water = { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 };
 
 function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}): LifecycleFish {
   const spec = species.get(speciesId);
@@ -281,13 +284,20 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 
-  // Invertebrates are more ammonia-sensitive than any fish, and the old cap of 12 was a fish cap.
+  // Invertebrates are more ammonia-sensitive than any fish, and the tolerance bound below is a fish bound.
   const LEAST_TOLERANT_FISH_AMMONIA = 0.1;
   const belowFishTolerance = (s: (typeof parsedSpecies)[number]) =>
     s.lifecycle.ammoniaTolerance < LEAST_TOLERANT_FISH_AMMONIA;
   const walks = (s: (typeof parsedSpecies)[number]) =>
     typeof s.locomotion === 'object' && s.locomotion !== null && 'walking' in s.locomotion;
   const nanoCapSpecies = parsedSpecies.filter((s) => !belowFishTolerance(s));
+
+  it('sets the least-tolerant fish ammonia to the real minimum across non-walking species', () => {
+    const fishTolerances = parsedSpecies
+      .filter((s) => !walks(s))
+      .map((s) => s.lifecycle.ammoniaTolerance);
+    expect(Math.min(...fishTolerances)).toBe(LEAST_TOLERANT_FISH_AMMONIA);
+  });
 
   it('excludes only walking invertebrates, the shrimp among them, from the nano cap run', () => {
     const excluded = parsedSpecies.filter(belowFishTolerance);
@@ -299,7 +309,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
   });
 
   it.each(nanoCapSpecies.map((s) => [s.id, s.biome] as const))(
-    'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
+    'a nano stocked to the standard bioload capacity, at most 60 animals, keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
       if (!spec) throw new Error(`no species ${id}`);
@@ -548,6 +558,18 @@ describe('growth and old age', () => {
     expect(only(grown).size).toBe(spec?.maxSizeM);
   });
 
+  it('stops growth at the tank length limit and trims a fish already past it', () => {
+    const spec = species.get('guppy');
+    const cap = (spec?.birthSizeM ?? 0) * 1.05;
+    const capped = run(tank([fishOf('a', 'guppy')]), 60 * DAY, { env: { maxFishLengthM: cap } });
+    expect(only(capped).size).toBe(cap);
+    expect(only(capped).size).toBeLessThan(spec?.maxSizeM ?? 0);
+    const trimmed = run(tank([fishOf('a', 'guppy', { size: spec?.maxSizeM ?? 1 })]), 60 * DAY, {
+      env: { maxFishLengthM: cap },
+    });
+    expect(only(trimmed).size).toBe(cap);
+  });
+
   it('does not grow a starving fish', () => {
     const start = tank([fishOf('a', 'guppy', { hunger: 0.9 })]);
     expect(only(run(start, 2 * DAY)).size).toBe(fishOf('a', 'guppy').size);
@@ -772,7 +794,7 @@ describe('nitrogen cycle', () => {
     const crashed = tank(guppies(10), {}, { bacteria: UNCYCLED });
     const dosed = applyCare(
       crashed,
-      { type: 'bottled_bacteria' },
+      { type: 'bottled_bacteria', idempotencyKey: 'bacteria-test-key' },
       'freshwater',
       chemistryParams,
       T0,
@@ -794,7 +816,13 @@ describe('nitrogen cycle', () => {
 
   it('bottled bacteria never push a colony past 1', () => {
     const full = tank([fishOf('a', 'neon-tetra')]);
-    const dosed = applyCare(full, { type: 'bottled_bacteria' }, 'freshwater', chemistryParams, T0);
+    const dosed = applyCare(
+      full,
+      { type: 'bottled_bacteria', idempotencyKey: 'bacteria-test-key' },
+      'freshwater',
+      chemistryParams,
+      T0,
+    );
     if (!dosed.ok) throw new Error(dosed.reason);
     expect(dosed.value.chemistry.bacteria).toEqual({ ammoniaOxidisers: 1, nitriteOxidisers: 1 });
   });
@@ -871,6 +899,32 @@ describe('pH, KH, temperature and salinity', () => {
     expect(r.state.chemistry.salinity).toBeGreaterThan(30);
   });
 
+  it('holds a mangrove tank at 10 ppt, clear of every mangrove species range by 5 ppt', () => {
+    expect(chemistryParams.salinity.target.mangrove).toBe(newTankChemistry('mangrove').salinity);
+    const target = chemistryParams.salinity.target.mangrove;
+    const mangrove = parsedSpecies.filter((s) => s.biome === 'mangrove');
+    expect(mangrove.length).toBeGreaterThan(0);
+    for (const s of mangrove) {
+      const [low, high] = s.chemistry.salinityPpt;
+      expect(target - low, s.id).toBeGreaterThanOrEqual(5);
+      expect(high - target, s.id).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('keeps a stocked mangrove tank unstressed over a month of daily visits', () => {
+    const fish = parsedSpecies.filter((s) => s.biome === 'mangrove').map((s) => fishOf(s.id, s.id));
+    const start = { ...tank(fish), chemistry: newTankChemistry('mangrove') };
+    const end = fedDaily(start, 30, { env: { biome: 'mangrove' } });
+    expect(end.chemistry.salinity).toBeCloseTo(10, 2);
+    expect(end.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+  });
+
+  it('draws a mangrove tank created at the old 15 ppt down to 10', () => {
+    const old = { ...tank([]), chemistry: { ...newTankChemistry('mangrove'), salinity: 15 } };
+    const r = run(old, 40 * DAY, { env: { biome: 'mangrove' } });
+    expect(r.state.chemistry.salinity).toBeCloseTo(10, 2);
+  });
+
   it('accumulating nitrate consumes KH and then lets pH sag', () => {
     const start = tank([fishOf('a', 'angelfish', { size: 0.15 })], {}, { kh: 3 });
     const end = run(start, 40 * DAY).state;
@@ -916,6 +970,90 @@ describe('pH, KH, temperature and salinity', () => {
     expect(t).toBeCloseTo(27, 1);
   });
 
+  it.each(biomeSchema.options)(
+    'the default tier 1 heater warms an empty %s tank from room temperature to its target',
+    (biome) => {
+      const state = {
+        ...tank([]),
+        chemistry: {
+          ...newTankChemistry(biome),
+          temperatureC: chemistryParams.temperature.roomC,
+        },
+      };
+      const t = run(state, 3 * DAY, { env: { biome } }).state.chemistry.temperatureC;
+      expect(t).toBeCloseTo(chemistryParams.temperature.target[biome], 1);
+    },
+  );
+
+  describe('heater tiers', () => {
+    const { roomC } = chemistryParams.temperature;
+    const coldTank = (biome: Biome) => ({
+      ...tank([]),
+      chemistry: { ...newTankChemistry(biome), temperatureC: roomC },
+    });
+    const after = (tier: number, ms: number, biome: Biome = 'freshwater') =>
+      run(coldTank(biome), ms, {
+        env: { biome },
+        equipment: { ...DEFAULT_EQUIPMENT, heater: { tier } },
+      }).state.chemistry.temperatureC;
+
+    it('a higher tier warms a cold tank faster', () => {
+      const one = after(1, 6 * HOUR);
+      const two = after(2, 6 * HOUR);
+      const three = after(3, 6 * HOUR);
+      expect(two).toBeGreaterThan(one);
+      expect(three).toBeGreaterThan(two);
+    });
+
+    it('tier 1 follows the plain drift curve toward the setpoint', () => {
+      const { target, driftPerHour } = chemistryParams.temperature;
+      const goal = target.freshwater;
+      for (const hours of [1, 3, 6, 12, 24]) {
+        const expected = goal - (goal - roomC) * Math.exp(-driftPerHour * hours);
+        expect(after(1, hours * HOUR)).toBeCloseTo(expected, 6);
+      }
+    });
+
+    it('every tier settles on the setpoint and never rises past it', () => {
+      const goal = chemistryParams.temperature.target.freshwater;
+      for (const tier of [1, 2, 3]) {
+        for (const hours of [1, 2, 4, 8, 16, 24, 48]) {
+          expect(after(tier, hours * HOUR)).toBeLessThanOrEqual(goal);
+        }
+        expect(after(tier, 5 * DAY)).toBeCloseTo(goal, 1);
+      }
+    });
+
+    it('an overheated tank cools at the same rate whatever the tier', () => {
+      const hot = {
+        ...tank([]),
+        chemistry: { ...newTankChemistry('freshwater'), temperatureC: 35 },
+      };
+      const cooled = (tier: number, hours: number) =>
+        run(hot, hours * HOUR, { equipment: { ...DEFAULT_EQUIPMENT, heater: { tier } } }).state
+          .chemistry.temperatureC;
+      for (const hours of [1, 4, 12]) {
+        expect(cooled(3, hours)).toBe(cooled(1, hours));
+        expect(cooled(1, hours)).toBeLessThan(35);
+      }
+    });
+
+    it('a higher tier reaches the hottest biome target sooner', () => {
+      const target = chemistryParams.temperature.target.blackwater;
+      expect(target - after(3, 8 * HOUR, 'blackwater')).toBeLessThan(
+        target - after(1, 8 * HOUR, 'blackwater'),
+      );
+    });
+
+    it('warming up is deterministic across window splits', () => {
+      const equipment = { ...DEFAULT_EQUIPMENT, heater: { tier: 3 } };
+      const whole = run(coldTank('freshwater'), 12 * HOUR, { equipment }).state;
+      const half = run(coldTank('freshwater'), 6 * HOUR, { equipment }).state;
+      const rest = run(half, 12 * HOUR, { equipment, from: 6 * HOUR }).state;
+      expect(rest.chemistry.temperatureC).toBe(whole.chemistry.temperatureC);
+    });
+  });
+
   it('a water change pulls KH towards the biome source water, not one global value', () => {
     const reef = {
       ...tank([fishOf('a', 'ocellaris-clownfish')]),
@@ -926,6 +1064,231 @@ describe('pH, KH, temperature and salinity', () => {
     const { sourceWater, restoredPerWaterChange } = chemistryParams.kh;
     expect(r.value.chemistry.kh).toBeCloseTo(5 + (sourceWater.reef - 5) * restoredPerWaterChange);
     expect(r.value.chemistry.kh).toBeGreaterThan(5);
+  });
+
+  describe('salt dosing and salinity dilution', () => {
+    const reefAt = (salinity: number): LifecycleState => ({
+      ...tank([fishOf('a', 'ocellaris-clownfish')]),
+      chemistry: { ...newTankChemistry('reef'), salinity },
+    });
+    const mix = chemistryParams.salinity.target.reef;
+    const dose = (state: LifecycleState, biome: Biome = 'reef') => {
+      const r = applyCare(state, { type: 'salt_dose' }, biome, chemistryParams, T0);
+      if (!r.ok) throw new Error(r.reason);
+      return r.value;
+    };
+
+    it('dose and water-change target equal each salt biome default', () => {
+      for (const biome of ['reef', 'mangrove'] as const) {
+        const mixLevel = newTankChemistry(biome).salinity;
+        expect(chemistryParams.salinity.target[biome]).toBe(mixLevel);
+        const atDefault = {
+          ...tank([]),
+          chemistry: newTankChemistry(biome),
+        };
+        const changed = applyCare(atDefault, { type: 'water_change' }, biome, chemistryParams, T0);
+        if (!changed.ok) throw new Error(changed.reason);
+        expect(changed.value.chemistry.salinity).toBe(mixLevel);
+        const dosed = applyCare(atDefault, { type: 'salt_dose' }, biome, chemistryParams, T0);
+        expect(dosed.ok).toBe(false);
+      }
+    });
+
+    it('moves salinity a fixed fraction of the gap towards the salt-mix level', () => {
+      const { saltDoseFraction } = chemistryParams.salinity;
+      expect(dose(reefAt(20)).chemistry.salinity).toBeCloseTo(20 + (mix - 20) * saltDoseFraction);
+      const twice = dose(dose(reefAt(20)));
+      expect(twice.chemistry.salinity).toBeGreaterThan(dose(reefAt(20)).chemistry.salinity);
+      expect(twice.chemistry.salinity).toBeLessThan(mix);
+    });
+
+    it('refuses at or above the mix level instead of diluting or no-oping', () => {
+      for (const salinity of [mix, mix + 4]) {
+        const r = applyCare(reefAt(salinity), { type: 'salt_dose' }, 'reef', chemistryParams, T0);
+        expect(r.ok).toBe(false);
+      }
+    });
+
+    it('refuses to dose a tank whose biome has no salt', () => {
+      for (const biome of ['freshwater', 'cichlid', 'blackwater'] as const) {
+        const state = { ...tank([]), chemistry: newTankChemistry(biome) };
+        const r = applyCare(state, { type: 'salt_dose' }, biome, chemistryParams, T0);
+        expect(r.ok).toBe(false);
+      }
+    });
+
+    it('a water change after dosing dilutes salinity towards the target', () => {
+      const dosed = reefAt(mix + 6);
+      const changed = applyCare(dosed, { type: 'water_change' }, 'reef', chemistryParams, T0);
+      if (!changed.ok) throw new Error(changed.reason);
+      const { restoredPerWaterChange } = chemistryParams.salinity;
+      expect(changed.value.chemistry.salinity).toBeCloseTo(mix + 6 - 6 * restoredPerWaterChange);
+    });
+
+    it('a water change leaves salinity alone at the target and in fresh tanks', () => {
+      const atTarget = applyCare(
+        reefAt(mix),
+        { type: 'water_change' },
+        'reef',
+        chemistryParams,
+        T0,
+      );
+      if (!atTarget.ok) throw new Error(atTarget.reason);
+      expect(atTarget.value.chemistry.salinity).toBe(mix);
+      const fresh = applyCare(
+        tank([]),
+        { type: 'water_change' },
+        'freshwater',
+        chemistryParams,
+        T0,
+      );
+      if (!fresh.ok) throw new Error(fresh.reason);
+      expect(fresh.value.chemistry.salinity).toBe(0);
+    });
+
+    it('offline catch-up after a dose is deterministic and independent of how it is split', () => {
+      const dosed = dose(reefAt(20));
+      const reef = { env: { biome: 'reef' as const } };
+      const whole = run(dosed, 2 * DAY, reef);
+      const again = run(dosed, 2 * DAY, reef);
+      const halves = run(run(dosed, DAY, reef).state, 2 * DAY, { ...reef, from: DAY });
+      expect(again.state.chemistry.salinity).toBe(whole.state.chemistry.salinity);
+      expect(halves.state.chemistry.salinity).toBeCloseTo(whole.state.chemistry.salinity, 9);
+      expect(whole.state.chemistry.salinity).toBeGreaterThan(dosed.chemistry.salinity);
+      expect(whole.state.chemistry.salinity).toBeLessThanOrEqual(mix);
+      expect(whole.state.chemistry.salinity).toBeGreaterThan(
+        run(reefAt(20), 2 * DAY, reef).state.chemistry.salinity,
+      );
+    });
+  });
+
+  describe('buffer dosing', () => {
+    const ceiling = chemistryParams.kh.bufferCeiling;
+    const cichlidAt = (kh: number): LifecycleState => ({
+      ...tank([]),
+      chemistry: { ...newTankChemistry('cichlid'), kh },
+    });
+    const buffer = (state: LifecycleState, biome: Biome) =>
+      applyCare(
+        state,
+        { type: 'buffer_dose', idempotencyKey: 'buffer-test-key' },
+        biome,
+        chemistryParams,
+        T0,
+      );
+
+    it('raises KH by one dose, past the source water', () => {
+      const r = buffer(cichlidAt(10), 'cichlid');
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.value.chemistry.kh).toBeCloseTo(10 + chemistryParams.kh.bufferDoseKh);
+      expect(r.value.chemistry.kh).toBeGreaterThan(chemistryParams.kh.sourceWater.cichlid);
+    });
+
+    it('stops exactly at the biome ceiling and then refuses', () => {
+      const nearly = buffer(cichlidAt(ceiling.cichlid - 0.5), 'cichlid');
+      if (!nearly.ok) throw new Error(nearly.reason);
+      expect(nearly.value.chemistry.kh).toBe(ceiling.cichlid);
+      expect(buffer(nearly.value, 'cichlid').ok).toBe(false);
+      expect(buffer(cichlidAt(ceiling.cichlid + 3), 'cichlid').ok).toBe(false);
+    });
+
+    it('refuses biomes with a zero ceiling', () => {
+      for (const biome of ['blackwater', 'reef'] as const) {
+        expect(ceiling[biome]).toBe(0);
+        expect(buffer({ ...tank([]), chemistry: newTankChemistry(biome) }, biome).ok).toBe(false);
+      }
+    });
+
+    it('lifts the KH through the buffered target once offline time passes', () => {
+      const dosed = buffer(cichlidAt(10), 'cichlid');
+      if (!dosed.ok) throw new Error(dosed.reason);
+      const base = { env: { biome: 'cichlid' as const } };
+      const plain = run(cichlidAt(10), 2 * DAY, base).state.chemistry;
+      const buffered = run(dosed.value, 2 * DAY, base).state.chemistry;
+      expect(buffered.kh).toBeGreaterThan(plain.kh);
+    });
+  });
+
+  describe('botanicals and tannin', () => {
+    const p = chemistryParams.tannin;
+    const blackAt = (tannin: number, ph = 6): LifecycleState => ({
+      ...tank([], { tannin }),
+      chemistry: { ...newTankChemistry('blackwater'), ph },
+    });
+    const botanicals = (state: LifecycleState, biome: Biome = 'blackwater') =>
+      applyCare(
+        state,
+        { type: 'add_botanicals', idempotencyKey: 'botanical-test' },
+        biome,
+        chemistryParams,
+        T0,
+      );
+
+    it('adds tannin and pulls pH down a little', () => {
+      const r = botanicals(blackAt(0));
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.value.water.tannin).toBeCloseTo(p.perDose);
+      expect(r.value.chemistry.ph).toBeCloseTo(6 - p.phPullPerDose);
+    });
+
+    it('never pulls pH below the floor, and never past the tannin ceiling', () => {
+      const lowPh = botanicals(blackAt(0, p.phFloor + 0.05));
+      if (!lowPh.ok) throw new Error(lowPh.reason);
+      expect(lowPh.value.chemistry.ph).toBe(p.phFloor);
+      const floored = botanicals(blackAt(0.1, p.phFloor));
+      if (!floored.ok) throw new Error(floored.reason);
+      expect(floored.value.chemistry.ph).toBe(p.phFloor);
+      const nearly = botanicals(blackAt(p.ceiling.blackwater - 0.1));
+      if (!nearly.ok) throw new Error(nearly.reason);
+      expect(nearly.value.water.tannin).toBe(p.ceiling.blackwater);
+      expect(botanicals(nearly.value).ok).toBe(false);
+    });
+
+    it('keeps the floor inside the pH range every blackwater species shares', () => {
+      const lows = parsedSpecies
+        .filter((s) => s.biome === 'blackwater')
+        .map((s) => s.chemistry.phRange[0]);
+      expect(lows.length).toBeGreaterThan(0);
+      expect(p.phFloor).toBeGreaterThanOrEqual(Math.max(...lows));
+    });
+
+    it('refuses reef, cichlid and mangrove tanks', () => {
+      for (const biome of ['reef', 'cichlid', 'mangrove'] as const) {
+        expect(p.ceiling[biome]).toBe(0);
+        expect(botanicals({ ...tank([]), chemistry: newTankChemistry(biome) }, biome).ok).toBe(
+          false,
+        );
+      }
+    });
+
+    it('a water change dilutes tannin', () => {
+      const r = applyCare(
+        blackAt(0.8),
+        { type: 'water_change' },
+        'blackwater',
+        chemistryParams,
+        T0,
+      );
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.value.water.tannin).toBeCloseTo(0.8 * (1 - p.restoredPerWaterChange));
+    });
+
+    it('decays deterministically offline, independent of how the time is split', () => {
+      const base = { env: { biome: 'blackwater' as const } };
+      const start = blackAt(0.8);
+      const whole = run(start, 3 * DAY, base);
+      const halves = run(run(start, DAY, base).state, 3 * DAY, { ...base, from: DAY });
+      expect(whole.state.water.tannin).toBeCloseTo(0.8 * Math.exp(-p.decayPerHour * 72), 9);
+      expect(halves.state.water.tannin).toBeCloseTo(whole.state.water.tannin, 9);
+      expect(run(start, 3 * DAY, base).state.water.tannin).toBe(whole.state.water.tannin);
+    });
+
+    it('tannin holds the pH target lower while it lasts', () => {
+      const base = { env: { biome: 'blackwater' as const } };
+      const tea = run(blackAt(1), 2 * DAY, base).state.chemistry.ph;
+      const clear = run(blackAt(0), 2 * DAY, base).state.chemistry.ph;
+      expect(tea).toBeLessThan(clear);
+    });
   });
 
   it('names water quality as the cause when out-of-range water kills a fish', () => {
@@ -1122,7 +1485,7 @@ describe('water volume', () => {
     };
     const fullCount = Math.floor(nanoCap / neon.bioload + 1e-9);
 
-    it('keeps waste flat however far the stock is over the cap of a nano', () => {
+    it('keeps waste flat up to four times the cap of a nano', () => {
       const atCap = nitrogenOf(fullCount, nanoLitres, nanoCap);
       expect(atCap).toBeGreaterThan(0);
       expect(nitrogenOf(fullCount * 2, nanoLitres, nanoCap)).toBeCloseTo(atCap, 6);
@@ -1589,5 +1952,104 @@ describe('warm-water species and the heater', () => {
     const start = tank([fishOf('a', 'neon-tetra')]);
     const f = only(run(start, 5 * DAY, { feeder: true, equipment: heaterless }));
     expect(f.health).toBe(1);
+  });
+});
+
+describe('blackwater pH under good care', () => {
+  const PH_FLOOR_ASSUMED_FOR_APISTOGRAMMA = 5.5;
+  const blackwater = parsedSpecies.filter((s) => s.biome === 'blackwater');
+  const allowedCo2Tiers = [0, 1, 2, 3].filter(
+    (tier) => equipmentProblems('blackwater', { ...DEFAULT_EQUIPMENT, co2: { tier } }).length === 0,
+  );
+
+  function phRangeOverGoodCare(
+    co2Tier: number,
+    days: number,
+  ): { low: number; high: number; lowestHealth: number } {
+    const equipment = { ...DEFAULT_EQUIPMENT, co2: { tier: co2Tier } };
+    let state: LifecycleState = {
+      water: cleanWater,
+      chemistry: newTankChemistry('blackwater'),
+      medicine: null,
+      fish: blackwater.flatMap((s) =>
+        Array.from({ length: 2 }, (_, i) =>
+          fishOf(`${s.id}-${i}`, s.id, { size: s.lifecycle.maxSizeM }),
+        ),
+      ),
+    };
+    let now = T0;
+    let low = Infinity;
+    let high = -Infinity;
+    let lowestHealth = 1;
+    for (let day = 0; day < days; day++) {
+      state = {
+        ...state,
+        water: { ...state.water, uneatenFood: state.water.uneatenFood + 0.5 },
+        fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+      };
+      if (day % 7 === 0) {
+        const changed = applyCare(
+          state,
+          { type: 'water_change' },
+          'blackwater',
+          chemistryParams,
+          now,
+        );
+        if (!changed.ok) throw new Error(changed.reason);
+        state = changed.value;
+      }
+      for (let h = 0; h < 24; h++) {
+        const r = catchUp({
+          state,
+          fromMs: now,
+          toMs: now + HOUR,
+          ...env,
+          equipment,
+          biome: 'blackwater',
+          graceEndsAtMs: NO_GRACE,
+          vacationFeeder: false,
+          ...NO_BREEDING,
+        });
+        state = r.state;
+        now += HOUR;
+        low = Math.min(low, state.chemistry.ph);
+        high = Math.max(high, state.chemistry.ph);
+        lowestHealth = Math.min(lowestHealth, ...state.fish.map((f) => f.health));
+      }
+    }
+    return { low, high, lowestHealth };
+  }
+
+  it('still offers the no-CO2 tier', () => {
+    expect(allowedCo2Tiers).toContain(0);
+  });
+
+  it.each(allowedCo2Tiers)('CO2 tier %d stays at or above pH 5.5 for 90 days', (tier) => {
+    expect(phRangeOverGoodCare(tier, 90).low).toBeGreaterThanOrEqual(
+      PH_FLOOR_ASSUMED_FOR_APISTOGRAMMA,
+    );
+  });
+
+  it.each(allowedCo2Tiers)('CO2 tier %d stays inside every blackwater species range', (tier) => {
+    const { low, high, lowestHealth } = phRangeOverGoodCare(tier, 90);
+    expect(lowestHealth).toBe(1);
+    for (const s of blackwater) {
+      const [min, max] = s.chemistry.phRange;
+      expect(low, s.id).toBeGreaterThanOrEqual(Math.max(min, PH_FLOOR_ASSUMED_FOR_APISTOGRAMMA));
+      expect(high, s.id).toBeLessThanOrEqual(max);
+    }
+  });
+
+  it.each([1, 2, 3])(
+    'ignores CO2 tier %d left over in a blackwater tank, so catch-up matches a tank without it',
+    (tier) => {
+      expect(phRangeOverGoodCare(tier, 30)).toEqual(phRangeOverGoodCare(0, 30));
+    },
+  );
+
+  it('issue repro: CO2 tier 2 is refused in blackwater rather than driving pH to about 4.5', () => {
+    expect(equipmentProblems('blackwater', { ...DEFAULT_EQUIPMENT, co2: { tier: 2 } })).toEqual([
+      'co2 is not used in blackwater tanks',
+    ]);
   });
 });

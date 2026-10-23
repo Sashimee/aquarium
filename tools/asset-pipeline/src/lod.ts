@@ -17,7 +17,11 @@ export interface SimplifyOptions {
   minTriangles: number;
   /** Forbid collapses across attribute seams, so a UV chart boundary survives simplification. */
   keepSeams?: boolean;
+  /** Finishes with topology-blind simplification when the first pass stalls above the target, as on scans shredded into islands and open borders. */
+  sloppyFallback?: boolean;
 }
+
+const SLOPPY_TRIGGER = 1.25;
 
 const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
   { semantic: 'NORMAL', size: 3, weight: 0.6 },
@@ -29,10 +33,9 @@ const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
   { semantic: LEG_ATTRIBUTE, size: 1, weight: 3 },
 ];
 
-/** Drops zero-area triangles, then every triangle outside the largest position-welded component, so simplified thin parts cannot leave floating flecks. */
-export function keepMainComponent(prim: Primitive): void {
+function keepComponents(prim: Primitive, keep: (sizes: number[], label: number) => boolean): void {
   const indicesAccessor = prim.getIndices();
-  if (!indicesAccessor) throw new Error('keepMainComponent: primitive must be indexed');
+  if (!indicesAccessor) throw new Error('keepComponents: primitive must be indexed');
   const positions = prim.getAttribute('POSITION')!.getArray()!;
   const bounds = boundsOf(positions);
   const diagonal = Math.hypot(
@@ -52,9 +55,20 @@ export function keepMainComponent(prim: Primitive): void {
   const components = connectedComponents(canon, solid, () => true);
   const kept: number[] = [];
   for (let t = 0; t < solid.length; t += 3)
-    if (components.label[solid[t]!] === 0) kept.push(solid[t]!, solid[t + 1]!, solid[t + 2]!);
+    if (keep(components.sizes, components.label[solid[t]!]!))
+      kept.push(solid[t]!, solid[t + 1]!, solid[t + 2]!);
   indicesAccessor.setArray(Uint32Array.from(kept));
   compactPrimitive(prim);
+}
+
+/** Drops zero-area triangles, then every triangle outside the largest position-welded component, so simplified thin parts cannot leave floating flecks. */
+export function keepMainComponent(prim: Primitive): void {
+  keepComponents(prim, (_, label) => label === 0);
+}
+
+/** Like `keepMainComponent`, but keeps every component with at least `minShare` of the largest one's vertices: a model made of separate bodies loses only its flecks. */
+export function keepLargeComponents(minShare: number): (prim: Primitive) => void {
+  return (prim) => keepComponents(prim, (sizes, label) => sizes[label]! >= minShare * sizes[0]!);
 }
 
 export function triangleCountOf(prim: Primitive): number {
@@ -108,6 +122,12 @@ export function simplifyPrimitive(prim: Primitive, options: SimplifyOptions): vo
   );
   if (simplified.length === 0)
     throw new Error('simplifyPrimitive: simplification removed every triangle');
-  indicesAccessor.setArray(Uint32Array.from(simplified));
+  let result = simplified;
+  if (options.sloppyFallback && simplified.length > target * 3 * SLOPPY_TRIGGER) {
+    [result] = MeshoptSimplifier.simplifySloppy(simplified, positions, 3, null, target * 3, 1);
+    if (result.length === 0)
+      throw new Error('simplifyPrimitive: sloppy simplification removed every triangle');
+  }
+  indicesAccessor.setArray(Uint32Array.from(result));
   compactPrimitive(prim);
 }

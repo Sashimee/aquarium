@@ -17,7 +17,30 @@ export {
   stepWater,
 } from './water.ts';
 export { stepTank } from './step.ts';
-export { catchUp, type CatchUpInput, type CatchUpResult } from './catchup.ts';
+export {
+  catchUp,
+  type CatchUpCorals,
+  type CatchUpCrew,
+  type CatchUpInput,
+  type CatchUpPlants,
+  type CatchUpResult,
+} from './catchup.ts';
+export {
+  blocked,
+  layoutPlantKeys,
+  obstaclesOf,
+  reconcilePlants,
+  START_SIZE as PLANT_START_SIZE,
+  stepPlants,
+  trimPlant,
+  type LayoutPlant,
+  type Obstacle,
+  type PlantBounds,
+  type PlantState,
+  type PlantStepContext,
+  type PlantTable,
+  type TrimResult,
+} from './plants.ts';
 export {
   applyCare,
   applyEating,
@@ -66,3 +89,14 @@ export {
   type KindRates,
   type OnsetPressure,
 } from './disease.ts';
+export {
+  coralSpecOf,
+  coralStress,
+  fragCoral,
+  reconcileCorals,
+  stepCorals,
+  type CoralState,
+  type CoralStepContext,
+  type CoralTable,
+  type FragResult,
+} from './corals.ts';

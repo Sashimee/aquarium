@@ -1,6 +1,6 @@
 import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
-import { WATER_INSET } from '../../engine/tank/dimensions';
+import { waterReach } from '../../scene/caves';
 import type {
   DecorCommand,
   DecorPaletteEntry,
@@ -64,12 +64,13 @@ export class DecorMode {
       return false;
     }
     const dims = engine.tank.dimensions;
+    const reach = waterReach(dims);
     this.editor = new DecorEditor({
       specs: world.specs,
       biome: world.biome,
       limits: {
-        halfLength: dims.length / 2 - dims.glass - WATER_INSET,
-        halfDepth: dims.depth / 2 - dims.glass - WATER_INSET,
+        halfLength: reach.halfX,
+        halfDepth: reach.halfZ,
         waterTop: dims.height - dims.freeboard,
       },
       ground: (x, z) => world.groundHeight(x, z),

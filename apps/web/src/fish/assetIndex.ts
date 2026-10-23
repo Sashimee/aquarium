@@ -119,7 +119,7 @@ function assetPath(value: unknown, path: string, extension = '.glb'): string {
   return file;
 }
 
-function sharperTextures(value: unknown, path: string): Map<string, string> {
+export function sharperTextures(value: unknown, path: string): Map<string, string> {
   const out = new Map<string, string>();
   if (value === undefined) return out;
   if (!Array.isArray(value)) fail(path, 'an array');

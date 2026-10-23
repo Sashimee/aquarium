@@ -1,0 +1,57 @@
+{
+  "behaviour": {
+    "boldness": 0.35,
+    "curiosity": 0.4,
+    "depthBand": [0.25, 0.7],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.35,
+    "preferredZone": "mid",
+    "schooling": {
+      "minGroup": 10,
+      "tightenWhenStartled": true,
+      "topologicalNeighbours": 7
+    },
+    "territorial": false,
+    "traits": []
+  },
+  "biome": "blackwater",
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.25,
+    "phRange": [5, 7],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [23, 26]
+  },
+  "commonName": "Rummy-nose tetra",
+  "id": "rummy-nose-tetra",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.15,
+    "bioload": 0.3,
+    "birthSizeM": 0.012,
+    "diet": ["flakes", "brine-shrimp", "bloodworms"],
+    "growthPerDay": 5e-5,
+    "healthLossPerHourStarving": 0.0093,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0078,
+    "lifespanDays": 1825,
+    "maxSizeM": 0.036,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.03,
+    "cruiseSpeedMps": 0.1,
+    "gait": "burst-and-coast",
+    "massKg": 0.0007,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 0.5,
+    "maxTurnRateDegPerS": 540,
+    "strouhal": 0.3,
+    "swimmingMode": "carangiform"
+  },
+  "scientificName": "Petitella bleheri"
+}

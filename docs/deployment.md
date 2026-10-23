@@ -23,6 +23,18 @@ Set in the Dokploy app, never in the repo: `DATABASE_URL`, `BETTER_AUTH_SECRET`,
 `SMTP_PORT`, `MAIL_FROM` (must be `@bas.lu`), `SITE_INDEXABLE`, `NODE_ENV`. Optional: `TRUSTED_PROXIES` (comma-separated
 IPs/CIDRs of the reverse proxy, default private ranges) so rate limits key on the real client IP.
 
+Payments (optional): `STRIPE_SECRET_KEY` (`sk_` or `rk_`) and `STRIPE_WEBHOOK_SECRET` (`whsec_`) must be set both or
+neither. Without them `/api/health` reports `payments: disabled` and the payment routes return 503. The webhook endpoint
+is `https://<host>/api/payments/webhook`, subscribed to `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`, `invoice.paid`, `invoice_payment.paid`,
+`customer.subscription.created`/`updated`/`deleted`, `refund.created`/`updated`, and
+`charge.dispute.closed`/`updated`/`funds_reinstated`. Test keys go on the devfish app only: a live key (`sk_live_`/`rk_live_`) is refused at boot unless `PAYMENTS_LIVE=1` is set, which belongs on the production app only and only once Alex has approved live payments.
+Before switching payments back on after a period off, look for subscriptions of deleted accounts that Stripe may
+still bill: `select id from club_subscriptions where user_id is null and status in ('active','trialing','past_due','unpaid','incomplete')`.
+Check each in the Stripe dashboard and cancel the ones still running (webhook retries lapse after three days, and an
+`incomplete` row older than 24 h no longer blocks account deletion while payments are off). Subscriptions that sync again
+after the switch are cancelled automatically.
+
 Care reminders (T52): `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (base64url, set both or neither) turn on web push;
 without them the server logs `web push is off` once at start and mail reminders keep working. `VAPID_SUBJECT`
 (`mailto:` or `https:`, default `mailto:$MAIL_FROM`) and `REMINDER_DAILY_CAP` (global reminders per 24 h, default 500) are
@@ -44,6 +56,22 @@ app; the API serves it with SPA fallback. The API is bundled to `apps/api/dist/s
 migration aborts start.
 
 The `HEALTHCHECK` hits `/api/health`.
+
+### Old chunks survive a deploy
+
+`/assets/*` is served `immutable`, so tabs opened before a deploy still request the previous build's
+hashed chunks. The image keeps its own `assets/` at `/app/assets-current`, and `docker/entrypoint.sh` copies
+it into `/app/web/assets` at every start (only when that path is a mount point; unchanged files are touched,
+changed ones are copied to a temp name and renamed, so a running container never sees a half-written file),
+then deletes files not refreshed within `ASSET_RETENTION_DAYS` (default 7, exact to the minute). A
+non-numeric value, one below 1 (`0` would prune the build just copied in), or one above 99999 (more than 5 digits after leading zeros) makes the container exit with an error at start. On the Aquarium Dev app, `/app/web/assets` is a Dokploy volume mount (`aquarium-dev-assets`),
+so earlier builds' files are still there. Without the mount (prod, local, CI) the script does nothing and the
+image's own `/app/web/assets` is served.
+
+Create the mount only once the entrypoint is on the deployed branch: a mount over an image without the
+copy step hides every asset. Dokploy API: `POST /api/mounts.create` with `type: "volume"`,
+`volumeName: "aquarium-dev-assets"`, `mountPath: "/app/web/assets"`, `serviceId` set to the Dev app's `applicationId`,
+`serviceType: "application"`, then redeploy. Never add it to Aquarium Prod without Alex's go.
 
 ## Indexing
 

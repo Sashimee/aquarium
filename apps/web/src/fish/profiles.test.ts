@@ -114,12 +114,23 @@ describe('modelFor', () => {
     }
   });
 
-  it('gives every male model a length factor in (0, 1]', () => {
+  it('gives every male model the length factor its built model was scaled by', () => {
+    const models = parseFishAssets(shippedIndex);
     for (const [id, profile] of Object.entries(FISH_RENDER_PROFILES)) {
       if (profile.male === null) continue;
       expect(profile.male.lengthFactor, id).toBeGreaterThan(0);
-      expect(profile.male.lengthFactor, id).toBeLessThanOrEqual(1);
+      const female = models.get(profile.assetId)?.standardLengthM;
+      const male = models.get(profile.male.assetId)?.standardLengthM;
+      expect(female, id).toBeDefined();
+      expect(male, id).toBeDefined();
+      expect((male ?? 0) / (female ?? 1), id).toBeCloseTo(profile.male.lengthFactor, 3);
     }
+  });
+
+  it('draws a male peacock a third longer than a female of the same size', () => {
+    const male = { ...MALE, species: 'aulonocara-baenschi', lengthM: 0.06 };
+    expect(bodyLengthOf(male, 0.0766)).toBeCloseTo(0.0798);
+    expect(bodyLengthOf({ ...male, ...FEMALE }, 0.0766)).toBe(0.06);
   });
 });
 

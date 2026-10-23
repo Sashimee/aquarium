@@ -81,9 +81,76 @@ describe('TierController', () => {
     expect(c.sample(1000, 0)).toBeNull();
     expect(c.sample(Number.NaN, 1)).toBeNull();
     expect(c.sample(-5, 2)).toBeNull();
-    const { changes } = run(c, 300, 3, 10_000);
-    expect(changes).toEqual([]);
+    let t = 1000;
+    for (let second = 0; second < 20; second++) {
+      t += 300;
+      expect(c.sample(300, t)).toBeNull();
+      ({ end: t } = run(c, 10, t, 700));
+    }
     expect(c.tier).toBe('high');
+  });
+
+  it('steps down when nothing but hitches arrives for the down hold (#1456)', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    const at: number[] = [];
+    let t = 0;
+    for (let frame = 0; frame < 60 && at.length < 2; frame++) {
+      t += 400;
+      if (c.sample(400, t) !== null) at.push(t);
+    }
+    expect(c.tier).toBe('low');
+    expect(at[0]).toBeGreaterThanOrEqual(DEFAULT_CONTROLLER_CONFIG.downHoldMs);
+    expect(at[0]).toBeLessThan(3000);
+    expect((at[1] ?? 0) - (at[0] ?? 0)).toBeGreaterThanOrEqual(3000);
+  });
+
+  it('needs a few hitches in a row, so two long stalls alone do not step down', () => {
+    const c = controller('high');
+    expect(c.sample(2500, 2500)).toBeNull();
+    expect(c.sample(2500, 5000)).toBeNull();
+    expect(c.sample(2500, 7500)).toBeNull();
+    expect(c.tier).toBe('high');
+  });
+
+  it('restarts the hitch run after one normal frame', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    let t = 0;
+    for (let frame = 0; frame < 4; frame++) {
+      t += 400;
+      expect(c.sample(400, t)).toBeNull();
+    }
+    t += TARGET;
+    expect(c.sample(TARGET, t)).toBeNull();
+    const resumedAt = t;
+
+    let steppedAt: number | null = null;
+    while (steppedAt === null) {
+      t += 400;
+      if (c.sample(400, t) !== null) steppedAt = t;
+    }
+    expect(steppedAt).toBeGreaterThanOrEqual(resumedAt + DEFAULT_CONTROLLER_CONFIG.downHoldMs);
+    expect(c.tier).toBe('medium');
+  });
+
+  it('does not count hitches inside a pause toward a step down', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    let t = 0;
+    for (let frame = 0; frame < 40; frame++) {
+      c.pause(t);
+      t += 400;
+      expect(c.sample(400, t)).toBeNull();
+    }
+    expect(c.tier).toBe('high');
+  });
+
+  it('stays on the lowest tier under sustained hitches', () => {
+    const c = controller('low');
+    let t = 0;
+    for (let frame = 0; frame < 40; frame++) {
+      t += 400;
+      expect(c.sample(400, t)).toBeNull();
+    }
+    expect(c.tier).toBe('low');
   });
 
   it('steps up after sustained headroom, which takes longer than stepping down', () => {
@@ -96,10 +163,30 @@ describe('TierController', () => {
 
   it('predicts the next tier cost from the gpu signal before stepping up', () => {
     const c = controller('high');
-    // ultra costs 1.7 x high: 8 ms -> 13.6 ms > 0.8 x 16.7 ms, so no room.
-    expect(run(c, 8, 0, 30_000).changes).toEqual([]);
-    // 7 ms -> 11.9 ms fits.
-    expect(run(c, 7, 30_000, 30_000).changes[0]).toMatchObject({ to: 'ultra' });
+    // ultra costs 1.7 x high and may take half of 0.8 x 16.7 ms: 4 ms -> 6.8 ms, so no room.
+    expect(run(c, 4, 0, 30_000).changes).toEqual([]);
+    // 3.5 ms -> 5.95 ms fits.
+    expect(run(c, 3.5, 30_000, 30_000).changes[0]).toMatchObject({ to: 'ultra' });
+  });
+
+  it('leaves ultra once it takes more than its share of the gpu, and keeps it below that', () => {
+    const c = controller('ultra');
+    // Ultra's share is half the budget: it steps down above 0.5 x 1.2 x 16.7 = 10 ms.
+    expect(run(c, 9.5, 0, 30_000).changes).toEqual([]);
+    expect(run(c, 10.5, 30_000, 5000).changes[0]).toMatchObject({ from: 'ultra', to: 'high' });
+  });
+
+  it('holds high where ultra just fitted the frame, rather than climbing back', () => {
+    const c = controller('ultra');
+    const { end } = run(c, 11, 0, 5000);
+    expect(c.tier).toBe('high');
+    // 11 ms on ultra is about 6.5 ms on high, which predicts ultra over its share again.
+    expect(run(c, 6.5, end, 60_000).changes).toEqual([]);
+  });
+
+  it('keeps the whole budget for ultra on the frame signal, which never climbs into it alone', () => {
+    const c = controller('ultra', { signal: 'frame' });
+    expect(run(c, 15, 0, 30_000).changes).toEqual([]);
   });
 
   it('climbs off full-resolution low only when medium would fit', () => {
@@ -158,7 +245,7 @@ describe('TierController', () => {
   });
 
   it('doubles the hold for a tier that failed during probation', () => {
-    const c = controller('medium', { minTier: 'medium' });
+    const c = controller('medium', { minTier: 'medium', reentryHoldMs: 0 });
     const base = c.upHoldFor('high');
     let { changes, end } = run(c, 4, 0, 10_000);
     expect(changes[0]).toMatchObject({ to: 'high' });
@@ -193,6 +280,93 @@ describe('TierController', () => {
     run(c, 30, end, 6000);
     expect(c.tier).toBe('medium');
     expect(c.upHoldFor('high')).toBe(DEFAULT_CONTROLLER_CONFIG.upHoldMs);
+  });
+
+  it('does not re-enter a tier it just left before the re-entry hold runs out', () => {
+    const c = controller('high', { signal: 'frame', reentryHoldMs: 60_000 });
+    const { changes, end } = run(c, 30, 0, 5000);
+    expect(changes.map((ch) => ch.to)).toEqual(['medium']);
+    const leftAt = changes[0]?.at ?? 0;
+    // Medium keeps up at once, which alone would climb back after the 8 s up hold.
+    const back = run(c, TARGET, end, 90_000).changes[0];
+    expect(back).toMatchObject({ from: 'medium', to: 'high', reason: 'headroom' });
+    expect((back?.at ?? 0) - leftAt).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it('holds every tier from holdBelow() up, but not the ones beneath it', () => {
+    const c = controller('low', { reentryHoldMs: 0 });
+    c.holdBelow('high', 60_000);
+    const { changes } = run(c, 2, 0, 59_000);
+    expect(changes.map((ch) => ch.to)).toEqual(['medium']);
+    expect(run(c, 2, 59_000, 20_000).changes[0]).toMatchObject({ from: 'medium', to: 'high' });
+  });
+
+  it('ignores the samples around a stall reported by pause()', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    let { end } = run(c, 10, 0, 1000);
+    // Compile stalls under ignoreAboveMs would read as over budget for the down hold.
+    for (let i = 0; i < 6; i++) {
+      c.pause(end);
+      ({ end } = run(c, 120, end, 500));
+    }
+    const { changes } = run(c, 10, end, 10_000);
+    expect(changes).toEqual([]);
+    expect(c.tier).toBe('high');
+  });
+
+  it('still steps down under a sustained overload with a stall every 5 s', () => {
+    const c = controller('high', { windowSize: 60, cooldownMs: 3000, downHoldMs: 2000 });
+    const changes = [];
+    let t = 0;
+    for (let cycle = 0; cycle < 6 && changes.length === 0; cycle++) {
+      c.pause(t);
+      const { changes: found, end } = run(c, 30, t, 5000);
+      changes.push(...found);
+      t = end;
+    }
+    expect(changes.map((ch) => ch.to)).toEqual(['medium']);
+    expect(changes[0]?.at).toBeLessThan(15_000);
+  });
+
+  it('keeps the samples taken before a pause', () => {
+    const c = controller('high', { windowSize: 60, cooldownMs: 3000 });
+    const { end } = run(c, 30, 0, 1100);
+    c.pause(end);
+    // A full window of 30 ms frames is already over budget, so only the down hold remains.
+    const { changes } = run(c, 30, end + 3000, 2100);
+    expect(changes).toMatchObject([{ from: 'high', to: 'medium', reason: 'over-budget' }]);
+  });
+
+  it('does not count paused time toward a hold', () => {
+    const c = controller('high', { windowSize: 10, cooldownMs: 3000, downHoldMs: 2000 });
+    let { end } = run(c, 30, 0, 1000);
+    for (let i = 0; i < 4; i++) {
+      c.pause(end);
+      ({ end } = run(c, 30, end, 3200));
+    }
+    expect(c.tier).toBe('high');
+  });
+
+  it('keeps the holds saved by a pause when another one comes before any sample', () => {
+    const c = controller('high', { windowSize: 10, cooldownMs: 3000, downHoldMs: 2000 });
+    const { end } = run(c, 30, 0, 1600);
+    c.pause(end);
+    c.pause(end + 3500);
+    const resumeAt = end + 6500;
+    // About 1.45 s of the 2 s down hold stood at the first pause, so it completes soon after.
+    const { changes } = run(c, 30, resumeAt, 1000);
+    expect(changes).toMatchObject([{ from: 'high', to: 'medium', reason: 'over-budget' }]);
+  });
+
+  it('reset() during a pause drops the holds the pause saved', () => {
+    const c = controller('high', { windowSize: 10, cooldownMs: 3000, downHoldMs: 2000 });
+    const { end } = run(c, 30, 0, 1600);
+    c.pause(end);
+    c.reset('high', end + 100);
+    const settled = end + 3100;
+    // A fresh window and the whole down hold: what the pause saved would have cut it short.
+    expect(run(c, 30, settled, 2000).changes).toEqual([]);
+    expect(run(c, 30, settled + 2000, 1000).changes).toMatchObject([{ to: 'medium' }]);
   });
 
   it('reset() applies a manual tier and restarts measurement', () => {

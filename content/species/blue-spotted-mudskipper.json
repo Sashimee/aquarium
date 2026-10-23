@@ -1,0 +1,58 @@
+{
+  "behaviour": {
+    "airGulp": {
+      "perHour": 12
+    },
+    "boldness": 0.5,
+    "curiosity": 0.4,
+    "depthBand": [0, 0.12],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.35,
+    "preferredZone": "bottom",
+    "territorial": true,
+    "traits": ["air-gulp", "amphibious"]
+  },
+  "biome": "mangrove",
+  "breeding": {
+    "mode": "none"
+  },
+  "chemistry": {
+    "khMin": 4,
+    "nitriteTolerance": 0.4,
+    "phRange": [7.5, 8.5],
+    "salinityPpt": [5, 30],
+    "sources": [
+      "FishBase (fishbase.se) species summary: marine, brackish and freshwater intertidal mud flats, 26 to 30 C, pH 8.0 to 8.5 (Ref. 2060)",
+      "The pH floor of 7.5, the 24 C floor and the salinity range are hobby brackish practice, not a measured tolerance"
+    ],
+    "temperatureC": [24, 30]
+  },
+  "commonName": "Blue-spotted mudskipper",
+  "id": "blue-spotted-mudskipper",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.25,
+    "bioload": 0.8,
+    "birthSizeM": 0.05,
+    "diet": ["algae-wafer", "pellets", "bloodworms"],
+    "growthPerDay": 0.00035,
+    "healthLossPerHourStarving": 0.0078,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0065,
+    "lifespanDays": 1460,
+    "maxSizeM": 0.1869,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.1,
+    "cruiseSpeedMps": 0.05,
+    "gait": "forage",
+    "massKg": 0.012,
+    "maxPitchDeg": 60,
+    "maxSpeedMps": 0.4,
+    "maxTurnRateDegPerS": 300,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Boleophthalmus pectinirostris"
+}

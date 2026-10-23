@@ -4,6 +4,22 @@ import type { Sdf } from './sdf.ts';
 
 export type Point3 = readonly [number, number, number];
 
+/** The bounds of one hard decor collider. */
+export interface DecorBounds {
+  readonly id: string;
+  readonly minX: number;
+  readonly minY: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxY: number;
+  readonly maxZ: number;
+}
+
+/** A hard decor collider's bounds and a key that changes whenever its shape does. */
+export interface DecorShape extends DecorBounds {
+  readonly key: string;
+}
+
 interface Primitive {
   readonly id: string;
   readonly minX: number;
@@ -357,6 +373,33 @@ export class DecorField implements Sdf {
   /** Beyond this distance from every collider `sample` reports exactly this, with an up normal. */
   get reach(): number {
     return this.reachM;
+  }
+
+  /** Every collider's id and axis-aligned bounds, sorted by id. */
+  bounds(): DecorBounds[] {
+    const out: DecorBounds[] = [];
+    for (const p of this.slots) {
+      if (p === null) continue;
+      out.push({
+        id: p.id,
+        minX: p.minX,
+        minY: p.minY,
+        minZ: p.minZ,
+        maxX: p.maxX,
+        maxY: p.maxY,
+        maxZ: p.maxZ,
+      });
+    }
+    return out.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  }
+
+  /** `bounds` with each collider's shape key. */
+  shapes(): DecorShape[] {
+    return this.bounds().map((b) => {
+      const key = this.shapeKey.get(b.id);
+      if (key === undefined) throw new Error(`decor collider "${b.id}" has no shape key`);
+      return { ...b, key };
+    });
   }
 
   /** Collider entries summed over the grid cells: the work queries walk, which a wider reach raises. */

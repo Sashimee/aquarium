@@ -85,14 +85,19 @@ export function reachCurrent(current: CurrentParameters, biome: Biome): CurrentP
  */
 export function limitLean(shear: number, linear: number, room: number): number {
   const over = Math.max(shear - linear, 0);
+  if (over === 0) return Math.min(shear, linear);
   return Math.min(shear, linear) + (over * room) / (room + over);
 }
 
 /** `limitLean` on a horizontal shear vector, keeping its direction. */
-export function limitLeanNode(shear: Node<'vec3'>, linear: number, room: number): Node<'vec3'> {
+export function limitLeanNode(
+  shear: Node<'vec3'>,
+  linear: number | Node<'float'>,
+  room: number,
+): Node<'vec3'> {
   const length = max(shear.length(), 1e-6);
   const over = max(length.sub(linear), 0);
-  const limited = min(length, linear).add(over.mul(room).div(over.add(room)));
+  const limited = min(length, linear).add(over.mul(room).div(max(over.add(room), 1e-6)));
   return shear.mul(limited.div(length));
 }
 
@@ -105,6 +110,7 @@ export interface PumpRoot {
 /** A time at which the pump is at its largest output, so dividing by it is safe. */
 function fullStrengthTime(field: FlowField): number {
   const { periodS, speedMps } = field.settings;
+  if (speedMps === 0) return 0;
   let best = 0;
   let bestAmplitude = 0;
   for (const quarter of [0, 0.25, 0.5, 0.75]) {
@@ -151,7 +157,7 @@ export class CurrentField {
   }
 
   get waveMaker(): FlowField | null {
-    return this.waveField;
+    return this.waveField !== null && this.waveField.settings.speedMps > 0 ? this.waveField : null;
   }
 
   /**
@@ -160,7 +166,7 @@ export class CurrentField {
    * from `@aquarium/sim`. `bounds` must match the sim's `World.flowBounds()`, which is private to
    * the worker; take the same minX/maxX/minZ/maxZ/minY/maxY from `Basin.fromTank(tank)` or
    * `Basin.fromSpace(space)` built from the config the worker was given.
-   * `simTimeS` is the sim snapshot's `time`.
+   * `simTimeS` is the sim snapshot's `time`. A pump with `speedMps` 0 is off: it sways nothing and gains 0.
    */
   setWaveMaker(field: FlowField | null, simTimeS: number): void {
     this.waveField = field;
@@ -190,6 +196,11 @@ export class CurrentField {
       return;
     }
     const full = field.settings.speedMps * field.amplitude(this.gainTimeS);
+    if (full === 0) {
+      out[0] = 0;
+      out[1] = 0;
+      return;
+    }
     field.sample(x, y, z, this.gainTimeS, this.scratch);
     out[0] = (this.scratch[0] ?? 0) / full;
     out[1] = (this.scratch[2] ?? 0) / full;

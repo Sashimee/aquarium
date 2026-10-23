@@ -277,6 +277,42 @@ describe('adding a fish to a running world', () => {
     expect(w.behaviour.anchor[i]).toBe(REEF_ANCHORS.findIndex((a) => a.kind === 'anemone'));
   });
 
+  it('keeps every hosted fish on its anemone when crevices are found for a newcomer or moved rock', () => {
+    const anemones = [
+      REEF_ANCHORS.filter((a) => a.kind === 'anemone')[0],
+      {
+        id: 'anemone-east',
+        kind: 'anemone' as const,
+        position: [0.4, 0.08, 0.15] as const,
+        radius: 0.07,
+      },
+    ].flatMap((a) => (a === undefined ? [] : [a]));
+    const w = new World({
+      ...community(2),
+      anchors: anemones,
+      fish: spawnMany('ocellaris-clownfish', 4),
+    });
+    expect(Array.from(w.behaviour.anchor)).toEqual([0, 0, 1, 1]);
+    w.removeFish('ocellaris-clownfish-0');
+    expect(Array.from(w.behaviour.anchor)).toEqual([0, 1, 1]);
+
+    const gramma = w.addFish({ id: 'gramma', species: 'royal-gramma' });
+    expect(Array.from(w.behaviour.anchor).slice(0, 3)).toEqual([0, 1, 1]);
+    const nook = w.behaviour.homes[w.behaviour.anchor[gramma] ?? -1];
+    expect(nook?.kind).toBe('cave');
+
+    const rock: Collider = {
+      id: 'new-rock',
+      hard: true,
+      kind: 'sphere',
+      center: [0.1, 0, 0.15],
+      radius: 0.08,
+    };
+    w.setDecor([...REEF_DECOR, rock]);
+    expect(Array.from(w.behaviour.anchor).slice(0, 3)).toEqual([0, 1, 1]);
+    expect(w.behaviour.homes[w.behaviour.anchor[gramma] ?? -1]?.kind).toBe('cave');
+  });
+
   it('widens the decor field for a fish longer than any already in the tank', () => {
     const w = new World({ ...community(3), fish: spawnMany('neon-tetra', 6) });
     const field = w.decorSdf;

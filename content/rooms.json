@@ -1,0 +1,210 @@
+[
+  {
+    "id": "room-living",
+    "name": "Living room",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-sofa-03",
+        "polyhaven-modern-coffee-table-01",
+        "polyhaven-mid-century-lounge-chair"
+      ],
+      "hdri": "polyhaven-lythwood-lounge"
+    },
+    "ambience": {
+      "sound": "audio/freesound-329533/freesound-329533.m4a",
+      "asset": "freesound-329533"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-bedroom",
+    "name": "Bedroom",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-vintage-day-bed",
+        "polyhaven-painted-wooden-nightstand",
+        "polyhaven-throw-pillows-01"
+      ],
+      "hdri": "polyhaven-hotel-room"
+    },
+    "ambience": {
+      "sound": "audio/freesound-630612/freesound-630612.m4a",
+      "asset": "freesound-630612"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-shop",
+    "name": "Aquarium shop",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-steel-frame-shelves-03",
+        "polyhaven-cashregister-01",
+        "polyhaven-plastic-crate-02"
+      ],
+      "hdri": "polyhaven-decor-shop"
+    },
+    "ambience": {
+      "sound": "audio/freesound-764641/freesound-764641.m4a",
+      "asset": "freesound-764641"
+    },
+    "hasWindow": false
+  },
+  {
+    "id": "room-office",
+    "name": "Home office",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-metal-office-desk",
+        "polyhaven-modern-arm-chair-01",
+        "polyhaven-classic-laptop"
+      ],
+      "hdri": "polyhaven-white-home-studio"
+    },
+    "ambience": {
+      "sound": "audio/freesound-327497/freesound-327497.m4a",
+      "asset": "freesound-327497"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-loft",
+    "name": "City loft",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-sofa-02",
+        "polyhaven-hanging-industrial-lamp",
+        "polyhaven-metal-stool-01"
+      ],
+      "hdri": "polyhaven-photo-studio-loft-hall"
+    },
+    "ambience": {
+      "sound": "audio/freesound-330427/freesound-330427.m4a",
+      "asset": "freesound-330427"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-zen",
+    "name": "Japanese zen room",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-chinese-tea-table",
+        "polyhaven-chinese-stool",
+        "polyhaven-ceramic-vase-01"
+      ],
+      "hdri": "polyhaven-studio-kominka-01"
+    },
+    "ambience": {
+      "sound": "audio/freesound-629951/freesound-629951.m4a",
+      "asset": "freesound-629951"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-beach",
+    "name": "Beach house",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-outdoor-table-chair-set-01",
+        "polyhaven-lifebuoy",
+        "polyhaven-painted-wooden-bench"
+      ],
+      "hdri": "polyhaven-illovo-beach-balcony"
+    },
+    "ambience": {
+      "sound": "audio/freesound-852826/freesound-852826.m4a",
+      "asset": "freesound-852826"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-cabin",
+    "name": "Mountain cabin",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-scandinavian-masonry-heater",
+        "polyhaven-rockingchair-01",
+        "polyhaven-vintage-oil-lamp"
+      ],
+      "hdri": "polyhaven-cabin"
+    },
+    "ambience": {
+      "sound": "audio/freesound-346321/freesound-346321.m4a",
+      "asset": "freesound-346321"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-sushi",
+    "name": "Sushi restaurant",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-bar-chair-round-01",
+        "polyhaven-round-wooden-table-02",
+        "polyhaven-carved-wooden-plate"
+      ],
+      "hdri": "polyhaven-warm-restaurant"
+    },
+    "ambience": {
+      "sound": "audio/freesound-723834/freesound-723834.m4a",
+      "asset": "freesound-723834"
+    },
+    "hasWindow": false
+  },
+  {
+    "id": "room-library",
+    "name": "Castle library",
+    "assets": {
+      "shell": null,
+      "furniture": ["polyhaven-shelf-01", "polyhaven-armchair-01", "polyhaven-marble-bust-01"],
+      "hdri": "polyhaven-reading-room"
+    },
+    "ambience": {
+      "sound": "audio/freesound-620683/freesound-620683.m4a",
+      "asset": "freesound-620683"
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-public-aquarium",
+    "name": "Public aquarium hall",
+    "assets": {
+      "shell": null,
+      "furniture": [
+        "polyhaven-painted-wooden-bench",
+        "polyhaven-wetfloorsign-01",
+        "polyhaven-bronze-whale-statue"
+      ],
+      "hdri": "polyhaven-ushaka-sea-world-aquarium"
+    },
+    "ambience": {
+      "sound": "audio/freesound-393689/freesound-393689.m4a",
+      "asset": "freesound-393689"
+    },
+    "hasWindow": false
+  },
+  {
+    "id": "room-submarine",
+    "name": "Submarine",
+    "assets": {
+      "shell": null,
+      "furniture": ["polyhaven-seadogs-compass", "polyhaven-metal-stool-01"],
+      "hdri": "polyhaven-industrial-pipe-and-valve-01"
+    },
+    "ambience": {
+      "sound": "audio/freesound-438735/freesound-438735.m4a",
+      "asset": "freesound-438735"
+    },
+    "hasWindow": true
+  }
+]

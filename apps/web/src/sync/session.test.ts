@@ -1,4 +1,4 @@
-import type { Tank } from '@aquarium/shared';
+import type { ConflictReason, Coral, Plant, Tank } from '@aquarium/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, type ApiClient } from '../ui/api';
 import {
@@ -15,6 +15,7 @@ import {
   TANK_C,
 } from './fixtures';
 import { ACCLIMATION_SECONDS } from './life';
+import { trimRefusalShown } from './plantTrim';
 import { TankSession } from './session';
 
 const deadPip = fishFixture(FISH_1, {
@@ -33,17 +34,24 @@ function apiMocks() {
     renameTank: vi.fn(),
     saveDecorLayout: vi.fn(),
     saveBackground: vi.fn(),
+    saveRoom: vi.fn(),
+    ownedRooms: vi.fn().mockResolvedValue([]),
     addFish: vi.fn(),
     wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
     purchase: vi.fn(),
     saveLight: vi.fn(),
+    setCo2: vi.fn(),
     netFish: vi.fn(),
     care: vi.fn(),
     treat: vi.fn(),
+    trimPlant: vi.fn(),
+    fragCoral: vi.fn(),
+    moveFish: vi.fn(),
     reportAte: vi.fn(),
     shareTank: vi.fn(),
     rotateShare: vi.fn(),
     revokeShare: vi.fn(),
+    setGallery: vi.fn(),
   };
 }
 
@@ -632,6 +640,7 @@ describe('sign-out safety', () => {
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
       wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+      ownedRooms: vi.fn().mockResolvedValue([]),
       reportAte: vi.fn().mockReturnValue(hang),
     };
     const rec = recordBus();
@@ -712,6 +721,7 @@ describe('tank switcher and naming', () => {
         tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
         tank: vi.fn().mockResolvedValue(second),
         wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+        ownedRooms: vi.fn().mockResolvedValue([]),
         reportAte: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
       };
       const rec = recordBus();
@@ -833,6 +843,7 @@ describe('tank switcher and naming', () => {
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
       wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+      ownedRooms: vi.fn().mockResolvedValue([]),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();
@@ -904,6 +915,7 @@ describe('tank switcher and naming', () => {
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
       wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+      ownedRooms: vi.fn().mockResolvedValue([]),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();
@@ -1274,6 +1286,51 @@ describe('public sharing', () => {
   });
 });
 
+describe('gallery listing', () => {
+  it('lists a shared tank and says so', async () => {
+    const { api, session } = setup([tankFixture({ shared: true })]);
+    await session.setUser(verified);
+    api.setGallery.mockResolvedValue(tankFixture({ shared: true, inGallery: true }));
+    expect(await session.setGalleryListed(true)).toBe(true);
+    expect(api.setGallery).toHaveBeenCalledWith(TANK_A, true);
+    expect(session.activeTank?.inGallery).toBe(true);
+    expect(session.getState().notice).toBe('Your tank is in the gallery.');
+  });
+
+  it('takes the tank out again', async () => {
+    const { api, session } = setup([tankFixture({ shared: true, inGallery: true })]);
+    await session.setUser(verified);
+    api.setGallery.mockResolvedValue(tankFixture({ shared: true, inGallery: false }));
+    expect(await session.setGalleryListed(false)).toBe(true);
+    expect(session.activeTank?.inGallery).toBe(false);
+    expect(session.getState().notice).toBe('Your tank is out of the gallery.');
+  });
+
+  it('shows the server reason for a 409 and keeps the tank unlisted', async () => {
+    const { api, session } = setup([tankFixture()]);
+    await session.setUser(verified);
+    api.setGallery.mockRejectedValue(
+      new ApiRequestError(
+        409,
+        'conflict',
+        'Turn on the public link before listing this tank in the gallery.',
+      ),
+    );
+    expect(await session.setGalleryListed(true)).toBe(false);
+    expect(session.activeTank?.inGallery).toBe(false);
+    expect(session.getState().error).toBe(
+      'Turn on the public link before listing this tank in the gallery.',
+    );
+  });
+
+  it('does nothing without an active tank', async () => {
+    const { api, session } = setup([]);
+    await session.setUser(verified);
+    expect(await session.setGalleryListed(true)).toBe(false);
+    expect(api.setGallery).not.toHaveBeenCalled();
+  });
+});
+
 describe('Pearls and the T70 request contract', () => {
   const boughtTank = () =>
     tankFixture({
@@ -1396,6 +1453,54 @@ describe('Pearls and the T70 request contract', () => {
     expect(api.care).toHaveBeenCalledWith(TANK_A, { type: 'water_change' });
   });
 
+  it.each(['buffer_dose', 'add_botanicals'] as const)(
+    'sends a key with %s and reuses it on a retry',
+    async (type) => {
+      const { api, session } = setup();
+      await session.setUser(verified);
+      api.care
+        .mockRejectedValueOnce(apiError(0, 'timeout'))
+        .mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+      await session.careAction({ type });
+      await session.careAction({ type });
+      await session.careAction({ type });
+      const keys = api.care.mock.calls.map((c) => keyOf(c[1]));
+      expect(api.care.mock.calls[0]?.[1]).toMatchObject({ type });
+      expect(keys[0]).toEqual(expect.any(String));
+      expect(keys[1]).toBe(keys[0]);
+      expect(keys[2]).not.toBe(keys[0]);
+    },
+  );
+
+  it('sends the salt dose without a key', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    await session.careAction({ type: 'salt_dose' });
+    expect(api.care).toHaveBeenCalledWith(TANK_A, { type: 'salt_dose' });
+  });
+
+  it('is busy while a dose is in flight and shows a refusal inline', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    let release: (error: unknown) => void = () => undefined;
+    api.care.mockReturnValue(new Promise((_, reject) => (release = reject)));
+    const pending = session.careAction({ type: 'salt_dose' });
+    expect(session.getState().busy).toBe(true);
+    release(apiError(422, 'feeding_rejected'));
+    expect(await pending).toBe(false);
+    expect(session.getState().busy).toBe(false);
+    expect(session.getState().error).not.toBeNull();
+  });
+
+  it('flags a refusal for too few Pearls on a buffer dose', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care.mockRejectedValue(apiError(402, 'insufficient_pearls'));
+    expect(await session.careAction({ type: 'buffer_dose' })).toBe(false);
+    expect(session.getState().pearlsRefused).toBe(true);
+  });
+
   it('buys equipment, shows the new balance and the upgraded tank', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
@@ -1465,15 +1570,18 @@ describe('Pearls and the T70 request contract', () => {
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().owned).toEqual(['plant:java-fern']));
     api.purchase.mockRejectedValue(apiError(409, 'conflict'));
-    api.wallet.mockResolvedValue({ balance: 500, owned: ['plant:java-fern'], released: [] });
+    api.wallet.mockResolvedValue({ balance: 500, owned: ['plant:java-fern'] });
     await session.purchase('equipment:filter:2', 'Installed.');
     expect(session.getState().owned).toEqual(['plant:java-fern']);
   });
 
-  describe('lamp hours for the hood light', () => {
-    const withLamp = (tank: Tank, onHour: number, offHour: number): Tank => ({
+  describe('lamp hours and strength for the hood light', () => {
+    const withLamp = (tank: Tank, onHour: number, offHour: number, intensity = 0.8): Tank => ({
       ...tank,
-      equipment: { ...tank.equipment, light: { ...tank.equipment.light, onHour, offHour } },
+      equipment: {
+        ...tank.equipment,
+        light: { ...tank.equipment.light, intensity, onHour, offHour },
+      },
     });
 
     it("announces each tank's own hours on load and on a switch", async () => {
@@ -1486,8 +1594,8 @@ describe('Pearls and the T70 request contract', () => {
       await session.setUser(verified);
       await session.select(TANK_B);
       expect(seen).toEqual([
-        { tankId: TANK_A, onHour: 8, offHour: 20 },
-        { tankId: TANK_B, onHour: 14, offHour: 2 },
+        { tankId: TANK_A, intensity: 0.8, onHour: 8, offHour: 20 },
+        { tankId: TANK_B, intensity: 0.8, onHour: 14, offHour: 2 },
       ]);
     });
 
@@ -1497,15 +1605,29 @@ describe('Pearls and the T70 request contract', () => {
       rec.bus.on('tank:lamp', (e) => seen.push(e));
       await session.setUser(verified);
       const base = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
-      api.saveLight.mockResolvedValue(withLamp(base, 22, 6));
+      api.saveLight.mockResolvedValue(withLamp(base, 22, 6, 0.5));
       await session.setLight({ intensity: 0.5, onHour: 22, offHour: 6 });
       api.care.mockResolvedValue(
-        withLamp(tankFixture({ lastTickAt: '2026-02-01T12:02:00.000Z' }), 22, 6),
+        withLamp(tankFixture({ lastTickAt: '2026-02-01T12:02:00.000Z' }), 22, 6, 0.5),
       );
       await session.careAction({ type: 'water_change' });
       expect(seen).toEqual([
-        { tankId: TANK_A, onHour: 8, offHour: 20 },
-        { tankId: TANK_A, onHour: 22, offHour: 6 },
+        { tankId: TANK_A, intensity: 0.8, onHour: 8, offHour: 20 },
+        { tankId: TANK_A, intensity: 0.5, onHour: 22, offHour: 6 },
+      ]);
+    });
+
+    it('announces a strength change with the hours unchanged', async () => {
+      const { api, rec, session } = setup();
+      const seen: unknown[] = [];
+      rec.bus.on('tank:lamp', (e) => seen.push(e));
+      await session.setUser(verified);
+      const base = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+      api.saveLight.mockResolvedValue(withLamp(base, 8, 20, 0.2));
+      await session.setLight({ intensity: 0.2, onHour: 8, offHour: 20 });
+      expect(seen).toEqual([
+        { tankId: TANK_A, intensity: 0.8, onHour: 8, offHour: 20 },
+        { tankId: TANK_A, intensity: 0.2, onHour: 8, offHour: 20 },
       ]);
     });
   });
@@ -1521,6 +1643,26 @@ describe('Pearls and the T70 request contract', () => {
     await session.purchase('equipment:filter:2', 'Installed.');
     const keys = api.purchase.mock.calls.map((c) => keyOf(c[0]));
     expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('sets the CO2 tier and shows the saved tank', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    const base = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+    api.setCo2.mockResolvedValue({ ...base, equipment: { ...base.equipment, co2: { tier: 0 } } });
+    expect(await session.setCo2(0)).toBe(true);
+    expect(api.setCo2).toHaveBeenCalledWith(TANK_A, 0);
+    expect(session.getState().notice).toBe('The CO₂ is off.');
+  });
+
+  it('shows the server message when the CO2 change is refused', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.setCo2.mockRejectedValue(
+      new ApiRequestError(400, 'validation_failed', 'this tank has not bought CO2 tier 3.'),
+    );
+    expect(await session.setCo2(3)).toBe(false);
+    expect(session.getState().error).toContain('this tank has not bought CO2 tier 3');
   });
 
   it('saves the lamp schedule in UTC hours and shows the saved tank', async () => {
@@ -1657,11 +1799,11 @@ describe('a balance that moves on the server', () => {
     api.wallet.mockResolvedValueOnce(wallet(500, ['plant:java-fern']));
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().owned).toEqual(['plant:java-fern']));
-    api.wallet.mockResolvedValue({ balance: 525, owned: [], released: ['plant:java-fern'] });
+    api.wallet.mockResolvedValue({ balance: 525, owned: [] });
     await session.refreshWallet();
     expect(session.getState().owned).toEqual([]);
     api.purchase.mockRejectedValue(apiError(409, 'conflict'));
-    api.wallet.mockResolvedValue({ balance: 525, owned: ['decor:boulder-01'], released: [] });
+    api.wallet.mockResolvedValue({ balance: 525, owned: ['decor:boulder-01'] });
     await session.purchase('decor:boulder-01', 'Placed.');
     expect(session.getState().owned).toEqual(['decor:boulder-01']);
   });
@@ -1728,6 +1870,153 @@ describe('a balance that moves on the server', () => {
   });
 });
 
+describe('moving a fish', () => {
+  const quarantine = tankFixture({ id: TANK_B, name: 'Quarantine', quarantine: true });
+  const home = () => tankFixture({ fish: [fishFixture(FISH_1, { name: 'Pip' })] });
+  const refuse = (status: number, reason: ConflictReason | null, retry: number | null = null) =>
+    new ApiRequestError(
+      status,
+      status === 429 ? 'rate_limited' : 'conflict',
+      'server words',
+      {},
+      retry,
+      reason,
+    );
+
+  it('sends the move with a key and applies both tanks', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    const pip = fishFixture(FISH_1, { name: 'Pip' });
+    api.moveFish.mockResolvedValue({
+      source: tankFixture({ fish: [], lastTickAt: '2026-02-01T12:01:00.000Z' }),
+      destination: tankFixture({
+        id: TANK_B,
+        name: 'Quarantine',
+        quarantine: true,
+        fish: [pip],
+        lastTickAt: '2026-02-01T12:01:00.000Z',
+      }),
+    });
+    const outcome = await session.move(FISH_1, TANK_B);
+    expect(outcome).toEqual({ ok: true, refusal: null });
+    expect(api.moveFish).toHaveBeenCalledWith(TANK_A, FISH_1, {
+      toTankId: TANK_B,
+      idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/),
+    });
+    const state = session.getState();
+    expect(state.tanks.find((t) => t.id === TANK_A)?.fish).toHaveLength(0);
+    expect(state.tanks.find((t) => t.id === TANK_B)?.fish).toHaveLength(1);
+    expect(state.notice).toBe('Pip was moved to Quarantine.');
+  });
+
+  it.each([
+    ['fish_dead', /Pip has died/],
+    ['wrong_biome', /Pip cannot live in Quarantine: it is a different kind of water/],
+    ['tank_full', /Quarantine has no room for Pip/],
+    ['key_reused', /clashed with an earlier one/],
+  ] as const)('explains a %s refusal and starts a new key next time', async (reason, text) => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(refuse(409, reason));
+    const outcome = await session.move(FISH_1, TANK_B);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.refusal).toMatch(text);
+    await session.move(FISH_1, TANK_B);
+    const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('reports a refusal once, not also as a session error', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(refuse(409, 'tank_full'));
+    const errors: (string | null)[] = [];
+    session.subscribe(() => errors.push(session.getState().error));
+    await session.move(FISH_1, TANK_B);
+    expect(errors.filter((e) => e !== null)).toEqual([]);
+    api.moveFish.mockRejectedValue(refuse(429, null, 5));
+    await session.move(FISH_1, TANK_B);
+    expect(errors.filter((e) => e !== null)).toEqual([]);
+  });
+
+  it.each([
+    ['a network error', apiError(0, 'network')],
+    ['a timeout', apiError(0, 'timeout')],
+    ['a 500', apiError(500, 'internal')],
+    ['a 503', apiError(503, 'internal')],
+  ])('keeps the key after %s so the retry replays', async (_name, failure) => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(failure);
+    await session.move(FISH_1, TANK_B);
+    await session.move(FISH_1, TANK_B);
+    const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('does not replay a held key after the fish has been moved back', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    const pip = fishFixture(FISH_1, { name: 'Pip' });
+    const at = '2026-02-01T12:01:00.000Z';
+    const inHome = (fish: Tank['fish']) => tankFixture({ fish, lastTickAt: at });
+    const inQuarantine = (fish: Tank['fish']) =>
+      tankFixture({ id: TANK_B, name: 'Quarantine', quarantine: true, fish, lastTickAt: at });
+
+    api.moveFish.mockRejectedValueOnce(apiError(0, 'network'));
+    await session.move(FISH_1, TANK_B);
+
+    api.tank.mockResolvedValueOnce(inQuarantine([pip]));
+    await session.select(TANK_B);
+    api.moveFish.mockResolvedValueOnce({ source: inQuarantine([]), destination: inHome([pip]) });
+    await session.move(FISH_1, TANK_A);
+
+    api.tank.mockResolvedValueOnce(inHome([pip]));
+    await session.select(TANK_A);
+    api.moveFish.mockResolvedValueOnce({ source: inHome([]), destination: inQuarantine([pip]) });
+    await session.move(FISH_1, TANK_B);
+
+    expect(api.moveFish).toHaveBeenCalledTimes(3);
+    const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('falls back to the server text for a 409 without a known reason', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(refuse(409, null));
+    expect((await session.move(FISH_1, TANK_B)).refusal).toBe('server words');
+  });
+
+  it('says how long to wait after a 429 and keeps the key for the retry', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(refuse(429, null, 12));
+    const outcome = await session.move(FISH_1, TANK_B);
+    expect(outcome.refusal).toBe('Too many moves in a short time. Try again in 12 seconds.');
+    await session.move(FISH_1, TANK_B);
+    const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('leaves the refusal empty for a failure the player cannot act on', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(apiError(0, 'network'));
+    const outcome = await session.move(FISH_1, TANK_B);
+    expect(outcome).toEqual({ ok: false, refusal: null });
+    expect(session.getState().error).toMatch(/Could not reach the server/);
+  });
+
+  it('sends nothing for an unknown fish or tank', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    expect((await session.move(FISH_2, TANK_B)).ok).toBe(false);
+    expect((await session.move(FISH_1, '00000000-0000-4000-8000-0000000000ff')).ok).toBe(false);
+    expect(api.moveFish).not.toHaveBeenCalled();
+  });
+});
+
 describe('treating a tank', () => {
   const sick = fishFixture(FISH_1, {
     disease: {
@@ -1759,7 +2048,7 @@ describe('treating a tank', () => {
       entry: null,
     });
     const outcome = await session.treat('ich', 'premium');
-    expect(outcome).toEqual({ ok: true, overdose: false, refusal: null });
+    expect(outcome).toEqual({ ok: true, overdose: false, refusal: null, reason: null });
     expect(api.treat).toHaveBeenCalledWith(TANK_A, {
       kind: 'ich',
       potency: 'premium',
@@ -1809,9 +2098,16 @@ describe('treating a tank', () => {
     const { api, session } = setup(sickTank());
     await session.setUser(verified);
     const water = 'Change the water until only a trace is left, then switch.';
-    api.treat.mockRejectedValue(new ApiRequestError(409, 'conflict', water));
+    api.treat.mockRejectedValue(
+      new ApiRequestError(409, 'conflict', water, {}, null, 'other_medicine'),
+    );
     const refused = await session.treat('ich', 'standard');
-    expect(refused).toEqual({ ok: false, overdose: false, refusal: water });
+    expect(refused).toEqual({
+      ok: false,
+      overdose: false,
+      refusal: water,
+      reason: 'other_medicine',
+    });
     await session.treat('ich', 'standard');
     const keys = api.treat.mock.calls.map((c) => keyOf(c[1]));
     expect(keys[1]).not.toBe(keys[0]);
@@ -1834,6 +2130,7 @@ describe('treating a tank', () => {
       ok: false,
       overdose: false,
       refusal: null,
+      reason: null,
     });
     expect(api.treat).not.toHaveBeenCalled();
   });
@@ -1849,5 +2146,376 @@ describe('treating a tank', () => {
       expect.objectContaining({ quarantine: true, size: 'nano30' }),
     );
     expect(session.getState().activeId).toBe(TANK_B);
+  });
+});
+
+describe('growing plants', () => {
+  const fern = (over: Partial<Plant> = {}): Plant => ({
+    key: 's7',
+    assetId: 'plant-fern',
+    tintSeed: 7,
+    parentKey: null,
+    position: null,
+    size: 1.6,
+    minSize: 0.4,
+    maxSize: 2.4,
+    ...over,
+  });
+  const planted = (over: Partial<Tank> = {}) =>
+    tankFixture({ plants: [fern()], lastTickAt: '2026-02-01T00:00:00.000Z', ...over });
+  const refuse = (status: number, code: ApiRequestError['code'], reason?: ConflictReason) =>
+    new ApiRequestError(status, code, 'server words', {}, null, reason ?? null);
+
+  it('announces the plants on load and when a returned tank changes them', async () => {
+    const { api, rec, session } = setup([planted()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:plants')).toEqual([{ tankId: TANK_A, plants: [fern()] }]);
+    api.care.mockResolvedValue(planted({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:plants')).toHaveLength(1);
+    api.care.mockResolvedValue(
+      planted({ plants: [fern({ size: 1.9 })], lastTickAt: '2026-02-01T00:10:00.000Z' }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:plants')).toHaveLength(2);
+    expect(rec.of('tank:plants')[1]).toEqual({ tankId: TANK_A, plants: [fern({ size: 1.9 })] });
+  });
+
+  it('announces an empty list for a tank without growth state', async () => {
+    const { rec, session } = setup([tankFixture()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:plants')).toEqual([{ tankId: TANK_A, plants: [] }]);
+  });
+
+  it('sends the trim with a key, applies the returned tank and announces the new size', async () => {
+    const { api, rec, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockResolvedValue(
+      planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+    );
+    const outcome = await session.trimPlant('s7', 1);
+    expect(outcome).toEqual({ ok: true, refusal: null });
+    expect(api.trimPlant).toHaveBeenCalledWith(TANK_A, {
+      plantKey: 's7',
+      size: 1,
+      idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/),
+    });
+    expect(session.getState().tanks[0]?.plants?.[0]?.size).toBe(1);
+    expect(rec.of('tank:plants').at(-1)).toEqual({ tankId: TANK_A, plants: [fern({ size: 1 })] });
+    expect(session.getState().notice).toBe('The fern was trimmed.');
+  });
+
+  it.each([
+    [400, 'validation_failed', undefined, /cannot be cut back that far/],
+    [404, 'not_found', undefined, /no longer in this tank/],
+    [409, 'conflict', 'plant_not_grown', /has not grown past that size/],
+    [409, 'conflict', 'key_reused', /clashed with an earlier one/],
+    [429, 'rate_limited', undefined, /Too many trims/],
+  ] as const)('explains a %s %s refusal', async (status, code, reason, text) => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(refuse(status, code, reason));
+    const outcome = await session.trimPlant('s7', 1);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.refusal).toMatch(text);
+    expect(session.getState().tanks[0]?.plants?.[0]?.size).toBe(1.6);
+  });
+
+  it('keeps the key after a rate limit or a lost reply and drops it after a refusal', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant
+      .mockRejectedValueOnce(refuse(429, 'rate_limited'))
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValueOnce(
+        planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+      )
+      .mockRejectedValue(refuse(409, 'conflict', 'plant_not_grown'));
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 0.5);
+    await session.trimPlant('s7', 0.5);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).toBe(keys[0]);
+    expect(keys[4]).not.toBe(keys[3]);
+  });
+
+  it('expires a held trim key after ten minutes so a lost reply is not replayed forever', async () => {
+    const api = apiMocks();
+    api.species.mockResolvedValue([speciesFixture()]);
+    api.tanks.mockResolvedValue([planted()]);
+    let now = Date.parse('2026-02-01T12:00:00.000Z');
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: recordBus().bus,
+      sleep: async () => undefined,
+      now: () => now,
+    });
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(apiError(0, 'network'));
+    await session.trimPlant('s7', 1);
+    now += 60_000;
+    await session.trimPlant('s7', 1);
+    now += 11 * 60_000;
+    await session.trimPlant('s7', 1);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('refreshes the tank after a plant_not_grown refusal so the dialog sees the real size', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(refuse(409, 'conflict', 'plant_not_grown'));
+    api.tank.mockResolvedValue(
+      planted({ plants: [fern({ size: 1.2 })], lastTickAt: '2026-02-01T00:05:00.000Z' }),
+    );
+    const outcome = await session.trimPlant('s7', 1.5);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.refusal).toMatch(/has not grown past that size/);
+    expect(session.getState().tanks[0]?.plants?.[0]?.size).toBe(1.2);
+  });
+
+  it('closes the dialog on success and shows the refusal otherwise', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValueOnce(refuse(404, 'not_found'));
+    const refused = await session.trimPlant('s7', 1);
+    expect(trimRefusalShown(refused, session.getState().error)).toMatch(/no longer in this tank/);
+    api.trimPlant.mockResolvedValue(
+      planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+    );
+    const worked = await session.trimPlant('s7', 1);
+    expect(trimRefusalShown(worked, session.getState().error)).toBeNull();
+  });
+
+  it('starts a new key once a trim has worked', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockResolvedValue(
+      planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+    );
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 1);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('uses another key for another size', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(apiError(0, 'network'));
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 0.8);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('does not call the server for a plant the tank does not have, or with no tank', async () => {
+    const { api, session } = setup([tankFixture()]);
+    expect(await session.trimPlant('s7', 1)).toEqual({ ok: false, refusal: null });
+    await session.setUser(verified);
+    expect(await session.trimPlant('s7', 1)).toEqual({ ok: false, refusal: null });
+    expect(api.trimPlant).not.toHaveBeenCalled();
+  });
+});
+
+describe('reef corals', () => {
+  const table = (over: Partial<Coral> = {}): Coral => ({
+    key: 's3',
+    assetId: 'acropora-cytherea',
+    tintSeed: 3,
+    parentKey: null,
+    position: null,
+    size: 1.6,
+    minSize: 0.4,
+    maxSize: 2,
+    fragMinSize: 1.5,
+    bleach: 0,
+    ...over,
+  });
+  const reef = (over: Partial<Tank> = {}) =>
+    tankFixture({
+      biome: 'reef',
+      corals: [table()],
+      lastTickAt: '2026-02-01T00:00:00.000Z',
+      ...over,
+    });
+  const refuse = (status: number, code: ApiRequestError['code'], reason?: string) =>
+    new ApiRequestError(
+      status,
+      code,
+      'server words',
+      {},
+      null,
+      (reason ?? null) as ConflictReason | null,
+    );
+
+  it('announces the corals on load and only when a returned tank changes them', async () => {
+    const { api, rec, session } = setup([reef()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:corals')).toEqual([{ tankId: TANK_A, corals: [table()] }]);
+    api.care.mockResolvedValue(reef({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:corals')).toHaveLength(1);
+    api.care.mockResolvedValue(
+      reef({ corals: [table({ size: 1.8, bleach: 0.2 })], lastTickAt: '2026-02-01T00:10:00.000Z' }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:corals').at(-1)).toEqual({
+      tankId: TANK_A,
+      corals: [table({ size: 1.8, bleach: 0.2 })],
+    });
+  });
+
+  it('announces an empty list for a tank without coral state', async () => {
+    const { rec, session } = setup([tankFixture()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:corals')).toEqual([{ tankId: TANK_A, corals: [] }]);
+  });
+
+  it('cuts a fragment with a key, applies the tank and announces the new fragment', async () => {
+    const { api, rec, session } = setup([reef()]);
+    await session.setUser(verified);
+    const frag = table({
+      key: 's3.1',
+      parentKey: 's3',
+      position: [0.1, 0.05],
+      size: 0.3,
+      fragMinSize: 1.5,
+    });
+    api.fragCoral.mockResolvedValue(
+      reef({
+        corals: [table({ size: 1.3 }), frag],
+        lastTickAt: '2026-02-01T00:01:00.000Z',
+      }),
+    );
+    const outcome = await session.fragCoral('s3');
+    expect(outcome).toEqual({ ok: true, refusal: null });
+    expect(api.fragCoral).toHaveBeenCalledWith(TANK_A, {
+      coralKey: 's3',
+      idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/),
+    });
+    expect(rec.of('tank:corals').at(-1)).toEqual({
+      tankId: TANK_A,
+      corals: [table({ size: 1.3 }), frag],
+    });
+    expect(session.getState().notice).toBe('A fragment was cut from the acropora cytherea.');
+  });
+
+  it.each([
+    [404, 'not_found', undefined, /no longer in this tank/],
+    [409, 'conflict', 'coral_not_grown', /not grown enough/],
+    [409, 'conflict', 'coral_bleached', /too bleached/],
+    [409, 'conflict', 'coral_limit', /as many fragments/],
+    [409, 'conflict', 'coral_no_room', /no room on the substrate/],
+    [409, 'conflict', 'key_reused', /clashed with an earlier one/],
+    [409, 'conflict', undefined, /server words/],
+    [429, 'rate_limited', undefined, /Too many cuts/],
+  ] as const)('explains a %s %s %s refusal', async (status, code, reason, text) => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral.mockRejectedValue(refuse(status, code, reason));
+    api.tank.mockResolvedValue(reef({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    const outcome = await session.fragCoral('s3');
+    expect(outcome.ok).toBe(false);
+    expect(outcome.refusal).toMatch(text);
+  });
+
+  it('refreshes the tank after a 409 so the picker sees the real size', async () => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral.mockRejectedValue(refuse(409, 'conflict', 'coral_not_grown'));
+    api.tank.mockResolvedValue(
+      reef({ corals: [table({ size: 1.2 })], lastTickAt: '2026-02-01T00:05:00.000Z' }),
+    );
+    await session.fragCoral('s3');
+    expect(session.getState().tanks[0]?.corals?.[0]?.size).toBe(1.2);
+  });
+
+  it('refreshes the tank after a 404 so the picker drops a colony that is gone', async () => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral.mockRejectedValue(refuse(404, 'not_found'));
+    api.tank.mockResolvedValue(reef({ corals: [], lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.fragCoral('s3');
+    expect(api.tank).toHaveBeenCalledTimes(1);
+    expect(session.getState().tanks[0]?.corals).toEqual([]);
+  });
+
+  it('keeps the key after a lost reply and drops it after a refusal', async () => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockRejectedValueOnce(refuse(409, 'conflict', 'coral_limit'))
+      .mockRejectedValue(refuse(409, 'conflict', 'coral_limit'));
+    api.tank.mockResolvedValue(reef({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.fragCoral('s3');
+    await session.fragCoral('s3');
+    await session.fragCoral('s3');
+    const keys = api.fragCoral.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it('does not call the server for a coral the tank does not have', async () => {
+    const { api, session } = setup([tankFixture()]);
+    expect(await session.fragCoral('s3')).toEqual({ ok: false, refusal: null });
+    await session.setUser(verified);
+    expect(await session.fragCoral('s3')).toEqual({ ok: false, refusal: null });
+    expect(api.fragCoral).not.toHaveBeenCalled();
+  });
+});
+
+describe('gifts', () => {
+  it('turns acceptsGifts on for a tank and tells the player', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    const setAcceptsGifts = vi
+      .fn()
+      .mockResolvedValue(
+        tankFixture({ acceptsGifts: true, lastTickAt: '2026-02-01T12:01:00.000Z' }),
+      );
+    Object.assign(api, { setAcceptsGifts });
+    expect(await session.setAcceptsGifts(TANK_A, true)).toBe(true);
+    expect(setAcceptsGifts).toHaveBeenCalledWith(TANK_A, true);
+    expect(session.getState().tanks[0]?.acceptsGifts).toBe(true);
+    expect(session.getState().notice).toContain('now accepts gifted and traded fish');
+  });
+
+  it('keeps the flag and shows the error when the server refuses', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    Object.assign(api, { setAcceptsGifts: vi.fn().mockRejectedValue(apiError(500, 'internal')) });
+    expect(await session.setAcceptsGifts(TANK_A, true)).toBe(false);
+    expect(session.getState().tanks[0]?.acceptsGifts).toBe(false);
+    expect(session.getState().error).not.toBeNull();
+  });
+
+  it('puts a gifted fish in the acclimation bag', async () => {
+    const { rec, session } = setup();
+    await session.setUser(verified);
+    const arrived = fishFixture(FISH_2, { name: 'Dot' });
+    session.applyGiftTank(
+      tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z', fish: [fishFixture(FISH_1), arrived] }),
+      true,
+    );
+    expect(rec.of('tank:fish-added')).toEqual([{ tankId: TANK_A, fish: arrived, acclimate: true }]);
+    expect(session.getState().bagged.map((b) => b.name)).toEqual(['Dot']);
+  });
+
+  it('does not bag a fish that returns from a cancelled offer', async () => {
+    const { rec, session } = setup([tankFixture({ fish: [] })]);
+    await session.setUser(verified);
+    const back = fishFixture(FISH_3, { name: 'Back' });
+    session.applyGiftTank(
+      tankFixture({ lastTickAt: '2026-02-01T12:03:00.000Z', fish: [back] }),
+      false,
+    );
+    expect(rec.of('tank:fish-added')).toEqual([{ tankId: TANK_A, fish: back, acclimate: false }]);
+    expect(session.getState().bagged).toEqual([]);
   });
 });

@@ -10,14 +10,25 @@ import {
   type Vector3,
   WebGPURenderer,
 } from 'three/webgpu';
-import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import {
-  DEFAULT_LAMP_HOURS,
+  applyDayLighting,
+  type DayLightingRig,
+  FRESHWATER_FILL_LEVEL,
+  lampGain,
+} from './dayLighting';
+import {
+  ClockPin,
+  assertClockSetting,
+  hoodMinute,
+  roomMinute,
+  type ClockSetting,
+  DaylightFeed,
+  DEFAULT_LAMP_SCHEDULE,
   daylightAt,
   lampPhotoperiod,
   localMinuteOfDay,
   minuteOfDay,
-  type LampHours,
+  type LampSchedule,
   type Photoperiod,
 } from './daylight';
 import { roomDaylightAt } from './room/timeOfDay';
@@ -26,29 +37,47 @@ import {
   type DeviceLossWatch,
   type DeviceLostInfo,
   type LossSource,
-  recoveryFor,
+  respondToDeviceLoss,
   sessionBackend,
   watchDeviceLoss,
-  webglFallbackUrl,
 } from './deviceLoss';
 import { showDeviceNotice } from './deviceNotice';
-import { EffectsSlot } from './effectsSlot';
-import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
-import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
+import {
+  displayLimits,
+  displayPreference,
+  isTouchFirstDevice,
+  type DisplayChoice,
+  type DisplayLimits,
+  type DisplayPreference,
+} from './displayPreference';
+import { EffectsRecovery, EffectsSlot } from './effectsSlot';
+import { materialUse, PipelineFailureHandler, watchPipelineErrors } from './pipelineErrors';
+import { installRoomLighting, DEFAULT_HDRI_URL, type RoomLighting } from './environment';
+import { GltfPropSource } from './room/gltfPropSource';
+import { roomAssetsFrom, RoomStage } from './room/RoomStage';
 import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
+import { TierShadow } from './tierShadow';
+import { MaterialRebuild } from './materialRebuild';
 import { deviceTextureLimit } from './photo/capture';
 import { PhotoMode } from './photo/PhotoMode';
+import { FrameCap } from './framePacing';
+import { preventPageZoom } from './pageZoom';
 import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
-import { renderPixelRatio } from './quality/tiers';
-import { TankBackground } from './tank/background';
+import {
+  MAX_SHADOW_MAP_SIZE,
+  renderPixelRatio,
+  type Tier,
+  type TierSettings,
+} from './quality/tiers';
+import { posterTier, TankBackground } from './tank/background';
 import {
   defaultView,
   TANK_DIMENSIONS,
@@ -59,6 +88,7 @@ import {
 import { meanSubstrateHeight } from './tank/substrate';
 import { UNREFLECTED_LAYER } from './tank/surfaceReflection';
 import { Tank } from './tank/Tank';
+import { BIOME_WATER } from './water/biomeWater';
 import { Caustics } from './water/caustics';
 import { InteriorLight } from './water/interior';
 import { WaterMedium, type WaterQuality } from './water/medium';
@@ -68,12 +98,14 @@ export type FrameCallback = (deltaS: number, nowMs: number) => void;
 export interface EngineConfig {
   options: EngineOptions;
   events?: EngineEventBus;
+  /** The player's frame rate and resolution opt-ins; the page-wide one by default. */
+  display?: DisplayPreference;
   water?: WaterQuality;
   hdriUrl?: string;
 }
 
 const STATS_INTERVAL_MS = 500;
-const DEFAULT_WATER: WaterQuality = { cdom440: 0.05, turbidity: 0.08 };
+const DEFAULT_WATER: WaterQuality = BIOME_WATER.freshwater;
 const MAX_DELTA_S = 0.1;
 /** A stalled effects chunk never settles; past this the tank starts plain and they attach later. */
 const EFFECTS_BOOT_WAIT_MS = 5000;
@@ -84,13 +116,6 @@ const CAPTURE_EFFECTS_WAIT_MS = 15000;
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
 /** At the water surface; the hood's spread leaves about three quarters of it on average below. */
 const HOOD_INTENSITY = 4;
-const DAYLIGHT_INTERVAL_MS = 1000;
-/** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
-const DAYLIGHT_EPSILON = 0.005;
-
-function hasCoarsePointer(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-}
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
 export interface StartableRenderer extends LossSource {
@@ -159,25 +184,46 @@ export class Engine {
   readonly photo: PhotoMode;
 
   private size: TankSize;
-  private readonly clock: number | null;
+  private readonly clockPin: ClockPin;
   private readonly showStats: boolean;
-  private daylightLevel = 1;
-  private daylightCheckedAt = -Infinity;
-  private daylightAnnounced = false;
-  private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_HOURS);
+  private readonly daylightFeed: DaylightFeed;
+  private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_SCHEDULE);
   private readonly dayRig: DayLightingRig;
+  private readonly roomLighting: RoomLighting;
+  /** Touch-first devices keep the room within the mobile GPU budget at any tier. */
+  private readonly touchFirst: boolean;
+  private roomStage: RoomStage | null = null;
+  private roomWanted: string | null = null;
   private readonly effects = new EffectsSlot(
     (message, cause) => this.reportError(message, cause),
     (on) => this.events.emit('engine:temporal-resolve', { on }),
+    (cause) => {
+      if (!this.disposed) this.effectsRecovery.dropped(cause);
+    },
   );
+  private readonly effectsRecovery = new EffectsRecovery(
+    () => {
+      if (!this.disposed) this.effectsLoad = this.loadEffects();
+    },
+    (run, delayMs) => {
+      const timer = window.setTimeout(run, delayMs);
+      return () => window.clearTimeout(timer);
+    },
+  );
+  private unregisterEffectsTemporal: (() => void) | null = null;
+  private effectsCleanupAdded = false;
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
+  private readonly materialRebuild = new MaterialRebuild();
   private sceneRevisionValue = 0;
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
   private readonly reflectedShadow = new ReflectedShadow();
+  private readonly hoodShadow = new TierShadow(this.hood, MAX_SHADOW_MAP_SIZE);
   private readonly loop: RenderLoop;
+  private readonly frameCap: FrameCap;
+  private displayLimits: DisplayLimits;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -253,13 +299,30 @@ export class Engine {
   ) {
     const preference = config.options.backend;
     this.loop = new RenderLoop(renderer, (t) => this.frame(t));
+    this.daylightFeed = new DaylightFeed(() => this.readDaylight(), events);
     deviceLoss.onLost((info) => this.deviceLost(info, preference));
+    cleanup.add(() => this.effectsRecovery.dispose());
     this.size = config.options.tankSize;
     const dimensions = TANK_DIMENSIONS[this.size];
-    this.clock = config.options.clock;
+    this.clockPin = new ClockPin(config.options.clock);
     this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
-    const profile = qualityProfile(hasCoarsePointer());
+    this.touchFirst = isTouchFirstDevice();
+    const profile = qualityProfile(this.touchFirst);
+    const display = config.display ?? displayPreference;
+    const chosenDisplay = (): DisplayChoice => ({
+      frameRate: config.options.frameRate ?? display.snapshot().frameRate,
+      pixelRatio: config.options.pixelRatio ?? display.snapshot().pixelRatio,
+    });
+    this.displayLimits = displayLimits(profile, chosenDisplay());
+    this.frameCap = new FrameCap(this.displayLimits.frameCapFps);
+    cleanup.add(
+      display.subscribe(() => {
+        this.displayLimits = displayLimits(profile, chosenDisplay());
+        this.frameCap.setFps(this.displayLimits.frameCapFps);
+        this.applyPixelRatio();
+      }),
+    );
     this.quality = new QualityManager(events, {
       gpuTiming: this.gpuTiming && profile.gpuTiming,
       pinned: config.options.tier,
@@ -268,12 +331,14 @@ export class Engine {
       refreshMs: profile.refreshMs,
       probeTier: profile.probeTier,
       maxTier: profile.maxTier,
+      maxTextureSize: profile.maxTextureSize,
       awaitContent: true,
     });
     const pipelineFailures = new PipelineFailureHandler(
       this.effects,
-      (id) => usesMaterial(this.scene, id),
+      (id) => materialUse(this.scene, id),
       (message, cause) => this.reportError(message, cause),
+      () => this.materialRebuild.request(performance.now()),
     );
     cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
 
@@ -295,6 +360,7 @@ export class Engine {
       (message, cause) => this.reportError(message, cause),
     );
     cleanup.add(() => roomLighting.dispose());
+    this.roomLighting = roomLighting;
     const roomBackgroundIntensity = this.scene.backgroundIntensity;
 
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
@@ -318,8 +384,13 @@ export class Engine {
       substrateAlbedo: this.substrateAlbedo,
       roomBackgroundIntensity,
       roomDaylight: 1,
+      lampGain: lampGain(DEFAULT_LAMP_SCHEDULE.intensity),
     };
-    this.background = new TankBackground(this.ktx2, this.quality.tier, ASSET_BASE);
+    this.background = new TankBackground(
+      this.ktx2,
+      posterTier(this.quality.tier, this.quality.settings.textureSize),
+      ASSET_BASE,
+    );
     cleanup.add(() => this.background.dispose());
     this.tank = new Tank(
       dimensions,
@@ -361,6 +432,12 @@ export class Engine {
     cleanup.add(() => this.photo.dispose());
 
     this.registerQualityFeatures();
+    cleanup.add(this.daylightFeed.watch(document));
+    const followVisibility = (): void => this.loop.setHidden(document.hidden);
+    followVisibility();
+    document.addEventListener('visibilitychange', followVisibility);
+    cleanup.add(() => document.removeEventListener('visibilitychange', followVisibility));
+    cleanup.add(preventPageZoom(document));
 
     const resizeObserver = new ResizeObserver(() => this.resize());
     cleanup.add(() => resizeObserver.disconnect());
@@ -393,6 +470,7 @@ export class Engine {
     this.fitHood(dimensions);
     if (!this.photo.active) this.frameTank(dimensions);
     this.effects.tankResized();
+    void this.showRoom();
     this.sceneRevisionValue++;
     this.events.emit('engine:tank-resized', { size, dimensions, litres: this.waterLitres });
   }
@@ -404,7 +482,7 @@ export class Engine {
 
   set roomBackgroundIntensity(value: number) {
     this.dayRig.roomBackgroundIntensity = value;
-    applyDayLighting(this.dayRig, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
   }
 
   get disposed(): boolean {
@@ -416,13 +494,24 @@ export class Engine {
    * the sim's UTC clock, or `?clock=` read as a UTC time.
    */
   get daylight(): number {
-    return this.daylightLevel;
+    return this.daylightFeed.level;
   }
 
-  /** Runs the visible hood on the tank's lamp schedule, `equipment.light`. */
-  setLampSchedule(hours: LampHours): void {
-    this.photoperiod = lampPhotoperiod(hours);
-    this.daylightCheckedAt = -Infinity;
+  /**
+   * Pins the tank to minutes after midnight, read like `?clock=`, to the middle of the lamp's on
+   * (`'day'`) or off (`'night'`) period, or to `null` for local time again. The light fades to
+   * the new level rather than cutting.
+   */
+  setClock(setting: ClockSetting): void {
+    assertClockSetting(setting);
+    if (this.clockPin.set(setting, performance.now())) this.daylightFeed.recheck();
+  }
+
+  /** Runs the visible hood on the tank's lamp schedule and strength, `equipment.light`. */
+  setLampSchedule(schedule: LampSchedule): void {
+    this.photoperiod = lampPhotoperiod(schedule);
+    this.dayRig.lampGain = lampGain(schedule.intensity);
+    this.daylightFeed.recheck();
   }
 
   /** Whether frames go through a temporal resolve; `engine:temporal-resolve` tells changes. */
@@ -453,6 +542,56 @@ export class Engine {
     return this.background
       .useIndex(json)
       .catch((cause: unknown) => this.reportError('The tank background failed to load', cause));
+  }
+
+  /** The room around the tank, for `RoomLight` to light; null until `useRoomIndex`. */
+  get room(): RoomStage | null {
+    return this.roomStage;
+  }
+
+  /**
+   * Hands the room the scene's parsed `assets/index.json`, once; the room `setRoom` asked for
+   * then loads, and reloads at the level of detail of each new quality tier.
+   */
+  useRoomIndex(json: unknown): Promise<void> {
+    if (this.disposed || this.roomStage) return Promise.resolve();
+    let assets: ReturnType<typeof roomAssetsFrom>;
+    try {
+      assets = roomAssetsFrom(json);
+    } catch (cause) {
+      this.reportError('The room index could not be read', cause);
+      return Promise.resolve();
+    }
+    const stage = new RoomStage({
+      lighting: this.roomLighting,
+      props: new GltfPropSource(this.ktx2, assets.files),
+      catalog: assets.catalog,
+      hdriUrl: assets.hdriUrl,
+      mobile: this.touchFirst,
+    });
+    this.roomStage = stage;
+    this.scene.add(stage.group);
+    this.cleanup.add(() => stage.dispose());
+    this.cleanup.add(this.quality.register('room', (_settings, tier) => void this.showRoom(tier)));
+    return this.showRoom();
+  }
+
+  /**
+   * Shows `roomId` around the tank, or no room and the default studio for null. Only the room on
+   * show holds GPU memory. A failed load is reported on `engine:error` and keeps the room's shell.
+   */
+  setRoom(roomId: string | null): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    this.roomWanted = roomId;
+    return this.showRoom();
+  }
+
+  private showRoom(tier: Tier = this.quality.tier): Promise<void> {
+    const stage = this.roomStage;
+    if (!stage || this.disposed) return Promise.resolve();
+    return stage
+      .show(this.roomWanted, this.tank.dimensions, tier)
+      .catch((cause: unknown) => this.reportError('The room failed to load', cause));
   }
 
   /** Depth of field follows the focus camera, on tiers that allow it. */
@@ -510,24 +649,15 @@ export class Engine {
    */
   private deviceLost(info: DeviceLostInfo, preference: EngineOptions['backend']): void {
     if (this.disposed) return;
-    this.loop.halt();
-    const recovery = recoveryFor(info.api, preference);
-    this.events.emit('engine:device-lost', { api: info.api, message: info.message, recovery });
-    this.reportError(`The ${info.api} device was lost: ${info.message}`, info);
-    if (recovery === 'webgl') {
-      const here = window.location.href;
-      const next = webglFallbackUrl(here, browserSessionStore());
-      if (next === here) window.location.reload();
-      else window.location.replace(next);
-      return;
-    }
-    this.cleanup.add(
-      showDeviceNotice(
-        document.body,
-        'The graphics device stopped responding, so the tank cannot be drawn. Reload to try again.',
-        { label: 'Reload', run: () => window.location.reload() },
-      ),
-    );
+    const removeNotice = respondToDeviceLoss(info, preference, {
+      halt: () => this.loop.halt(),
+      announce: (event) => this.events.emit('engine:device-lost', event),
+      report: (message, cause) => this.reportError(message, cause),
+      location: window.location,
+      store: browserSessionStore(),
+      notify: (message, action) => showDeviceNotice(document.body, message, action),
+    });
+    this.cleanup.add(removeNotice);
   }
 
   private setupHood(): void {
@@ -562,28 +692,34 @@ export class Engine {
     shadowCam.bottom = -halfExtent;
     shadowCam.far = d.height + 2;
     shadowCam.updateProjectionMatrix();
-    applyDayLighting(this.dayRig, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
   }
 
-  private updateDaylight(nowMs: number): void {
-    if (nowMs - this.daylightCheckedAt < DAYLIGHT_INTERVAL_MS) return;
-    this.daylightCheckedAt = nowMs;
-    this.dayRig.roomDaylight = roomDaylightAt(this.clock ?? minuteOfDay(new Date()));
-    const level = daylightAt(this.clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod);
-    if (this.daylightAnnounced && Math.abs(level - this.daylightLevel) < DAYLIGHT_EPSILON) return;
-    this.daylightAnnounced = true;
-    this.daylightLevel = level;
-    this.events.emit('engine:daylight', { level });
+  /** The minute the room's sky and sun are read at, easing after a clock change like the hood. */
+  roomClockMinute(): number {
+    const target = roomMinute(this.clockPin.clock) ?? minuteOfDay(new Date());
+    return this.clockPin.blendMinute(target, performance.now());
+  }
+
+  /** The hood level now; the room light behind the tank follows on the same read. */
+  private readDaylight(): number {
+    const setting = this.clockPin.clock;
+    const hoodAt = hoodMinute(setting, this.photoperiod);
+    const roomAt = roomMinute(setting);
+    const { hood, room } = this.clockPin.blend(
+      {
+        hood: daylightAt(hoodAt ?? localMinuteOfDay(Date.now(), 0), this.photoperiod),
+        room: roomDaylightAt(roomAt ?? minuteOfDay(new Date())),
+      },
+      performance.now(),
+    );
+    this.dayRig.roomDaylight = room;
+    return hood;
   }
 
   private registerQualityFeatures(): void {
-    this.quality.register('pixel-ratio', (s) => {
-      this.renderer.setPixelRatio(renderPixelRatio(window.devicePixelRatio, s));
-    });
-    this.quality.register('shadows', (s) => {
-      this.hood.castShadow = s.shadowMapSize > 0;
-      if (s.shadowMapSize > 0) this.hood.shadow.mapSize.set(s.shadowMapSize, s.shadowMapSize);
-    });
+    this.quality.register('pixel-ratio', (s) => this.applyPixelRatio(s));
+    this.quality.register('shadows', (s) => this.hoodShadow.apply(s.shadowMapSize));
     this.quality.register('caustics', (s) => {
       // The context node's version is in every pipeline's cache key, so this rebuilds them all.
       if (this.caustics.setMethod(s.causticMethod, s.causticLayers)) {
@@ -592,9 +728,9 @@ export class Engine {
     });
     // A tier change can rebuild pipelines without touching a material, e.g. by toggling shadows.
     this.quality.register('cull-prewarm', () => this.cullPrewarm.invalidate());
-    this.quality.register('background', (_, tier) => {
+    this.quality.register('background', (s, tier) => {
       this.background
-        .setTier(tier)
+        .setTier(posterTier(tier, s.textureSize))
         .catch((cause: unknown) =>
           this.reportError('The tank background failed to load at the new tier', cause),
         );
@@ -611,9 +747,14 @@ export class Engine {
     });
   }
 
+  private applyPixelRatio(settings: Readonly<TierSettings> = this.quality.settings): void {
+    const ceiling = this.displayLimits.pixelRatioCeiling;
+    this.renderer.setPixelRatio(renderPixelRatio(window.devicePixelRatio, settings, ceiling));
+  }
+
   private async warmUp(): Promise<void> {
-    this.updateDaylight(0);
-    applyDayLighting(this.dayRig, this.daylightLevel);
+    this.daylightFeed.frame(0, 0);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
     await this.renderer.compileAsync(this.scene, this.camera);
     await this.tank.compileSurfaceReflection(this.renderer, this.scene, this.camera);
     this.warmedUp = true;
@@ -627,8 +768,16 @@ export class Engine {
       const effects = new Effects(this, postPipelineFactory(this.renderer), () =>
         this.effects.refresh(),
       );
+      this.unregisterEffectsTemporal?.();
+      this.unregisterEffectsTemporal = null;
       this.effects.attach(effects);
-      this.cleanup.add(() => this.effects.dispose());
+      if (!this.effectsCleanupAdded) {
+        this.effectsCleanupAdded = true;
+        this.cleanup.add(() => {
+          this.unregisterEffectsTemporal?.();
+          this.effects.dispose();
+        });
+      }
       // Right behind the effects' own feature, so the features registered later (the fish
       // materials) see the new tier's temporal resolve when its nodes are already loaded. A tier
       // whose nodes still have to load swaps its pipeline later; the refresh passed to `Effects`
@@ -636,7 +785,9 @@ export class Engine {
       // never draw a temporal frame without velocity. The fish register only once
       // `Engine.create` resolves, which awaits this load unless it stalls; effects that attach
       // after the fish take that same announced path on every tier change.
-      this.cleanup.add(this.quality.register('effects-temporal', () => this.effects.refresh()));
+      this.unregisterEffectsTemporal = this.quality.register('effects-temporal', () =>
+        this.effects.refresh(),
+      );
       // The first frames already carry the starting tier's look instead of popping into it.
       await effects.ready();
     } catch (cause) {
@@ -672,6 +823,8 @@ export class Engine {
   }
 
   private frame(nowMs: number): void {
+    const pacedMs = this.frameCap.tick(nowMs);
+    if (pacedMs === null) return;
     const frameMs = this.lastFrameAt === null ? 0 : nowMs - this.lastFrameAt;
     this.lastFrameAt = nowMs;
     const deltaS = Math.min(frameMs / 1000, MAX_DELTA_S);
@@ -680,9 +833,15 @@ export class Engine {
     this.photo.apply();
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.photo.apply();
-    this.updateDaylight(nowMs);
-    applyDayLighting(this.dayRig, this.daylightLevel);
-    if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
+    if (this.clockPin.easing) this.daylightFeed.recheck();
+    this.daylightFeed.frame(nowMs, frameMs);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
+    if (this.materialRebuild.flush(this.scene) > 0) this.cullPrewarm.invalidate();
+    if (this.cullPrewarm.begin(nowMs) > 0) {
+      this.sceneRevisionValue++;
+      // Unculled first draws build pipelines, so this frame's timing is a compile stall.
+      this.quality.stall(nowMs);
+    }
     try {
       this.draw();
     } finally {
@@ -692,7 +851,7 @@ export class Engine {
 
     if (frameMs > 0) {
       if (this.skipFrameSample) this.skipFrameSample = false;
-      else this.quality.sample(frameMs, this.gpuMs, nowMs);
+      else this.quality.sample(pacedMs, this.gpuMs, nowMs);
       this.gpuMs = null;
       this.stats.frames++;
       this.stats.frameMsSum += frameMs;

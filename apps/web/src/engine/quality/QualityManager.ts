@@ -2,7 +2,11 @@ import type { EngineEventBus } from '../events';
 import { DEFAULT_CONTROLLER_CONFIG, TierController } from './controller';
 import { gpuTimeSpansFrames, median, selectInitialTier, type TimingSignal } from './probe';
 import {
+  frameTimedMaxTier,
+  lowerTier,
   TIER_SETTINGS,
+  TIERS,
+  tierAt,
   tierIndex,
   type Tier,
   type TierChangeReason,
@@ -23,6 +27,8 @@ export interface QualityOptions {
   probeTier?: Tier;
   /** The highest tier the probe and adaptation may choose; a pinned or manual tier may exceed it. */
   maxTier?: Tier;
+  /** Caps every tier's `textureSize`, pinned and manual tiers included; defaults to 2048. */
+  maxTextureSize?: 1024 | 2048;
   probeMs?: number;
   /** Frames right after start-up include pipeline compiles and are not representative. */
   warmupMs?: number;
@@ -40,12 +46,28 @@ export interface QualityOptions {
    */
   awaitContent?: boolean;
   contentTimeoutMs?: number;
+  /**
+   * A frame at least this long, and `STALL_RATIO` times the probe's fastest quarter, is a stall
+   * (a pipeline compile or texture upload) rather than the tier's cost. A probe that saw one runs
+   * again while a whole run, warm-up included, still ends within `maxProbeMs` of its start;
+   * otherwise it drops the stalls and decides, so no probe outlasts `maxProbeMs`. A device that
+   * is that slow on every frame has no fast quarter to stand out from, so it is timed as it is.
+   */
+  stallMs?: number;
+  maxProbeMs?: number;
 }
 
 type Phase =
   | { kind: 'idle' }
   | { kind: 'waiting'; deadline: number }
-  | { kind: 'probing'; content: boolean; startedAt: number; gpu: number[]; frame: number[] }
+  | {
+      kind: 'probing';
+      content: boolean;
+      startedAt: number;
+      deadline: number;
+      gpu: number[];
+      frame: number[];
+    }
   | { kind: 'running' };
 
 /**
@@ -64,10 +86,13 @@ export class QualityManager {
   private readonly warmupMs: number;
   private readonly minGpuSamples: number;
   private readonly contentTimeoutMs: number;
+  private readonly stallMs: number;
+  private readonly maxProbeMs: number;
   private hasContent: boolean;
   private contentDeadline = Infinity;
   private tierAnnounced = false;
   private signal: TimingSignal | null = null;
+  private readonly table: Readonly<Record<Tier, Readonly<TierSettings>>>;
 
   constructor(
     private readonly events: EngineEventBus,
@@ -84,8 +109,11 @@ export class QualityManager {
     this.warmupMs = options.warmupMs ?? 300;
     this.minGpuSamples = options.minGpuSamples ?? 10;
     this.contentTimeoutMs = options.contentTimeoutMs ?? 15_000;
+    this.stallMs = options.stallMs ?? 100;
+    this.maxProbeMs = options.maxProbeMs ?? 10_000;
     this.hasContent = !(options.awaitContent ?? false);
     this.current = options.pinned ?? this.probeTier;
+    this.table = cappedSettings(options.maxTextureSize ?? 2048);
   }
 
   get tier(): Tier {
@@ -93,7 +121,7 @@ export class QualityManager {
   }
 
   get settings(): Readonly<TierSettings> {
-    return TIER_SETTINGS[this.current];
+    return this.table[this.current];
   }
 
   /** True from `start()` until the probe picks a tier, including any wait for content. */
@@ -178,6 +206,20 @@ export class QualityManager {
   }
 
   /**
+   * A load or pipeline compile is stalling frames from now on. A probe in progress starts its
+   * warm-up again while a whole run still fits before its deadline; the controller ignores the
+   * next samples.
+   */
+  stall(nowMs: number): void {
+    const phase = this.phase;
+    if (phase.kind === 'probing') {
+      if (this.canRestart(phase, nowMs)) this.restartProbe(phase, nowMs);
+      return;
+    }
+    if (phase.kind === 'running') this.controller?.pause(nowMs);
+  }
+
+  /**
    * Manual override from the dev panel or settings; adaptation restarts from there. A pick above
    * `maxTier` is shown as picked, but the controller restarts clamped to `maxTier`, so its first
    * step over budget lands one below the cap: on a phone, ultra drops straight to medium.
@@ -190,13 +232,39 @@ export class QualityManager {
   }
 
   private beginProbe(nowMs: number, content: boolean): void {
-    this.phase = { kind: 'probing', content, startedAt: nowMs + this.warmupMs, gpu: [], frame: [] };
+    this.phase = {
+      kind: 'probing',
+      content,
+      startedAt: nowMs + this.warmupMs,
+      deadline: nowMs + this.maxProbeMs,
+      gpu: [],
+      frame: [],
+    };
+  }
+
+  private canRestart(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): boolean {
+    return nowMs + this.warmupMs + this.probeMs <= phase.deadline;
+  }
+
+  private restartProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {
+    phase.startedAt = nowMs + this.warmupMs;
+    phase.gpu.length = 0;
+    phase.frame.length = 0;
   }
 
   private finishProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {
+    const stall = stallThreshold(phase.frame, this.stallMs);
+    if (phase.frame.some((ms) => ms >= stall)) {
+      if (this.canRestart(phase, nowMs)) {
+        this.restartProbe(phase, nowMs);
+        return;
+      }
+      phase.frame = phase.frame.filter((ms) => ms < stall);
+    }
     const signal: TimingSignal = this.trustsGpu(phase) ? 'gpu' : 'frame';
     this.signal = signal;
     const measured = this.current;
+    const maxTier = signal === 'gpu' ? this.maxTier : frameTimedMaxTier(this.maxTier);
     const result = selectInitialTier({
       samples: signal === 'gpu' ? phase.gpu : phase.frame,
       signal,
@@ -204,7 +272,7 @@ export class QualityManager {
       targetMs: this.options.targetMs,
       refreshMs: this.refreshMs,
       // The empty tank runs faster than the furnished one will, so it may only lower the tier.
-      maxTier: phase.content ? this.maxTier : measured,
+      maxTier: phase.content ? maxTier : lowerTier(measured, maxTier),
     });
     if (!phase.content) {
       this.settle(result.tier);
@@ -214,14 +282,23 @@ export class QualityManager {
     }
     this.phase = { kind: 'running' };
     if (this.options.adaptive) {
-      this.controller = new TierController(result.tier, {
+      const controller = new TierController(result.tier, {
         ...DEFAULT_CONTROLLER_CONFIG,
         targetMs: this.options.targetMs,
         refreshMs: this.refreshMs,
-        maxTier: this.maxTier,
+        maxTier,
         signal,
       });
-      this.controller.reset(result.tier, nowMs);
+      controller.reset(result.tier, nowMs);
+      // The furnished tank measured too slow for the tiers above its pick: no climbing straight
+      // back into them, which rebuilds every pipeline twice for nothing.
+      if (tierIndex(result.tier) < tierIndex(measured)) {
+        controller.holdBelow(
+          tierAt(tierIndex(result.tier) + 1),
+          nowMs + controller.config.reentryHoldMs,
+        );
+      }
+      this.controller = controller;
     }
     this.settle(result.tier);
   }
@@ -257,4 +334,25 @@ export class QualityManager {
     this.tierAnnounced = true;
     this.events.emit('quality:tier-changed', { from, to, reason });
   }
+}
+
+const STALL_RATIO = 3;
+
+function stallThreshold(frames: readonly number[], stallMs: number): number {
+  const sorted = [...frames].sort((a, b) => a - b);
+  const fastQuarter = sorted[Math.floor((sorted.length - 1) / 4)] ?? 0;
+  return Math.max(stallMs, fastQuarter * STALL_RATIO);
+}
+
+function cappedSettings(
+  maxTextureSize: 1024 | 2048,
+): Readonly<Record<Tier, Readonly<TierSettings>>> {
+  const table = { ...TIER_SETTINGS };
+  for (const tier of TIERS) {
+    const settings = TIER_SETTINGS[tier];
+    if (settings.textureSize > maxTextureSize) {
+      table[tier] = { ...settings, textureSize: maxTextureSize };
+    }
+  }
+  return table;
 }

@@ -1,9 +1,36 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { build, context } from 'esbuild';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const runtimeDeps = Object.keys(pkg.dependencies).filter((name) => !name.startsWith('@aquarium/'));
+
+const presetsDir = new URL('../../content/presets/', import.meta.url);
+const presetFiles = readdirSync(presetsDir).filter((name) => name.endsWith('.json'));
+if (presetFiles.length === 0) throw new Error('content/presets has no preset files.');
+const checker = await build({
+  stdin: {
+    contents: "export { assertPresetNames, PresetNameError } from './src/presetNames.ts';",
+    resolveDir: fileURLToPath(new URL('./', import.meta.url)),
+    loader: 'ts',
+  },
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+  logLevel: 'silent',
+});
+const { assertPresetNames, PresetNameError } = await import(
+  `data:text/javascript;base64,${Buffer.from(checker.outputFiles[0].text).toString('base64')}`
+);
+try {
+  assertPresetNames(presetFiles);
+} catch (error) {
+  if (!(error instanceof PresetNameError)) throw error;
+  console.error(error.message);
+  process.exit(1);
+}
 
 const speciesDir = new URL('../../content/species/', import.meta.url);
 const species = readdirSync(speciesDir)
@@ -20,16 +47,24 @@ writeFileSync(
 );
 
 writeFileSync(
+  new URL('./dist/plants.json', import.meta.url),
+  readFileSync(new URL('../../content/plants.json', import.meta.url)),
+);
+
+writeFileSync(
+  new URL('./dist/corals.json', import.meta.url),
+  readFileSync(new URL('../../content/corals.json', import.meta.url)),
+);
+
+writeFileSync(
   new URL('./dist/economy.json', import.meta.url),
   readFileSync(new URL('../../content/economy.json', import.meta.url)),
 );
 
 const presets = Object.fromEntries(
-  ['freshwater', 'reef'].map((biome) => [
-    biome,
-    JSON.parse(
-      readFileSync(new URL(`../../content/presets/${biome}.json`, import.meta.url), 'utf8'),
-    ),
+  presetFiles.map((name) => [
+    name.slice(0, -'.json'.length),
+    JSON.parse(readFileSync(new URL(name, presetsDir), 'utf8')),
   ]),
 );
 writeFileSync(new URL('./dist/presets.json', import.meta.url), JSON.stringify(presets));

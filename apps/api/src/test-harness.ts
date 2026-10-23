@@ -6,7 +6,13 @@ import pg from 'pg';
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify';
 import { buildApp, DEFAULT_SIGN_IN_THROTTLE } from './app.ts';
 import type { Limit } from './rate-limit.ts';
-import { createAuth, type Auth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from './auth.ts';
+import {
+  createAuth,
+  type Auth,
+  DEFAULT_AUTH_RATE_LIMITS,
+  type AuthRateLimits,
+  type AuthRateLimitStorage,
+} from './auth.ts';
 import { connect, runMigrations, type Database } from './db/index.ts';
 import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type Mailer, type MailLimits } from './mail.ts';
@@ -17,9 +23,12 @@ import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
 import type { PushSender } from './push.ts';
+import type { PaymentProvider } from './payments/provider.ts';
+import type { PaymentsLimits } from './payments/routes.ts';
 import type { ReminderLimits } from './reminders.ts';
 import type { PublicLimits } from './public.ts';
 import type { GalleryLimits } from './gallery.ts';
+import type { CommunityConfig } from './community.ts';
 
 const cheapKey = (password: string, salt: Buffer) =>
   new Promise<Buffer>((resolve, reject) =>
@@ -27,6 +36,27 @@ const cheapKey = (password: string, salt: Buffer) =>
       err ? reject(err) : resolve(key),
     ),
   );
+
+// Better Auth's built-in memory store is a module-level Map shared by every createAuth() in a worker.
+function isolatedRateLimitStorage(): AuthRateLimitStorage {
+  const hits = new Map<string, { count: number; lastRequest: number }>();
+  return {
+    async consume(key, rule) {
+      const now = Date.now();
+      const windowMs = rule.window * 1000;
+      const hit = hits.get(key);
+      if (!hit || now - hit.lastRequest >= windowMs) {
+        hits.set(key, { count: 1, lastRequest: now });
+        return { allowed: true, retryAfter: null };
+      }
+      if (hit.count >= rule.max) {
+        return { allowed: false, retryAfter: Math.ceil((hit.lastRequest + windowMs - now) / 1000) };
+      }
+      hits.set(key, { count: hit.count + 1, lastRequest: now });
+      return { allowed: true, retryAfter: null };
+    },
+  };
+}
 
 const TEST_PASSWORD_HASHER = {
   hash: async (password: string) => {
@@ -89,12 +119,15 @@ export interface HarnessOptions {
   signInThrottle?: Limit;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  paymentsLimits?: PaymentsLimits;
   handleLimit?: Limit;
   collectionLimit?: Limit;
   publicLimits?: PublicLimits;
   galleryLimits?: GalleryLimits;
+  community?: Partial<CommunityConfig>;
   testHooks?: boolean;
   push?: PushSender | null;
+  payments?: PaymentProvider | null;
   reminderLimits?: ReminderLimits;
   mailDelayMs?: number;
   appOrigin?: string;
@@ -194,6 +227,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     database,
     mailer,
     password: TEST_PASSWORD_HASHER,
+    rateLimitStorage: isolatedRateLimitStorage(),
     runInBackground: (task) => {
       background.add(task);
       void task.finally(() => background.delete(task));
@@ -230,13 +264,16 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     testHooks: opts.testHooks ?? true,
     authSecret: TEST_SECRET,
     push: opts.push ?? null,
+    payments: opts.payments ?? null,
     ...(opts.reminderLimits ? { reminderLimits: opts.reminderLimits } : {}),
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
+    ...(opts.paymentsLimits ? { paymentsLimits: opts.paymentsLimits } : {}),
     ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),
     ...(opts.collectionLimit ? { collectionLimit: opts.collectionLimit } : {}),
     ...(opts.publicLimits ? { publicLimits: opts.publicLimits } : {}),
     ...(opts.galleryLimits ? { galleryLimits: opts.galleryLimits } : {}),
+    ...(opts.community ? { community: opts.community } : {}),
     logger: opts.logStream !== undefined,
     ...(opts.logStream ? { logStream: opts.logStream } : {}),
   });

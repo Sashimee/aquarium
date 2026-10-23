@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../../engine/events';
 import { FeedGate } from '../../sync/feedGate';
+import type { PlantPick } from '../../scene/plantGrowth';
 import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
 import type { ReachBridge } from '../food/clipReach';
@@ -137,6 +138,7 @@ function makeController(
   const bubbles = new BubbleField(MAX.y, () => 0.5);
   const startle = vi.fn();
   const netTap = vi.fn();
+  const pickPlant = vi.fn<(ray: Ray) => PlantPick | null>(() => null);
   const pickFish = vi.fn<(ray: Ray) => (() => Vec3 | null) | null>(() => null);
   const lure = vi.fn();
   const setLaserDot = vi.fn();
@@ -154,6 +156,7 @@ function makeController(
     events,
     startle,
     netTap,
+    pickPlant,
     pickFish,
     toSim: sceneToSim,
     reach,
@@ -177,6 +180,7 @@ function makeController(
     bubbles,
     startle,
     netTap,
+    pickPlant,
     pickFish,
     lure,
     setLaserDot,
@@ -264,6 +268,66 @@ describe('PlayController net', () => {
     t.setRay(null);
     t.controller.tap(10, 10);
     expect(t.netTap).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlayController tap announcement', () => {
+  it.each(['feed', 'tap', 'trim', 'net'] as const)(
+    'announces the tapped ray with the %s tool',
+    (tool) => {
+      const t = makeController();
+      const seen = vi.fn();
+      t.events.on('play:tapped', seen);
+      t.controller.setTool(tool);
+      t.controller.tap(10, 10);
+      expect(seen).toHaveBeenCalledOnce();
+      expect(seen).toHaveBeenCalledWith({ ray: frontRay() });
+    },
+  );
+
+  it('says nothing when the camera has no ray', () => {
+    const t = makeController();
+    const seen = vi.fn();
+    t.events.on('play:tapped', seen);
+    t.setRay(null);
+    t.controller.tap(10, 10);
+    expect(seen).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlayController trim', () => {
+  const pick = { key: 's7', size: 1.6, minSize: 0.4, maxSize: 2.4, distance: 0.5 };
+
+  it('reports the plant under the tap and does not startle the fish', () => {
+    const t = makeController();
+    t.pickPlant.mockReturnValue(pick);
+    const seen = vi.fn();
+    t.events.on('plant:picked', seen);
+    t.controller.setTool('trim');
+    t.controller.tap(10, 10);
+    expect(t.pickPlant).toHaveBeenCalledWith(frontRay());
+    expect(seen).toHaveBeenCalledWith({ pick });
+    expect(t.startle).not.toHaveBeenCalled();
+  });
+
+  it('reports a miss as null', () => {
+    const t = makeController();
+    const seen = vi.fn();
+    t.events.on('plant:picked', seen);
+    t.controller.setTool('trim');
+    t.controller.tap(10, 10);
+    expect(seen).toHaveBeenCalledWith({ pick: null });
+  });
+
+  it('does nothing with other tools or without a camera ray', () => {
+    const t = makeController();
+    const seen = vi.fn();
+    t.events.on('plant:picked', seen);
+    t.controller.tap(10, 10);
+    t.controller.setTool('trim');
+    t.setRay(null);
+    t.controller.tap(10, 10);
+    expect(seen).not.toHaveBeenCalled();
   });
 });
 

@@ -1,0 +1,57 @@
+{
+  "behaviour": {
+    "boldness": 0.7,
+    "curiosity": 0.9,
+    "depthBand": [0.05, 0.6],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "bottom",
+    "territorial": true,
+    "traits": []
+  },
+  "biome": "freshwater",
+  "breeding": {
+    "mode": "none"
+  },
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.25,
+    "phRange": [6.5, 7.5],
+    "salinityPpt": [0, 7],
+    "sources": [
+      "FishBase (fishbase.se) species summary, as Dichotomyctere ocellatus: freshwater, demersal, pH 6.5 to 7.5, dH 5 to 12, 22 to 26 C (Ref. 13371); aggressive against conspecifics; feeds on snails and other benthic organisms; not a brackish water species",
+      "SeriouslyFish species profile (seriouslyfish.com/species/dichotomyctere-ocellatus): 22 to 26 C, pH 6.5 to 7.5, 5 to 12 dGH; salt is optional, up to specific gravity 1.005 (about 7 ppt); not bred in the hobby",
+      "SeriouslyFish species profile (seriouslyfish.com/species/dichotomyctere-ocellatus): an active species that needs open areas for swimming",
+      "SeriouslyFish species profile (seriouslyfish.com/species/dichotomyctere-ocellatus): tends to nip the fins of slow-moving or long-finned fish; needs snails or unshelled shellfish to wear down its continuously growing teeth"
+    ],
+    "temperatureC": [22, 26]
+  },
+  "commonName": "Figure-8 puffer",
+  "id": "figure-8-puffer",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.25,
+    "bioload": 1,
+    "birthSizeM": 0.012,
+    "diet": ["bloodworms", "brine-shrimp", "pellets"],
+    "growthPerDay": 0.00015,
+    "healthLossPerHourStarving": 0.008,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.007,
+    "lifespanDays": 3650,
+    "maxSizeM": 0.0661,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.05,
+    "cruiseSpeedMps": 0.04,
+    "gait": "hover",
+    "massKg": 0.005,
+    "maxPitchDeg": 40,
+    "maxSpeedMps": 0.25,
+    "maxTurnRateDegPerS": 300,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Dichotomyctere ocellatus"
+}

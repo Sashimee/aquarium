@@ -1,0 +1,48 @@
+{
+  "roomId": "room-sushi",
+  "layout": [
+    {
+      "asset": "polyhaven-round-wooden-table-02",
+      "position": [-2, -0.75, 0.9],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-carved-wooden-plate",
+      "position": [-2, -0.004, 0.9],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-bar-chair-round-01",
+      "position": [-2.75, -0.75, 0.9],
+      "rotationY": 1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-bar-chair-round-01",
+      "position": [-1.25, -0.75, 0.9],
+      "rotationY": -1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-bar-chair-round-01",
+      "position": [-2, -0.75, 0.15],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-bar-chair-round-01",
+      "position": [-2, -0.75, 1.65],
+      "rotationY": 3.142,
+      "scale": 1
+    }
+  ],
+  "light": {
+    "keyColor": "#ffb877",
+    "keyIntensity": 1.8,
+    "ambientColor": "#ffe0c2",
+    "ambientIntensity": 0.4,
+    "windowPosition": null
+  }
+}

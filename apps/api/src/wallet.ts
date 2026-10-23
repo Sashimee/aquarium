@@ -43,6 +43,9 @@ export async function lockUserRow(tx: Tx, userId: string): Promise<void> {
   if (!row) throw new HttpError(401, apiError('unauthenticated', 'Sign in required.'));
 }
 
+// The starting grant is paid only when this call creates the wallet row. Any other code that inserts
+// a wallet row (a migration refund, say) must run for users who already have one, or that user never
+// receives the grant.
 export async function lockWallet(
   tx: Tx,
   economy: Economy,

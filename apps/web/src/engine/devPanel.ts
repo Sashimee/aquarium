@@ -1,7 +1,62 @@
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import {
+  type DisplayPreference,
+  displayPreference,
+  FRAME_RATE_CHOICES,
+  PIXEL_RATIO_CHOICES,
+  type FrameRateChoice,
+  type PixelRatioChoice,
+} from './displayPreference';
 import type { Engine } from './Engine';
 import { TIERS, type Tier } from './quality/tiers';
 import { readStats, type StatsReadout } from './statsReadout';
+import type { WaterMedium, WaterQuality } from './water/medium';
+
+/**
+ * Frame rate and pixel ratio dropdowns bound both ways to `preference`, so they follow a change
+ * made elsewhere, such as the settings screen. Returns the unsubscribe.
+ */
+export function addDisplayControls(folder: GUI, preference: DisplayPreference): () => void {
+  const display = { ...preference.snapshot() };
+  const controls = [
+    folder
+      .add(display, 'frameRate', [...FRAME_RATE_CHOICES])
+      .name('frame rate')
+      .onChange((frameRate: FrameRateChoice) => preference.set({ frameRate })),
+    folder
+      .add(display, 'pixelRatio', [...PIXEL_RATIO_CHOICES])
+      .name('pixel ratio')
+      .onChange((pixelRatio: PixelRatioChoice) => preference.set({ pixelRatio })),
+  ];
+  return preference.subscribe(() => {
+    Object.assign(display, preference.snapshot());
+    for (const control of controls) control.updateDisplay();
+  });
+}
+
+/** Room above the murkiest biome water (blackwater's CDOM 2.5) to push past it. */
+export const WATER_SLIDER_MAX = 5;
+
+/**
+ * A view of `medium`'s water that reads and writes it on every access, so a biome switch while
+ * the panel is open shows in the sliders and a slider never writes back the water it replaced.
+ */
+export function liveWater(medium: WaterMedium): WaterQuality {
+  return {
+    get cdom440() {
+      return medium.getQuality().cdom440;
+    },
+    set cdom440(cdom440: number) {
+      medium.setQuality({ ...medium.getQuality(), cdom440 });
+    },
+    get turbidity() {
+      return medium.getQuality().turbidity;
+    },
+    set turbidity(turbidity: number) {
+      medium.setQuality({ ...medium.getQuality(), turbidity });
+    },
+  };
+}
 
 /** Developer tweak panel. Loaded only in dev builds through a dynamic import. */
 export function createDevPanel(engine: Engine): () => void {
@@ -40,16 +95,22 @@ export function createDevPanel(engine: Engine): () => void {
   perf.add(readout, 'draws').disable().listen();
   perf.add(readout, 'triangles').disable().listen();
 
+  const offDisplay = addDisplayControls(perf, displayPreference);
+
   const offStats = engine.events.on('engine:stats', (s) => {
     Object.assign(readout, readStats(engine, s, window.devicePixelRatio));
   });
 
   const { medium, caustics, hood, scene, renderer } = engine;
-  const water = { ...medium.getQuality() };
   const waterFolder = gui.addFolder('Water');
-  const applyWater = (): void => medium.setQuality({ ...water });
-  waterFolder.add(water, 'cdom440', 0, 2, 0.01).name('CDOM a440 (1/m)').onChange(applyWater);
-  waterFolder.add(water, 'turbidity', 0, 2, 0.01).name('scattering (1/m)').onChange(applyWater);
+  waterFolder
+    .add(liveWater(medium), 'cdom440', 0, WATER_SLIDER_MAX, 0.01)
+    .name('CDOM a440 (1/m)')
+    .listen();
+  waterFolder
+    .add(liveWater(medium), 'turbidity', 0, WATER_SLIDER_MAX, 0.01)
+    .name('scattering (1/m)')
+    .listen();
   waterFolder.add(medium.absorptionScale, 'value', 0, 4, 0.01).name('absorption scale');
   waterFolder.addColor(engine, 'ambientScatter').name('ambient in-scatter');
   waterFolder.add(engine.tank.rippleAmplitude, 'value', 0, 1, 0.01).name('ripples');
@@ -68,6 +129,7 @@ export function createDevPanel(engine: Engine): () => void {
 
   return () => {
     offStats();
+    offDisplay();
     gui.destroy();
   };
 }

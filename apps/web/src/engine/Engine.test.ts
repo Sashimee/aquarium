@@ -6,6 +6,7 @@ import type { EngineOptions } from './options';
 class FakeRenderer implements StartableRenderer {
   readonly dispose = vi.fn();
   onDeviceLost = vi.fn<StartableRenderer['onDeviceLost']>();
+  onError = vi.fn<StartableRenderer['onError']>();
   constructor(
     readonly backend: object,
     private readonly initResult: () => Promise<unknown>,
@@ -16,7 +17,16 @@ class FakeRenderer implements StartableRenderer {
 }
 
 function options(backend: EngineOptions['backend']): EngineOptions {
-  return { backend, tier: null, adaptive: true, clock: null, stats: false, tankSize: 'standard' };
+  return {
+    backend,
+    tier: null,
+    adaptive: true,
+    clock: null,
+    stats: false,
+    tankSize: 'standard',
+    frameRate: null,
+    pixelRatio: null,
+  };
 }
 
 describe('initRenderer', () => {

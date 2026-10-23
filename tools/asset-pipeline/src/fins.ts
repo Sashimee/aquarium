@@ -33,6 +33,10 @@ export interface FinHints {
   shellPectorals?: boolean;
   /** Uniform scale of the caudal fin about its root, for sources whose tail is out of proportion to the body. */
   caudalScale?: number;
+  /** Non-uniform scale of the whole mesh across the body (x) and top to bottom (y), for sources drawn far deeper or rounder than the species. */
+  bodyScale?: { width: number; depth: number };
+  /** Exempts only vertices beyond the far edge of the last core slice (z > coreMaxZ) from fin classification, for sources whose snout tip is too thin to survive the opening. */
+  rigidSnout?: boolean;
   /** Fins to leave unclassified, for species whose fin is part of the body mesh. */
   skip?: FinName[];
 }
@@ -61,6 +65,24 @@ export function orient(positions: Float32Array, normals: Float32Array | null, ax
   };
   apply(positions);
   if (normals) apply(normals);
+}
+
+export function scaleBody(
+  positions: Float32Array,
+  normals: Float32Array,
+  scale: { width: number; depth: number },
+): void {
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i] = positions[i]! * scale.width;
+    positions[i + 1] = positions[i + 1]! * scale.depth;
+    const nx = normals[i]! / scale.width;
+    const ny = normals[i + 1]! / scale.depth;
+    const nz = normals[i + 2]!;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    normals[i] = nx / len;
+    normals[i + 1] = ny / len;
+    normals[i + 2] = nz / len;
+  }
 }
 
 export function medianX(positions: Float32Array): number {
@@ -226,6 +248,7 @@ export function classifyFins(
   const sliceBottom: (number | null)[] = new Array(slices).fill(null);
   const sliceSide: (number | null)[] = new Array(slices).fill(null);
   let coreMinZ = Infinity;
+  let coreMaxZ = -Infinity;
   for (let z = 0; z < slices; z++) {
     let yLo = Infinity;
     let yHi = -Infinity;
@@ -242,6 +265,7 @@ export function classifyFins(
     sliceBottom[z] = grid.origin[1] + yLo * size;
     sliceSide[z] = xHi;
     coreMinZ = Math.min(coreMinZ, grid.origin[2] + z * size);
+    coreMaxZ = Math.max(coreMaxZ, grid.origin[2] + (z + 1) * size);
   }
   if (!Number.isFinite(coreMinZ)) {
     throw new Error(
@@ -261,6 +285,7 @@ export function classifyFins(
   const analFrom = hints.analFromSnout ?? 0.5;
   const [pectLo, pectHi] = hints.pectoralRange ?? [0.1, 0.55];
   const skip = new Set(hints.skip ?? []);
+  const rigidSnout = hints.rigidSnout === true;
   const finThreshold = (hints.finThresholdVoxels ?? 1.5) * size;
 
   const kind = new Uint8Array(count);
@@ -279,6 +304,7 @@ export function classifyFins(
     const cx = clamp(toCell(grid, positions[i * 3]!, 0), 0, grid.nx - 1);
     const cy = clamp(toCell(grid, y, 1), 0, grid.ny - 1);
     const cz = clamp(toCell(grid, z, 2), 0, grid.nz - 1);
+    if (rigidSnout && z > coreMaxZ) continue;
     const d = Math.sqrt(distance2[voxelIndex(grid, cx, cy, cz)]!) * size;
     if (d <= finThreshold) continue;
     const t = at(top, z);

@@ -30,11 +30,16 @@ export const DEFAULT_AUTH_RATE_LIMITS: AuthRateLimits = {
   passwordReset: { window: 3600, max: 10 },
 };
 
+export type AuthRateLimitStorage = NonNullable<
+  NonNullable<Parameters<typeof betterAuth>[0]['rateLimit']>['customStorage']
+>;
+
 export interface AuthDeps {
   config: Pick<Config, 'authSecret' | 'appUrl' | 'trustedProxies'>;
   database: Database;
   mailer: Mailer;
   rateLimits?: AuthRateLimits;
+  rateLimitStorage?: AuthRateLimitStorage;
   runInBackground?: (task: Promise<void>) => void;
   password?: {
     hash: (password: string) => Promise<string>;
@@ -47,6 +52,7 @@ export function createAuth({
   database,
   mailer,
   rateLimits = DEFAULT_AUTH_RATE_LIMITS,
+  rateLimitStorage,
   runInBackground = (task) => void task,
   password,
 }: AuthDeps) {
@@ -216,6 +222,7 @@ export function createAuth({
     rateLimit: {
       enabled: true,
       storage: 'memory',
+      ...(rateLimitStorage ? { customStorage: rateLimitStorage } : {}),
       window: 60,
       max: 100,
       customRules: {

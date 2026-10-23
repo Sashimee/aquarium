@@ -1,4 +1,4 @@
-import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
+import { createPublicKey, generateKeyPairSync, randomUUID, verify } from 'node:crypto';
 import {
   apiErrorSchema,
   dataExportSchema,
@@ -106,6 +106,7 @@ async function withFish(h: Harness, cookie: string) {
   const created = await call(h, cookie, 'POST', '/api/tanks', {
     name: 'Home',
     biome: 'freshwater',
+    idempotencyKey: randomUUID(),
   });
   const tank = tankSchema.parse(created.json());
   const fish = await call(

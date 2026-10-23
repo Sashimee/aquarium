@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  atlasDistance,
+  bakeFraming,
   drawsAsImpostor,
   effectiveDistance,
   IMPOSTOR_LOD,
+  inDisplay,
   markNearest,
+  meshLod,
+  modelFraming,
   MOUTH_LODS,
   mouthFade,
+  rankMeshes,
   REFERENCE_LENGTH_M,
   selectLod,
+  type AtlasFraming,
+  type MeshCandidate,
   type MeshRank,
 } from './lod';
 
@@ -52,6 +60,39 @@ describe('selectLod', () => {
   });
 });
 
+describe('atlasDistance', () => {
+  it('grows with the camera distance and the atlas texels per metre of fish', () => {
+    expect(atlasDistance(1, 64, 0.02, 1)).toBeCloseTo(1600);
+    expect(atlasDistance(2, 64, 0.02, 1)).toBeCloseTo(3200);
+    expect(atlasDistance(1, 128, 0.02, 1)).toBeCloseTo(3200);
+    expect(atlasDistance(1, 64, 0.02, 2)).toBeCloseTo(800);
+  });
+
+  it('rejects an atlas without area', () => {
+    expect(() => atlasDistance(1, 0, 0.02, 1)).toThrow(RangeError);
+    expect(() => atlasDistance(1, 64, 0, 1)).toThrow(RangeError);
+    expect(() => atlasDistance(1, 64, 0.02, 0)).toThrow(RangeError);
+  });
+
+  it('keeps a near 64 px small fish as a mesh before a further 128 px large one', () => {
+    const small = { distance: 0, full: false, rankKey: 0 };
+    const large = { distance: 0, full: false, rankKey: 0 };
+    small.distance = atlasDistance(0.3, 64, 0.02, 1);
+    large.distance = atlasDistance(0.5, 128, 0.06, 1);
+    markNearest([large, small], 1);
+    expect(small.full).toBe(true);
+    expect(large.full).toBe(false);
+  });
+
+  it('demotes the more distant of two fish with the same atlas', () => {
+    const near = { distance: atlasDistance(0.3, 64, 0.02, 1), full: false, rankKey: 0 };
+    const far = { distance: atlasDistance(1.2, 64, 0.02, 1), full: true, rankKey: 0 };
+    markNearest([far, near], 1);
+    expect(near.full).toBe(true);
+    expect(far.full).toBe(false);
+  });
+});
+
 describe('markNearest', () => {
   const ranks = (...distances: number[]): MeshRank[] =>
     distances.map((distance) => ({ distance, full: false, rankKey: 0 }));
@@ -93,6 +134,48 @@ describe('markNearest', () => {
 
   it('rejects a negative limit', () => {
     expect(() => markNearest(ranks(1), -1)).toThrow(RangeError);
+  });
+});
+
+describe('rankMeshes', () => {
+  interface Fish extends MeshCandidate {
+    readonly framing: AtlasFraming;
+  }
+  const fish = (cameraDistance: number, frameSize: number, radius: number, scale = 1): Fish => ({
+    cameraDistance,
+    scale,
+    framing: { frameSize, radius },
+    distance: 0,
+    full: false,
+    rankKey: 0,
+  });
+  const framingOf = (f: Fish): AtlasFraming => f.framing;
+
+  it('gives the slot to a near small 64 px fish over a further large 128 px one', () => {
+    // Size-adjusted distance puts the large fish nearer (0.21 vs 0.375 reference lengths), but the
+    // small one's atlas is coarser per screen pixel (480 vs 533).
+    const small = fish(0.3, 64, 0.02);
+    const large = fish(0.5, 128, 0.06);
+    rankMeshes([large, small], framingOf, 1);
+    expect(small.full).toBe(true);
+    expect(large.full).toBe(false);
+  });
+
+  it('writes each fish its atlas distance and sorts nearest first', () => {
+    const scaled = fish(1, 64, 0.02, 2);
+    const plain = fish(1, 64, 0.02);
+    const items = [plain, scaled];
+    rankMeshes(items, framingOf, 1);
+    expect(scaled.distance).toBeCloseTo(atlasDistance(1, 64, 0.02, 2));
+    expect(plain.distance).toBeCloseTo(atlasDistance(1, 64, 0.02, 1));
+    expect(items).toEqual([scaled, plain]);
+  });
+
+  it('marks nothing full with no slots, and throws on a bad atlas', () => {
+    const items = [fish(0.3, 64, 0.02), fish(0.5, 128, 0.06)];
+    rankMeshes(items, framingOf, 0);
+    expect(items.every((f) => !f.full)).toBe(true);
+    expect(() => rankMeshes([fish(1, 0, 0.02)], framingOf, 1)).toThrow(RangeError);
   });
 });
 
@@ -146,6 +229,67 @@ describe('drawsAsImpostor', () => {
   it('never swaps on a tier without impostors', () => {
     expect(choose({ tierImpostors: false, lod: IMPOSTOR_LOD })).toBe(false);
     expect(choose({ tierImpostors: false, lod: 0, full: false })).toBe(false);
+  });
+});
+
+describe('inDisplay', () => {
+  it('counts a display as shown until it has all but closed', () => {
+    expect(inDisplay(0)).toBe(false);
+    expect(inDisplay(0.01)).toBe(false);
+    expect(inDisplay(0.02)).toBe(true);
+    expect(inDisplay(1)).toBe(true);
+  });
+});
+
+describe('meshLod', () => {
+  it('keeps the distance level for one of the nearest few', () => {
+    expect(meshLod(0, true, 3)).toBe(0);
+    expect(meshLod(1, true, 3)).toBe(1);
+  });
+
+  it('draws one outside them a level coarser, down to lod2, so crossing the cap steps once', () => {
+    expect(meshLod(0, false, 3)).toBe(1);
+    expect(meshLod(1, false, 3)).toBe(IMPOSTOR_LOD);
+    expect(meshLod(2, false, 3)).toBe(IMPOSTOR_LOD);
+  });
+
+  it('falls back to the coarsest level a model with fewer levels has', () => {
+    expect(meshLod(0, false, 2)).toBe(1);
+    expect(meshLod(1, false, 2)).toBe(1);
+    expect(meshLod(0, false, 1)).toBe(0);
+  });
+
+  it('rejects a model without levels', () => {
+    expect(() => meshLod(0, false, 0)).toThrow(RangeError);
+  });
+});
+
+describe('bakeFraming', () => {
+  it('frames a small animal in 64 px and a larger one in 128 px, as the bake does', () => {
+    expect(bakeFraming(0.0144)).toEqual({ frameSize: 64, radius: 0.0144 });
+    expect(bakeFraming(64 / 700 / 2).frameSize).toBe(64);
+    expect(bakeFraming(0.05).frameSize).toBe(128);
+  });
+
+  it('rejects a model without extent', () => {
+    expect(() => bakeFraming(0)).toThrow(RangeError);
+  });
+});
+
+describe('modelFraming', () => {
+  const min = [-0.01, -0.02, -0.03] as const;
+  const max = [0.01, 0.02, 0.03] as const;
+
+  it("ranks a model with a baked atlas by that atlas's framing, loaded or not", () => {
+    const impostor = { frameSize: 128, radius: 0.04 };
+    expect(modelFraming({ min, max, impostor })).toBe(impostor);
+  });
+
+  it('ranks one without by the bake framing of half its diagonal, the same every frame', () => {
+    const walker = { min, max, impostor: null };
+    const framing = modelFraming(walker);
+    expect(framing).toEqual(bakeFraming(Math.hypot(0.02, 0.04, 0.06) / 2));
+    expect(modelFraming(walker)).toBe(framing);
   });
 });
 

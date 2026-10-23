@@ -1,7 +1,8 @@
-import { Raycaster, Vector2 } from 'three/webgpu';
+import { Ray as ThreeRay, Raycaster, Vector2, Vector3 } from 'three/webgpu';
 import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
 import { waterBounds } from '../../engine/tank/dimensions';
+import type { PlantPick } from '../../scene/plantGrowth';
 import { speciesInput } from '../../fish/species';
 import { FeedGate } from '../../sync/feedGate';
 import type { Vec3 } from '../camera';
@@ -26,6 +27,7 @@ import { PlayVisuals } from './visuals';
 /** The parts of the scene the play layer reads. */
 export interface PlayScene {
   groundHeight(x: number, z: number): number;
+  pickPlant?(ray: ThreeRay): PlantPick | null;
   readonly current: { sample(x: number, y: number, z: number, out: Float64Array | number[]): void };
 }
 
@@ -106,6 +108,13 @@ export function createPlaySystem(
     events: interaction,
     startle: sim.startle?.bind(sim),
     netTap: sim.netTap?.bind(sim),
+    pickPlant: (ray) =>
+      scene.pickPlant?.(
+        new ThreeRay(
+          new Vector3(ray.origin.x, ray.origin.y, ray.origin.z),
+          new Vector3(ray.dir.x, ray.dir.y, ray.dir.z),
+        ),
+      ) ?? null,
     pickFish: sim.pickFish?.bind(sim),
     toSim: sceneToSim,
     reach: sim,

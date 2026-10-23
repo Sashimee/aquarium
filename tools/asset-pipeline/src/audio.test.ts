@@ -2,8 +2,22 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AUDIO_RECIPES, decodeAudio, encodeM4a, processAudio, rawAudioPath } from './audio.ts';
-import { AUDIO_SAMPLE_RATE, integratedLoudness } from './audio-dsp.ts';
+import {
+  AUDIO_RECIPES,
+  decodeAudio,
+  encodeM4a,
+  LIMITER_CEILING_DB,
+  modificationNotes,
+  processAudio,
+  rawAudioPath,
+} from './audio.ts';
+import {
+  AUDIO_SAMPLE_RATE,
+  integratedLoudness,
+  limitPeaks,
+  peakOf,
+  linearToDb,
+} from './audio-dsp.ts';
 import { checkAssets, type CheckInput } from './check.ts';
 import { sha256 } from './glb.ts';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
@@ -44,12 +58,129 @@ describe('encodeM4a', () => {
   });
 });
 
+function peaky(seconds: number): Float32Array {
+  const samples = tone(seconds, 300, 0.02);
+  for (let i = 0; i < samples.length; i += AUDIO_SAMPLE_RATE) samples[i] = 0.9;
+  return samples;
+}
+
+describe('limitPeaks', () => {
+  it('holds every sample under the ceiling and leaves quiet audio alone', () => {
+    const limited = limitPeaks(peaky(3), -6, 240);
+    expect(peakOf(limited)).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6);
+    const quiet = tone(1, 440, 0.1);
+    expect(limitPeaks(quiet, -6, 240)).toEqual(quiet);
+  });
+
+  it('limits a peak in the first samples', () => {
+    const samples = new Float32Array(2000).fill(0.01);
+    samples[3] = 1;
+    expect(peakOf(limitPeaks(samples, -6, 240))).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6);
+  });
+});
+
+describe('limitPeaks at a loop seam', () => {
+  const lookahead = 240;
+  const gainAt = (input: Float32Array, output: Float32Array, i: number) =>
+    (output[i] ?? NaN) / (input[i] ?? NaN);
+
+  it('gives both ends of a loop the same gain when a transient sits near the end', () => {
+    const samples = new Float32Array(48000).fill(0.2);
+    samples[samples.length - 100] = 1;
+    const looped = limitPeaks(samples, -6, lookahead, true);
+    const plain = limitPeaks(samples, -6, lookahead);
+    const last = samples.length - 1;
+    const wrappedStep = Math.abs(gainAt(samples, looped, 0) - gainAt(samples, looped, last));
+    const plainStep = Math.abs(gainAt(samples, plain, 0) - gainAt(samples, plain, last));
+    expect(plainStep).toBeGreaterThan(0.2);
+    expect(wrappedStep).toBeLessThan(0.005);
+    expect(peakOf(looped)).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6);
+  });
+
+  it('ducks the start of the loop for a transient within the look-ahead of the end', () => {
+    const samples = new Float32Array(48000).fill(0.2);
+    samples[samples.length - 10] = 1;
+    const looped = limitPeaks(samples, -6, lookahead, true);
+    expect(gainAt(samples, looped, 0)).toBeLessThan(1);
+  });
+
+  it('matches the unwrapped limiter when nothing is near the seam', () => {
+    const samples = tone(1, 300, 0.02);
+    samples[20000] = 0.9;
+    expect(limitPeaks(samples, -6, lookahead, true)).toEqual(limitPeaks(samples, -6, lookahead));
+  });
+});
+
+describe('processAudio with a limiter', () => {
+  const loop = { crossfadeS: 0.25 };
+  const base = { id: 'l', source: 's', role: 'l', targetLufs: -26, loop };
+
+  it('cannot reach the target by plain gain when one peak caps it', () => {
+    const plain = processAudio(peaky(4), base);
+    expect(plain.peakLimited).toBe(true);
+    expect(plain.loudnessLufs).toBeLessThan(-30);
+  });
+
+  it('reaches the target under the peak ceiling', () => {
+    const limited = processAudio(peaky(4), { ...base, limit: true });
+    expect(limited.loudnessLufs).toBeGreaterThan(-26.5);
+    expect(limited.loudnessLufs).toBeLessThan(-25.5);
+    expect(linearToDb(peakOf(limited.samples))).toBeLessThan(-1);
+  });
+
+  it('reports peakLimited only when the limiter leaves the clip short of the target', () => {
+    const reached = processAudio(peaky(4), { ...base, limit: true });
+    expect(reached.peakLimited).toBe(false);
+    expect(modificationNotes({ ...base, limit: true }, reached).join('; ')).toContain(
+      'normalised to -26 LUFS',
+    );
+
+    const unreachable = { ...base, targetLufs: 0, limit: true };
+    const missed = processAudio(peaky(4), unreachable);
+    expect(missed.peakLimited).toBe(true);
+    const notes = modificationNotes(unreachable, missed).join('; ');
+    expect(notes).not.toContain('normalised to');
+    expect(notes).toContain('instead of the 0 LUFS target');
+    expect(notes).toContain(`limited by the ${LIMITER_CEILING_DB} dBFS peak ceiling`);
+    expect(notes).toContain('-2.5 dBFS peak ceiling');
+  });
+});
+
 describe('processAudio', () => {
   it('cuts a loop to its length minus the crossfade and hits the target loudness', () => {
     const recipe = { id: 'l', source: 's', role: 'l', targetLufs: -23, loop: { crossfadeS: 0.5 } };
     const processed = processAudio(tone(4), recipe);
     expect(processed.samples.length).toBe(Math.round(3.5 * AUDIO_SAMPLE_RATE));
     expect(processed.loudnessLufs).toBeCloseTo(-23, 1);
+  });
+
+  it('takes the loop from inside the search range', () => {
+    const quiet = tone(8, 440, 0.01);
+    const loud = tone(8, 440, 0.4);
+    const source = new Float32Array(quiet.length + loud.length);
+    source.set(quiet);
+    source.set(loud, quiet.length);
+    const recipe = {
+      id: 'l',
+      source: 's',
+      role: 'l',
+      targetLufs: -30,
+      loop: { crossfadeS: 0.5, loopS: 4, searchS: [8, 16] as [number, number] },
+    };
+    const inRange = processAudio(source, recipe);
+    expect(inRange.samples.length).toBe(Math.round(4 * AUDIO_SAMPLE_RATE));
+    expect(inRange.gainDb).toBeLessThan(0);
+  });
+
+  it('refuses a search range shorter than the loop', () => {
+    const recipe = {
+      id: 'l',
+      source: 's',
+      role: 'l',
+      targetLufs: -23,
+      loop: { crossfadeS: 0.2, loopS: 5, searchS: [0, 3] as [number, number] },
+    };
+    expect(() => processAudio(tone(10), recipe)).toThrow();
   });
 
   it('trims a one-shot and fades its end', () => {

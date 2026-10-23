@@ -1,35 +1,8 @@
 import { STAND_HEIGHT, type TankDimensions } from '../../engine/tank/dimensions';
-import type { Tier } from '../../engine/quality/tiers';
 import { mulberry32 } from '../placement';
 
 export const ROOM_PRESETS = ['living-room', 'office'] as const;
 export type RoomPreset = (typeof ROOM_PRESETS)[number];
-
-export const ROOM_CHOICES = ['none', ...ROOM_PRESETS] as const;
-export type RoomChoice = (typeof ROOM_CHOICES)[number];
-
-export const DEFAULT_ROOM_CHOICE: RoomChoice = 'none';
-
-export function isRoomChoice(value: unknown): value is RoomChoice {
-  return typeof value === 'string' && (ROOM_CHOICES as readonly string[]).includes(value);
-}
-
-/**
- * `shell` is walls, floor and window, `reduced` adds the furniture, `full` adds the ceiling and
- * the books.
- */
-export type RoomDetail = 'shell' | 'reduced' | 'full';
-
-const DETAIL: Readonly<Record<Tier, RoomDetail>> = {
-  low: 'shell',
-  medium: 'reduced',
-  high: 'full',
-  ultra: 'full',
-};
-
-export function roomDetailFor(tier: Tier): RoomDetail {
-  return DETAIL[tier];
-}
 
 export type Vec3 = readonly [number, number, number];
 
@@ -157,13 +130,32 @@ function bookshelf(frame: Frame, z: number, seed: number): { box: RoomBox; books
   return { box, books };
 }
 
-function windowFor(tank: TankExtent, frame: Frame): WindowSlot {
-  const x = tank.length / 2 + WINDOW_CLEARANCE + WINDOW_SIZE[0] / 2;
+function backWallZ(tank: TankExtent): number {
+  return -(tank.depth / 2 + WALL_GAP);
+}
+
+/**
+ * The window on the back wall, set to the right of the tank so that it follows the tank's length.
+ * `centreY` tunes its height per room, in tank space; the default is the sill height of T57's rooms.
+ */
+export function windowSlotFor(
+  tank: TankExtent,
+  centreY = -STAND_HEIGHT + WINDOW_SILL + WINDOW_SIZE[1] / 2,
+): WindowSlot {
+  const backZ = backWallZ(tank);
   return {
     id: 'window-main',
-    centre: [x, frame.floorY + WINDOW_SILL + WINDOW_SIZE[1] / 2, frame.backZ],
+    centre: [tank.length / 2 + WINDOW_CLEARANCE + WINDOW_SIZE[0] / 2, centreY, backZ],
     size: WINDOW_SIZE,
-    paneZ: frame.backZ - 0.02,
+    paneZ: backZ - 0.02,
+  };
+}
+
+export function roomShell(tank: TankExtent): Bounds {
+  const halfWidth = roomHalfWidth(tank);
+  return {
+    min: [-halfWidth, -STAND_HEIGHT, backWallZ(tank)],
+    max: [halfWidth, -STAND_HEIGHT + ROOM_HEIGHT, FRONT_Z],
   };
 }
 
@@ -248,16 +240,13 @@ export function planRoom(preset: RoomPreset, tank: TankExtent, seed = 1): RoomLa
   }
   const floorY = -STAND_HEIGHT;
   const halfWidth = roomHalfWidth(tank);
-  const backZ = -(tank.depth / 2 + WALL_GAP);
+  const backZ = backWallZ(tank);
   const frame: Frame = { floorY, backZ, halfWidth, leftFree: -(tank.length / 2 + TANK_CLEARANCE) };
-  const slot = windowFor(tank, frame);
+  const slot = windowSlotFor(tank);
   const built = preset === 'office' ? office(tank, frame, seed) : livingRoom(tank, frame, seed);
   return {
     preset,
-    shell: {
-      min: [-halfWidth, floorY, backZ],
-      max: [halfWidth, floorY + ROOM_HEIGHT, FRONT_Z],
-    },
+    shell: roomShell(tank),
     tank: {
       min: [-tank.length / 2, 0, -tank.depth / 2],
       max: [tank.length / 2, tank.height, tank.depth / 2],
@@ -278,18 +267,5 @@ export function boxBounds(box: Pick<RoomBox, 'centre' | 'size'>): Bounds {
   return {
     min: [cx - sx / 2, cy - sy / 2, cz - sz / 2],
     max: [cx + sx / 2, cy + sy / 2, cz + sz / 2],
-  };
-}
-
-export function visibleParts(
-  layout: RoomLayout,
-  detail: RoomDetail,
-): { boxes: readonly RoomBox[]; books: readonly RoomBook[]; ceiling: boolean } {
-  if (detail === 'shell') return { boxes: [], books: [], ceiling: false };
-  const full = detail === 'full';
-  return {
-    boxes: layout.boxes,
-    books: full ? layout.books : [],
-    ceiling: full,
   };
 }

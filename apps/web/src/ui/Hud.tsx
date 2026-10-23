@@ -1,12 +1,21 @@
-import type { Biome, PlayableBiome } from '@aquarium/shared';
+import type { Biome, CreatableBiome } from '@aquarium/shared';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { earnedText, euroText, pearlText } from '../sync/economy';
 import type { CameraMode } from '../interaction/camera';
 import { chipState, type ChipStatus } from './chemistryChip';
-import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
+import { useAuth, useBridge, useCameraMode, useDemoBiome, useLatest } from './context';
+import { clockFor, initialMode, nextMode, writeMode, type DayNightMode } from './dayNight';
 import { getDip, subscribeDips } from './dipStore';
-import { BookIcon, DuskIcon, MoonIcon, PersonIcon, SunIcon, TankIcon } from './icons';
+import {
+  AutoLightIcon,
+  BookIcon,
+  DuskIcon,
+  MoonIcon,
+  PersonIcon,
+  SunIcon,
+  TankIcon,
+} from './icons';
 import type { OpenPanel } from './panels';
 import { Link } from './screens';
 import { useActiveTank, useOptionalSession, useSessionState } from './session';
@@ -21,9 +30,12 @@ const BIOME_LABEL: Record<Biome, string> = {
   mangrove: 'Mangrove',
 };
 
-const TANK_TYPES: readonly { biome: PlayableBiome; label: string }[] = [
+const TANK_TYPES: readonly { biome: CreatableBiome; label: string }[] = [
   { biome: 'freshwater', label: 'Freshwater' },
   { biome: 'reef', label: 'Reef' },
+  { biome: 'cichlid', label: 'Cichlid' },
+  { biome: 'blackwater', label: 'Blackwater' },
+  { biome: 'mangrove', label: 'Mangrove' },
 ];
 
 function useTimeOfDay(): TimeOfDay | null {
@@ -209,14 +221,14 @@ export function CameraControls() {
   );
 }
 
-export function TankTypeSwitch({ onCreate }: { onCreate(biome: PlayableBiome): void }) {
+export function TankTypeSwitch({ onCreate }: { onCreate(biome: CreatableBiome): void }) {
   const { interaction } = useBridge();
   const session = useOptionalSession();
   const state = useSessionState();
   const demo = useDemoBiome();
   const shown = shownBiome(state, demo);
   const enabled = canSwitch(state);
-  const choose = (target: PlayableBiome) => {
+  const choose = (target: CreatableBiome) => {
     const plan = planSwitch(state, demo, target);
     switch (plan.kind) {
       case 'none':
@@ -277,6 +289,50 @@ export function RoundButton({
     >
       {children}
     </button>
+  );
+}
+
+const DAY_NIGHT_ICON: Record<DayNightMode, () => React.JSX.Element> = {
+  auto: AutoLightIcon,
+  day: SunIcon,
+  night: MoonIcon,
+};
+
+const DAY_NIGHT_LABEL: Record<DayNightMode, string> = {
+  auto: 'automatic',
+  day: 'day',
+  night: 'night',
+};
+
+export function DayNightButton() {
+  const { interaction } = useBridge();
+  const lamp = useLatest(interaction, 'lamp:schedule');
+  const [pressed, setPressed] = useState<DayNightMode | null>(null);
+  const mode = pressed ?? initialMode(window.location.search, undefined, lamp);
+  const [announced, setAnnounced] = useState('');
+  const next = nextMode(mode);
+  const Icon = DAY_NIGHT_ICON[mode];
+  return (
+    <>
+      <button
+        type="button"
+        className="round"
+        data-mode={mode}
+        aria-label={`Lighting: ${DAY_NIGHT_LABEL[mode]}. Switch to ${DAY_NIGHT_LABEL[next]}`}
+        title={`Lighting: ${DAY_NIGHT_LABEL[mode]}`}
+        onClick={() => {
+          setPressed(next);
+          setAnnounced(`Lighting set to ${DAY_NIGHT_LABEL[next]}`);
+          writeMode(next);
+          interaction.emit('clock:request', { clock: clockFor(next) });
+        }}
+      >
+        <Icon />
+      </button>
+      <span role="status" className="sr-only">
+        {announced}
+      </span>
+    </>
   );
 }
 
@@ -356,6 +412,10 @@ export function AccountPanel({ onCollection }: { onCollection(): void }) {
           <Link to="/sign-up">Create account</Link>
         </nav>
       )}
+      <nav aria-label="Community" className="account legal">
+        <Link to="/gallery">Tank gallery</Link>
+        <Link to="/community">Community tank</Link>
+      </nav>
       <nav aria-label="Legal" className="account legal">
         <Link to="/privacy">Privacy</Link>
         <Link to="/credits">Credits</Link>

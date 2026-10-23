@@ -1,5 +1,6 @@
+import { createReauthenticator } from './reauth.ts';
 import { safeError } from './safe-error.ts';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import {
@@ -39,6 +40,12 @@ import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './l
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
 import type { PushSender } from './push.ts';
+import type { PaymentProvider } from './payments/provider.ts';
+import {
+  DEFAULT_PAYMENTS_LIMITS,
+  registerPaymentRoutes,
+  type PaymentsLimits,
+} from './payments/routes.ts';
 import {
   DEFAULT_REMINDER_LIMITS,
   registerReminderRoutes,
@@ -46,7 +53,19 @@ import {
   type ReminderLimits,
 } from './reminders.ts';
 import type { SpeciesCatalog } from './species.ts';
-import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
+import { loadCoralTable } from './corals.ts';
+import { loadPlantTable } from './plants.ts';
+import {
+  DEFAULT_CARE_LIMITS,
+  registerTankRoutes,
+  type CareLimits,
+  type TankRouteDeps,
+} from './tanks.ts';
+import {
+  DEFAULT_COMMUNITY_CONFIG,
+  registerCommunityRoutes,
+  type CommunityConfig,
+} from './community.ts';
 
 export interface AppOptions {
   indexable: boolean;
@@ -66,11 +85,14 @@ export interface AppOptions {
   legalLimits?: LegalLimits;
   authSecret: string;
   push?: PushSender | null;
+  payments?: PaymentProvider | null;
+  paymentsLimits?: PaymentsLimits;
   reminderLimits?: ReminderLimits;
   handleLimit?: Limit;
   collectionLimit?: Limit;
   publicLimits?: PublicLimits;
   galleryLimits?: GalleryLimits;
+  community?: Partial<CommunityConfig>;
   testHooks?: boolean;
   logger?: boolean;
   logStream?: { write(chunk: string): void };
@@ -232,14 +254,31 @@ function hasAmbiguousPath(url: string): boolean {
 
 const PUBLIC_PATH_PREFIX = '/api/public/';
 const VIEWER_PATH_PREFIX = '/t/';
+const GALLERY_PAGE_PATH = '/gallery';
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
 // Pages and links whose URL holds a one-time token. The strict-origin-when-cross-origin default
 // would still send the full URL to same-origin subresources (JS, CSS, /api/me) on first load. The
 // policy stays scoped: the CSRF check falls back to Referer and the default suits every other route.
 const TOKEN_PAGES = new Set(['/reset-password', '/verify-email']);
 
-function isViewerPath(url: string): boolean {
-  return normalizedPathname(url).toLowerCase().startsWith(VIEWER_PATH_PREFIX);
+const NOINDEX_ACCOUNT_PAGES = new Set([
+  '/sign-in',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/sessions',
+  '/settings',
+]);
+
+function isNoindexPagePath(url: string): boolean {
+  const path = normalizedPathname(url).toLowerCase();
+  return (
+    path.startsWith(VIEWER_PATH_PREFIX) ||
+    path === GALLERY_PAGE_PATH ||
+    path.startsWith(`${GALLERY_PAGE_PATH}/`) ||
+    NOINDEX_ACCOUNT_PAGES.has(path.replace(/\/+$/, ''))
+  );
 }
 
 function carriesUrlToken(url: string): boolean {
@@ -301,6 +340,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   const { indexable, webRoot, appOrigin, database, auth, mailer, logger = true } = opts;
   const clock = opts.clock ?? createClock();
   const { signInThrottle } = opts;
+  const paymentsStatus = opts.payments ? 'enabled' : 'disabled';
   const secure = new URL(appOrigin).protocol === 'https:';
   const applySecurityHeaders = (reply: FastifyReply): void => {
     reply.headers(SECURITY_HEADERS);
@@ -371,7 +411,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       reply.header('content-security-policy', KTX2_WORKER_CSP);
     }
     if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');
-    if (isViewerPath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
+    if (isNoindexPagePath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
   });
 
   app.addHook('onRequest', async (req, reply) => {
@@ -418,10 +458,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.get('/api/health', async (_req, reply) => {
     try {
       await database.pool.query('select 1');
-      return { status: 'ok' };
+      return { status: 'ok', payments: paymentsStatus };
     } catch {
       app.log.error('health check: database unreachable');
-      return reply.code(503).send({ status: 'unavailable' });
+      return reply.code(503).send({ status: 'unavailable', payments: paymentsStatus });
     }
   });
 
@@ -609,9 +649,30 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     database,
     auth,
     credits: loadCredits(),
-    limiter: new RateLimiter(),
+    limiter,
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
+    payments: opts.payments ?? null,
+    clock,
+  });
+
+  const reauthenticate = createReauthenticator(database, auth);
+
+  registerPaymentRoutes({
+    app,
+    database,
+    economy,
+    clock,
+    limiter,
+    limits: opts.paymentsLimits ?? DEFAULT_PAYMENTS_LIMITS,
+    mailer,
+    appOrigin,
+    provider: opts.payments ?? null,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
+    reauthenticate: async (req, password) => {
+      const current = await currentSession(req);
+      return current ? reauthenticate(current, password) : 'stale_session';
+    },
   });
 
   registerReminderRoutes({
@@ -624,17 +685,24 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
-  registerTankRoutes({
+  const tankDeps: TankRouteDeps = {
     app,
     database,
     species: opts.species,
     chemistryParams: opts.chemistryParams,
     economy,
     presets: opts.presets ?? loadPresets(),
+    plants: loadPlantTable(),
+    corals: loadCoralTable(),
     clock,
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
+  };
+  registerTankRoutes(tankDeps);
+  registerCommunityRoutes({
+    tank: tankDeps,
+    config: { ...DEFAULT_COMMUNITY_CONFIG, ...opts.community },
   });
 
   registerCollectionRoutes({
@@ -685,13 +753,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   const root = resolve(webRoot);
   const hasWeb = existsSync(resolve(root, 'index.html'));
   if (hasWeb) {
+    const emitted = loadEmittedAssets(root);
     void app.register(fastifyStatic, {
       root,
       dotfiles: 'ignore',
       preCompressed: true,
       cacheControl: false,
       setHeaders: (res, path) => {
-        res.header('cache-control', staticCacheControl(relative(root, path)));
+        res.header('cache-control', staticCacheControl(relative(root, path), emitted));
       },
     });
   }
@@ -742,16 +811,55 @@ const SECURITY_HEADERS = {
   'cross-origin-opener-policy': 'same-origin',
 };
 
-// Vite emits content-hashed bundles flat in assets/; models and textures copied from public/ live in
-// subdirectories under stable names, so they must stay revalidatable.
-const HASHED_ASSET = /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
+// Only files Vite emitted carry a content hash; a name-shaped match would also catch public/ files
+// flattened into assets/ under stable names, which must stay revalidatable.
+const VITE_MANIFEST = '.vite/manifest.json';
 
-export function staticCacheControl(relPath: string): string {
+interface ViteManifestEntry {
+  file?: string;
+  css?: string[];
+  assets?: string[];
+}
+
+const isStringList = (value: unknown): boolean =>
+  value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+
+function isManifestEntry(value: unknown): value is ViteManifestEntry {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const { file, css, assets } = value as Record<string, unknown>;
+  return typeof file === 'string' && isStringList(css) && isStringList(assets);
+}
+
+export function loadEmittedAssets(webRoot: string): ReadonlySet<string> {
+  const path = resolve(webRoot, VITE_MANIFEST);
+  const unusable = (cause?: unknown) =>
+    new Error(
+      `Cannot read the Vite manifest at ${path}; rebuild the web app with \`pnpm --filter web build\` (build.manifest enabled) or delete the stale dist directory.`,
+      { cause },
+    );
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (cause) {
+    throw unusable(cause);
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw unusable();
+  const emitted = new Set<string>();
+  for (const entry of Object.values(parsed)) {
+    if (!isManifestEntry(entry)) throw unusable();
+    for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) {
+      if (file) emitted.add(file);
+    }
+  }
+  return emitted;
+}
+
+export function staticCacheControl(relPath: string, emitted: ReadonlySet<string>): string {
   const file = relPath
     .split(sep)
     .join('/')
     .replace(/\.(br|gz)$/, '');
-  if (HASHED_ASSET.test(file)) return 'public, max-age=31536000, immutable';
+  if (emitted.has(file)) return 'public, max-age=31536000, immutable';
   if (file.startsWith('assets/') && file.indexOf('/', 'assets/'.length) !== -1) {
     return 'public, max-age=3600';
   }

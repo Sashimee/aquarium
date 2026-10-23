@@ -1,8 +1,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { checkAssets, loadCheckInput } from './check.ts';
 import { sha256 } from './glb.ts';
-import { derivedModifications } from './manifest.ts';
+import { aggregateSha256, derivedModifications, manifestSchema } from './manifest.ts';
+import { verifyRawSource } from './source.ts';
 
 export const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
@@ -71,8 +72,49 @@ async function main(argv: string[]): Promise<number> {
     console.log(`rendered ${rendered}; recorded sha256 ${entry.sha256} in assets/manifest.json`);
     return 0;
   }
+  if (command === 'render-cichlid-backgrounds' || command === 'render-water-backgrounds') {
+    const { renderAllCichlidBackgrounds } = await import('./cichlid-render.ts');
+    const { renderAllWaterBackgrounds } = await import('./water-render.ts');
+    const renderAll =
+      command === 'render-cichlid-backgrounds'
+        ? renderAllCichlidBackgrounds
+        : renderAllWaterBackgrounds;
+    const only = rest.filter((a) => !a.startsWith('--'));
+    const manifestPath = join(REPO_ROOT, 'assets', 'manifest.json');
+    let text = readFileSync(manifestPath, 'utf8');
+    const manifest = manifestSchema.parse(JSON.parse(text));
+    const byId = new Map(manifest.assets.map((a) => [a.id, a]));
+    const verified = new Set<string>();
+    const rendered = await renderAll(
+      {
+        verifySource: (sourceId) => {
+          if (verified.has(sourceId)) return;
+          const source = byId.get(sourceId);
+          if (!source) throw new Error(`${sourceId} is not in assets/manifest.json`);
+          verifyRawSource(source, aggregateSha256);
+          verified.add(sourceId);
+        },
+      },
+      only,
+    );
+    for (const file of rendered) {
+      const id = basename(dirname(file));
+      const digest = sha256(readFileSync(file));
+      const at = text.indexOf(`"id": "${id}"`);
+      if (at < 0) throw new Error(`${id} is not in assets/manifest.json`);
+      const head = text.slice(0, at);
+      const tail = text
+        .slice(at)
+        .replace(/"sha256": (null|"[0-9a-f]{64}")/, `"sha256": "${digest}"`)
+        .replace(/"status": "[a-z_]+"/, '"status": "downloaded"');
+      text = head + tail;
+      console.log(`rendered ${file}; sha256 ${digest}`);
+    }
+    writeFileSync(manifestPath, text);
+    return 0;
+  }
   console.error(
-    'usage: cli.ts check | sync-manifest | render-misty-lake | build [asset-id ...] [--impostor-sheets=dir] [--background-sheet=file.png]',
+    'usage: cli.ts check | sync-manifest | render-misty-lake | render-cichlid-backgrounds [id ...] | render-water-backgrounds [id ...] | build [asset-id ...] [--impostor-sheets=dir] [--background-sheet=file.png]',
   );
   return 2;
 }

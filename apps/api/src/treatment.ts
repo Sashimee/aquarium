@@ -12,7 +12,6 @@ import { eq } from 'drizzle-orm';
 import { schema } from './db/index.ts';
 import { MAX_TREAT_KEYS, storedTreatKeys, type TreatKeys } from './disease.ts';
 import { apiError, HttpError } from './errors.ts';
-import { legacyKey } from './legacyRequests.ts';
 import type { Ticked, Tx } from './tanks.ts';
 import { findReplay, lockWallet, spend, type Charged } from './wallet.ts';
 import { z } from 'zod';
@@ -33,10 +32,9 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
       const user = await authorize(req);
       const { tankId } = z.strictObject({ tankId: idSchema }).parse(req.params);
       const body = treatRequestSchema.parse(req.body);
-      throttle(user.id, 'care');
       const premium = body.potency === 'premium';
       const itemRef = `consumable:premium-medicine:${body.kind}:${tankId}`;
-      const key = legacyKey(body.idempotencyKey);
+      const key = body.idempotencyKey;
 
       return withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
@@ -63,6 +61,7 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
         } else if (seen) {
           return respond(await render(tx, ticked), seen.overdose, null);
         }
+        throttle(user.id, 'care');
 
         const { state } = ticked;
         if (!state.fish.some((f) => f.alive && f.disease?.kind === body.kind)) {

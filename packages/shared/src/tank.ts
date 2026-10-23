@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { backgroundIdSchema } from './backgrounds.js';
+import { roomIdSchema } from './rooms.js';
 import {
   biomeSchema,
-  playableBiomeSchema,
+  creatableBiomeSchema,
   decorLayoutResponseSchema,
   decorLayoutSchema,
   idSchema,
@@ -11,7 +12,9 @@ import {
   unitSchema,
 } from './common.js';
 import { chemistrySchema } from './chemistry.js';
-import { equipmentSchema, lightScheduleSchema } from './equipment.js';
+import { equipmentSchema, lightScheduleSchema, MAX_EQUIPMENT_TIER } from './equipment.js';
+import { coralSchema } from './corals.js';
+import { plantSchema } from './plants.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
 import {
   idempotencyKeySchema,
@@ -19,6 +22,7 @@ import {
   purchasableStageSchema,
   walletSchema,
 } from './economy.js';
+import { foodTypeSchema } from './food.js';
 import {
   diseaseStateSchema,
   medicineSchema,
@@ -32,7 +36,12 @@ export const waterSchema = z.object({
   ammonia: z.number().nonnegative(),
   nitrate: z.number().nonnegative(),
   algae: unitSchema,
+  tannin: unitSchema.default(0).describe('tea-coloured humic water, 0 clear to 1 black'),
   uneatenFood: z.number().nonnegative().describe('portions of food on the substrate or drifting'),
+  uneatenFoodTypes: z
+    .array(foodTypeSchema)
+    .optional()
+    .describe('foods in the uneaten total; absent on tanks that predate it, meaning any'),
 });
 export type Water = z.infer<typeof waterSchema>;
 
@@ -132,6 +141,11 @@ export const tankSchema = z.object({
   quarantine: z.boolean().describe('the one nano tank kept apart for new fish and treatment'),
   shared: z.boolean().describe('whether a public link is active'),
   inGallery: z.boolean().describe('listed in the tank of the week gallery; needs an active link'),
+  acceptsGifts: z
+    .boolean()
+    .describe(
+      'opt-in, default false: this tank may receive gifted or traded fish from other players',
+    ),
   shareToken: shareTokenSchema
     .nullable()
     .describe('only in the response that enabled or rotated the link, null on every other read'),
@@ -140,10 +154,21 @@ export const tankSchema = z.object({
   // true: decorLayout is what the player saved, and [] means they emptied the tank.
   decorEdited: z.boolean(),
   backgroundId: backgroundIdSchema,
+  roomId: roomIdSchema
+    .nullable()
+    .describe('the room the tank stands in, room-living by default; null is the plain studio'),
+  roomSetAt: timestampSchema
+    .nullable()
+    .describe('null until the player saves a room; set on every PATCH that carries roomId'),
   water: waterSchema,
   lastTickAt: timestampSchema,
   chemistry: chemistrySchema,
   equipment: equipmentSchema,
+  co2OwnedTier: z
+    .int()
+    .min(0)
+    .max(MAX_EQUIPMENT_TIER)
+    .describe('highest CO2 tier bought; any tier up to it can be switched to for free'),
   recentVisitDays: z
     .number()
     .int()
@@ -156,6 +181,18 @@ export const tankSchema = z.object({
     .nullable()
     .optional()
     .describe('the medicine running in this tank, null or absent when there is none'),
+  plants: z
+    .array(plantSchema)
+    .optional()
+    .describe(
+      'growing plants: the layout plants (the preset ones while the layout is unedited) and their offsets',
+    ),
+  corals: z
+    .array(coralSchema)
+    .optional()
+    .describe(
+      'reef corals: the layout corals (the preset ones while the layout is unedited) and their fragments, each with a 0..1 bleach level',
+    ),
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
   away: awaySummarySchema.optional(),
@@ -165,14 +202,12 @@ export type Tank = z.infer<typeof tankSchema>;
 export const createTankRequestSchema = z
   .strictObject({
     name: z.string().trim().min(1).max(60),
-    biome: playableBiomeSchema,
+    biome: creatableBiomeSchema,
     size: tankSizeSchema.default('standard'),
     quarantine: z.boolean().default(false),
-    idempotencyKey: idempotencyKeySchema
-      .optional()
-      .describe(
-        'required when the tank costs Pearls: every display tank after the first, any size but standard',
-      ),
+    idempotencyKey: idempotencyKeySchema.describe(
+      'makes a retry replay the first answer; the tank costs Pearls for every display tank after the first and any size but standard',
+    ),
   })
   .refine((v) => !v.quarantine || v.size === QUARANTINE_TANK_SIZE, {
     message: 'a quarantine tank is always nano30',
@@ -185,14 +220,31 @@ export const updateTankRequestSchema = z
     name: z.string().trim().min(1).max(60).optional(),
     decorLayout: decorLayoutSchema.optional(),
     backgroundId: backgroundIdSchema.nullable().optional(),
+    roomId: roomIdSchema
+      .nullable()
+      .optional()
+      .describe(
+        'null for no room, a free room, or one the account bought, else 409 room_not_owned',
+      ),
     light: lightScheduleSchema.optional().describe('free: the lamp schedule and intensity'),
+    acceptsGifts: z
+      .boolean()
+      .optional()
+      .describe('opt this tank in or out of receiving gifted fish'),
+    co2: z
+      .strictObject({ tier: z.int().min(0).max(MAX_EQUIPMENT_TIER) })
+      .optional()
+      .describe('free: switch CO2 to a tier this tank already owns, or 0 for off; never charges'),
   })
   .refine(
     (v) =>
       v.name !== undefined ||
       v.decorLayout !== undefined ||
       v.backgroundId !== undefined ||
-      v.light !== undefined,
+      v.roomId !== undefined ||
+      v.light !== undefined ||
+      v.acceptsGifts !== undefined ||
+      v.co2 !== undefined,
     'nothing to update',
   );
 export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
@@ -200,8 +252,8 @@ export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
 export const addFishRequestSchema = z.strictObject({
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
-  stage: purchasableStageSchema.optional().describe('missing means DEFAULT_PURCHASE_STAGE'),
-  idempotencyKey: idempotencyKeySchema.optional(),
+  stage: purchasableStageSchema,
+  idempotencyKey: idempotencyKeySchema,
 });
 export type AddFishRequest = z.infer<typeof addFishRequestSchema>;
 

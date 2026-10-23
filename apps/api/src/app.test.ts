@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { redactUrl, staticCacheControl, stripTokensFromBody } from './app.ts';
+import { loadEmittedAssets, redactUrl, staticCacheControl, stripTokensFromBody } from './app.ts';
 import { createHarness, type Harness } from './test-harness.ts';
 
+const EMITTED: ReadonlySet<string> = new Set(['assets/index-C7vUOBtl.js']);
 const NOINDEX = 'noindex, nofollow';
 const BUNDLE = 'console.log("hello aquarium");'.repeat(200);
 let dist: string;
@@ -15,6 +16,7 @@ let plain: Harness;
 let spa: Harness;
 let indexable: Harness;
 let broken: Harness;
+let http: Harness;
 
 beforeAll(async () => {
   dist = mkdtempSync(join(tmpdir(), 'aquarium-dist-'));
@@ -25,23 +27,42 @@ beforeAll(async () => {
   writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.br'), brotliCompressSync(BUNDLE));
   writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.gz'), gzipSync(BUNDLE));
   writeFileSync(join(dist, 'assets', 'index.json'), '{}');
+  for (const name of ['index-C-nEAlfU.js', 'system--58a3A-e.js']) {
+    writeFileSync(join(dist, 'assets', name), 'x');
+  }
+  writeFileSync(join(dist, 'assets', 'polyhaven-cabin_1k.ktx2'), 'ktx');
+  mkdirSync(join(dist, '.vite'));
+  writeFileSync(
+    join(dist, '.vite', 'manifest.json'),
+    JSON.stringify({
+      'index.html': {
+        file: 'assets/index-C7vUOBtl.js',
+        css: ['assets/index-C-nEAlfU.js'],
+        assets: ['assets/system--58a3A-e.js'],
+      },
+    }),
+  );
   writeFileSync(join(dist, 'ktx2-worker.js'), 'self.onmessage=()=>{}');
   mkdirSync(join(dist, 'assets', 'fish'));
   writeFileSync(join(dist, 'assets', 'fish', 'tetra.glb'), 'glb');
   writeFileSync(join(dist, '.env'), 'SECRET=1');
-  [plain, spa, indexable, broken] = await Promise.all([
+  // Each harness creates a database and runs every migration, so five at once can pass vitest's 10 s hook
+  // default on a loaded machine; the timeout below covers that setup instead of a 5 s per-test one.
+  [plain, spa, indexable, broken, http] = await Promise.all([
     createHarness(),
     createHarness({ webRoot: dist }),
     createHarness({ webRoot: dist, indexable: true }),
     createHarness(),
+    createHarness({ appOrigin: 'http://localhost:3000' }),
   ]);
-});
+}, 60_000);
 
 afterAll(async () => {
   await Promise.all([
     plain.close(),
     spa.close(),
     indexable.close(),
+    http.close(),
     // The 503 test already ended this pool, and -t may skip that test; ending twice rejects.
     (broken.database.pool.ended ? Promise.resolve() : broken.database.pool.end())
       .then(() => broken.app.close())
@@ -56,13 +77,14 @@ const withDist = (isIndexable = false): FastifyInstance => (isIndexable ? indexa
 describe('health', () => {
   it('reports ok while the database answers', async () => {
     const res = await plain.app.inject('/api/health');
-    expect(res.json()).toEqual({ status: 'ok' });
+    expect(res.json()).toEqual({ status: 'ok', payments: 'disabled' });
   });
 
   it('reports 503 when the database is gone', async () => {
     await broken.database.pool.end();
     const res = await broken.app.inject('/api/health');
     expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ status: 'unavailable', payments: 'disabled' });
     expect(res.headers['x-robots-tag']).toBe(NOINDEX);
   });
 });
@@ -246,14 +268,9 @@ describe('security headers', () => {
   });
 
   it('omits HSTS when APP_URL is plain http', async () => {
-    const http = await createHarness({ appOrigin: 'http://localhost:3000' });
-    try {
-      const res = await http.app.inject('/api/health');
-      expect(res.headers['strict-transport-security']).toBeUndefined();
-      expect(res.headers['content-security-policy']).toBeDefined();
-    } finally {
-      await http.close();
-    }
+    const res = await http.app.inject('/api/health');
+    expect(res.headers['strict-transport-security']).toBeUndefined();
+    expect(res.headers['content-security-policy']).toBeDefined();
   });
 });
 
@@ -319,8 +336,68 @@ describe('with a web build', () => {
       .map((entry) => relative(publicDir, join(entry.parentPath, entry.name)));
     expect(files.length).toBeGreaterThan(0);
     for (const file of files) {
-      expect(staticCacheControl(file), file).not.toContain('immutable');
-      expect(staticCacheControl(join('assets', basename(file))), file).not.toContain('immutable');
+      expect(staticCacheControl(file, EMITTED), file).not.toContain('immutable');
+      expect(staticCacheControl(join('assets', basename(file)), EMITTED), file).not.toContain(
+        'immutable',
+      );
+    }
+  });
+
+  it('does not serve the Vite manifest', async () => {
+    expect((await withDist().inject('/.vite/manifest.json')).statusCode).toBe(404);
+  });
+
+  it('refuses to start with a web root but no Vite manifest', async () => {
+    const bare = mkdtempSync(join(tmpdir(), 'aquarium-nomanifest-'));
+    writeFileSync(join(bare, 'index.html'), '<!doctype html>');
+    try {
+      expect(() => loadEmittedAssets(bare)).toThrow(/Vite manifest/);
+      await expect(createHarness({ webRoot: bare })).rejects.toThrow(/Vite manifest/);
+    } finally {
+      rmSync(bare, { recursive: true, force: true });
+    }
+  });
+
+  it('tells the operator to rebuild when the manifest is missing', () => {
+    const bare = mkdtempSync(join(tmpdir(), 'aquarium-nomanifest-'));
+    try {
+      expect(() => loadEmittedAssets(bare)).toThrow(
+        /pnpm --filter web build.*delete the stale dist/,
+      );
+    } finally {
+      rmSync(bare, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['null', '42', '"text"', '[]', '{'])('rejects a manifest of %s', (body) => {
+    const bad = mkdtempSync(join(tmpdir(), 'aquarium-badmanifest-'));
+    mkdirSync(join(bad, '.vite'));
+    writeFileSync(join(bad, '.vite', 'manifest.json'), body);
+    try {
+      expect(() => loadEmittedAssets(bad)).toThrow(/Cannot read the Vite manifest/);
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    '{"a": null}',
+    '{"a": 5}',
+    '{"a": []}',
+    '{"a": {}}',
+    '{"a": {"file": 3}}',
+    '{"a": {"file": "x.js", "css": "x.css"}}',
+    '{"a": {"file": "x.js", "assets": [1]}}',
+  ])('rejects a manifest with a malformed entry %s', (body) => {
+    const bad = mkdtempSync(join(tmpdir(), 'aquarium-badentry-'));
+    mkdirSync(join(bad, '.vite'));
+    writeFileSync(join(bad, '.vite', 'manifest.json'), body);
+    try {
+      expect(() => loadEmittedAssets(bad)).toThrow(
+        new RegExp(`Cannot read the Vite manifest at .*manifest\\.json.*pnpm --filter web build`),
+      );
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
     }
   });
 
@@ -330,9 +407,9 @@ describe('with a web build', () => {
       (await app.inject({ url, headers: { 'accept-encoding': 'br' } })).headers['cache-control'];
     expect(await cache('/assets/index-C7vUOBtl.js')).toBe('public, max-age=31536000, immutable');
     for (const name of ['index-C-nEAlfU.js', 'system--58a3A-e.js']) {
-      writeFileSync(join(dist, 'assets', name), 'x');
       expect(await cache(`/assets/${name}`), name).toBe('public, max-age=31536000, immutable');
     }
+    expect(await cache('/assets/polyhaven-cabin_1k.ktx2')).toBe('no-cache');
     expect(await cache('/assets/fish/tetra.glb')).toBe('public, max-age=3600');
     expect(await cache('/assets/index.json')).toBe('no-cache');
     expect(await cache('/index.html')).toBe('no-cache');
@@ -428,6 +505,58 @@ describe('indexing', () => {
     }
     expect((await app.inject('/')).headers['x-robots-tag']).toBeUndefined();
     expect((await app.inject('/tank/42')).headers['x-robots-tag']).toBeUndefined();
+  });
+
+  it('sends noindex on the gallery pages even when indexable', async () => {
+    const app = withDist(true);
+    for (const url of [
+      '/gallery',
+      '/gallery/',
+      '/Gallery/0b9f5c1e-6d52-4c1e-8a57-3f0f0b1d2c3a',
+      '/gallery/%61bc',
+    ]) {
+      expect((await app.inject(url)).headers['x-robots-tag'], url).toBe(NOINDEX);
+    }
+    expect((await app.inject('/gallery-of-fish')).headers['x-robots-tag']).toBeUndefined();
+    expect((await app.inject('/t/abc')).headers['x-robots-tag']).toBe(NOINDEX);
+    expect((await app.inject('/')).headers['x-robots-tag']).toBeUndefined();
+    expect((await app.inject('/tank/42')).headers['x-robots-tag']).toBeUndefined();
+  });
+
+  it('sends noindex on the account pages, for HEAD and with a query string', async () => {
+    const app = withDist(true);
+    const pages = [
+      '/sign-in',
+      '/sign-up',
+      '/forgot-password',
+      '/reset-password',
+      '/verify-email',
+      '/sessions',
+      '/settings',
+    ];
+    for (const page of pages) {
+      for (const url of [page, `${page}/`, `${page}?token=abc&x=1`, page.toUpperCase()]) {
+        for (const method of ['GET', 'HEAD'] as const) {
+          const res = await app.inject({ method, url });
+          expect(res.headers['x-robots-tag'], `${method} ${url}`).toBe(NOINDEX);
+        }
+      }
+    }
+    expect((await app.inject('/sign-in-help')).headers['x-robots-tag']).toBeUndefined();
+    expect((await app.inject('/settings/x')).headers['x-robots-tag']).toBeUndefined();
+    for (const url of ['/privacy', '/credits']) {
+      expect((await app.inject(url)).headers['x-robots-tag'], url).toBeUndefined();
+    }
+  });
+
+  it('sends noindex on HEAD and query-string gallery requests', async () => {
+    const app = withDist(true);
+    for (const url of ['/gallery?page=2', '/gallery/abc?x=1', '/t/abc?x=1']) {
+      for (const method of ['GET', 'HEAD'] as const) {
+        const res = await app.inject({ method, url });
+        expect(res.headers['x-robots-tag'], `${method} ${url}`).toBe(NOINDEX);
+      }
+    }
   });
 
   it('redacts the viewer token from logs and leaves /t/ crawlable so noindex is seen', async () => {

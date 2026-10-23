@@ -29,13 +29,23 @@ function atTier(values: readonly number[], tier: number): number {
 
 const times = (n: number): string => `${Number(n.toFixed(2))} times`;
 
+function heaterWarmupSpeedup(tier: number, cp: ChemistryParameters): number {
+  const { driftPerHour, heaterWarmupRatePerHourPerTier: rate } = cp.temperature;
+  return Math.max(driftPerHour, rate * tier) / Math.max(driftPerHour, rate);
+}
+
 /** What a tier does in the water model, worded from the same numbers the server steps with. */
 export function effectText(device: Device, tier: number, cp: ChemistryParameters): string {
   switch (device) {
-    case 'heater':
-      return tier === 1
-        ? `Warms the tank to the temperature its fish like. One heater already reaches 31 °C in a ${cp.temperature.roomC} °C room.`
+    case 'heater': {
+      if (tier === 1) {
+        return `Warms the tank to the temperature its fish like. One heater already reaches 31 °C in a ${cp.temperature.roomC} °C room.`;
+      }
+      const speedup = Number(heaterWarmupSpeedup(tier, cp).toFixed(2));
+      return speedup > 1
+        ? `Warms a cold tank ${times(speedup)} as fast as tier 1 does, then settles on the same temperature.`
         : 'Same temperatures as tier 1: the heat the fish want is already within reach, so this adds headroom and nothing else.';
+    }
     case 'filter': {
       const share = Math.round(Math.min(1, tier * cp.bacteria.mediaCapacityPerFilterTier) * 100);
       return `Its media hosts up to ${share}% of the bacteria a full tank can use, which clear ammonia and nitrite.`;
@@ -72,7 +82,15 @@ export function devicesForBiome(biome: Biome): Device[] {
   );
 }
 
-export type TierState = 'installed' | 'better-installed' | 'available';
+export type TierState = 'installed' | 'better-installed' | 'owned' | 'available';
+
+type EquipmentTank = Pick<Tank, 'biome' | 'equipment' | 'co2OwnedTier'>;
+
+/** The server refuses a purchase at or below this: the best tier installed or, for CO2, ever bought. */
+function ownedBaseline(tank: EquipmentTank, device: Device): number {
+  const running = tank.equipment[device].tier;
+  return device === 'co2' ? Math.max(running, tank.co2OwnedTier) : running;
+}
 
 export interface TierOffer {
   tier: number;
@@ -91,21 +109,28 @@ export interface DeviceOffer {
 }
 
 export function deviceOffers(
-  tank: Pick<Tank, 'biome' | 'equipment'>,
+  tank: EquipmentTank,
   economy: Economy,
   cp: ChemistryParameters,
 ): DeviceOffer[] {
   return devicesForBiome(tank.biome).map((device) => {
     const currentTier = tank.equipment[device].tier;
+    const baseline = ownedBaseline(tank, device);
     const tiers = economy.items.equipment[device].map((price, i): TierOffer => {
       const tier = i + 1;
       const state: TierState =
-        tier === currentTier ? 'installed' : tier < currentTier ? 'better-installed' : 'available';
+        tier === currentTier
+          ? 'installed'
+          : tier > baseline
+            ? 'available'
+            : device === 'co2'
+              ? 'owned'
+              : 'better-installed';
       return {
         tier,
         price,
         state,
-        skipped: state === 'available' ? tier - currentTier - 1 : 0,
+        skipped: state === 'available' ? tier - baseline - 1 : 0,
         effect: effectText(device, tier, cp),
       };
     });
@@ -118,7 +143,7 @@ export type EquipmentChoice =
 
 /** The same refusals the server makes, so a downgrade never reaches the wire. */
 export function chooseEquipment(
-  tank: Pick<Tank, 'biome' | 'equipment'>,
+  tank: EquipmentTank,
   economy: Economy,
   device: Device,
   tier: number,
@@ -129,7 +154,13 @@ export function chooseEquipment(
   }
   const price = economy.items.equipment[device][tier - 1];
   if (price === undefined) return { ok: false, reason: `There is no tier ${tier} ${label}.` };
-  const current = tank.equipment[device].tier;
+  const current = ownedBaseline(tank, device);
+  if (device === 'co2' && tier <= current) {
+    return {
+      ok: false,
+      reason: `This tank already owns a tier ${current} ${label}; pick tier ${tier} in Care for free.`,
+    };
+  }
   if (tier === current)
     return { ok: false, reason: `This tank already has a tier ${tier} ${label}.` };
   if (tier < current) {
@@ -139,4 +170,44 @@ export function chooseEquipment(
     };
   }
   return { ok: true, ref: equipmentRef(device, tier), price, skipped: tier - current - 1 };
+}
+
+export type Co2ChoiceState = 'running' | 'available' | 'shop' | 'refused';
+
+export interface Co2Choice {
+  tier: number;
+  label: string;
+  state: Co2ChoiceState;
+  reason: string | null;
+}
+
+/** Off and every tier, each marked as running now, free to pick, a shop purchase, or refused by the biome. */
+export function co2Choices(
+  tank: Pick<Tank, 'biome' | 'equipment' | 'co2OwnedTier'>,
+  economy: Economy,
+): Co2Choice[] {
+  const running = tank.equipment.co2.tier;
+  const owned = Math.max(tank.co2OwnedTier, running);
+  const tiers = [0, ...economy.items.equipment.co2.map((_, i) => i + 1)];
+  return tiers.map((tier): Co2Choice => {
+    const label = tier === 0 ? 'Off' : `Tier ${tier}`;
+    const make = (state: Co2ChoiceState, reason: string | null = null): Co2Choice => ({
+      tier,
+      label,
+      state,
+      reason,
+    });
+    if (tier === running) return make('running');
+    const probe: Equipment = {
+      filter: { tier: 0 },
+      heater: { tier: 0 },
+      light: { tier: 0, intensity: 0.5, onHour: 8, offHour: 20 },
+      co2: { tier },
+      waveMaker: { tier: 0 },
+    };
+    if (equipmentProblems(tank.biome, probe).length > 0) {
+      return make('refused', `CO₂ is not used in ${tank.biome} tanks.`);
+    }
+    return make(tier > owned ? 'shop' : 'available');
+  });
 }

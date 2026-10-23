@@ -63,6 +63,15 @@ describe('SimStream', () => {
     expect(xs(stream, 0)).toEqual({ a: 5 });
   });
 
+  it('says whether a snapshot joined the stream', () => {
+    const { stream } = setup();
+    expect(stream.push(snapshot(1, 0, [1]), 0)).toBe(false);
+    stream.begin(1, ['a']);
+    expect(stream.push(snapshot(1, 1, [1]), 0)).toBe(true);
+    expect(stream.push(snapshot(1, 2, [2]), STEP_MS)).toBe(true);
+    expect(stream.push(snapshot(9, 3, [2]), STEP_MS)).toBe(false);
+  });
+
   it('keeps every other fish continuous when one is added', () => {
     const { stream, now } = running();
     const before = xs(stream, now);

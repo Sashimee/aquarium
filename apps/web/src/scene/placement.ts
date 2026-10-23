@@ -35,7 +35,7 @@ export function mulberry32(seed: number): () => number {
 export type ReachFn = (scale: number, axis?: 'x' | 'z') => number;
 
 export const MAX_TILT_RAD = 0.1;
-const ROOT_DEPTH = 0.004;
+export const ROOT_DEPTH = 0.004;
 const ATTEMPTS_PER_PLANT = 40;
 /** Smallest share of its drawn scale a plant shrinks to, before it is moved to make room instead. */
 export const GLASS_SHRINK_FLOOR = 0.5;
@@ -123,4 +123,62 @@ export function scatterPatch(
     placed.push({ x, y, z, yaw, tiltX, tiltZ, scale, tone });
   }
   return placed;
+}
+
+const OPEN_SAMPLES = 24;
+const OPEN_STEPS = 12;
+/** A disc at least this open keeps its place. */
+const SMOTHERED_SHARE = 0.5;
+/** Open share `openGround` looks for before settling for the most open spot. */
+const OPEN_TARGET = 0.85;
+
+export function openShare(
+  x: number,
+  z: number,
+  radius: number,
+  isOpen: (x: number, z: number) => boolean,
+): number {
+  let open = 0;
+  for (let i = 0; i < OPEN_SAMPLES; i++) {
+    const r = radius * Math.sqrt((i + 0.5) / OPEN_SAMPLES);
+    const a = i * 2.399963229728653;
+    if (isOpen(x + Math.cos(a) * r, z + Math.sin(a) * r)) open++;
+  }
+  return open / OPEN_SAMPLES;
+}
+
+/**
+ * Where a patch that hardscape mostly smothers can root instead: the nearest spot on its own side
+ * of the tank, inside `limitX`/`limitZ` and no shallower than it started, whose ground is
+ * `OPEN_TARGET` open (else the most open one). A disc at least half open stays where it is, so
+ * only patches whose plants would pile into a gap move.
+ */
+export function openGround(
+  center: readonly [number, number],
+  radius: number,
+  limitX: number,
+  limitZ: number,
+  isOpen: (x: number, z: number) => boolean,
+): [number, number] {
+  const [x, z] = center;
+  if (openShare(x, z, radius, isOpen) >= SMOTHERED_SHARE) return [x, z];
+  const [loX, hiX] = x < 0 ? [-limitX, 0] : [0, limitX];
+  const [loZ, hiZ] = z < 0 ? [Math.min(-limitZ, z), z] : [z, Math.max(limitZ, z)];
+  let best: [number, number] = [x, z];
+  let bestShare = -1;
+  let bestMove = Infinity;
+  for (let i = 0; i <= OPEN_STEPS; i++) {
+    for (let j = 0; j <= OPEN_STEPS; j++) {
+      const cx = loX + ((hiX - loX) * i) / OPEN_STEPS;
+      const cz = loZ + ((hiZ - loZ) * j) / OPEN_STEPS;
+      const share = Math.min(OPEN_TARGET, openShare(cx, cz, radius, isOpen));
+      const move = Math.hypot(cx - x, cz - z);
+      if (share > bestShare || (share === bestShare && move < bestMove)) {
+        best = [cx, cz];
+        bestShare = share;
+        bestMove = move;
+      }
+    }
+  }
+  return best;
 }

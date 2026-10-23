@@ -10,12 +10,6 @@
   },
   "decor": [
     {
-      "assetId": "driftwood-branch",
-      "position": [-0.2, 0.085, 0.0],
-      "rotationY": 0.4,
-      "scale": 1.1
-    },
-    {
       "assetId": "dead-quiver-trunk",
       "position": [-0.42, 0.092, -0.12],
       "rotationY": 1.1,
@@ -28,10 +22,10 @@
       "scale": 0.7
     },
     {
-      "assetId": "boulder-01",
-      "position": [0.3, 0.086, -0.04],
-      "rotationY": 1.0,
-      "scale": 0.85
+      "assetId": "java-fern",
+      "position": [-0.3, 0.17, -0.05],
+      "rotationY": 0.6,
+      "scale": 0.7
     },
     {
       "assetId": "boulder-01",
@@ -40,15 +34,21 @@
       "scale": 0.55
     },
     {
+      "assetId": "boulder-01",
+      "position": [0.3, 0.086, -0.04],
+      "rotationY": 1,
+      "scale": 0.85
+    },
+    {
+      "assetId": "driftwood-branch",
+      "position": [-0.2, 0.085, 0],
+      "rotationY": 0.4,
+      "scale": 1.1
+    },
+    {
       "assetId": "coast-rocks-05",
       "position": [0.12, 0.055, 0.12],
       "rotationY": 0.3,
-      "scale": 0.7
-    },
-    {
-      "assetId": "java-fern",
-      "position": [-0.3, 0.17, -0.05],
-      "rotationY": 0.6,
       "scale": 0.7
     },
     {
@@ -65,7 +65,7 @@
       "center": [-0.3, 0.12],
       "radius": 0.2,
       "count": 70,
-      "scale": [0.7, 1.0],
+      "scale": [0.7, 1],
       "seed": 101
     },
     {
@@ -74,7 +74,7 @@
       "center": [0.32, 0.14],
       "radius": 0.18,
       "count": 55,
-      "scale": [0.7, 1.0],
+      "scale": [0.7, 1],
       "seed": 102
     },
     {

@@ -27,7 +27,14 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 | Electric yellow cichlid (T48) | no allowed model of the species | `wm-labidochromis-chmee2`, `wm-labidochromis-severni` |
 | Golden mbuna, Melanochromis auratus (T48) | no allowed model of the species | `wm-melanochromis-5snake5-female`, `wm-melanochromis-5snake5-male`, `wm-melanochromis-lee-1` |
 | Black calvus, Altolamprologus calvus (T48) | no allowed model of the species | `wm-altolamprologus-5snake5` |
-| Fairy cichlid, Neolamprologus brichardi (T48) | no usable reference photo (gap) | none: the only candidate, `Neolamprologus brichardi femmina.jpg`, is described by its author as N. olivaceus |
+| Fairy cichlid, Neolamprologus brichardi (T48) | no allowed model; CC BY-SA photo approved 2026-10-22 | `wm-brichardi-stang-1zz` (CC BY-SA 4.0) |
+| Peacock cichlid, Aulonocara baenschi (T48) | no allowed model; CC BY-SA photo approved 2026-10-22 | `wm-aulonocara-baenschi-rjcastillo` (CC BY-SA 4.0) |
+| Shell-dweller, Neolamprologus multifasciatus (T48) | no allowed model; CC BY-SA photo approved 2026-10-22 | `wm-multifasciatus-ingebrigtsen-male` (CC BY-SA 3.0) |
+| Cardinal tetra (T49) | no allowed model of the species | `wm-cardinal-vicente` (CC0) |
+| Rummy-nose tetra (T49) | no allowed model of the species | `wm-rummynose-reiskoffer` (CC BY 3.0) |
+| Apistogramma hongsloi (T49) | no allowed model of the species | `wm-apistogramma-hongsloi-male`, `wm-apistogramma-hongsloi-pair` (CC BY 4.0) |
+| Dwarf pencilfish (T49) | no allowed model of the species | `wm-nannostomus-marginatus-male`, `wm-nannostomus-marginatus-female` (CC0) |
+| Marbled hatchetfish (T49) | no CC0 or CC-BY photo; SA-only gap | none, see the T49 gaps list |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
 Licence rule for painted loft fish: when the colours are painted by eye from reference photos and no photo pixels are reused, the asset is CC0 with `sources: []` (royal gramma, cleaner wrasse). The photos stay in `assets/manifest.json` and CREDITS.md as reference photos and are named in the recipe note. A photo only becomes a `sources` entry (carrying its licence, attribution and modifications) when its pixels are projected onto the model, as for the bronze corydoras. Either licence is acceptable; CC-BY sources need attribution in both files.
@@ -161,7 +168,7 @@ Reference photos (in manifest, downloaded): `wm-banggai-53953454` (CC BY 4.0, Da
 | Coral | [Blue Sea Anemone L (reef piece)](https://sketchfab.com/3d-models/f2542a8681584d048e515c660e6866fe) ([render](https://media.sketchfab.com/models/f2542a8681584d048e515c660e6866fe/thumbnails/9cd178a4da3644ac9d424508cbc281cd/2448df9406a24ff2b1c5ed63103ee865.jpeg)) | stefanorivera | CC-BY 4.0 | 22,057 | focal reef piece; despite the title it is a coral on live rock |
 | Decor | Poly Haven `lambis_shell` | Kuutti Siitonen | CC0 | 12,498 | reef decor, downloaded |
 | Substrate | Poly Haven `coast_sand_01`, `clean_pebbles`, `coast_sand_04` | Poly Haven artists | CC0 | n/a | freshwater sand, gravel, reef sand (2k PBR), downloaded |
-| HDRI | Poly Haven `kloofendal_48d_partly_cloudy_puresky`, `studio_small_09` | Greg Zaal, Jarod Guest / Sergej Majboroda | CC0 | n/a | 2k .hdr, downloaded |
+| HDRI | Poly Haven `studio_small_09` | Sergej Majboroda | CC0 | n/a | 2k .hdr, downloaded |
 
 Poly Haven licence verified on the asset page (https://polyhaven.com/a/boulder_01 shows CC0) and https://polyhaven.com/license.
 
@@ -275,6 +282,10 @@ No model of the species exists under an allowed licence. The CC0 ffish.asia scan
 
 Alex approved CC BY-SA lateral reference photos for the firefish, six-line wrasse, harlequin rasbora and bristlenose pleco. Picks, chosen from a visual comparison of the Commons candidates (3.0 and 4.0 only; 2.0 and 2.5 are not on the project's list): `wm-firefish-hobgood` (Nick Hobgood, BY-SA 3.0, shows the long dorsal spine), `wm-rasbora-dabrowski` (Mariusz Dabrowski, BY-SA 3.0, true lateral), `wm-sixline-delso-63` (Diego Delso, BY-SA 4.0), `wm-ancistrus-reis` (Julio Reis, BY-SA 4.0, wild-type colour, tail cropped) and `wm-ancistrus-l144-adolfoi` (Corydoras-adolfoi, BY-SA 4.0, full outline, albino morph so shape only). Textures derived from them are CC-BY-SA. The share-alike allowlist in `tools/asset-pipeline/src/manifest.ts` must list these ids before `pnpm assets:check` accepts them.
 
+### CC-BY-SA photos approved for three cichlids (2026-10-22)
+
+Alex approved CC BY-SA reference photos for the fairy cichlid, the peacock and the shell-dweller (issue #638, T48; BY-SA only, never NC or ND). Licences re-read on each Commons file page on 2026-10-22. Picks: `wm-brichardi-stang-1zz` (David J. Stang, BY-SA 4.0; sharp and fully lit with fins spread, over FakirNL's washed-out true lateral and Bjoertvedt's blurred shot), `wm-aulonocara-baenschi-rjcastillo` (Rjcastillo, BY-SA 4.0; clean side-on male with spread fins, over the same author's crowded blotched-morph photo) and `wm-multifasciatus-ingebrigtsen-male` (Richard A. Ingebrigtsen, BY-SA 3.0; sharp true lateral, over NasserHalaweh's soft side-lit shot, and the author's public-domain `Neolamprologus multifasciatus 3.jpg`, which is a small bleached fish among shells). Rejected candidates were not kept. The handoff is item 2a in the cichlid section.
+
 ## Clean-up crew and cleaner wrasse (issue #630, T40 and T44)
 
 Checked 2026-10-16. Sketchfab was searched for CC0 and CC-BY downloadable models; every candidate below carries the licence and downloadable flag on its Sketchfab record. The ffish.asia scans considered here (the two picks and the rejected alternatives) are CC0 photogrammetry of preserved specimens, so they are heavy (390k to 1.3M faces, 8192x8192 base colour) and need the pipeline to decimate and downscale. Each scan also contains a 2 cm colour-checker cube mesh that must be dropped.
@@ -293,17 +304,18 @@ Checked 2026-10-16. Sketchfab was searched for CC0 and CC-BY downloadable models
 
 Reference photos (in manifest, downloaded): `wm-nerite-baldonado-1` and `wm-nerite-baldonado-2` (CC BY 4.0, Evan Baldonado; the second shows the foot and operculum from below) and `wm-nerite-obsidian-05` (CC0, shows the dark foot, head and tentacles). All other Commons zebra nerite photos are CC BY-SA and were not used. Key traits: dome-shaped shell with banding, thick dark grey foot, two short tentacles, no visible spire.
 
-### Hermit crab (reef; Clibanarius)
+### Hermit crab (shipped scan is Pagurus bernhardus, painted as a reef Clibanarius tricolor)
 
-**Decision: pick `sketchfab-5ebe7794`**
+**Decision: pick `sketchfab-bce6689d`** (Pagurus bernhardus, CC-BY 4.0; replaces `sketchfab-5ebe7794`, #895)
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1 | [Clibanarius longitarsus](https://sketchfab.com/3d-models/5ebe7794183346e998afb97b68021158) ([render](https://media.sketchfab.com/models/5ebe7794183346e998afb97b68021158/thumbnails/68eefea4d6244d208b89596e991cd50c/d2c2d2f3b7fd40d69aaa995be71845e7.jpeg)) | ffishAsia-and-floraZia | CC0 | 495,292 | 8192x8192 base colour, olive legs with banding | real hermit crab in a conical shell, legs and eyestalks intact | PICK |
-| 2 | [Dardanus aspersus](https://sketchfab.com/3d-models/8e1a156487bf4c0c8fc684e08ee16006) ([render](https://media.sketchfab.com/models/8e1a156487bf4c0c8fc684e08ee16006/thumbnails/3d291e42ff1e49dda40ce659a48568f5/4e6b43ebca8a498cb8b4382147bbba29.jpeg)) | ffishAsia-and-floraZia | CC0 | 794,059 | 8k photogrammetry | good, a large anemone-carrying species | reserve: heavier and less like the common reef hermit |
-| 3 | [Dardanus crassimanus](https://sketchfab.com/3d-models/a7216d61f2d7401a97da99a4a8ee6823) ([render](https://media.sketchfab.com/models/a7216d61f2d7401a97da99a4a8ee6823/thumbnails/775655e536764d34a8f33b9da4d9d239/f3533ceee3094991b010456ca4db4701.jpeg)) | ffishAsia-and-floraZia | CC0 | 963,500 | 8k, red-orange, spiny murex shell | good | reserve: too large and ornate for a small cleaner |
+| 1 | [Dardanus aspersus](https://sketchfab.com/3d-models/8e1a156487bf4c0c8fc684e08ee16006) ([render](https://media.sketchfab.com/models/8e1a156487bf4c0c8fc684e08ee16006/thumbnails/3d291e42ff1e49dda40ce659a48568f5/4e6b43ebca8a498cb8b4382147bbba29.jpeg)) | ffishAsia-and-floraZia | CC0 | 794,059 | 8k photogrammetry | good, a large anemone-carrying species | reserve: heavier and less like the common reef hermit |
+| 2 | [Dardanus crassimanus](https://sketchfab.com/3d-models/a7216d61f2d7401a97da99a4a8ee6823) ([render](https://media.sketchfab.com/models/a7216d61f2d7401a97da99a4a8ee6823/thumbnails/775655e536764d34a8f33b9da4d9d239/f3533ceee3094991b010456ca4db4701.jpeg)) | ffishAsia-and-floraZia | CC0 | 963,500 | 8k, red-orange, spiny murex shell | good | reserve: too large and ornate for a small cleaner |
 
-The CC-BY hermit crabs (Wermin 319,616 faces fimo-clay magnet, Blaast 25,184, Xfdfgd 40,154) are modelled by hand or stylised and were not considered further. The scan has no rig; legs are one fused mesh, so the pipeline needs a simple walk rig or procedural leg motion.
+**Update 2026-10-21 (#895):** the earlier pick, the Clibanarius longitarsus scan `sketchfab-5ebe7794`, was dropped: it has no front claw pair (the claw slot on one side was the rearmost leg). The pick is now `sketchfab-bce6689d` ([Pagurus bernhardus](https://sketchfab.com/3d-models/bce6689d5b2644488c0ab3fa7bcda5eb), Chapel_Prints_CO, CC-BY 4.0, 846,345 faces, untextured): two distinct chelipeds, the left about 4x the volume of the right, both ahead of every walking-leg tip and rooted near the head. It is a cold-water Atlantic species rather than a reef one, so it needs a procedural reef-hermit colouring. Rejected: the other ffishAsia CC0 scans (Dardanus aspersus, Dardanus crassimanus `a7216d61`, the Mediterranean hermit crab `1c6af8ac`) are 0.7 to 1.6 million faces and have the chelipeds tucked into the shell or tangled with the legs (Dardanus aspersus and the Mediterranean scan are out of the shell), so a clean front pair is not separable; the Coenobita scans by Do_real_ao_digital (CC-BY, 32k and 43k faces) are a land species and low-quality blobs seen from below; the Clibanarius longitarsus CT scan is CC BY-NC-SA.
+
+The CC-BY hermit crabs (Wermin 319,616 faces fimo-clay magnet, Blaast 25,184, Xfdfgd 40,154) are modelled by hand or stylised and were not considered further. **What ships (#895, #861, #916, #925):** `hermit-crab` in `apps/web/public/assets/index.json` is built from `sketchfab-bce6689d` alone (Pagurus bernhardus, genus Pagurus; `content/species/hermit-crab.json` still names Clibanarius tricolor, which is the look painted on, not the scanned animal). The pipeline (`tools/asset-pipeline/src/hermit.ts`) merges the 9 glTF chunks and welds vertices; segments shell, exposed soft body, claws, walking legs and antennae; orients to +Z forward and scales the shell to 3 cm; splits welded legs so each side has 3 walking slots plus the claw; bends each walking leg down to the ground and turns the shell to trail behind the crab; re-simplifies to 25,000 triangles (LOD1 and LOD2 at 40% and 15%); and bakes procedural colour into a 2048 px atlas (banded shell, blue legs with orange joints, orange antennae). The scan has no rig: walking is procedural leg motion driven by the per-vertex `_FIN_ID`, `_FIN_MASK` and `_LEG` data. Known gaps from the reviews: the claw tips stay about 2 to 3 mm above the standoff (-7.9 and -7.5 mm against 10.1 mm, #925 review), and the colour is by eye.
 
 ### Bluestreak cleaner wrasse (Labroides dimidiatus)
 
@@ -356,7 +368,7 @@ Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least o
 | Discus (`sketchfab-f623d697`) | 8,033 | 8 images, largest 4096x4096 | 0 / 0 | 0 |
 | Discus 3 (`sketchfab-e284e187`) | 3,456 | 2 images, largest 1024x512 | 1 / 11 | 1 |
 | Ancistrus sp. Orange (`sketchfab-65133817`) | 40,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
-| Hermit crab (`sketchfab-5ebe7794`) | 495,292 | 2 images, largest 8192x8192 | 0 / 0 | 0 |
+| Hermit crab (`sketchfab-bce6689d`) | 846,345 | none (untextured) | 0 / 0 | 0 |
 | Nerite shell (`sketchfab-70b8866a`) | 394,418 | 2 images, largest 8192x8192 | 0 / 0 | 0 |
 
 Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.
@@ -401,7 +413,7 @@ Banding check (2026-10-16): the blue channel of an 800x400 gradient region of th
 
 ## African cichlid lake (issue #638, T48)
 
-Checked 2026-10-19. Sources searched in order: Smithsonian (no fish models of these species), Sketchfab with the CC0 and CC-BY filters and the downloadable flag, Poly Haven, ambientCG, Wikimedia Commons. Licences were read from the Sketchfab model record and bundled `license.txt`, the Poly Haven asset page and the Commons file-page metadata. Raw files are in `~/.cache/aquarium-assets/raw/<id>/`. No CC-BY-SA was used or added.
+Checked 2026-10-19. Sources searched in order: Smithsonian (no fish models of these species), Sketchfab with the CC0 and CC-BY filters and the downloadable flag, Poly Haven, ambientCG, Wikimedia Commons. Licences were read from the Sketchfab model record and bundled `license.txt`, the Poly Haven asset page and the Commons file-page metadata. Raw files are in `~/.cache/aquarium-assets/raw/<id>/`. No CC-BY-SA was used in this survey; the three cichlid photos approved afterwards are added under the CC BY-SA section above (CC-BY-SA photos approved for three cichlids).
 
 ### Species
 
@@ -411,9 +423,11 @@ Checked 2026-10-19. Sources searched in order: Smithsonian (no fish models of th
 | Electric yellow cichlid (Labidochromis caeruleus, Malawi) | fallback: procedural loft | `wm-labidochromis-chmee2` (CC BY 3.0), `wm-labidochromis-severni` (CC0) | n/a | No allowed model. A third photo (`Labidochromis caeruleus F.jpg`, Stacnbake) is smaller and was not downloaded. |
 | Golden mbuna (Melanochromis auratus, Malawi) | fallback: procedural loft | `wm-melanochromis-5snake5-female`, `-male` (CC0), `wm-melanochromis-lee-1` (CC BY 3.0) | n/a | Male and female differ strongly (gold with dark stripes versus blue-black with pale stripes): loft needs two texture sets. |
 | Black calvus (Altolamprologus calvus, Tanganyika) | fallback: procedural loft | `wm-altolamprologus-5snake5` (CC0) | n/a | One photo. Tall dorsal fin and compressed body. |
-| Fairy cichlid (Neolamprologus brichardi, Tanganyika) | gap: no reference | none | n/a | The only CC0 or CC-BY photo found, Marrabbio2's `Neolamprologus brichardi femmina.jpg` (CC BY 3.0), is described on its Commons page as "Neolamprologus olivaceus female" and sits in the olivaceus category, so it is not in the manifest. Everything else under Neolamprologus brichardi or pulcher on Commons is a journal figure page. The species needs a correctly identified photo (or a Sketchfab model) before it can be lofted; without one the biome ships with the four species above, which meets the 4-species minimum. |
+| Fairy cichlid (Neolamprologus brichardi, Tanganyika) | fallback: procedural loft | `wm-brichardi-stang-1zz` (CC BY-SA 4.0, David J. Stang) | n/a | See the CC BY-SA section above (CC-BY-SA photos approved for three cichlids). The CC BY 3.0 photo by Marrabbio2 is N. olivaceus and stays out of the manifest. |
+| Peacock cichlid (Aulonocara baenschi, Malawi) | fallback: procedural loft | `wm-aulonocara-baenschi-rjcastillo` (CC BY-SA 4.0, Rjcastillo) | n/a | Male only; females are plain grey, see handoff item 2a. |
+| Shell-dweller (Neolamprologus multifasciatus, Tanganyika) | fallback: procedural loft | `wm-multifasciatus-ingebrigtsen-male` (CC BY-SA 3.0, Richard A. Ingebrigtsen) | n/a | Tiny (males about 5 cm, females about 3 cm), dense vertical bars. |
 
-The PLAN lists 4 or more species. With the four that have references the biome has one model and three lofts. Gaps Alex may want to know about: no Aulonocara (peacock) and no shell-dweller (Neolamprologus multifasciatus) photo or model exists under an allowed licence (everything found was CC BY-SA, CC BY 2.0 or a public-domain mark). Species ids are proposals; `content/species/*.json` belongs to the later owners.
+The PLAN lists 4 or more species. With the four that have references the biome has one model and three lofts. Gaps closed on 2026-10-22: Alex approved CC BY-SA reference photos for the fairy cichlid, the peacock and the shell-dweller (the CC0 and CC BY searches found no usable photo of any of the three), so the biome now has seven species. Species ids are proposals; `content/species/*.json` belongs to the later owners.
 
 ### Hardscape and decor
 
@@ -455,10 +469,227 @@ The manifest biome will be `cichlid`. `content/backgrounds/cichlid.json` and the
 Adult target lengths (total length, approximate): Pseudotropheus demasoni 7 to 8 cm, Labidochromis caeruleus 8 to 10 cm, Melanochromis auratus 10 to 11 cm, Altolamprologus calvus 13 to 15 cm.
 
 1. Demasoni (`sketchfab-f7f3faca`): drop `Cube_helper`, replace the 64-joint skeleton with the pipeline fish rig, orient, scale to 7.5 cm, bake masks, KTX2 at 1k and 2k, LODs.
-2. Loft three species from the listed photos: electric yellow (9 cm), golden mbuna in two sexes (10.5 cm), black calvus (14 cm). Credits: `wm-labidochromis-chmee2` (Chmee2) and `wm-melanochromis-lee-1` (lienyuan lee) are CC BY 3.0, the rest CC0. Fairy cichlid (9 to 10 cm) is blocked on a correctly identified reference photo, see the species table.
+2. Loft three species from the listed photos: electric yellow (9 cm), golden mbuna in two sexes (10.5 cm), black calvus (14 cm). Credits: `wm-labidochromis-chmee2` (Chmee2) and `wm-melanochromis-lee-1` (lienyuan lee) are CC BY 3.0, the rest CC0. Fairy cichlid, peacock and shell-dweller are in the CC BY-SA handoff below (item 2a).
+2a. Loft three more species from CC BY-SA reference photos (approved by Alex on 2026-10-22, BY-SA only; raw files are in `~/.cache/aquarium-assets/raw/<id>/original.jpg`). All three are procedural lofts, none has a model.
+   - Fairy cichlid (9 to 10 cm), `wm-brichardi-stang-1zz` (David J. Stang, CC BY-SA 4.0, 1000x626): cream-pink body with rows of small orange-brown scale spots, black-and-yellow operculum mark, blue-green iris. The body is turned slightly towards the camera, so rectify the outline. The long caudal and pelvic filaments are not in the photo, so build them from the species description. Dimorphism is mild: males are a little larger with longer filaments, one texture set is enough.
+   - Peacock cichlid, Aulonocara baenschi (12 to 13 cm), `wm-aulonocara-baenschi-rjcastillo` (Rjcastillo, CC BY-SA 4.0, 3055x2158): orange body, electric-blue head, blue-violet caudal and pelvic edges, yellow dorsal and anal fins. **Sexual dimorphism:** this is a male. Females are plain silvery grey-brown with faint vertical bars and no blue, and a little smaller, so the loft needs two texture sets. Paint the female by eye from the description with no photo pixels (CC0); no female photo is in the manifest.
+   - Shell-dweller (males about 5 cm, females about 3 cm), `wm-multifasciatus-ingebrigtsen-male` (Richard A. Ingebrigtsen, CC BY-SA 3.0, 4272x2848): pale tan-brown with dense dark vertical bars and a blue-ringed eye. The frame also holds a female and a juvenile, so crop to the large male. **Sexual dimorphism** is in size, not colour: use one texture set at two scales.
+   - Any texture projected from these photos is CC BY-SA: keep it as a separately attributed asset with `sources` naming the photo, and list it in the manifest with the licence of the photo. The ids are already on the share-alike allowlist in `tools/asset-pipeline/src/manifest.ts`.
+
 3. Rocks (`polyhaven-namaqualand_boulder_03`, `-05`, `polyhaven-rock_07`): decimate to LOD0 targets of about 12,000 triangles for boulder_03, 8,000 for boulder_05 and 4,000 for rock_07, then LOD1 at about a quarter of that. Bake normals, ship as a `rock-pile` decor set with at least two arrangements.
 4. Shell (`sketchfab-1bedca25`): decimate to three LODs, 1k KTX2, instance-friendly origin, scale to 3.5 to 5 cm (Neothauma-like). The shell normal map is 11.9 MB at source and must be downscaled.
 5. Substrate: reuse existing sand textures; no new asset.
+6. Backgrounds: render the five slots to the specs above, strip metadata, build the three KTX2 tiers, then add the entries to the manifest with `sha256`, `files[]`, `modifications[]` and status `downloaded`.
+
+## Amazon blackwater (issue #639, T49)
+
+Checked 2026-10-22. Sources searched in order: Smithsonian (no fish models), Sketchfab with the CC0 and CC-BY filters and the downloadable flag, Poly Haven, ambientCG, Wikimedia Commons. Licences were read from the Sketchfab model record and bundled `license.txt`, the Poly Haven and ambientCG asset pages and the Commons file-page metadata. Raw files are in `~/.cache/aquarium-assets/raw/<id>/`. No CC-BY-SA was used: the gaps that only CC-BY-SA photos fill are listed below for Alex.
+
+### Species
+
+| Species | Decision | Pick | Polycount | Notes |
+|---|---|---|---|---|
+| Cardinal tetra (Paracheirodon axelrodi) | fallback: procedural loft | `wm-cardinal-vicente` (CC0, 2168x1535) | n/a | The only allowed photo that is sharp enough; the fish was photographed just after the lights came on, so the belly is pale pink and the red must be painted deeper. The `sketchfab-2fabf5db` neon tetra mesh (already in the manifest) is a candidate body to re-texture with a full red belly. Rejected: `Low-Poly Cardinal Tetra` (trionamccarthy01, CC-BY-4.0, Sketchfab `6906e205`): 380 triangles, no skin, flat colours, not added to the manifest. Not used: `Neon Lodz.jpg` and `Akvarijní rybky.jpg` (CC BY 3.0), the public-domain cardinal photos (not CC0, not on the allow-list). |
+| Rummy-nose tetra (Hemigrammus rhodostomus, now generally Petitella rhodostoma since 2020) | fallback: procedural loft | `wm-rummynose-reiskoffer` (CC BY 3.0, 1600x1145) | n/a | Commons categorises this as Petitella bleheri (false rummy-nose), the fish usually sold as rummy-nose; red head and banded tail are the same. No true H. rhodostomus photo under an allowed licence was found. |
+| Apistogramma hongsloi (dwarf cichlid) | fallback: procedural loft | `wm-apistogramma-hongsloi-male` (CC BY 4.0, 9248x6944), `wm-apistogramma-hongsloi-pair` (CC BY 4.0, 7940x5464) | n/a | Clean male lateral. The pair photo has both fish partly behind plants, so the female texture is painted by eye with it as colour reference. Strong dimorphism (males about 6 to 7 cm, females about 4 cm and yellow): two texture sets. |
+| Dwarf pencilfish (Nannostomus marginatus) | fallback: procedural loft | `wm-nannostomus-marginatus-male`, `wm-nannostomus-marginatus-female` (CC0, D.W.) | n/a | Sharp laterals of both sexes. Two dark stripes, red fin marks on the male. |
+| Black phantom tetra (Hyphessobrycon megalopterus) | model (optional fifth species) | `sketchfab-92b5b5bb` (DenDen, CC-BY-4.0) | 608 triangles | Rigged (13 joints), no animation, flat-colour materials only; the silver-grey body and humeral blotch are painted. The source has no adipose fin and the fin schema has no adipose id, so none is modelled. Weak, but the only allowed rigged characin model for this biome. |
+| Marbled hatchetfish (Carnegiella strigata) | gap: SA-only or non-CC0 public domain | none | n/a | See the gaps list below. Procedural body from the species description if Alex does not approve a photo. |
+
+The PLAN asks for 4 or more species: cardinal, rummy-nose, Apistogramma and dwarf pencilfish are covered (all four are lofts), plus the black phantom model, so five without the hatchetfish. Species ids are proposals; `content/species/*.json` belongs to the later owners.
+
+### Hardscape, driftwood and leaf litter
+
+No allowed model of Indian almond (Terminalia catappa) leaves exists: Sketchfab, Poly Haven and ambientCG hold only generic leaves. Leaf litter is therefore built from CC0 leaf atlases and ground textures, tinted brown in the pipeline.
+
+| Item | Pick | Licence | Notes |
+|---|---|---|---|
+| Driftwood, root tangle | `sketchfab-07422ed7` (HeartOfLines) | CC-BY-4.0 | 23780 triangles, 4096x4096 PNG maps (base, metal-rough, normal): downscale to 2k. |
+| Driftwood, second piece | `sketchfab-mJUa0nux` (jasonwebb) | CC-BY-4.0 | 68260 triangles, one 4096x4096 base colour, no normal map: decimate and bake. |
+| Branches and twigs | `polyhaven-dry_branches_medium_01` | CC0 | 16803 triangles, 2k PBR. |
+| Trunks, reused | `polyhaven-dead_tree_trunk_02`, `polyhaven-dead_quiver_trunk`, `sketchfab-c53807ef` | CC0 and CC-BY-4.0 | Already in the manifest. |
+| Leaf-litter floor | `ambientcg-ScatteredLeaves009`, `polyhaven-dry_decay_leaves` | CC0 | 2k PBR ground textures; tint toward tannin brown. |
+| Leaf cards | `ambientcg-LeafSet015`, `ambientcg-LeafSet030` | CC0 | Atlases with opacity maps; scatter as cards (floating and sunken leaves). `LeafSet030` is built as `oak-leaf-card`. `LeafSet015` (reddish-brown, beech-like; no true catappa atlas exists under an allowed licence) is the planned `catappa-leaf-card` for the blackwater preset (#1342): recipe still to add in `tools/asset-pipeline/src/leaf-card.ts` (asset-pipeline-engineer). |
+| Amazon sword | [echinodorus](https://sketchfab.com/3d-models/echinodorus-3701243ae55c482f82379da81180d8f1) (`sketchfab-3701243a`, trueblack, [thumbnail](https://media.sketchfab.com/models/3701243ae55c482f82379da81180d8f1/thumbnails/e82e82a5dd384e608fc14fba753d8e88/8c5f0fb028ad4e1a877e3ee0b9f7e5ab.jpeg)) | CC-BY-4.0 | 3632 triangles, 24 flat-colour materials, no textures, no rig; the only candidate found (Sketchfab search for "echinodorus" and "amazon sword"), checked 2026-10-23. Needs scale normalisation and per-leaf colour variation. |
+| Sand | `ambientcg-Ground101`, `polyhaven-coast_sand_01` | CC0 | Already in the manifest: a pale fine sand under the leaf litter. |
+
+### Backgrounds (render specs, not yet in the manifest)
+
+No allowed underwater blackwater photo was found, so the five slots are renders in the `bg-fw-misty-lake` pattern. They are not in `assets/manifest.json` yet: the committed-backgrounds suite in the asset-pipeline package expects every background entry to be built. The pipeline PR that renders them adds them as `downloaded` entries with `kind: "background"`, `biome: "blackwater"`, `source: "render"` and the slot below.
+
+| Slot | Id | Licence |
+|---|---|---|
+| Leaf-litter floor | `bg-blackwater-leaf-litter` | CC0 |
+| Root tangle | `bg-blackwater-root-tangle` | CC-BY-4.0 (driftwood credit, HeartOfLines) |
+| Driftwood wall | `bg-blackwater-driftwood-wall` | CC-BY-4.0 (driftwood credit, jasonwebb) |
+| Flooded forest | `bg-blackwater-flooded-forest` | CC0 |
+| Open tannin water | `bg-blackwater-open-tannin` | CC0 |
+
+Every render: no EXIF or other metadata, no fish, no text, no people. 2:1, at least 4096x2048, graded underwater by the pipeline (the renderer tints the poster once more with tannin absorption, so keep the grade light), soft light fall-off from the top, no hard sun shafts. Freshwater only.
+
+- `bg-blackwater-leaf-litter`: a low view over a floor covered in `ambientcg-ScatteredLeaves009` and `polyhaven-dry_decay_leaves` with `ambientcg-LeafSet015` and `-LeafSet030` cards at varied scale, a few sunken twigs from `polyhaven-dry_branches_medium_01`, deep amber-brown water above fading to dark.
+- `bg-blackwater-root-tangle`: `sketchfab-07422ed7` as a large branching root left of centre with leaf litter at its base and twigs from `polyhaven-dry_branches_medium_01`; the centre third stays open and dim. Licence is CC-BY-4.0 because of the driftwood credit: `source_url` and `author_url` point to the scan (`https://sketchfab.com/3d-models/driftwood-scan-07422ed79cdd46c88aa5999486403804`, `https://sketchfab.com/HeartOfLines`).
+- `bg-blackwater-driftwood-wall`: `sketchfab-mJUa0nux` stacked and angled to fill the left and right thirds as a wall of wood, leaf litter on the floor. CC-BY-4.0 for the same reason (`https://sketchfab.com/3d-models/driftwood-3d-scan-mJUa0nux6YAp3LqHPWmxHuBgVRr`, `https://sketchfab.com/jasonwebb`).
+- `bg-blackwater-flooded-forest`: several vertical trunks (`polyhaven-dead_tree_trunk_02`, `polyhaven-dead_quiver_trunk`, both CC0) receding into dark brown water with leaf litter and twigs at the base.
+- `bg-blackwater-open-tannin`: open amber-brown water, a faint lighter patch top right, a few distant twigs and leaves low in the frame, the calmest slot for tanks with a lot of foreground decor.
+
+The manifest biome will be `blackwater`. `content/backgrounds/blackwater.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `blackwater`, so the file would fail validation. Add both in the PR that makes the biome playable.
+
+### Background photo re-survey (2026-10-22)
+
+Re-searched Wikimedia Commons for real behind-the-glass photos (CC0 and CC-BY 3.0/4.0, at least 3000 px wide). Nothing is usable, so the five render slots above stand and no photo entry was added to the manifest. Blackwater: the only hits are above-water igapo and Rio Negro shots (`FLOODED AREA - FLORESTA INUNDAVEL DE IGAPO - panoramio.jpg`, a 360 degree panorama; `Serrapilheria - panoramio.jpg`, a floating lodge; `Floresta inundada iranduba amazonas - panoramio (7).jpg`, a stormy sky and a building; all CC BY 3.0). No underwater tannin, root or leaf-litter photo exists under an allowed licence.
+
+### CC-BY-SA and other gaps for Alex
+
+Nothing in this survey ships as CC-BY-SA. Decisions needed:
+
+- Marbled hatchetfish (Carnegiella strigata): no CC0 or CC-BY photo of any hatchetfish was found. The candidates are public domain, not CC0 (`Machadinha.JPG` and `Machadinha02.JPG` by Rcfernandes, 1600x1200; `Carnegiella strigata2.jpg`, 400x271), or CC BY-SA: `Gasteropelecus sternicla - 9326.jpg` (Amada44, CC BY-SA 3.0, 1587x925), `Gasteropelecus sternicla.JPG` (Neale Monks, CC BY-SA 3.0, 1060x880), `Hal - Gasteropelecus sternicla - 1.jpg` (Emőke Dénes, CC BY-SA 4.0), `Gasteropelecidae Gasteropelecus maculatus 1.2.jpg` (NasserHalaweh, CC BY-SA 4.0, 2147x1610). A CC BY 2.0 maculatus photo is not accepted by the allow-list. Either approve one photo or the hatchetfish is lofted from the description.
+- Cardinal tetra and rummy-nose: a sharper cardinal photo or a true H. rhodostomus (now generally Petitella rhodostoma) photo was not found under an allowed licence. The picks above are adequate and need no decision.
+
+### Handoff to asset-pipeline-engineer
+
+Adult target lengths (total length, approximate): cardinal tetra 4 cm, rummy-nose 4.5 cm, black phantom 4.5 cm, dwarf pencilfish 3.5 cm, Apistogramma hongsloi male 6.5 cm and female 4 cm.
+
+1. Black phantom (`sketchfab-92b5b5bb`): replace the 13-joint skeleton with the pipeline fish rig, orient, scale to 4.5 cm, paint the body (silver-grey, black humeral blotch), KTX2 at 1k and 2k, LODs. No image textures exist, so the whole texture is new.
+2. Loft four species from the listed photos: cardinal (`wm-cardinal-vicente`, 4 cm; deepen the red belly by eye, optionally re-texture the `sketchfab-2fabf5db` mesh instead), rummy-nose (`wm-rummynose-reiskoffer`, 4.5 cm; credit Donar Reiskoffer, CC BY 3.0), Apistogramma hongsloi in two sexes (`wm-apistogramma-hongsloi-male` at 6.5 cm; the female at 4 cm painted by eye with `wm-apistogramma-hongsloi-pair` as colour reference), dwarf pencilfish in two sexes (`wm-nannostomus-marginatus-male`, `-female`, CC0, 3.5 cm). Crop each photo to the fish first: the Apistogramma files are 9248x6944 and 7940x5464 and the fish is small in frame.
+3. Driftwood (`sketchfab-07422ed7`, `sketchfab-mJUa0nux`): decimate to LOD0 targets of about 10,000 triangles for 07422ed7 and 12,000 for mJUa0nux, then LOD1 at about a quarter, downscale the 4096 maps to 2k and 1k KTX2, bake a normal map for mJUa0nux, origin at the base. Ship as two `driftwood` pieces.
+4. Branches (`polyhaven-dry_branches_medium_01`): 16803 triangles, decimate to about 4,000 for LOD0, bake normals, ship as a twig cluster for the root clutter.
+5. Leaf litter: build a `leaf-litter` ground decal or instanced-card set from `ambientcg-ScatteredLeaves009` and `polyhaven-dry_decay_leaves` (floor tiles) and `ambientcg-LeafSet015` and `-LeafSet030` (leaf cards from the opacity maps), tinted toward tannin brown, 1k KTX2. Leaves must sink and float: provide a flat card mesh with the opacity cutout.
+6. Substrate: reuse existing sand textures, no new asset.
+7. Backgrounds: render the five slots to the specs above, strip metadata, build the three KTX2 tiers, then add the entries to the manifest with `sha256`, `files[]`, `modifications[]` and status `downloaded`.
+
+## Sound (issue #649, T59)
+
+Checked 2026-10-16 on each Freesound sound page (licence link read from the page; every pick is CC0, so no attribution is required, though CREDITS.md lists them). Searches were restricted to CC0 and CC-BY on Freesound. Raw files are the Freesound `lq` preview OGGs (lossy, about 60 to 80 kbps; the originals need a login and are better quality, so fetching them is the upgrade path if artefacts are audible after the transcode, the low-pass and the normalisation), kept in `~/.cache/aquarium-assets/raw/freesound-<id>/`. Manifest `kind` is the free string `audio`, so the manifest schema needed no change.
+
+**Format and size plan.** Ship each sound as AAC in `.m4a` only, as decided in PLAN 9.1 (no Opus/OGG). Encoders (ffmpeg and similar) are not installed on the sourcing machine, so encoding, loudness normalisation and loop crossfading are left to the pipeline or gameplay agent; the intended steps are in each manifest entry's `notes`, and `modifications` stays empty until they are done. Size: the nine picks total about 0.49 MB as source previews, well within the repo budget; a per-preset audio budget is left to the pipeline PR's size check (T59 audio encoding + size check). Loops are to be trimmed to 12 to 16 s. The built-asset index schema (`tools/asset-pipeline/src/index-schema.ts`) may need an `audio` kind when the pipeline starts emitting these.
+
+| Sound | Pick | Why |
+|---|---|---|
+| Filter hum (loop) | `freesound-197804` | steady pump hum, no bubble strips, long enough to find a stationary 12 s section |
+| Air bubbles (loop) | `freesound-188223` | authored as a loop, 8.4 s |
+| Underwater ambience (loop) | `freesound-862788` | explicitly muffled and tagged loop |
+| Glass tap | `freesound-427389` | clean single tap, 0.49 s |
+| Food plop | `freesound-853279` | small plop, 0.38 s |
+| Net splash | `freesound-398032` | shallow splash, 1.3 s, most downloaded of the splash set |
+| UI clicks (3) | `freesound-528561`, `freesound-629020`, `freesound-342200` | soft, plain and wooden click, each under 0.3 s |
+| Calm music (optional) | **skipped** | the only short CC0 loop found is Freesound 826622 (xkeril, 20 s), but it is a lo-fi electric piano that does not suit an underwater bed; revisit if music is wanted |
+
+### Candidates
+
+All CC0 unless marked.
+
+- **Filter hum:** 1. [Indoor Fish Tank without Bubble strips Ambiance](https://freesound.org/s/197804/) by 7778, 31.2 s (PICK); 2. [fish-tank-fltr-edit](https://freesound.org/s/369861/) by doubleDog, 6.6 s (short, likely an edit with audible repetition); 3. [Aquarium Lobster Filter](https://freesound.org/s/522987/) by vero.marengere, 24 s. CC-BY alternative not needed: Freesound 167748 (ultradust).
+- **Air bubbles:** 1. [Bubble Loop](https://freesound.org/s/188223/) by MikeRat, 8.4 s (PICK); 2. [Water bubbles loop](https://freesound.org/s/521392/) by GoldenTricycle, 11.8 s (fizzier, more boiling than aquarium); 3. [Aquarium aerator y bubbles](https://freesound.org/s/418198/) by ddaedalus, 38 s (also carries a pump).
+- **Underwater ambience:** 1. [Ambience, designed, deep, muffled, wavy, underwater, dream, memory, loop](https://freesound.org/s/862788/) by Oldome, 25.3 s (PICK); 2. [Underwater Ambience](https://freesound.org/s/504641/) by Fission9, 46.9 s (12k downloads, brighter and longer); 3. [Ambiance_Underwater_Stereo](https://freesound.org/s/482116/) by Nox_Sound, 45 s.
+- **Glass tap:** 1. [Glass Tap](https://freesound.org/s/427389/) by zembacraftworks, 0.49 s (PICK); 2. [Glass Tap.wav](https://freesound.org/s/262958/) by Unicornaphobist, 0.2 s (a ting on a bottle, too ringy); 3. [Glass Tap](https://freesound.org/s/668384/) by CJspellsfish, 0.3 s.
+- **Food plop:** 1. [Fishing Lure Plop Water - Game SFX (2 or 2)](https://freesound.org/s/853279/) by el_boss, 0.38 s (PICK); 2. [Water.wav](https://freesound.org/s/530359/) by danielpodlovics, 0.33 s; 3. [Water drop (splash)](https://freesound.org/s/451126/) by bolkmar, 1.1 s.
+- **Net splash:** 1. [Splash](https://freesound.org/s/398032/) by swordofkings128, 1.3 s (PICK); 2. [WaterSplash](https://freesound.org/s/646568/) by Ryanz-Official, 1.3 s; 3. [water splash 2](https://freesound.org/s/398039/) by swordofkings128, 1.9 s.
+- **UI clicks:** picks [Soft UI Button Click](https://freesound.org/s/528561/) by Jummit, 0.24 s, [Button click](https://freesound.org/s/629020/) by Kolombooo, 0.29 s, [Videogame Menu BUTTON CLICK](https://freesound.org/s/342200/) by Christopherderp, 0.14 s; reserves [Button Hover Click](https://freesound.org/s/623990/) by eqylizer, 0.1 s and [Water Click](https://freesound.org/s/371274/) by Mafon2, 0.1 s.
+- **Calm music (not picked):** [Memories of a sweet summer (loop)](https://freesound.org/s/826622/) by xkeril, 20 s; [Calming Piano Loop 60bpm](https://freesound.org/s/679738/) by Seth_Makes_Sounds, 109 s (too long for the budget); [Synth pad deep ambience with beach waves](https://freesound.org/s/222448/) by waveplaySFX, 34 s.
+
+Not verified here (no audio tools on the machine): the loop seams. The pipeline must audition each loop and crossfade as planned in the entry notes.
+
+## Brackish mangrove (issue #640, T50)
+
+Checked 2026-10-22. Sources searched in order: Smithsonian (no brackish fish models), Sketchfab with the CC0 and CC-BY filters and the downloadable flag, Poly Haven, ambientCG, Wikimedia Commons. Licences were read from the Sketchfab model record and bundled `license.txt`, the Poly Haven asset page and the Commons file-page metadata (all dated 2026-10-22). Raw files are in `~/.cache/aquarium-assets/raw/<id>/`. No CC-BY-SA was used and no species is blocked on a ShareAlike photo, so there are no SA-only gaps to decide. Species ids are proposals; `content/species/*.json` belongs to the later owners.
+
+### Species
+
+| Species | Decision | Pick | Polycount | Notes |
+|---|---|---|---|---|
+| Barred mudskipper (Periophthalmus argentilineatus) | model | `sketchfab-c3bc5a29` (ffish.asia / floraZia.com, CC0) | 216,740 triangles | Photogrammetry scan, rigid, one 4096 texture. Best anatomy of the brackish set (raised eyes, pectoral arms). Needs heavy decimation and a rig. |
+| Blue-spotted mudskipper (Boleophthalmus pectinirostris) | model | `sketchfab-0fe8a8af` (ffish.asia / floraZia.com, CC0) | 392,134 triangles | Photogrammetry scan, rigid, one 4096 texture, blue spots intact. Second mudskipper species so the biome has a grazing pair of goby shapes. |
+| Figure-8 puffer (Dichotomyctere ocellatus, formerly Tetraodon biocellatus), **moved to the freshwater roster, kept here for its catalog history; not part of the mangrove set** | fallback: procedural loft; **not a mangrove species, belongs to the freshwater roster** (decision for #1220, 2026-10-22) | no CC0 or CC-BY photo; `PD-user-de` candidate pending Alex's licence decision (see Gaps below) | n/a | Lofted from the species description until a photo is allowed. The scan `sketchfab-7cbf59ce` (CC0, 312,662 triangles) is Takifugu snyderi, a marine puffer with the wrong pattern, so it is a geometry reference only. |
+| Banded archerfish (Toxotes jaculatrix) | fallback: procedural loft | `wm-archerfish-vassil` (CC0), `wm-archerfish-pericard` (CC-BY-4.0, Pierre Pericard) | n/a | Silver body with five to six dark saddle bars and a rear-set dorsal. No model found. |
+| Silver mono (Monodactylus argenteus) | fallback: procedural loft | `wm-mono-shetty` (CC0), `wm-mono-khauv` (CC-BY-4.0, Lek Khauv) | n/a | Diamond-shaped silver disc, tall dorsal and anal fins. A third photo (`Monodactylus argenteus 1.jpg`, Karelj, public domain) was found and not downloaded. |
+| Bumblebee goby (Brachygobius sp.) | fallback: procedural loft | `wm-bumblebee-lisitsyn-1`, `-2` (CC-BY-4.0, Pavlik Lisitsyn, B. doriae) | n/a | Tiny (about 3 to 4 cm), broad black and yellow bands. The Frank M. Greco photo (CC BY 3.0, 640x449) is too small and was not downloaded. |
+| Orange chromide (Etroplus maculatus) | fallback: procedural loft | no CC0 or CC-BY photo; `PD-self` candidate pending Alex's licence decision (see Gaps below) | n/a | Lofted from the species description (orange spots, flank blotch, dark dorsal bars) until a photo is allowed. The only CC BY 3.0 photo found (Manojk) shows dead fish in a fish-market crate and was rejected. |
+
+Figure-8 puffer biome (#1220): FishBase (https://www.fishbase.se/summary/Dichotomyctere-ocellatus.html, read 2026-10-22) lists it as freshwater, "Not a brackish water species", pH 6.5 to 7.5, 22 to 26 C. Seriously Fish (https://www.seriouslyfish.com/species/dichotomyctere-ocellatus/, read 2026-10-22) says it is often treated as true freshwater, lives in freshwater to brackish rivers and coasts, and does better with a little marine salt at about SG 1.005 (roughly 7 ppt) in captivity. The mangrove tank runs at 15 ppt, pH 8 (`packages/shared/src/chemistry.ts`), above the top of that range, so the species is not marked brackish and the model leaves the mangrove set. Its home is the freshwater biome (pH 7, 0 ppt; blackwater at pH 6 is below its range). The loft model is unchanged and stays in the catalog as the pick for this species.
+
+Ranking per species, best first. Mudskippers: `sketchfab-c3bc5a29`, `sketchfab-0fe8a8af` (they are different species, so each is the pick for its own species; only these two were found under CC0 or CC-BY). Figure-8 puffer: loft from the species description, or re-textured `sketchfab-7cbf59ce`; no allowed photo yet. Archerfish: `wm-archerfish-vassil` over `wm-archerfish-pericard` (CC0 beats attribution). Mono: `wm-mono-shetty` (6048x4032, CC0) over `wm-mono-khauv`. Bumblebee goby: `wm-bumblebee-lisitsyn-1` over `-2`. Chromide: no allowed photo yet.
+
+### Gaps pending Alex's licence decision
+
+Four Commons files are public domain, not CC0 or CC-BY, and the repo allows only CC0 and CC-BY. They are not in `assets/manifest.json`, were not credited, and nothing may use them until Alex approves a public-domain class and PLAN §1 and the manifest `rules` record it. Raw files stay in `~/.cache/aquarium-assets/raw/<id>/` (not committed). Checked 2026-10-22 against the file-page wikitext.
+
+| Proposed id | Commons file | Commons tag | File URL | Commons sha1 | If vetoed |
+|---|---|---|---|---|---|
+| `wm-figure8-geyer` | `Tetraodon biocelatus.jpg` (Robin Geyer, 843x444) | `{{PD-user-de\|Robin Geyer}}`, transferred from de.wikipedia; permission text "völlige Freigabe" | https://upload.wikimedia.org/wikipedia/commons/0/0f/Tetraodon_biocelatus.jpg | `45373288678b63d5c41c739864f70207f4bb2e5a` | Figure-8 puffer lofted from the species description plus any CC0 or CC-BY photo found later; optionally re-textured `sketchfab-7cbf59ce`. |
+| `wm-bumblebee-malamut` | `Brachygobius xanthozonus.jpg` (Malamut, 1301x976) | `{{PD-self}}` | https://upload.wikimedia.org/wikipedia/commons/5/5c/Brachygobius_xanthozonus.jpg | `f6b2e40e82334c85f7750d1a063133e3f7c59de7` | Bumblebee goby ships from its fallback: loft from `wm-bumblebee-lisitsyn-1` and `-2` (CC-BY-4.0). |
+| `wm-chromide-raghu` | `Etroplus Maculatus.JPG` (Raghu.kuttan, 2304x1536) | `{{PD-self}}` | https://upload.wikimedia.org/wikipedia/commons/8/8d/Etroplus_Maculatus.JPG | `c71c55cd2b3c2d5ef80ae86eb7f664a95222bc7b` | Orange chromide lofted from the species description plus any CC0 or CC-BY photo found later. |
+| `wm-mangrove-roots-hillebrand` | `Close view of red mangrove roots.jpg` (Steve Hillebrand, USFWS, 3504x2336) | `{{PD-author\|1=Steve Hillebrand, U.S. Fish and Wildlife Service}}`, via the aggregator public-domain-image.com; not `PD-USGov-FWS` | https://upload.wikimedia.org/wikipedia/commons/a/a7/Close_view_of_red_mangrove_roots.jpg | `a3c7954866363fbef836be152532524767b146f1` | Mangrove roots come from the CC-BY lucq22 prop-root model `sketchfab-c32d977c` (and the CC0 `sketchfab-5658cc51`); colour reference from `wm-mangrove-restinga-wilfredor` (CC0). |
+
+The previous revision recorded these four as `CC0-1.0`; that was wrong, since Commons tags them as public domain and none carries a CC0 deed.
+
+The PLAN asks for 4 or more species. The biome has six: two models and four lofts (the figure-8 puffer moved to the freshwater roster). The "model" picks are scans of high triangle count, so the pipeline cost is decimation, not modelling.
+
+### Hardscape, roots and decor
+
+| Item | Pick | Licence | Notes |
+|---|---|---|---|
+| Prop roots, hero pieces | `sketchfab-5658cc51` (ffish.asia / floraZia.com) | CC0 | Red mangrove (Rhizophora mucronata) sapling scan, 1,378,644 triangles in 44 meshes, one 8192 atlas. Split into root clusters, trunk and leaves. |
+| Prop roots, instanced thicket | `sketchfab-c32d977c` (lucq22) | CC-BY-4.0 | 3,926 triangles, stylised hand model with base colour and normal maps. Light enough to instance many times. |
+| Sunken stump with aerial roots | `sketchfab-a221abc9` (JFN / db4) | CC-BY-4.0 | Petrified mangrove stump from Sarawak, Scaniverse scan, 362,021 triangles, 8192 texture. |
+| Propagules and leaf litter | `sketchfab-2b81ff20` (ffish.asia / floraZia.com) | CC0 | Red mangrove propagules and leaves, 669,262 triangles. Not roots: small decor. |
+| Substrate, tidal mud | `polyhaven-brown_mud_03` (Rob Tuytel) | CC0 | 2k PBR set, wet brown mud with stones and clumps. |
+| Substrate, sand and shell | `polyhaven-coast_sand_04`, `ambientcg-Ground101` | CC0 | Already in the manifest; for the sandy patches of the tank. |
+| Rocks | `polyhaven-rock_07`, `polyhaven-boulder_01`, `polyhaven-coast_rocks_05` | CC0 | Already in the manifest. |
+| Root and mud colour reference | `wm-mangrove-restinga-wilfredor` | CC0 | Photo for matching the render grade and the root tint, not placed in a tank. |
+
+No allowed underwater mangrove photo with a clean frame exists; every CC0, CC-BY and public-domain mangrove photo found is shot above the waterline or has people or boats in frame. The roots in the reference photo are used as a colour and shape reference only.
+
+### Emergent mud bank (issue #1259)
+
+Checked 2026-10-22. Sketchfab (CC0 and CC-BY, downloadable) was searched for mud bank, mudflat, river bank and swamp bank; Poly Haven and ambientCG have only flat textures, no bank models.
+
+| Candidate | Licence | Verdict |
+|---|---|---|
+| `River Bank` (telziel, uid a4f6b184, 16,845 triangles) | CC-BY-4.0 | A mossy cliff chunk (thumbnail check) with a green algae skin and a vertical face, not a wet mud slope. Rejected. |
+| `Estuary Bank` (emcderm, uid 3cd1c470, 837,090 triangles) | CC-BY-4.0 | A scan of stones lining a river bank. Rejected: rock, not mud, and far too heavy. |
+| `Soil Bank` (mr.himumz, uid ac464d5e) | CC-BY-4.0 | A scanned clay bottle despite the name. Rejected. |
+| `Tidal tree, seacoast, shore, mud flat` (Metazeon) | CC-BY-4.0 | About 960k triangles of landscape scan with a tree; unusable at tank scale. Rejected. |
+
+Decision: **build the bank procedurally** from the existing CC0 `polyhaven-brown_mud_03` (already in the manifest, tidal-mud substrate, 2k PBR with displacement). A broad bank needs a controlled shape (flat top, gentle slope, honest radius), which a scan will not give, and no allowed scan matches. No new manifest entry and no new credit are needed.
+
+### Backgrounds (render specs, not yet in the manifest)
+
+Real photos are not usable as posters, so the five slots are renders in the `bg-fw-misty-lake` pattern, built from the CC0 and CC-BY assets above. They are not in `assets/manifest.json` yet, for the reason given under the African cichlid lake section; the pipeline PR that renders them adds them as `downloaded` entries with `kind: "background"`, `biome: "mangrove"`, `source: "render"` and the slot below.
+
+| Slot | Id | Licence |
+|---|---|---|
+| Prop-root thicket | `bg-mangrove-prop-root-thicket` | CC-BY-4.0 (root model credit, lucq22) |
+| Red mangrove roots on mud | `bg-mangrove-red-roots` | CC0 |
+| Petrified stump | `bg-mangrove-petrified-stump` | CC-BY-4.0 (stump credit, JFN / db4) |
+| Tidal mud flat | `bg-mangrove-tidal-flat` | CC0 |
+| Open brackish water | `bg-mangrove-open-water` | CC0 |
+
+Every render: no EXIF or other metadata, no fish, no text and no people. 2:1, at least 4096x2048, graded underwater by the pipeline (the renderer tints the poster once more, so keep the grade light), soft light fall-off from the top, no hard sun shafts. Brackish: murky green-brown water with tannin warmth, suspended silt, limited visibility, nothing marine and no coral.
+
+- `bg-mangrove-prop-root-thicket`: A dense thicket of arching prop roots (`sketchfab-c32d977c`, instanced at varied scale and rotation, with a few hero roots from `sketchfab-5658cc51`) rising from a dark mud floor (`polyhaven-brown_mud_03`), roots filling the left and right thirds and thinning out in the centre third, brown-green haze behind.
+- `bg-mangrove-red-roots`: A close side-on cluster of red mangrove prop roots from `sketchfab-5658cc51` only, standing on `polyhaven-brown_mud_03` with scattered `polyhaven-rock_07`, light shafts diffused to a soft glow from the top left. Tint the roots toward the red-brown of `wm-mangrove-restinga-wilfredor`.
+- `bg-mangrove-petrified-stump`: A weathered grey-brown stump with aerial roots (`sketchfab-a221abc9`) left of centre, half-sunk in mud (`polyhaven-brown_mud_03`), a few `sketchfab-c32d977c` roots behind it and open murky water to the right. The Scaniverse 8192 texture is bare wood, so rim-light it lightly.
+- `bg-mangrove-tidal-flat`: A low, wide view across a mud flat (`polyhaven-brown_mud_03`, `polyhaven-coast_sand_04` patches) with propagules and leaf litter from `sketchfab-2b81ff20` lying on it, small roots from `sketchfab-5658cc51` at the far edge, and a clear gradient up into green-brown water. The calmest slot, for tanks with a lot of foreground decor.
+- `bg-mangrove-open-water`: Open green-brown water with a distant silhouette of roots along the bottom third (small instances of `sketchfab-5658cc51`, heavy depth haze), the upper two thirds smoothly graded, and a faint lighter patch top right. With `polyhaven-brown_mud_03` mud at the base.
+
+For the thicket and stump renders, `source_url` and `author_url` should point to the CC-BY component that sets the licence (`https://sketchfab.com/3d-models/mangrove-tree-roots-c32d977c14e04e5ebc1fbef9b6111957` and `https://sketchfab.com/lucq22`; `https://sketchfab.com/3d-models/petrified-mangrove-beach-debris-4-scaniverse-a221abc90fb345b69aa0886af7711187` and `https://sketchfab.com/db4`), and their CREDITS rows should link the same source. The other three slots credit the CC0 sources.
+
+The manifest biome will be `mangrove`. `content/backgrounds/mangrove.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `mangrove`, so the file would fail validation. Add both in the PR that makes the biome playable.
+
+### Background photo re-survey (2026-10-22)
+
+Re-searched Commons for underwater or waterline mangrove photos (CC0 and CC-BY 3.0/4.0, at least 3000 px wide). None is an underwater scene. Closest: `Mangroves in the Restinga Lagoon.jpg` (CC0, 4288x2379), a clean red-mangrove root curtain over dark reflective water with no people, but it is shot above the waterline with a bright sky patch of reflections, so it would read as a photo of a shore, not water behind glass. Rejected: Sundarban High Tide 01 to 04 (CC BY 4.0, mostly sky), Sungei Buloh (CC BY 4.0, foliage and grass), Havelock Island (CC BY 4.0, beach with swimmers and boats), Withlacoochee (CC BY 4.0, cypress swamp, not mangrove), Roots of the mangrove swamp (CC0, birds and branches). Mangrove snapper and `They're used by the mangroves to breathe...` are public domain and CC BY-SA 2.0 respectively and were not considered. The renders above stand.
+
+### Handoff to asset-pipeline-engineer
+
+Adult target lengths (total length, approximate): barred mudskipper 10 to 12 cm, blue-spotted mudskipper 12 to 15 cm, figure-8 puffer 6 to 7 cm, banded archerfish 15 to 20 cm in a home tank, silver mono 15 to 20 cm, bumblebee goby 3 to 4 cm, orange chromide 8 to 10 cm.
+
+1. Mudskippers (`sketchfab-c3bc5a29`, `sketchfab-0fe8a8af`): remove the scan slate (the 1024 `Material.001` texture) and base pieces, decimate to LOD0 under about 15k triangles, LOD1 and LOD2 below that, rig spine plus pectoral and dorsal fin joints (they rest on the substrate and mud, so the idle pose is propped on the pectorals), origin at the belly, 1k to 2k KTX2.
+2. Loft four species from the listed photos for the mangrove set: banded archerfish (`wm-archerfish-vassil`, `-pericard`), silver mono (`wm-mono-shetty`, `-khauv`), bumblebee goby (`wm-bumblebee-lisitsyn-1`, `-2`), orange chromide (no allowed photo; species description unless Alex approves `wm-chromide-raghu`, see Gaps). The figure-8 puffer is no longer in this set: it ships in the freshwater roster as a loft (paint the figure-8 markings from the species description unless Alex approves `wm-figure8-geyer`, see Gaps). CC-BY credits (Pericard, Khauv, Lisitsyn) must stay in CREDITS.md. No sexual dimorphism is built in; the chromide and bumblebee goby are near-monomorphic.
+3. Optional (freshwater roster): `sketchfab-7cbf59ce` as the puffer geometry only, if the loft reads worse; it is Takifugu snyderi, so re-texture it from the species description (or from `wm-figure8-geyer` if Alex approves it).
+4. Roots: split `sketchfab-5658cc51` into prop-root clusters (each under about 15k triangles, three to four clusters), trunk and leaves; 8192 atlas to 2k KTX2; origin at the root base; scale to 20 to 40 cm tall. `sketchfab-c32d977c` instances at 20 to 35 cm with its textures at 1k; `sketchfab-a221abc9` decimated to under about 20k triangles, 8192 texture to 2k, 15 to 30 cm. `sketchfab-2b81ff20`: split propagules from leaves, each under 3k triangles, 15 to 25 cm propagules.
+5. Substrate: `polyhaven-brown_mud_03` is the mud substrate; reuse existing sand and rocks.
 6. Backgrounds: render the five slots to the specs above, strip metadata, build the three KTX2 tiers, then add the entries to the manifest with `sha256`, `files[]`, `modifications[]` and status `downloaded`.
 
 ## Sound (issue #649, T59)
@@ -492,3 +723,76 @@ All CC0 unless marked.
 - **Calm music (not picked):** [Memories of a sweet summer (loop)](https://freesound.org/s/826622/) by xkeril, 20 s; [Calming Piano Loop 60bpm](https://freesound.org/s/679738/) by Seth_Makes_Sounds, 109 s (too long for the budget); [Synth pad deep ambience with beach waves](https://freesound.org/s/222448/) by waveplaySFX, 34 s.
 
 Not verified here (no audio tools on the machine): the loop seams. The pipeline must audition each loop and crossfade as planned in the entry notes.
+
+## Rooms (issue #1459, T74)
+
+Checked 2026-10-23. Twelve rooms (PLAN 9.1 "Rooms", 9.2 T74). Every pick is CC0: Poly Haven for furniture and HDRIs (licence read on https://polyhaven.com/license and the asset page, `sofa_03` spot-checked), Freesound CC0 for ambience (licence link read on each sound page; searches restricted to the CC0 filter, so no CC-BY or CC-BY-SA entry was needed). The shell stays procedural, so `assets.shell` is null in `content/rooms.json`. Raw files are in `~/.cache/aquarium-assets/raw/<asset-id>/` (Poly Haven 1k glTF plus 1k jpg textures, 1k `.hdr`, Freesound lq preview OGG). Poly Haven asset ids use hyphens (`polyhaven-sofa-03`) because `content/rooms.json` refs are slugs (`[a-z][a-z0-9-]*`).
+
+Candidate ranking is thin by design: Poly Haven has one or two plausible props per role, so the table names the pick and the nearest alternates. Alternate HDRIs were chosen from the Poly Haven list by name and category only and were not downloaded or rendered; thumbnails of the picks are linked below.
+
+### Picks
+
+| Room | Furniture (instanced glTF) | HDRI | Ambience (Freesound, CC0) |
+|---|---|---|---|
+| Living room (`room-living`) | [`polyhaven-sofa-03`](https://cdn.polyhaven.com/asset_img/thumbs/sofa_03.png?width=256&height=256), [`polyhaven-modern-coffee-table-01`](https://cdn.polyhaven.com/asset_img/thumbs/modern_coffee_table_01.png?width=256&height=256), [`polyhaven-mid-century-lounge-chair`](https://cdn.polyhaven.com/asset_img/thumbs/mid_century_lounge_chair.png?width=256&height=256) | [`polyhaven-lythwood-lounge`](https://cdn.polyhaven.com/asset_img/thumbs/lythwood_lounge.png?width=256&height=256) | [`freesound-329533`](https://freesound.org/s/329533/) leonelmail, 17 s |
+| Bedroom (`room-bedroom`) | [`polyhaven-vintage-day-bed`](https://cdn.polyhaven.com/asset_img/thumbs/vintage_day_bed.png?width=256&height=256), [`polyhaven-painted-wooden-nightstand`](https://cdn.polyhaven.com/asset_img/thumbs/painted_wooden_nightstand.png?width=256&height=256), [`polyhaven-throw-pillows-01`](https://cdn.polyhaven.com/asset_img/thumbs/throw_pillows_01.png?width=256&height=256) | [`polyhaven-hotel-room`](https://cdn.polyhaven.com/asset_img/thumbs/hotel_room.png?width=256&height=256) | [`freesound-630612`](https://freesound.org/s/630612/) xxamoney27xx, 546 s |
+| Aquarium shop (`room-shop`) | [`polyhaven-steel-frame-shelves-03`](https://cdn.polyhaven.com/asset_img/thumbs/steel_frame_shelves_03.png?width=256&height=256), [`polyhaven-cashregister-01`](https://cdn.polyhaven.com/asset_img/thumbs/CashRegister_01.png?width=256&height=256), [`polyhaven-plastic-crate-02`](https://cdn.polyhaven.com/asset_img/thumbs/plastic_crate_02.png?width=256&height=256) | [`polyhaven-decor-shop`](https://cdn.polyhaven.com/asset_img/thumbs/decor_shop.png?width=256&height=256) | [`freesound-764641`](https://freesound.org/s/764641/) VanessaRiddle, 180 s |
+| Home office (`room-office`) | [`polyhaven-metal-office-desk`](https://cdn.polyhaven.com/asset_img/thumbs/metal_office_desk.png?width=256&height=256), [`polyhaven-modern-arm-chair-01`](https://cdn.polyhaven.com/asset_img/thumbs/modern_arm_chair_01.png?width=256&height=256), [`polyhaven-classic-laptop`](https://cdn.polyhaven.com/asset_img/thumbs/classic_laptop.png?width=256&height=256) | [`polyhaven-white-home-studio`](https://cdn.polyhaven.com/asset_img/thumbs/white_home_studio.png?width=256&height=256) | [`freesound-327497`](https://freesound.org/s/327497/) DavidFrbr, 101 s |
+| City loft (`room-loft`) | [`polyhaven-sofa-02`](https://cdn.polyhaven.com/asset_img/thumbs/sofa_02.png?width=256&height=256), [`polyhaven-hanging-industrial-lamp`](https://cdn.polyhaven.com/asset_img/thumbs/hanging_industrial_lamp.png?width=256&height=256), [`polyhaven-metal-stool-01`](https://cdn.polyhaven.com/asset_img/thumbs/metal_stool_01.png?width=256&height=256) | [`polyhaven-photo-studio-loft-hall`](https://cdn.polyhaven.com/asset_img/thumbs/photo_studio_loft_hall.png?width=256&height=256) | [`freesound-330427`](https://freesound.org/s/330427/) janbezouska, 225 s |
+| Japanese zen room (`room-zen`) | [`polyhaven-chinese-tea-table`](https://cdn.polyhaven.com/asset_img/thumbs/chinese_tea_table.png?width=256&height=256), [`polyhaven-chinese-stool`](https://cdn.polyhaven.com/asset_img/thumbs/chinese_stool.png?width=256&height=256), [`polyhaven-ceramic-vase-01`](https://cdn.polyhaven.com/asset_img/thumbs/ceramic_vase_01.png?width=256&height=256) | [`polyhaven-studio-kominka-01`](https://cdn.polyhaven.com/asset_img/thumbs/studio_kominka_01.png?width=256&height=256) | [`freesound-629951`](https://freesound.org/s/629951/) Sindbad13, 48 s |
+| Beach house (`room-beach`) | [`polyhaven-outdoor-table-chair-set-01`](https://cdn.polyhaven.com/asset_img/thumbs/outdoor_table_chair_set_01.png?width=256&height=256), [`polyhaven-lifebuoy`](https://cdn.polyhaven.com/asset_img/thumbs/lifebuoy.png?width=256&height=256), [`polyhaven-painted-wooden-bench`](https://cdn.polyhaven.com/asset_img/thumbs/painted_wooden_bench.png?width=256&height=256) | [`polyhaven-illovo-beach-balcony`](https://cdn.polyhaven.com/asset_img/thumbs/illovo_beach_balcony.png?width=256&height=256) | [`freesound-852826`](https://freesound.org/s/852826/) kkenny101, 22 s |
+| Mountain cabin (`room-cabin`) | [`polyhaven-scandinavian-masonry-heater`](https://cdn.polyhaven.com/asset_img/thumbs/scandinavian_masonry_heater.png?width=256&height=256), [`polyhaven-rockingchair-01`](https://cdn.polyhaven.com/asset_img/thumbs/Rockingchair_01.png?width=256&height=256), [`polyhaven-vintage-oil-lamp`](https://cdn.polyhaven.com/asset_img/thumbs/vintage_oil_lamp.png?width=256&height=256) | [`polyhaven-cabin`](https://cdn.polyhaven.com/asset_img/thumbs/cabin.png?width=256&height=256) | [`freesound-346321`](https://freesound.org/s/346321/) nielstii, 73 s |
+| Sushi restaurant (`room-sushi`) | [`polyhaven-bar-chair-round-01`](https://cdn.polyhaven.com/asset_img/thumbs/bar_chair_round_01.png?width=256&height=256), [`polyhaven-round-wooden-table-02`](https://cdn.polyhaven.com/asset_img/thumbs/round_wooden_table_02.png?width=256&height=256), [`polyhaven-carved-wooden-plate`](https://cdn.polyhaven.com/asset_img/thumbs/carved_wooden_plate.png?width=256&height=256) | [`polyhaven-warm-restaurant`](https://cdn.polyhaven.com/asset_img/thumbs/warm_restaurant.png?width=256&height=256) | [`freesound-723834`](https://freesound.org/s/723834/) ivoliYT, 137 s |
+| Castle library (`room-library`) | [`polyhaven-shelf-01`](https://cdn.polyhaven.com/asset_img/thumbs/Shelf_01.png?width=256&height=256), [`polyhaven-armchair-01`](https://cdn.polyhaven.com/asset_img/thumbs/ArmChair_01.png?width=256&height=256), [`polyhaven-marble-bust-01`](https://cdn.polyhaven.com/asset_img/thumbs/marble_bust_01.png?width=256&height=256) | [`polyhaven-reading-room`](https://cdn.polyhaven.com/asset_img/thumbs/reading_room.png?width=256&height=256) | [`freesound-620683`](https://freesound.org/s/620683/) xkeril, 581 s |
+| Public aquarium hall (`room-public-aquarium`) | [`polyhaven-painted-wooden-bench`](https://cdn.polyhaven.com/asset_img/thumbs/painted_wooden_bench.png?width=256&height=256), [`polyhaven-wetfloorsign-01`](https://cdn.polyhaven.com/asset_img/thumbs/WetFloorSign_01.png?width=256&height=256), [`polyhaven-bronze-whale-statue`](https://cdn.polyhaven.com/asset_img/thumbs/bronze_whale_statue.png?width=256&height=256) | [`polyhaven-ushaka-sea-world-aquarium`](https://cdn.polyhaven.com/asset_img/thumbs/ushaka_sea_world_aquarium.png?width=256&height=256) | [`freesound-393689`](https://freesound.org/s/393689/) hz37, 70 s |
+| Submarine (`room-submarine`) | [`polyhaven-seadogs-compass`](https://cdn.polyhaven.com/asset_img/thumbs/seadogs_compass.png?width=256&height=256), [`polyhaven-metal-stool-01`](https://cdn.polyhaven.com/asset_img/thumbs/metal_stool_01.png?width=256&height=256) | [`polyhaven-industrial-pipe-and-valve-01`](https://cdn.polyhaven.com/asset_img/thumbs/industrial_pipe_and_valve_01.png?width=256&height=256) | [`freesound-438735`](https://freesound.org/s/438735/) craigsmith, 24 s |
+
+### Alternates considered
+
+- **Living room:** Audio: 646561 cynthia_1968 "Ambient living room background" (70 s); 501008 RavenWolfProds (rain and wind chimes, 207 s). HDRI: `lythwood_room`, `small_empty_house`.
+- **Bedroom:** Audio: 172666 UnderlinedDesigns "Ambient Wind" (621 s). HDRI: `lythwood_room`, `en_suite`.
+- **Aquarium shop:** Audio: 320463 Alcappuccino "Bakery Shop (1) in Vienna" (41 s). HDRI: `phone_shop`, `witsand_woolshop`.
+- **Home office:** Audio: 541117 Chelly01 "Office ambience" (142 s); 579568 leonelmail "Office ambience - call center 3" (180 s, voices). HDRI: `unfinished_office`.
+- **City loft:** Audio: 332785 be_a_hero_not_a_patriot "city ambience ... night, distant traffic" (209 s). HDRI: `photo_studio_01`.
+- **Japanese zen room:** Audio: 75273 markystar "tokyo_park_at_dusk" (124 s, may carry traffic); 193784 jhumbucker "Water fountain" (14 s). HDRI: `studio_kominka_02`, `ninomaru_teien` (outdoor).
+- **Beach house:** Audio: 848039 richwise "Gentle waves at Priory Bay" (199 s). HDRI: `sundowner_deck`.
+- **Mountain cabin:** Audio: 512685 WavJunction.com "Fireplace Crackles" (16 s, loopable length); 382616 Davor (80 s). HDRI: `fireplace`, `pine_attic`.
+- **Sushi restaurant:** Audio: 75249 markystar "loud japanese diner" (127 s, too loud); 616359 rozhkovkirill "Indian Restaurant Dubai" (304 s). HDRI: `warm_bar`, `warm_reception_dinner`.
+- **Castle library:** Audio: 613781 xkeril "Library ambience" (434 s); 400849 mindhealer "A small library in Korea" (243 s). HDRI: `old_hall`, `lythwood_lounge`.
+- **Public aquarium hall:** Audio: 614927 Rimmer "Indoor pool1" (19 s, water echo, no crowd). HDRI: `hall_of_finfish`, `museum_of_history`.
+- **Submarine:** Audio: none close (the search for "submarine interior hum" returned one CC0 hit). HDRI: `moon_lab`, `aft_lounge`.
+
+### Size and GPU figures
+
+These are the **source** figures measured from the downloaded files. Nothing is built yet: `tools/asset-pipeline` has no room path, so shipped bytes, LOD triangle counts and draw calls after merging are not measured. Triangle counts are the full-detail Poly Haven mesh (the glTF at every resolution points at the same `.bin`). Draw calls are glTF primitives, unmerged. Texture figures are the 1k jpg files before KTX2.
+
+| Room | Furniture | Source tris | Draw calls | jpg textures (MB) | geometry bin (MB) | HDRI .hdr (MB) | audio raw (MB) |
+|---|---|---|---|---|---|---|---|
+| Living room | sofa_03, modern_coffee_table_01, mid_century_lounge_chair | 18656 | 4 | 3.52 | 0.56 | 1.54 | 0.13 |
+| Bedroom | vintage_day_bed, painted_wooden_nightstand, throw_pillows_01 | 9547 | 5 | 5.51 | 0.25 | 1.57 | 5.24 |
+| Aquarium shop | steel_frame_shelves_03, CashRegister_01, plastic_crate_02 | 24163 | 9 | 5.62 | 0.80 | 1.63 | 1.55 |
+| Home office | metal_office_desk, modern_arm_chair_01, classic_laptop | 30264 | 15 | 5.48 | 0.98 | 1.52 | 0.88 |
+| City loft | sofa_02, hanging_industrial_lamp, metal_stool_01 | 20592 | 5 | 5.31 | 0.64 | 1.64 | 2.12 |
+| Japanese zen room | chinese_tea_table, chinese_stool, ceramic_vase_01 | 13894 | 3 | 3.39 | 0.39 | 1.43 | 0.64 |
+| Beach house | outdoor_table_chair_set_01, lifebuoy, painted_wooden_bench | 21186 | 5 | 5.10 | 0.74 | 1.48 | 0.18 |
+| Mountain cabin | scandinavian_masonry_heater, Rockingchair_01, vintage_oil_lamp | 28424 | 5 | 4.35 | 0.97 | 1.66 | 0.73 |
+| Sushi restaurant | bar_chair_round_01, round_wooden_table_02, carved_wooden_plate | 20739 | 3 | 5.08 | 1.20 | 1.66 | 0.98 |
+| Castle library | Shelf_01, ArmChair_01, marble_bust_01 | 23264 | 3 | 1.68 | 0.58 | 1.62 | 5.19 |
+| Public aquarium hall | painted_wooden_bench, WetFloorSign_01, bronze_whale_statue | 4674 | 3 | 4.30 | 0.14 | 1.73 | 0.67 |
+| Submarine | seadogs_compass, metal_stool_01 | 19979 | 4 | 4.37 | 0.60 | 1.71 | 0.18 |
+
+Against the PLAN 9.2 limits (mobile: 15 k triangles, 10 draw calls, 8 MB geometry and textures; high: 60 k, 30 draw calls, 24 MB):
+
+- Over the **mobile triangle limit** at source: living room, shop, home office, loft, beach, cabin, sushi, library, submarine. The pipeline has to decimate (the LOD ladder) so each room lands at or under 15 k on mobile; all twelve are under the 60 k high limit at source.
+- Over the **mobile draw-call limit** at source: home office (15 primitives, `metal_office_desk` alone has 9). Merge by material or drop to the low LOD before shipping. Every other room is 9 or fewer.
+- **Repo size:** the 1.8 MB per-room budget includes the HDRI and audio. A 1024x512 HDRI is 0.52 MB as BC6H plus mips, about 0.7 MB; 16 s of 64 kbit/s AAC is about 0.13 MB. That leaves roughly 0.95 MB per room for three props, so the pipeline needs to cut prop textures to 512 px (or lower) in ETC1S/UASTC KTX2 and likely ship the room HDRI below 1k. This is an estimate, not a measurement; the assets are not built.
+- The two long audio sources (Bedroom, Castle library) are 5 MB raw lq previews of 9 to 10 minute recordings; only a 12 to 16 s loop ships.
+
+### Caveats
+
+- No audio tools on the sourcing machine, so no ambience was auditioned. Chosen from title, duration and tags only: `freesound-764641` ("Shop Tone") and `freesound-393689` (a large-hall walla recording with Dutch and English speech, picked as a stand-in for a public aquarium hall) are the least certain. The pipeline step that trims a loop is also where each file gets listened to.
+- Raw audio is the Freesound lq preview OGG (the originals need a login). Same trade-off as the T59 sounds.
+- Poly Haven has no Japanese furniture. The zen room uses `chinese_tea_table`, `chinese_stool` and `ceramic_vase_01`, which read as East Asian but not strictly Japanese. A Sketchfab CC0/CC-BY search for a chabudai, tatami props and a shoji screen is the upgrade path.
+- The castle library has no book prop: the only Poly Haven book set (`book_encyclopedia_set_01`) is 67 k triangles in 40 draw calls and was dropped. Books are better done as a procedural shelf texture.
+- The submarine has two props, not three: the caged lamp candidates were 23 k to 27 k triangles with 1 to 11 draw calls.
+- `polyhaven-painted-wooden-bench` serves the beach house and the public aquarium hall, and `polyhaven-metal-stool-01` the loft and the submarine; they are one manifest entry each, so a room-by-room size check must count them per room while the repo stores them once.

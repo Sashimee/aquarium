@@ -16,6 +16,7 @@ function setup() {
     species: vi.fn().mockResolvedValue([speciesFixture()]),
     tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [sick] })]),
     wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+    ownedRooms: vi.fn().mockResolvedValue([]),
     treat: vi.fn(),
   };
   const session = new TankSession({
@@ -37,7 +38,7 @@ describe('a refused dose', () => {
     const errors: (string | null)[] = [];
     session.subscribe(() => errors.push(session.getState().error));
     const outcome = await session.treat('ich', 'standard');
-    expect(outcome).toEqual({ ok: false, overdose: false, refusal: water });
+    expect(outcome).toEqual({ ok: false, overdose: false, refusal: water, reason: null });
     expect(errors.filter((e) => e !== null)).toEqual([]);
     expect(session.getState().error).toBeNull();
   });

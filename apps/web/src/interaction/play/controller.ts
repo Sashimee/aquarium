@@ -1,4 +1,5 @@
 import type { FoodType } from '@aquarium/shared';
+import type { PlantPick } from '../../scene/plantGrowth';
 import type { FeedGate } from '../../sync/feedGate';
 import type { EventBus } from '../../engine/events';
 import type { Vec3 } from '../camera';
@@ -117,6 +118,8 @@ export interface PlayDeps {
   pickFish?: ((ray: Ray) => (() => Vec3 | null) | null) | undefined;
   /** Picks the fish under the ray; the fish system emits `net:tap` for a catchable one. */
   netTap?: ((ray: Ray) => void) | undefined;
+  /** The plant whose stem passes nearest the ray, with the size it can be trimmed to. */
+  pickPlant?: ((ray: Ray) => PlantPick | null) | undefined;
   toSim(x: number, y: number, z: number, out: Float64Array): void;
   lure?(position: Vec3 | null): void;
   /** Asks the sim whether a nori grazer can reach a clip; unset skips the check. */
@@ -176,6 +179,7 @@ export class PlayController {
     position: [0, 0, 0],
     velocity: [0, 0, 0],
   };
+  private feedLocked = false;
   private lastToys = '';
   private lastGameKey = '';
 
@@ -184,10 +188,11 @@ export class PlayController {
       deps.events.on('feed:select', ({ food }) => {
         this.selectedFood = food;
       }),
-      deps.events.on('feed:request', ({ food, portion }) => {
-        this.selectedFood = food;
+      deps.events.on('feed:request', ({ food, portion, keepSelection }) => {
+        if (!keepSelection) this.selectedFood = food;
         this.feed(food, portion, null);
       }),
+      deps.events.on('play:feed-lock', ({ locked }) => this.setFeedLocked(locked)),
       deps.events.on('toys:remove', ({ toy }) => this.removeToy(toy)),
       deps.events.on('game:request', (request) => {
         if (request.action === 'stop') this.stopGame();
@@ -225,6 +230,10 @@ export class PlayController {
     return this.activeTool === 'laser' || this.activeTool === 'wand' || this.activeTool === 'ball';
   }
 
+  setFeedLocked(locked: boolean): void {
+    this.feedLocked = locked;
+  }
+
   setTool(tool: PlayTool): void {
     if (tool === this.activeTool) return;
     this.releaseBall();
@@ -241,6 +250,7 @@ export class PlayController {
   tap(x: number, y: number): void {
     const ray = this.deps.rayAt(x, y);
     if (!ray) return;
+    this.deps.events.emit('play:tapped', { ray });
     if (this.activeTool === 'feed') {
       const hit = pickPlaneY(ray.origin, ray.dir, this.deps.max.y);
       const { min, max } = this.deps;
@@ -259,6 +269,10 @@ export class PlayController {
     }
     if (this.activeTool === 'net') {
       this.deps.netTap?.(ray);
+      return;
+    }
+    if (this.activeTool === 'trim') {
+      this.deps.events.emit('plant:picked', { pick: this.deps.pickPlant?.(ray) ?? null });
       return;
     }
     if (this.activeTool === 'tap') this.tapGlass(ray);
@@ -546,6 +560,7 @@ export class PlayController {
 
   /** Drops the food and returns how many particles went in; 0 when it was refused. */
   private feed(food: FoodType, portion: number, at: Vec3 | null): number {
+    if (this.feedLocked && at !== null) return 0;
     const { gate, events, food: field, min, max } = this.deps;
     const fedAt = this.deps.now();
     const decision = gate.tryFeed(fedAt);

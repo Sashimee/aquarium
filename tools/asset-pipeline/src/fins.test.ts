@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CAUDAL_SCALE_FOLD, CAUDAL_SCALE_MIN, scaleCaudal, type FinResult } from './fins.ts';
+import {
+  CAUDAL_SCALE_FOLD,
+  CAUDAL_SCALE_MIN,
+  scaleBody,
+  scaleCaudal,
+  type FinResult,
+} from './fins.ts';
 import { FIN_IDS } from './index-schema.ts';
 import { FISH_RECIPES } from './recipes.ts';
 
@@ -133,5 +139,17 @@ describe('scaleCaudal', () => {
       const { positions, normals, fins } = strip();
       expect(() => scaleCaudal(positions, normals, fins, scale, id), id).not.toThrow();
     }
+  });
+});
+
+describe('scaleBody', () => {
+  it('scales width and depth and keeps normals unit length and perpendicular to a squashed surface', () => {
+    const positions = new Float32Array([1, 1, 3]);
+    const normals = new Float32Array([Math.SQRT1_2, Math.SQRT1_2, 0]);
+    scaleBody(positions, normals, { width: 0.5, depth: 0.25 });
+    expect([...positions]).toEqual([0.5, 0.25, 3]);
+    expect(Math.hypot(...normals)).toBeCloseTo(1);
+    const [nx = 0, ny = 0] = normals;
+    expect(ny / nx).toBeCloseTo(2);
   });
 });

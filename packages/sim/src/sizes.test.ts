@@ -21,6 +21,7 @@ interface FishModel {
   kind: string;
   species: string;
   tlOverSl: number;
+  standardLengthM: number;
 }
 
 function fishModels(): Map<string, FishModel> {
@@ -40,7 +41,13 @@ function fishModels(): Map<string, FishModel> {
     if (a.kind === 'shrimp' || a.kind === 'snail' || a.kind === 'crab') {
       if (a.species === undefined)
         throw new Error(`assets/index.json: ${a.kind} "${a.id}" lacks species`);
-      out.set(a.id, { id: a.id, kind: a.kind, species: a.species, tlOverSl: 1 });
+      out.set(a.id, {
+        id: a.id,
+        kind: a.kind,
+        species: a.species,
+        tlOverSl: 1,
+        standardLengthM: 0,
+      });
       continue;
     }
     if (a.kind !== 'fish') continue;
@@ -53,6 +60,7 @@ function fishModels(): Map<string, FishModel> {
       kind: a.kind,
       species: a.species,
       tlOverSl: tl / a.fish.standardLengthM,
+      standardLengthM: a.fish.standardLengthM,
     });
   }
   return out;
@@ -65,6 +73,61 @@ function fishModels(): Map<string, FishModel> {
  */
 const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number; source: string }> =
   {
+    'altolamprologus-calvus': {
+      model: 'altolamprologus-calvus',
+      maxSlM: 0.135 / 1.231,
+      maxTlM: 0.135,
+      source:
+        'FishBase: 13.5 cm TL (Ref. 5598); FishBase has no length-length relationship, so TL = ' +
+        '1.231 SL, the proportion of the lofted model',
+    },
+    'aulonocara-baenschi': {
+      model: 'aulonocara-baenschi-female',
+      maxSlM: (0.13 * 0.75) / 1.2725,
+      maxTlM: 0.13 * 0.75,
+      source:
+        'Female model. FishBase v25.04 has no female maximum (LengthFemale is empty), only 13 cm TL ' +
+        'male/unsexed (Ref. 4975). Seriously Fish gives males 120 mm SL and females 90 mm SL, so the ' +
+        "female is taken as 0.75 of the FishBase male: 9.75 cm TL. TL = 1.2725 SL is FishBase's " +
+        'length-length relationship measured on a male picture; applying it to the female is an ' +
+        'assumption. The male model is sized in MALE_MODEL_SIZES.',
+    },
+    'labidochromis-caeruleus': {
+      model: 'labidochromis-caeruleus',
+      maxSlM: 0.081,
+      maxTlM: 0.081 * 1.2085,
+      source: 'FishBase: 8.1 cm SL (Ref. 5653); TL = 1.2085 SL',
+    },
+    'melanochromis-auratus': {
+      model: 'melanochromis-auratus-female',
+      maxSlM: 0.11 / 1.23,
+      maxTlM: 0.11,
+      source:
+        'FishBase: 11 cm TL (Ref. 5663); FishBase has no length-length relationship, so TL = ' +
+        '1.23 SL, the proportion of the lofted model',
+    },
+    'neolamprologus-brichardi': {
+      model: 'neolamprologus-brichardi',
+      maxSlM: 0.09 / 1.3199,
+      maxTlM: 0.09,
+      source: 'FishBase: 9 cm TL (Ref. 5667); TL = 1.3199 SL',
+    },
+    'neolamprologus-multifasciatus': {
+      model: 'neolamprologus-multifasciatus',
+      maxSlM: 0.04 / 1.25,
+      maxTlM: 0.04,
+      source:
+        'FishBase: 4 cm TL (Ref. 5667); FishBase has no length-length relationship, so TL = 1.25 SL ' +
+        'is an assumption for cichlids',
+    },
+    'pseudotropheus-demasoni': {
+      model: 'pseudotropheus-demasoni',
+      maxSlM: 0.063,
+      maxTlM: 0.063 * 1.215,
+      source:
+        'FishBase (as Chindongo demasoni): 6.3 cm SL (Ref. 40900); FishBase has no length-length ' +
+        'relationship, so TL = 1.215 SL, the proportion of the lofted model',
+    },
     angelfish: {
       model: 'angelfish',
       maxSlM: 0.15 / 1.304,
@@ -112,6 +175,16 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       source:
         'FishBase: 13.7 cm SL; no length-length relationship was looked up, so TL = 1.2 SL is an ' +
         'assumption (the model draws 1.201)',
+    },
+    'figure-8-puffer': {
+      model: 'figure-8-puffer',
+      maxSlM: 0.08 / 1.21,
+      maxTlM: 0.08,
+      source:
+        'FishBase (as Dichotomyctere ocellatus, of which Tetraodon biocellatus is a junior ' +
+        'synonym): 8 cm TL (Ref. 12693); FishBase has no length-length relationship, so TL = 1.21 ' +
+        'SL, the proportion of the lofted model. Seriously Fish gives 80 mm SL; FishBase is kept ' +
+        'as the measured record, and both exceed the 6-7 cm hobby size in docs/assets/catalog.md',
     },
     firefish: {
       model: 'firefish',
@@ -199,7 +272,142 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxTlM: 0.2,
       source: 'FishBase: 20 cm TL (Ref. 9710); TL = 1.163 SL',
     },
+    'banded-archerfish': {
+      model: 'banded-archerfish',
+      maxSlM: 0.3 * 0.8595,
+      maxTlM: 0.3,
+      source: 'FishBase (Toxotes jaculatrix): 30 cm TL (Ref. 4833); SL = 0.8595 TL',
+    },
+    'barred-mudskipper': {
+      model: 'barred-mudskipper',
+      maxSlM: 0.19 * 0.8241,
+      maxTlM: 0.19,
+      source: 'FishBase (Periophthalmus argentilineatus): 19 cm TL (Ref. 4756); SL = 0.8241 TL',
+    },
+    'blue-spotted-mudskipper': {
+      model: 'blue-spotted-mudskipper',
+      maxSlM: 0.22 / 1.1773,
+      maxTlM: 0.22,
+      source:
+        'FishBase (Boleophthalmus pectinirostris): female 22 cm, male 17.5 cm TL (Ref. 125930); the ' +
+        'female length type is blank, so it is read as TL like the male; TL = 1.1773 SL',
+    },
+    'bumblebee-goby': {
+      model: 'bumblebee-goby',
+      maxSlM: 0.042 / 1.2338,
+      maxTlM: 0.042,
+      source:
+        'FishBase (Brachygobius doriae, the species of the reference photos): 4.2 cm TL (Ref. 7050); ' +
+        'TL = 1.2338 SL',
+    },
+    'orange-chromide': {
+      model: 'orange-chromide',
+      maxSlM: 0.095 / 1.2321,
+      maxTlM: 0.095,
+      source: 'FishBase (as Pseudetroplus maculatus): 9.5 cm TL (Ref. 115177); TL = 1.2321 SL',
+    },
+    'silver-mono': {
+      model: 'silver-mono',
+      maxSlM: 0.27,
+      maxTlM: 0.27 * 1.3455,
+      source:
+        'FishBase (Monodactylus argenteus): 27 cm SL (Ref. 44894); TL = 1.3455 SL, from two fish of ' +
+        '9.1 to 11.8 cm TL (FishBase also lists an older photo estimate, SL = 0.8131 TL)',
+    },
+    'apistogramma-hongsloi': {
+      model: 'apistogramma-hongsloi',
+      maxSlM: 0.034,
+      maxTlM: 0.034 * 1.231,
+      source:
+        'Female model. FishBase: 3.4 cm SL is the male/unsexed maximum (Ref. 36377, the original ' +
+        'description), used here for the smaller female because it matches the catalog 4 cm TL ' +
+        'female and Seriously Fish (females 40-45 mm); the 5.0 cm female field in FishBase has no ' +
+        'length type and is not used. FishBase has no length-length relationship, so TL = 1.231 SL, ' +
+        'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
+    },
+    'cardinal-tetra': {
+      model: 'cardinal-tetra',
+      maxSlM: 0.04 / 1.1708,
+      maxTlM: 0.04,
+      source:
+        'FishBase: 2.51 cm SL (Ref. 38376) is the wild-caught record; the larger aquarium adult is ' +
+        'used instead: Seriously Fish, 35 mm SL, about 4.1 cm TL, rounded to the catalog 4 cm TL; ' +
+        'TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
+    },
+    'dwarf-pencilfish': {
+      model: 'dwarf-pencilfish',
+      maxSlM: 0.035 / 1.2,
+      maxTlM: 0.035,
+      source:
+        'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
+        'so TL = 1.2 SL, the proportion of the lofted model',
+    },
+    'rummy-nose-tetra': {
+      model: 'rummy-nose-tetra',
+      maxSlM: 0.036,
+      maxTlM: 0.036 * 1.2506,
+      source:
+        'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
+    },
   };
+
+/**
+ * Species whose models the asset pipeline builds before their content/species file lands, with the
+ * same sourced maxima. An entry moves to ADULT_MAX in the PR that adds the species file; until then
+ * a built model is checked against the literature TL/SL. Model ids that are not built yet are
+ * planned ones.
+ */
+const AWAITING_CONTENT: Record<
+  string,
+  { model: string; maxSlM: number; maxTlM: number; source: string }
+> = {
+  'black-phantom-tetra': {
+    model: 'black-phantom-tetra',
+    maxSlM: 0.036,
+    maxTlM: 0.036 * 1.25,
+    source:
+      'Seriously Fish (listed as Megalamphodus megalopterus; accepted name Hyphessobrycon ' +
+      'megalopterus): 30-36 mm standard length. No FishBase ' +
+      'length-length relationship was checked, so TL = 1.25 SL, a typical characin proportion ' +
+      'with a forked caudal; it is an assumption, not a literature value.',
+  },
+};
+
+/**
+ * Models males wear instead of the species model, keyed by model with the species they draw
+ * (apps/web/src/fish/profiles.ts sizes them by their profile's length factor).
+ */
+const MALE_MODELS: Readonly<Record<string, string>> = {
+  'apistogramma-hongsloi-male': 'apistogramma-hongsloi',
+  'aulonocara-baenschi': 'aulonocara-baenschi',
+  'dwarf-pencilfish-male': 'dwarf-pencilfish',
+  'guppy-male': 'guppy',
+  'melanochromis-auratus-male': 'melanochromis-auratus',
+};
+
+/**
+ * Standard length each male model is built at, with the literature maximum it stands for. Checked
+ * against the built asset, so a resized male model has to update its source here.
+ */
+const MALE_MODEL_SIZES: Readonly<
+  Record<string, { standardLengthM: number; maxTlM: number; source: string }>
+> = {
+  'apistogramma-hongsloi-male': {
+    standardLengthM: 0.05,
+    maxTlM: 0.065,
+    source:
+      'FishBase: 7.0 cm TL maximum (Ref. 12251); catalog male 6.5 cm TL; Seriously Fish: males ' +
+      '55-60 mm. 5 cm SL x 1.231 draws 6.2 cm TL',
+  },
+  'aulonocara-baenschi': {
+    standardLengthM: 0.1019,
+    maxTlM: 0.13,
+    source:
+      'FishBase: 13 cm TL male/unsexed (Ref. 4975); TL = 1.2725 SL, measured on a male picture. ' +
+      'Built at 1.33 x the 7.66 cm SL female (Seriously Fish: males 120 mm SL, females 90 mm SL): ' +
+      '10.19 cm SL x 1.27 draws 13.0 cm TL',
+  },
+};
 
 /**
  * Models whose own TL/SL draws the species outside the tolerance, with the issue that fixes the
@@ -215,17 +423,73 @@ describe('species sizes are standard lengths', () => {
 
   it('documents an adult maximum for every species and every drawn fish model', () => {
     expect([...species.keys()].sort()).toEqual(Object.keys(ADULT_MAX).sort());
-    const drawn = new Set(Object.values(ADULT_MAX).map((a) => a.model));
+    const drawn = new Set(
+      [...Object.values(ADULT_MAX), ...Object.values(AWAITING_CONTENT)].map((a) => a.model),
+    );
     for (const m of models.values()) {
-      if (drawn.has(m.id)) continue;
-      // ADULT_MAX is keyed by species and the guppy's model is guppy-female; the web puts male
-      // guppies in guppy-male at 0.625 of the species length (apps/web/src/fish/profiles.ts).
-      expect(m.id, `fish model "${m.id}" needs an ADULT_MAX entry`).toBe('guppy-male');
+      if (drawn.has(m.id) || MALE_MODELS[m.id] !== undefined) continue;
+      expect.fail(`fish model "${m.id}" needs an ADULT_MAX or AWAITING_CONTENT entry`);
     }
     for (const [id, adult] of Object.entries(ADULT_MAX)) {
       expect(models.get(adult.model)?.species, id).toBe(id);
     }
   });
+
+  it('draws every male model as a documented species', () => {
+    for (const [model, id] of Object.entries(MALE_MODELS)) {
+      expect(
+        ADULT_MAX[id] ?? AWAITING_CONTENT[id],
+        `${model} draws undocumented "${id}"`,
+      ).toBeDefined();
+      const built = models.get(model);
+      if (built !== undefined) expect(built.species, model).toBe(id);
+    }
+  });
+
+  it('sizes only male models listed in MALE_MODELS', () => {
+    for (const model of Object.keys(MALE_MODEL_SIZES)) {
+      expect(
+        MALE_MODELS[model],
+        `MALE_MODEL_SIZES "${model}" has no MALE_MODELS entry`,
+      ).toBeDefined();
+    }
+  });
+
+  it.each(Object.entries(MALE_MODEL_SIZES))(
+    '%s: a built male model is drawn at its documented adult TL',
+    (model, size) => {
+      const built = models.get(model);
+      if (built === undefined) return;
+      expect(built.standardLengthM, size.source).toBeCloseTo(size.standardLengthM, 4);
+      expect(
+        Math.abs((built.standardLengthM * built.tlOverSl) / size.maxTlM - 1),
+        size.source,
+      ).toBeLessThan(TOLERANCE);
+    },
+  );
+
+  it('keeps a species awaiting content out of ADULT_MAX until its file lands', () => {
+    for (const id of Object.keys(AWAITING_CONTENT)) {
+      expect(species.has(id), `${id} has content: move it from AWAITING_CONTENT to ADULT_MAX`).toBe(
+        false,
+      );
+      expect(ADULT_MAX[id], id).toBeUndefined();
+    }
+  });
+
+  it.each(Object.entries(AWAITING_CONTENT))(
+    '%s: a built model awaiting content has the literature TL/SL',
+    (id, adult) => {
+      expect(adult.maxSlM, adult.source).toBeLessThan(adult.maxTlM);
+      const model = models.get(adult.model);
+      if (model === undefined) return;
+      expect(model.species, adult.model).toBe(id);
+      expect(
+        Math.abs((adult.maxSlM * model.tlOverSl) / adult.maxTlM - 1),
+        adult.source,
+      ).toBeLessThan(TOLERANCE);
+    },
+  );
 
   it.each(Object.entries(ADULT_MAX))('%s: maxSizeM is the literature maximum SL', (id, adult) => {
     const lifecycle = species.get(id)?.lifecycle;

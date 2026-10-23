@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
-import { backgroundFileSchema } from '@aquarium/shared';
+import { backgroundFileSchema, type RoomEntry } from '@aquarium/shared';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { speciesLengthM } from './fish.ts';
 import { readKtx2Info } from './textures.ts';
+import { BLACKWATER_FISH_RECIPES } from './blackwater-fish.ts';
+import { LOFT_FISH_RECIPES } from './loft-fish.ts';
 import { FISH_RECIPES } from './recipes.ts';
 import { shrimpLength } from './shrimp.ts';
 import {
@@ -14,6 +16,8 @@ import {
   type ContentBackground,
 } from './backgrounds.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
+import { roomHdriIds, loadRooms } from './room.ts';
+import { roomProblems } from './room-budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
@@ -52,11 +56,19 @@ export interface CheckInput {
   repoRoot: string;
   content?: Pick<BudgetInput, 'presets' | 'speciesBiome' | 'hdri'>;
   backgrounds?: ContentBackground[];
+  rooms?: RoomEntry[];
 }
 
 export function readGlbJson(buffer: Uint8Array): {
   meshes?: { primitives: { attributes: Record<string, number> }[] }[];
   images?: { uri?: string }[];
+  textures?: {
+    sampler?: number;
+    source?: number;
+    extensions?: { KHR_texture_basisu?: { source?: number } };
+  }[];
+  samplers?: { magFilter?: number; minFilter?: number; wrapS?: number; wrapT?: number }[];
+  materials?: Record<string, unknown>[];
   accessors?: {
     bufferView?: number;
     byteOffset?: number;
@@ -254,7 +266,127 @@ function mouthProblems(
     problems.push(`${at}: ${MOUTH_ATTRIBUTE} is 0 on every vertex; the mouth mask was not baked`);
 }
 
-function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
+export interface GlbDocument {
+  file: string;
+  json: ReturnType<typeof readGlbJson>;
+}
+
+const SRGB_SLOTS = new Set([
+  'baseColorTexture',
+  'emissiveTexture',
+  'sheenColorTexture',
+  'specularColorTexture',
+]);
+
+function textureSlots(value: unknown, slot: string, out: [number, string][]): void {
+  if (Array.isArray(value)) return;
+  if (typeof value !== 'object' || value === null) return;
+  const record = value as Record<string, unknown>;
+  if (typeof record.index === 'number' && slot.endsWith('Texture')) out.push([record.index, slot]);
+  for (const [key, child] of Object.entries(record)) textureSlots(child, key, out);
+}
+
+const GL_REPEAT = 10497;
+const GL_LINEAR = 9729;
+const GL_LINEAR_MIPMAP_LINEAR = 9987;
+
+function samplerKey(json: GlbDocument['json'], textureIndex: number): string {
+  const texture = json.textures?.[textureIndex];
+  const sampler = texture?.sampler === undefined ? undefined : json.samplers?.[texture.sampler];
+  const wrapS = sampler?.wrapS ?? GL_REPEAT;
+  const wrapT = sampler?.wrapT ?? GL_REPEAT;
+  return `wrapS=${wrapS} wrapT=${wrapT} mag=${sampler?.magFilter ?? GL_LINEAR} min=${sampler?.minFilter ?? GL_LINEAR_MIPMAP_LINEAR}`;
+}
+
+function conflictingPairs<T extends { derived: boolean }>(
+  list: readonly T[],
+  keyOf: (use: T) => string,
+): [T, T][] {
+  const groups = new Map<string, T[]>();
+  for (const use of list) {
+    const key = keyOf(use);
+    const group = groups.get(key) ?? [];
+    group.push(use);
+    groups.set(key, group);
+  }
+  const all = [...groups.values()];
+  const pairs: [T, T][] = [];
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const pair = firstDirectPair(all[i] ?? [], all[j] ?? []);
+      if (pair) pairs.push(pair);
+    }
+  }
+  return pairs;
+}
+
+function firstDirectPair<T extends { derived: boolean }>(
+  left: readonly T[],
+  right: readonly T[],
+): [T, T] | undefined {
+  const [leftFirst, rightFirst] = [left[0], right[0]];
+  if (!leftFirst || !rightFirst) return undefined;
+  const direct = left.find((use) => !use.derived);
+  if (direct) return [direct, rightFirst];
+  const rightDirect = right.find((use) => !use.derived);
+  return rightDirect ? [leftFirst, rightDirect] : undefined;
+}
+
+export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
+  interface Use {
+    file: string;
+    sampler: string;
+    colour: 'sRGB' | 'linear';
+    derived: boolean;
+  }
+  const uses = new Map<string, Use[]>();
+  for (const { file, json } of glbs) {
+    const slots: [number, string][] = [];
+    for (const material of json.materials ?? []) textureSlots(material, '', slots);
+    for (const [textureIndex, slot] of slots) {
+      const texture = json.textures?.[textureIndex];
+      const source = texture?.extensions?.KHR_texture_basisu?.source ?? texture?.source;
+      const uri = source === undefined ? undefined : json.images?.[source]?.uri;
+      if (uri === undefined || !uri.endsWith('.ktx2')) continue;
+      const target = posix.join(posix.dirname(file), safeDecodeUri(uri));
+      const base = {
+        file,
+        sampler: samplerKey(json, textureIndex),
+        colour: SRGB_SLOTS.has(slot) ? ('sRGB' as const) : ('linear' as const),
+      };
+      const twin = target.replace(/_1k\.ktx2$/, '_2k.ktx2');
+      const keys: [string, boolean][] = [[target, false]];
+      if (twin !== target) keys.push([twin, true]);
+      for (const [key, derived] of keys) {
+        const list = uses.get(key) ?? [];
+        list.push({ ...base, derived });
+        uses.set(key, list);
+      }
+    }
+  }
+  const problems: string[] = [];
+  for (const [uri, list] of [...uses].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    for (const [first, other] of conflictingPairs(list, (use) => use.colour)) {
+      problems.push(
+        `${uri} is read as ${first.colour} by ${first.file} but as ${other.colour} by ${other.file}; the web loader caches one texture per URL, so give each colour role its own file`,
+      );
+    }
+    for (const [first, other] of conflictingPairs(list, (use) => use.sampler)) {
+      problems.push(
+        `${uri} has sampler (${first.sampler}) in ${first.file} but (${other.sampler}) in ${other.file}; the web loader caches one texture per URL, so make the samplers match`,
+      );
+    }
+  }
+  return [...new Set(problems)];
+}
+
+function lodProblems(
+  asset: OutputAsset,
+  assetsDir: string,
+  shipped: ReadonlyMap<string, string>,
+  problems: string[],
+  glbs: GlbDocument[],
+): void {
   const at = `${asset.kind} ${asset.id}`;
   const owned = new Set(asset.files.map((f) => f.file));
   if (asset.lods.length !== LOD_COUNT) {
@@ -275,14 +407,15 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
     try {
       const bytes = readFileSync(path);
       const json = readGlbJson(bytes);
+      glbs.push({ file: lod.file, json });
       const primitives = (json.meshes ?? []).flatMap((m) => m.primitives);
       if (primitives.length === 0) problems.push(`${at}: ${lod.file} has no mesh primitives`);
       for (const image of json.images ?? []) {
         if (image.uri === undefined) continue;
         const target = posix.join(posix.dirname(lod.file), safeDecodeUri(image.uri));
-        if (!owned.has(target)) {
+        if (!owned.has(target) && !shipped.has(target)) {
           problems.push(
-            `${at}: ${lod.file} references ${image.uri}, which is not in the asset's files (embedded data: URIs are not allowed either)`,
+            `${at}: ${lod.file} references ${image.uri}, which is not in the asset's files or any other asset's (embedded data: URIs are not allowed either)`,
           );
         }
       }
@@ -321,7 +454,10 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
     }
     return;
   }
-  const lengthFactor = FISH_RECIPES.find((r) => r.id === asset.id)?.lengthFactor ?? 1;
+  const lengthFactor =
+    [...FISH_RECIPES, ...LOFT_FISH_RECIPES, ...BLACKWATER_FISH_RECIPES].find(
+      (r) => r.id === asset.id,
+    )?.lengthFactor ?? 1;
   const expectedLength = speciesLength * lengthFactor;
   if (asset.fish.lengthSource !== 'species-json') {
     problems.push(
@@ -535,6 +671,88 @@ function snailProblems(asset: OutputAsset, repoRoot: string, problems: string[])
   }
 }
 
+function sharedVariantPair(asset: OutputAsset, a: string, b: string): boolean {
+  return asset.textures.some((t) => {
+    const files = [t.variants['1k'].file, t.variants['2k'].file];
+    return files.includes(a) && files.includes(b);
+  });
+}
+
+export function duplicateTextureProblems(assets: readonly OutputAsset[]): string[] {
+  const first = new Map<string, { file: string; asset: string }>();
+  const problems: string[] = [];
+  for (const asset of assets)
+    for (const file of asset.files) {
+      if (!file.file.includes('/textures/') || !file.file.endsWith('.ktx2')) continue;
+      const key = `${asset.kind}/${asset.id}`;
+      const earlier = first.get(file.sha256);
+      if (earlier === undefined) first.set(file.sha256, { file: file.file, asset: key });
+      else if (earlier.file !== file.file && !sharedVariantPair(asset, earlier.file, file.file))
+        problems.push(
+          earlier.asset === key
+            ? `${file.file} is byte-identical to ${earlier.file} in the same asset; bind both materials to one texture`
+            : `${file.file} is byte-identical to ${earlier.file}; reference the existing texture instead of shipping a copy`,
+        );
+    }
+  return problems;
+}
+
+export function borrowedTextureProblems(assets: readonly OutputAsset[]): string[] {
+  const owner = new Map<string, OutputAsset>();
+  for (const asset of assets) for (const file of asset.files) owner.set(file.file, asset);
+  const problems: string[] = [];
+  for (const asset of assets) {
+    const own = new Set(asset.files.map((f) => f.file));
+    const reported = new Set<string>();
+    for (const texture of asset.textures)
+      for (const variant of [texture.variants['1k'], texture.variants['2k']]) {
+        const from = owner.get(variant.file);
+        if (own.has(variant.file) || from === undefined || from === asset) continue;
+        const missing = from.sources.filter((source) => !asset.sources.includes(source));
+        if (missing.length === 0 || reported.has(variant.file)) continue;
+        reported.add(variant.file);
+        problems.push(
+          `${asset.kind}/${asset.id}: borrows ${variant.file} from ${from.kind}/${from.id} but does not list its source ${missing.join(', ')} (the borrower inherits the owner's licence and credit)`,
+        );
+      }
+  }
+  return problems;
+}
+
+export function intraAssetDuplicateTextureProblems(assets: readonly OutputAsset[]): string[] {
+  const problems: string[] = [];
+  for (const asset of assets)
+    for (const texture of asset.textures) {
+      const { '1k': small, '2k': large } = texture.variants;
+      if (small.file !== large.file && small.sha256 === large.sha256)
+        problems.push(
+          `${asset.kind}/${asset.id}: ${large.file} is byte-identical to ${small.file}; point the 2k variant at the 1k file instead of shipping a copy`,
+        );
+    }
+  return problems;
+}
+
+export function unreferencedHdriProblems(
+  assets: readonly OutputAsset[],
+  loaded: BudgetInput['hdri'],
+  roomHdris: ReadonlySet<string> = new Set(),
+): string[] {
+  return assets
+    .filter((a) => a.kind === 'hdri' && a.id !== loaded.id && !roomHdris.has(a.id))
+    .map(
+      (a) =>
+        `asset hdri/${a.id}: apps/web never loads it (DEFAULT_HDRI_URL is hdri/${loaded.id}); remove its recipe or wire it to a use`,
+    );
+}
+
+export function glbDrawCalls(assetsDir: string, file: string): number {
+  const path = join(assetsDir, file);
+  if (!existsSync(path))
+    throw new Error(`room model ${path} is missing; run pnpm build:assets or fix the index entry`);
+  const json = readGlbJson(new Uint8Array(readFileSync(path)));
+  return (json.meshes ?? []).reduce((sum, m) => sum + m.primitives.length, 0);
+}
+
 export function checkAssets(input: CheckInput): string[] {
   const { manifest, credits, index, assetsDir, repoRoot } = input;
   const problems = validateManifest(manifest, credits);
@@ -542,6 +760,13 @@ export function checkAssets(input: CheckInput): string[] {
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
 
   const listed = new Map<string, string>();
+  const shipped = new Map(
+    index.assets.flatMap((a) => a.files.map((f) => [f.file, f.sha256] as const)),
+  );
+  problems.push(...duplicateTextureProblems(index.assets));
+  problems.push(...intraAssetDuplicateTextureProblems(index.assets));
+  problems.push(...borrowedTextureProblems(index.assets));
+  const glbs: GlbDocument[] = [];
   let audioBytes = 0;
   const seenAssets = new Set<string>();
   for (const asset of index.assets) {
@@ -549,7 +774,8 @@ export function checkAssets(input: CheckInput): string[] {
     if (seenAssets.has(key)) problems.push(`index lists ${key} twice`);
     seenAssets.add(key);
     effectiveLicenceProblems(asset, byId, problems);
-    if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, problems);
+    if (!TEXTURE_ONLY_KINDS.includes(asset.kind))
+      lodProblems(asset, assetsDir, shipped, problems, glbs);
     if (asset.kind === 'fish') {
       fishProblems(asset, repoRoot, problems);
       impostorProblems(asset, assetsDir, problems);
@@ -599,9 +825,17 @@ export function checkAssets(input: CheckInput): string[] {
     ];
     const owned = new Set(asset.files.map((f) => f.file));
     for (const file of referenced) {
-      if (!owned.has(file)) problems.push(`${key}: ${file} is referenced but not in files[]`);
+      if (!owned.has(file) && !shipped.has(file))
+        problems.push(`${key}: ${file} is referenced but not in files[]`);
+    }
+    for (const variant of asset.textures.flatMap((t) => [t.variants['1k'], t.variants['2k']])) {
+      const sha = shipped.get(variant.file);
+      if (!owned.has(variant.file) && sha !== undefined && sha !== variant.sha256)
+        problems.push(`${key}: ${variant.file} differs from the copy listed by its owner`);
     }
   }
+
+  problems.push(...sharedKtx2Problems(glbs));
 
   let total = 0;
   let assetBytes = 0;
@@ -639,7 +873,25 @@ export function checkAssets(input: CheckInput): string[] {
   if (input.backgrounds) {
     problems.push(...backgroundContentProblems(input.backgrounds, builtBackgrounds));
   }
-  if (input.content) problems.push(...budgetProblems({ index, ...input.content }));
+  if (input.content) {
+    problems.push(
+      ...unreferencedHdriProblems(
+        index.assets,
+        input.content.hdri,
+        new Set(roomHdriIds(input.rooms ?? [])),
+      ),
+    );
+    problems.push(...budgetProblems({ index, ...input.content }));
+  }
+  if (input.rooms) {
+    problems.push(
+      ...roomProblems(input.rooms, {
+        manifestIds: new Set(manifest.assets.map((a) => a.id)),
+        index,
+        drawCallsOf: (file) => glbDrawCalls(assetsDir, file),
+      }),
+    );
+  }
   return problems;
 }
 
@@ -670,5 +922,6 @@ export function loadCheckInput(repoRoot: string): CheckInput {
     repoRoot,
     content: loadBudgetContent(repoRoot),
     backgrounds,
+    rooms: loadRooms(repoRoot),
   };
 }

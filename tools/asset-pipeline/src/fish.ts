@@ -18,6 +18,7 @@ import {
   finDebugColors,
   medianX,
   orient,
+  scaleBody,
   scaleCaudal,
   type Axes,
   type FinHints,
@@ -42,6 +43,7 @@ import { spotImage, tintImage, type SpotSpec, type TintSpec } from './finish.ts'
 import { renderSheet } from './raster.ts';
 import { bleedIslandEdges } from './island-bleed.ts';
 import { worldSpotImage, type WorldSpotSpec } from './world-spots.ts';
+import { paintScanTexture, type ScanPaintSpec } from './scan-paint.ts';
 import { bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 
 export const FISH_LOD_PLAN: LodPlan = { ratios: [1, 0.4, 0.15], minTriangles: 150 };
@@ -68,6 +70,8 @@ export interface FishRecipe {
   /** Covers the eye beads fused into the body mesh with smooth, dark, glossy spheres on a material of their own. */
   glossyEyes?: GlossyEyeSpec;
   roughness?: number;
+  /** For flat-coloured sources: projects UVs from the side and paints the colour map from the species pattern, fins by id. */
+  paint?: ScanPaintSpec;
   /** Recolours the source's base colour by luminance, then paints spots on it. */
   recolour?: {
     tint: TintSpec;
@@ -151,6 +155,13 @@ export function normaliseFish(input: NormaliseInput): Part[] {
       part.positions[i] = part.positions[i]! - xShift;
   }
 
+  if (input.hints?.bodyScale) {
+    if (attachments.length > 0)
+      throw new Error(
+        `${input.recipeId ?? 'normaliseFish'}: bodyScale does not move eyes or other attachments, so they would float off the scaled body; drop bodyScale or the attachments.`,
+      );
+    scaleBody(merged.positions, merged.normals, input.hints.bodyScale);
+  }
   const fins = classifyFins(merged.positions, merged.indices, input.hints);
   if (input.hints?.caudalScale !== undefined)
     scaleCaudal(merged.positions, merged.normals, fins, input.hints.caudalScale, input.recipeId);
@@ -284,6 +295,16 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     recipe.skinPose ?? 'bind',
   );
 
+  if (recipe.paint) {
+    const clashing = (['eyes', 'bristles', 'glossyEyes', 'recolour'] as const).filter(
+      (option) => recipe[option] !== undefined,
+    );
+    if (clashing.length > 0)
+      throw new Error(
+        `${recipe.id}: paint cannot combine with ${clashing.join(', ')}; the paint step merges every part into one, which would drop their per-LOD detail. Remove ${clashing.join(', ')} from the recipe.`,
+      );
+  }
+
   const sourceMaterials = doc
     .getRoot()
     .listMaterials()
@@ -355,13 +376,22 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     recipeId: recipe.id,
   });
 
+  let finalParts = normalised;
+  let finalMaterials = materialDefs;
+  if (recipe.paint) {
+    const merged = mergeParts(normalised, normalised[0]!.material);
+    const base = materialDefs.find((m) => m.name === merged.material)!;
+    finalMaterials = [paintScanTexture([merged], base, recipe.paint)];
+    finalParts = [weldPart(merged)];
+  }
+
   const debugRender = await writeDebugRender(
     ctx.repoRoot,
     recipe.id,
-    normalised.filter((p) => !p.lods || p.lods.includes(0)),
-    materials,
+    finalParts.filter((p) => !p.lods || p.lods.includes(0)),
+    finalMaterials,
   );
-  const built = buildDocument(recipe.id, normalised, materialDefs);
+  const built = buildDocument(recipe.id, finalParts, finalMaterials);
   return emitAsset({
     outRoot: ctx.outRoot,
     kind: 'fish',
@@ -378,7 +408,9 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
         'merged meshes, dropped skeleton, animation and unused attributes',
         'oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length',
         'baked fin mask, fin id and mouth mask vertex attributes',
-        'colour and normal maps re-encoded to KTX2 at 1k and 2k',
+        recipe.paint
+          ? 'painted colour map encoded to KTX2'
+          : 'colour and normal maps re-encoded to KTX2 at 1k and 2k',
         ...(recipe.modifications ?? []),
       ],
       fish: fishInfo(

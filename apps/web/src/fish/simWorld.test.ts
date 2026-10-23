@@ -55,6 +55,49 @@ function anchorsOf(spec: SimWorldSpec, roster: TankRoster): unknown {
   return spec.config(roster.swimming())?.anchors;
 }
 
+describe('SimWorldSpec banks', () => {
+  const top = DEMO.config.space.height - DEMO.config.space.freeboard;
+  const bank: SceneAnchor = {
+    id: 'bank-1',
+    kind: 'bank',
+    position: [0.1, top + 0.08, 0.02],
+    radius: 0.007,
+  };
+  const banksOf = (spec: SimWorldSpec, roster: TankRoster): unknown[] =>
+    (spec.config(roster.swimming())?.anchors ?? []).filter((a) => a.kind === 'bank');
+
+  it('reaches a world started after the scene loaded', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([ANEMONE, bank]);
+    expect(banksOf(spec, roster)).toEqual([
+      { id: 'bank-1', kind: 'bank', position: [0.1, top + 0.08, 0.02], radius: 0.007 },
+    ]);
+  });
+
+  it('follows the decor when it moves', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([bank]);
+    const moved: SceneAnchor = { ...bank, position: [-0.2, top + 0.08, 0.1] };
+    const sent = spec.setAnchors([moved]);
+    expect(sent.map((a) => a.position)).toEqual([[-0.2, top + 0.08, 0.1]]);
+    expect(banksOf(spec, roster)).toHaveLength(1);
+  });
+
+  it('is gone with its decor', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([ANEMONE, bank]);
+    const sent = spec.setAnchors([ANEMONE]);
+    expect(sent.some((a) => a.kind === 'bank')).toBe(false);
+    expect(banksOf(spec, roster)).toEqual([]);
+  });
+
+  it('sends none for a scene without a bank', () => {
+    const { spec, roster } = setup();
+    spec.setAnchors([ANEMONE]);
+    expect(banksOf(spec, roster)).toEqual([]);
+  });
+});
+
 describe('SimWorldSpec', () => {
   it('starts a world without homes until the scene sends them', () => {
     const { spec, roster } = setup();
@@ -248,6 +291,62 @@ describe('SimWorldSpec', () => {
     const world = new World(config);
     expect(() => world.addFish({ id: 'tang', species: 'blue-tang' })).not.toThrow();
     expect(world.fishIds).toEqual([roster.simIdOf(FISH_1), 'tang']);
+  });
+
+  describe('a cave whose mouth the decor blocks', () => {
+    const CAVE: SceneAnchor = {
+      id: 'cave-1',
+      kind: 'cave',
+      position: [-0.1, 0.12, 0.05],
+      radius: 0.03,
+      facing: [0, 0, 1],
+    };
+    const onMouth = (x: number): Collider => ({
+      id: 'decor:boulder.0',
+      kind: 'sphere',
+      hard: true,
+      center: [x, 0.12, 0.05],
+      radius: 0.04,
+    });
+    const ids = (anchors: readonly { id: string }[] | null | undefined) =>
+      anchors?.map((a) => a.id);
+
+    it('is left out of the homes until the rock is moved off it', () => {
+      const { spec, roster } = setup();
+      spec.setAnchors([ANEMONE, CAVE]);
+      expect(ids(spec.config(roster.swimming())?.anchors)).toEqual(['anemone-1', 'cave-1']);
+
+      expect(ids(spec.setDecor([ROCK, onMouth(-0.1)]))).toEqual(['anemone-1']);
+      expect(ids(spec.config(roster.swimming())?.anchors)).toEqual(['anemone-1']);
+
+      expect(ids(spec.setDecor([ROCK, onMouth(0.2)]))).toEqual(['anemone-1', 'cave-1']);
+      expect(ids(spec.config(roster.swimming())?.anchors)).toEqual(['anemone-1', 'cave-1']);
+    });
+
+    it('is checked against the latest decor when the scene moves its caves', () => {
+      const { spec } = setup();
+      spec.setDecor([onMouth(0.2)]);
+      expect(ids(spec.setAnchors([CAVE]))).toEqual(['cave-1']);
+      expect(ids(spec.setAnchors([{ ...CAVE, position: [0.2, 0.12, 0.05] }]))).toEqual([]);
+    });
+
+    it('keeps the homes, so fish keep their caves, while decor moves without blocking one', () => {
+      const { spec } = setup();
+      const homes = spec.setAnchors([ANEMONE, CAVE]);
+      expect(spec.setDecor([ROCK])).toBeNull();
+      expect(spec.setDecor([{ ...ROCK, center: [0.25, 0.15, 0] }])).toBeNull();
+      expect(spec.anchors).toBe(homes);
+
+      spec.setDecor([onMouth(-0.1)]);
+      expect(spec.setDecor([onMouth(-0.1), ROCK])).toBeNull();
+    });
+
+    it('is not blocked by a soft plant over its mouth', () => {
+      const { spec } = setup();
+      spec.setAnchors([CAVE]);
+      expect(spec.setDecor([{ ...onMouth(-0.1), hard: false }])).toBeNull();
+      expect(ids(spec.anchors)).toEqual(['cave-1']);
+    });
   });
 
   it('names the colliders and homes that changed while a world was starting', () => {
@@ -632,6 +731,21 @@ describe('startWorld', () => {
     };
     expect(await run(0)).toEqual([['visitor', { recentVisitDays: 0 }]]);
     expect(await run(null)).toEqual([]);
+  });
+
+  it('leaves the visit days untaken for a world dropped before init answered', async () => {
+    const { spec, roster } = setup();
+    const { sim, calls } = recorder();
+    const visitDays = vi.fn(() => 3);
+    await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
+      current: () => false,
+      light: () => 1,
+      stage: () => undefined,
+      visitDays,
+      begin: () => calls.push(['begin']),
+    });
+    expect(visitDays).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
   });
 
   it('passes on a failed init without starting anything', async () => {

@@ -1,17 +1,22 @@
 import {
   PRIVACY_POLICY,
+  containsBlockedWord,
   dataExportSchema,
   deleteAccountRequestSchema,
   type Credits,
 } from '@aquarium/shared';
-import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
+import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
+import { storedFishSchema } from './gifts.ts';
+import { createReauthenticator } from './reauth.ts';
 import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
+import { describeProviderError, type PaymentProvider } from './payments/provider.ts';
 
 export interface LegalLimits {
   export: Limit;
@@ -22,8 +27,6 @@ export const DEFAULT_LEGAL_LIMITS: LegalLimits = {
   export: { max: 5, windowMs: 60 * 60_000 },
   deleteAttempt: { max: 5, windowMs: 15 * 60_000 },
 };
-
-export const FRESH_SESSION_MS = 5 * 60_000;
 
 interface CurrentSession {
   user: { id: string; email: string };
@@ -38,11 +41,14 @@ export interface LegalDeps {
   limiter: RateLimiter;
   limits: LegalLimits;
   currentSession: (req: FastifyRequest) => Promise<CurrentSession | null>;
+  payments?: PaymentProvider | null;
+  clock: Clock;
 }
 
 export function registerLegalRoutes(deps: LegalDeps): void {
   const { app, database, auth, credits, limiter, limits } = deps;
   const { db } = database;
+  const reauthenticate = createReauthenticator(database, auth);
 
   const unauthenticated = (reply: FastifyReply) =>
     reply.code(401).send(apiError('unauthenticated', 'Sign in required.'));
@@ -84,8 +90,10 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       auditRows,
       collectionRows,
       awardRows,
+      communityFeedRows,
       [walletRow],
       ledgerRows,
+      ownedRoomRows,
     ] = await Promise.all([
       db
         .select({
@@ -188,13 +196,85 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .from(schema.achievementAwards)
         .where(eq(schema.achievementAwards.userId, userId))
         .orderBy(asc(schema.achievementAwards.earnedAt)),
+      db
+        .select({
+          fedAt: schema.communityFeeds.fedAt,
+          food: schema.communityFeeds.food,
+          portion: schema.communityFeeds.portion,
+        })
+        .from(schema.communityFeeds)
+        .where(eq(schema.communityFeeds.userId, userId))
+        .orderBy(asc(schema.communityFeeds.fedAt)),
       db.select().from(schema.wallet).where(eq(schema.wallet.userId, userId)),
       db
         .select()
         .from(schema.ledger)
         .where(eq(schema.ledger.userId, userId))
         .orderBy(asc(schema.ledger.createdAt), asc(schema.ledger.id)),
+      db
+        .select({ roomId: schema.ownedRooms.roomId, purchasedAt: schema.ownedRooms.purchasedAt })
+        .from(schema.ownedRooms)
+        .where(eq(schema.ownedRooms.userId, userId))
+        .orderBy(asc(schema.ownedRooms.purchasedAt), asc(schema.ownedRooms.roomId)),
     ]);
+
+    // One snapshot for all payment tables, so a refund landing mid-export cannot show up without
+    // its charge.
+    const { adultRows, chargeRows, refundRows, disputeRows, clubRows } = await db.transaction(
+      async (tx) => {
+        const adultRows = await tx
+          .select({
+            confirmedAt: schema.adultConfirmations.confirmedAt,
+            withdrawnAt: schema.adultConfirmations.withdrawnAt,
+          })
+          .from(schema.adultConfirmations)
+          .where(eq(schema.adultConfirmations.userId, userId))
+          .orderBy(asc(schema.adultConfirmations.confirmedAt), asc(schema.adultConfirmations.id));
+        const chargeRows = await tx
+          .select({
+            id: schema.paymentCharges.id,
+            kind: schema.paymentCharges.kind,
+            amountCents: schema.paymentCharges.amountCents,
+            packId: schema.paymentCharges.packId,
+            packPearls: schema.paymentCharges.packPearls,
+            subscriptionId: schema.paymentCharges.subscriptionId,
+            periodStart: schema.paymentCharges.periodStart,
+            periodEnd: schema.paymentCharges.periodEnd,
+            consentAt: schema.paymentCharges.consentAt,
+            createdAt: schema.paymentCharges.createdAt,
+          })
+          .from(schema.paymentCharges)
+          .where(eq(schema.paymentCharges.userId, userId))
+          .orderBy(asc(schema.paymentCharges.createdAt), asc(schema.paymentCharges.id));
+        const chargeIds = chargeRows.map((c) => c.id);
+        const refundRows =
+          chargeIds.length === 0
+            ? []
+            : await tx
+                .select()
+                .from(schema.paymentRefunds)
+                .where(inArray(schema.paymentRefunds.chargeId, chargeIds))
+                .orderBy(asc(schema.paymentRefunds.createdAt), asc(schema.paymentRefunds.refundId));
+        const disputeRows =
+          chargeIds.length === 0
+            ? []
+            : await tx
+                .select()
+                .from(schema.paymentDisputes)
+                .where(inArray(schema.paymentDisputes.chargeId, chargeIds))
+                .orderBy(
+                  asc(schema.paymentDisputes.updatedAt),
+                  asc(schema.paymentDisputes.disputeId),
+                );
+        const clubRows = await tx
+          .select()
+          .from(schema.clubSubscriptions)
+          .where(eq(schema.clubSubscriptions.userId, userId))
+          .orderBy(asc(schema.clubSubscriptions.createdAt), asc(schema.clubSubscriptions.id));
+        return { adultRows, chargeRows, refundRows, disputeRows, clubRows };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
 
     const perTank = await Promise.all(
       tanks.map(async (tank) => {
@@ -230,6 +310,61 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         };
       }),
     );
+
+    const offerRows = await db
+      .select()
+      .from(schema.giftOffers)
+      .where(or(eq(schema.giftOffers.fromUserId, userId), eq(schema.giftOffers.toUserId, userId)))
+      .orderBy(asc(schema.giftOffers.createdAt), asc(schema.giftOffers.id));
+    const counterpartIds = offerRows.flatMap((o) => {
+      const other = o.fromUserId === userId ? o.toUserId : o.fromUserId;
+      return other === null ? [] : [other];
+    });
+    const handles = new Map<string, string | null>();
+    if (counterpartIds.length > 0) {
+      for (const u of await db
+        .select({ id: schema.user.id, handle: schema.user.handle })
+        .from(schema.user)
+        .where(inArray(schema.user.id, counterpartIds))) {
+        handles.set(u.id, u.handle);
+      }
+    }
+    const giftOffers = offerRows.flatMap((o) => {
+      const sent = o.fromUserId === userId;
+      const other = sent ? o.toUserId : o.fromUserId;
+      const parsed = storedFishSchema.safeParse(o.fish);
+      if (!parsed.success) {
+        app.log.error(
+          { offerId: o.id },
+          'gift offer left out of an export, its fish is unreadable',
+        );
+        return [];
+      }
+      const stored = parsed.data;
+      return [
+        {
+          id: o.id,
+          status: o.status,
+          wantsReturn: o.wantsReturn,
+          pledgedFishId: o.pledgedFishId,
+          createdAt: o.createdAt,
+          expiresAt: o.expiresAt,
+          settledAt: o.settledAt,
+          role: sent ? 'sender' : 'recipient',
+          counterpart: other === null ? null : (handles.get(other) ?? null),
+          fish: sent
+            ? stored
+            : {
+                id: stored.id,
+                species: stored.species,
+                name: containsBlockedWord(stored.name) ? stored.species : stored.name,
+                sex: stored.sex,
+                stage: stored.stage,
+                size: stored.size,
+              },
+        },
+      ];
+    });
 
     const body = dataExportSchema.parse(
       JSON.parse(
@@ -269,9 +404,19 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             ...rest,
             tank: tankName === null || !visible ? null : publicName(tankName),
           })),
+          communityFeeds: communityFeedRows,
           collection: { entries: collectionRows, achievements: awardRows },
           wallet: { balance: walletRow?.balance ?? 0, ledger: ledgerRows },
+          payments: {
+            adultConfirmations: adultRows,
+            charges: chargeRows,
+            refunds: refundRows,
+            disputes: disputeRows,
+            clubSubscriptions: clubRows,
+          },
+          ownedRooms: ownedRoomRows,
           tanks: perTank,
+          giftOffers,
         }),
       ),
     );
@@ -288,25 +433,16 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const { password } = deleteAccountRequestSchema.parse(req.body);
     const userId = current.user.id;
 
-    const wait = limiter.consume(`delete:${userId}`, limits.deleteAttempt);
+    const wait = limiter.consume(`reauth:${userId}`, limits.deleteAttempt);
     if (wait > 0) return tooMany(reply, wait);
 
-    const [credential] = await db
-      .select({ password: schema.account.password })
-      .from(schema.account)
-      .where(and(eq(schema.account.userId, userId), eq(schema.account.providerId, 'credential')));
-
-    if (credential?.password) {
-      const ctx = await auth.$context;
-      const valid =
-        password !== undefined &&
-        (await ctx.password.verify({ hash: credential.password, password }));
-      if (!valid) {
-        return reply
-          .code(403)
-          .send(apiError('forbidden', 'Password confirmation is required and must be correct.'));
-      }
-    } else if (Date.now() - current.session.createdAt.getTime() > FRESH_SESSION_MS) {
+    const proof = await reauthenticate(current, password);
+    if (proof === 'wrong_password') {
+      return reply
+        .code(403)
+        .send(apiError('forbidden', 'Password confirmation is required and must be correct.'));
+    }
+    if (proof === 'stale_session') {
       return reply
         .code(403)
         .send(
@@ -314,7 +450,66 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         );
     }
 
-    await db.transaction(async (tx) => {
+    // A subscription left running would keep billing an account that no longer exists, so a failed
+    // cancel, or payments being switched off while one still runs, stops the deletion.
+    const candidates = await db
+      .select({
+        id: schema.clubSubscriptions.id,
+        status: schema.clubSubscriptions.status,
+        createdAt: schema.clubSubscriptions.createdAt,
+      })
+      .from(schema.clubSubscriptions)
+      .where(
+        and(
+          eq(schema.clubSubscriptions.userId, userId),
+          inArray(schema.clubSubscriptions.status, [
+            'active',
+            'past_due',
+            'unpaid',
+            'trialing',
+            'incomplete',
+          ]),
+        ),
+      );
+    // Stripe expires an unpaid checkout subscription after 24 h, but with payments off the webhook
+    // that would record it never arrives, so an old incomplete row must not block deletion forever.
+    const running = candidates.filter(
+      (row) =>
+        Boolean(deps.payments) ||
+        row.status !== 'incomplete' ||
+        deps.clock.now() - row.createdAt.getTime() < 24 * 3_600_000,
+    );
+    if (running.length > 0) {
+      if (!deps.payments) {
+        app.log.error('account deletion refused: a subscription runs but payments are off');
+        return reply
+          .code(503)
+          .send(
+            apiError(
+              'payments_disabled',
+              'Your subscription cannot be cancelled while payments are unavailable, so nothing was deleted. Try again later.',
+            ),
+          );
+      }
+      try {
+        for (const { id } of running) await deps.payments.cancelSubscriptionNow(id);
+      } catch (error) {
+        app.log.error(
+          describeProviderError(error),
+          'subscription could not be cancelled for account deletion',
+        );
+        return reply
+          .code(502)
+          .send(
+            apiError(
+              'internal',
+              'Your subscription could not be cancelled with the payment provider, so nothing was deleted. Try again in a minute.',
+            ),
+          );
+      }
+    }
+
+    const orphaned = await db.transaction(async (tx) => {
       await tx
         .delete(schema.verification)
         .where(
@@ -345,8 +540,26 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       await tx
         .delete(schema.ledger)
         .where(and(eq(schema.ledger.userId, userId), eq(schema.ledger.source, 'game')));
+      const received = await tx
+        .select({ id: schema.giftOffers.id })
+        .from(schema.giftOffers)
+        .where(
+          and(
+            eq(schema.giftOffers.toUserId, userId),
+            inArray(schema.giftOffers.status, ['open', 'countered']),
+          ),
+        );
       await tx.delete(schema.user).where(eq(schema.user.id, userId));
+      return received.map((o) => o.id);
     });
+
+    // The deleted user's open gift offers lost their recipient; settle them now as declined so the
+    // fish are back with their senders. The sweeper retries anything this misses.
+    try {
+      await app.settleGiftOffers(orphaned);
+    } catch (error) {
+      app.log.error({ err: error }, 'gift offers of a deleted account were not settled');
+    }
 
     const { authCookies } = await auth.$context;
     const expired = (name: string, attributes: Record<string, unknown>) => {

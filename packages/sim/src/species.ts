@@ -1,4 +1,10 @@
-import { traitSchema, WALKER_SWIMMING_MODES, type Species } from '@aquarium/shared';
+import {
+  activitySchema,
+  traitSchema,
+  WALKER_SWIMMING_MODES,
+  type Activity,
+  type Species,
+} from '@aquarium/shared';
 import { BEHAVIOUR } from './behaviour.ts';
 import { FOOD_TYPES } from './food.ts';
 import { DEG } from './math.ts';
@@ -71,12 +77,13 @@ export const FLIP_PEAK_OVER_MEAN = Math.PI / 2;
 const SWIMMER_TRAITS: readonly Trait[] = [
   'shoal',
   'air-gulp',
+  'amphibious',
   'glass-grazer',
   'rock-grazer',
   'anemone-host',
   'flare-display',
 ];
-const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer', 'cleaner'];
+const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer'];
 
 export interface SimSpecies {
   readonly id: string;
@@ -100,10 +107,16 @@ export interface SimSpecies {
   readonly territorial: boolean;
   readonly boldness: number;
   readonly curiosity: number;
+  /** When it is awake; a nocturnal fish rests while the lamp is on. */
+  readonly activity: Activity;
   readonly home: HomeKind;
   readonly airGulp: boolean;
+  /** Hauls out onto an emergent bank when the tank has one (`bank.ts`). */
+  readonly amphibious: boolean;
   readonly grazer: 'glass' | 'rock' | 'none';
   readonly flare: boolean;
+  /** A cleaner fish holding a cleaning station (`cleaning.ts`); walkers that clean are not. */
+  readonly cleaner: boolean;
   /** Turns its belly towards the nearest surface when close to it (cave ceilings, glass). */
   readonly bellyToSurface: boolean;
   /** Preference weight per `FOOD_TYPES` index, 1 for the first diet entry and 0 off the diet. */
@@ -166,14 +179,20 @@ function parseTraits(id: string, traits: readonly string[]): ReadonlySet<Trait> 
 /**
  * Rejects a trait whose behaviour `Behaviour.planDefault` never reaches on this gait, so that it
  * cannot be ignored silently. The branch order there is: forage gait, then glass grazing, then a
- * home (anchor or station), then free swimming. A `cave-dweller` is not listed: every gait
- * shelters in its cave at rest and after a startle.
+ * home (anchor or station), then free swimming. A forager that grazes glass forages while food
+ * lies settled and grazes otherwise, so `glass-grazer` works on every gait; with `air-gulp` too it
+ * gulps only while it forages, never from the glass. A `cave-dweller` is
+ * not listed: every gait shelters in its cave at rest and after a startle.
  */
 function requireReachable(id: string, traits: ReadonlySet<Trait>, gait: Gait): void {
   const forager = gait === 'forage';
   const rules: [Trait, boolean, string][] = [
     ['air-gulp', forager, 'gait "forage", the only gait that starts a gulp'],
-    ['glass-grazer', !forager, 'a gait other than "forage", whose bottom foraging comes first'],
+    [
+      'amphibious',
+      traits.has('air-gulp'),
+      'trait "air-gulp": only an air-breather leaves the water',
+    ],
     [
       'anemone-host',
       !forager && !traits.has('glass-grazer'),
@@ -378,15 +397,28 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     territorial: behaviour.territorial,
     boldness: behaviour.boldness,
     curiosity: behaviour.curiosity,
+    activity: parseActivity(id, behaviour.activity),
     home,
     airGulp: traits.has('air-gulp'),
+    amphibious: traits.has('amphibious'),
     grazer: traits.has('glass-grazer') ? 'glass' : traits.has('rock-grazer') ? 'rock' : 'none',
     flare: traits.has('flare-display'),
+    cleaner: traits.has('cleaner') && walking === null,
     bellyToSurface: traits.has('glass-grazer') || traits.has('cave-dweller'),
     foodPreference: parseDiet(id, input.lifecycle.diet),
     ...parseTraitParams(id, behaviour, traits, loco.gait, home, walking !== null),
     walking,
   };
+}
+
+function parseActivity(id: string, activity: Activity | undefined): Activity {
+  if (activity === undefined) return 'diurnal';
+  if (!activitySchema.options.includes(activity)) {
+    throw new RangeError(
+      `species "${id}": behaviour.activity must be one of ${activitySchema.options.join(', ')}, got ${String(activity)}`,
+    );
+  }
+  return activity;
 }
 
 function parseWalking(

@@ -33,8 +33,13 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      stripe-mock:
+        image: stripe/stripe-mock:v0.206.0
+        ports:
+          - 12111:12111
     env:
       DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+      STRIPE_MOCK_URL: http://localhost:12111
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -72,6 +77,62 @@ jobs:
       - run: pnpm run --if-present assets:check
       - name: CI helper scripts
         run: node --test '.github/scripts/*.test.mjs'
+
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
+    defaults:
+      run:
+        shell: bash
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: aquarium
+          POSTGRES_PASSWORD: aquarium
+          POSTGRES_DB: aquarium_test
+        options: >-
+          --health-cmd "pg_isready -U aquarium"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      stripe-mock:
+        image: stripe/stripe-mock:v0.206.0
+    env:
+      DATABASE_URL: postgres://aquarium:aquarium@postgres:5432/aquarium_test
+      STRIPE_MOCK_URL: http://stripe-mock:12111
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        timeout-minutes: 12
+      - name: Container image matches the locked Playwright version
+        run: |
+          version=$(pnpm exec playwright --version | awk '{print $2}')
+          test "$version" = "1.63.0" || { echo "::error::Playwright is $version but the smoke container image is v1.63.0; update container: in ci.yml"; exit 1; }
+      - run: pnpm build
+        timeout-minutes: 12
+      - name: Start the e2e server on the built web app
+        timeout-minutes: 3
+        run: |
+          node e2e/build-server.mjs
+          node --enable-source-maps apps/api/dist/e2e-server.js > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:4317/api/health && break
+            sleep 1
+          done
+          curl -fsS http://localhost:4317/api/health || { cat server.log; exit 1; }
+      - name: Load the app signed out and signed in, failing on runtime errors
+        timeout-minutes: 8
+        run: pnpm smoke
+      - name: Server log
+        if: ${{ failure() }}
+        run: cat server.log
 
   # e2e runs only on demand (`gh workflow run ci.yml --ref dev`), once before a release (Alex, 2026-10-19).
   e2e-shard:
@@ -147,8 +208,13 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      stripe-mock:
+        image: stripe/stripe-mock:v0.206.0
+        ports:
+          - 12111:12111
     env:
       DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+      STRIPE_MOCK_URL: http://localhost:12111
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

@@ -8,8 +8,24 @@ export const biomeSchema = z.enum(['freshwater', 'reef', 'cichlid', 'blackwater'
 export type Biome = z.infer<typeof biomeSchema>;
 
 // Biomes a player can start a tank in. A biome joins when its preset, species and backgrounds ship.
-export const playableBiomeSchema = z.enum(['freshwater', 'reef']);
+export const playableBiomeSchema = z.enum([
+  'freshwater',
+  'reef',
+  'cichlid',
+  'blackwater',
+  'mangrove',
+]);
 export type PlayableBiome = z.infer<typeof playableBiomeSchema>;
+
+// Biomes a new tank can be created in. A biome joins when its species content ships.
+export const creatableBiomeSchema = z.enum([
+  'freshwater',
+  'reef',
+  'cichlid',
+  'blackwater',
+  'mangrove',
+]);
+export type CreatableBiome = z.infer<typeof creatableBiomeSchema>;
 
 export const isPlayableBiome = (biome: Biome): biome is PlayableBiome =>
   playableBiomeSchema.safeParse(biome).success;
@@ -28,6 +44,10 @@ export const decorItemSchema = z.strictObject({
     .default(0),
   scale: z.number().min(0.01).max(10).default(1),
   tintSeed: z.number().int().min(0).max(0xffffffff).optional().describe('stable colour seed'),
+  perch: z
+    .boolean()
+    .optional()
+    .describe('a bank asset that stands clear of the water as the tank perch'),
 });
 export type DecorItem = z.infer<typeof decorItemSchema>;
 

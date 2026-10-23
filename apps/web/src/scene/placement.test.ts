@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { PlantPatch } from '@aquarium/shared';
-import { GLASS_SHRINK_FLOOR, mulberry32, scaleForRoom, scatterPatch } from './placement';
+import {
+  GLASS_SHRINK_FLOOR,
+  mulberry32,
+  openGround,
+  openShare,
+  scaleForRoom,
+  scatterPatch,
+} from './placement';
 
 const patch: PlantPatch = {
   id: 'p',
@@ -160,5 +167,44 @@ describe('scatterPatch side glass', () => {
       expect(p.scale).toBeCloseTo(GLASS_SHRINK_FLOOR, 10);
       expect(Math.abs(p.x) + reach(p.scale)).toBeLessThanOrEqual(side.halfLength + 1e-9);
     }
+  });
+});
+
+describe('openGround', () => {
+  const wall = (x: number, z: number) => !(x > 0.05 && z < 0.05);
+
+  it('measures the share of a disc whose ground is free', () => {
+    expect(openShare(0, 0, 0.02, () => true)).toBe(1);
+    expect(openShare(0, 0, 0.02, () => false)).toBe(0);
+    expect(openShare(0.3, 0, 0.01, (x) => x < 0.3)).toBeGreaterThan(0.3);
+    expect(openShare(0.3, 0, 0.01, (x) => x < 0.3)).toBeLessThan(0.7);
+  });
+
+  it('leaves a disc that is at least half open where it is', () => {
+    expect(openGround([0.06, 0.2], 0.02, 0.3, 0.3, (x) => x < 0.06)).toEqual([0.06, 0.2]);
+  });
+
+  it('moves a smothered disc to open ground on its own side, no shallower than it was', () => {
+    const [x, z] = openGround([0.1, 0.02], 0.02, 0.3, 0.3, wall);
+    expect(wall(x, z)).toBe(true);
+    expect(openShare(x, z, 0.02, wall)).toBeGreaterThanOrEqual(0.85);
+    expect(x).toBeGreaterThanOrEqual(0);
+    expect(z).toBeGreaterThanOrEqual(0.02);
+  });
+
+  it('takes the nearest open spot rather than the first', () => {
+    const [x, z] = openGround([0.1, 0.02], 0.02, 0.3, 0.3, wall);
+    expect(Math.hypot(x - 0.1, z - 0.02)).toBeLessThan(0.1);
+  });
+
+  it('keeps a back patch at the back', () => {
+    const [, z] = openGround([0.1, -0.02], 0.02, 0.3, 0.3, (x, zz) => !(x > 0.05 && zz > -0.05));
+    expect(z).toBeLessThanOrEqual(-0.02);
+  });
+
+  it('settles for the most open spot when none is clear', () => {
+    const mostlyBlocked = (x: number) => x < 0.04;
+    const [x] = openGround([0.1, 0.02], 0.01, 0.3, 0.3, mostlyBlocked);
+    expect(x).toBeLessThanOrEqual(0.04);
   });
 });

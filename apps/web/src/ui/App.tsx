@@ -1,6 +1,16 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useAuth, useBridge, usePhotoView, useRedirect, useRoute } from './context';
 import { Dock } from './Dock';
+import { ErrorBoundary } from './ErrorBoundary';
 import {
   AccountPanel,
   AvatarButton,
@@ -9,10 +19,12 @@ import {
   PearlBalance,
   CollectionButton,
   StatusCard,
+  DayNightButton,
   TankButton,
   TankTypeSwitch,
 } from './Hud';
 import { BirthStatus, LifeStatus } from './LifeStatus';
+import { panelLoaders } from './panelLoaders';
 import { LoadingScreen } from './LoadingScreen';
 import { PhotoLayer, PhotoTools } from './PhotoControls';
 import { usePanels, type OpenPanel, type Panel } from './panels';
@@ -21,6 +33,8 @@ import { navigate } from './router';
 import { Sheet } from './Sheet';
 import { SoundButton } from './SoundSetting';
 import { useSessionState } from './session';
+import { ShowPacksContext, useShowPacks } from './spend';
+import { useShopAfterCheckout } from './useShopAfterCheckout';
 import {
   CreditsScreen,
   NotFoundScreen,
@@ -67,7 +81,15 @@ function Screen() {
       return <CreditsScreen />;
     case 'not-found':
       return <NotFoundScreen />;
+    case 'gallery':
+      return (
+        <Suspense fallback={null}>
+          <GalleryScreen />
+        </Suspense>
+      );
     case 'public-tank':
+    case 'gallery-tank':
+    case 'community':
       return null;
   }
 }
@@ -79,10 +101,15 @@ const ResetPasswordScreen = lazy(() =>
   import('./PasswordReset').then((m) => ({ default: m.ResetPasswordScreen })),
 );
 
+const GalleryTankView = lazy(() =>
+  import('./PublicTank').then((m) => ({ default: m.GalleryTankView })),
+);
+const CommunityView = lazy(() => import('./Community').then((m) => ({ default: m.CommunityView })));
+const GalleryScreen = lazy(() => import('./Gallery').then((m) => ({ default: m.GalleryScreen })));
 const PublicTankView = lazy(() =>
   import('./PublicTank').then((m) => ({ default: m.PublicTankView })),
 );
-const DecorBody = lazy(() => import('./DecorPanel'));
+const DecorBody = lazy(() => panelLoaders.decor());
 const TankReportBody = lazy(() => import('./TankReport'));
 const TanksPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TanksPanel })));
 const ShopPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.ShopPanel })));
@@ -99,9 +126,11 @@ const PANEL_TITLE: Record<OpenPanel, { label: string; title: string }> = {
   account: { label: 'Account menu', title: 'Account' },
 };
 
-const CollectionBook = lazy(() => import('./CollectionBook'));
+const CollectionBook = lazy(() => panelLoaders.book());
 
 const LifeDialogsView = lazy(() => import('./LifeDialogs'));
+
+const TrimDialog = lazy(() => panelLoaders.trim());
 
 function LifeDialogs({ onReview }: { onReview(): void }) {
   const state = useSessionState();
@@ -119,12 +148,14 @@ function PanelBody({
   food,
   onFood,
   onCollection,
+  onShop,
 }: {
   panel: OpenPanel;
   newTank: ReturnType<typeof usePanels>['newTank'];
   food: ReturnType<typeof useFood>[0];
   onFood: ReturnType<typeof useFood>[1];
   onCollection(): void;
+  onShop(): void;
 }) {
   switch (panel) {
     case 'feed':
@@ -136,7 +167,7 @@ function PanelBody({
     case 'shop':
       return <ShopPanel />;
     case 'care':
-      return <CarePanel />;
+      return <CarePanel onShop={onShop} />;
     case 'tanks':
       return <TanksPanel key={newTank ?? 'default'} newTankBiome={newTank} />;
     case 'report':
@@ -150,14 +181,77 @@ function isOpen(panel: Panel): panel is OpenPanel {
   return panel !== 'none';
 }
 
+const TRIM_HINT_MS = 4500;
+
+export function GuardedTrimDialog({
+  dismissed,
+  onDismiss,
+}: {
+  dismissed: boolean;
+  onDismiss(): void;
+}) {
+  if (dismissed) return null;
+  return (
+    <ErrorBoundary what="the trim tool" scope="app" dismissible onDismiss={onDismiss}>
+      <Suspense fallback={null}>
+        <TrimDialog />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
+export function TrimUnavailableToast({ active }: { active: boolean }) {
+  const { interaction } = useBridge();
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = interaction.on('plant:picked', ({ pick }) => {
+      clearTimeout(timer);
+      if (pick === null) {
+        setShown(false);
+        return;
+      }
+      setShown(true);
+      timer = setTimeout(() => setShown(false), TRIM_HINT_MS);
+    });
+    return () => {
+      off();
+      clearTimeout(timer);
+      setShown(false);
+    };
+  }, [active, interaction]);
+
+  return (
+    <div role="status" aria-live="polite" className="toast-live">
+      {shown && (
+        <p className="toast">The trim tool did not load. Reload the page to trim plants.</p>
+      )}
+    </div>
+  );
+}
+
 export function App() {
   useRedirect();
   const route = useRoute();
-  if (route.name === 'public-tank') return <PublicShell token={route.token} />;
-  return <Shell />;
+  if (route.name === 'public-tank') {
+    return <PublicShell view={<PublicTankView token={route.token} />} />;
+  }
+  if (route.name === 'community') {
+    return <PublicShell view={<CommunityView />} />;
+  }
+  if (route.name === 'gallery-tank') {
+    return <PublicShell view={<GalleryTankView id={route.id} />} />;
+  }
+  return (
+    <ErrorBoundary what="the aquarium" scope="app">
+      <Shell />
+    </ErrorBoundary>
+  );
 }
 
-function PublicShell({ token }: { token: string }) {
+function PublicShell({ view }: { view: ReactNode }) {
   return (
     <div className="shell">
       <a
@@ -170,9 +264,9 @@ function PublicShell({ token }: { token: string }) {
       >
         Skip to the tank
       </a>
-      <Suspense fallback={null}>
-        <PublicTankView token={token} />
-      </Suspense>
+      <ErrorBoundary what="this page" scope="app">
+        <Suspense fallback={null}>{view}</Suspense>
+      </ErrorBoundary>
       <LoadingScreen />
     </div>
   );
@@ -185,7 +279,8 @@ function Shell() {
   const panel: Panel = home ? requested : 'none';
   const [food, setFood] = useFood();
   const [bookOpen, setBookOpen] = useState(false);
-  const { user } = useAuth();
+  const [trimDismissed, setTrimDismissed] = useState(false);
+  const { user, status } = useAuth();
   const { interaction } = useBridge();
   const photoActive = usePhotoView()?.state.active ?? false;
   const shell = useRef<HTMLDivElement>(null);
@@ -215,6 +310,12 @@ function Shell() {
     if (!home && photoActive) interaction.emit('photo:request', { type: 'exit' });
   }, [home, photoActive, interaction]);
 
+  const openShop = useCallback(() => dispatch({ type: 'open', panel: 'shop' }), [dispatch]);
+
+  const showPacks = useShowPacks(openShop);
+
+  useShopAfterCheckout(home, openShop, status === 'ready' && !user);
+
   const startPhoto = () => {
     dispatch({ type: 'close' });
     interaction.emit('photo:request', { type: 'enter' });
@@ -237,90 +338,105 @@ function Shell() {
   };
 
   return (
-    <div className={photoActive ? 'shell photo-on' : 'shell'} ref={shell}>
-      <a
-        className="skip"
-        href="#tank"
-        onClick={(e) => {
-          e.preventDefault();
-          document.getElementById('tank')?.focus();
-        }}
-      >
-        Skip to the tank
-      </a>
-      <div id="photo-chrome" className="chrome">
-        <header className="hud">
-          <div className="hud-left">
-            <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
-            <ChemistryChip open={panel === 'care'} onPress={() => toggle('care')} />
-            <CameraControls />
-          </div>
-          <div className="hud-right">
-            <div className="hud-buttons">
-              {user && <CollectionButton onPress={() => setBookOpen(true)} />}
-              <PearlBalance open={panel === 'shop'} onPress={() => toggle('shop')} />
-              <SoundButton />
-              <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
-              <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
+    <ShowPacksContext.Provider value={showPacks}>
+      <div className={photoActive ? 'shell photo-on' : 'shell'} ref={shell}>
+        <a
+          className="skip"
+          href="#tank"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById('tank')?.focus();
+          }}
+        >
+          Skip to the tank
+        </a>
+        <div id="photo-chrome" className="chrome">
+          <header className="hud">
+            <div className="hud-left">
+              <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
+              <ChemistryChip open={panel === 'care'} onPress={() => toggle('care')} />
+              <CameraControls />
             </div>
-            <TankTypeSwitch
-              onCreate={(biome) => {
-                if (!home) navigate('/');
-                dispatch({ type: 'new-tank', biome });
-              }}
-            />
-          </div>
-        </header>
-        <div className="toasts">
-          <LifeStatus />
-          <BirthStatus />
-          <FeedToast />
-        </div>
-        {isOpen(panel) && (
-          <Sheet
-            key={panel}
-            panel={panel}
-            label={PANEL_TITLE[panel].label}
-            title={PANEL_TITLE[panel].title}
-            closeLabel={panel === 'decor' ? 'Done' : 'Close'}
-            onClose={() => dispatch({ type: 'close' })}
-          >
-            <Suspense
-              fallback={
-                <p className="hint" role="status">
-                  Opening.
-                </p>
-              }
-            >
-              <PanelBody
-                panel={panel}
-                newTank={newTank}
-                food={food}
-                onFood={setFood}
-                onCollection={() => {
-                  dispatch({ type: 'close' });
-                  setBookOpen(true);
+            <div className="hud-right">
+              <div className="hud-buttons">
+                {user && <CollectionButton onPress={() => setBookOpen(true)} />}
+                <PearlBalance open={panel === 'shop'} onPress={() => toggle('shop')} />
+                <SoundButton />
+                <DayNightButton />
+                <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
+                <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
+              </div>
+              <TankTypeSwitch
+                onCreate={(biome) => {
+                  if (!home) navigate('/');
+                  dispatch({ type: 'new-tank', biome });
                 }}
               />
-            </Suspense>
-          </Sheet>
-        )}
-        {bookOpen && (
-          <Suspense fallback={null}>
-            <CollectionBook onClose={() => setBookOpen(false)} />
-          </Suspense>
-        )}
-        <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-        <div className={home ? 'stage' : 'stage modal'}>
-          <Screen />
+            </div>
+          </header>
+          <div className="toasts">
+            <LifeStatus />
+            <BirthStatus />
+            <FeedToast />
+            <TrimUnavailableToast active={trimDismissed} />
+          </div>
+          {isOpen(panel) && (
+            <Sheet
+              key={panel}
+              panel={panel}
+              label={PANEL_TITLE[panel].label}
+              title={PANEL_TITLE[panel].title}
+              closeLabel={panel === 'decor' ? 'Done' : 'Close'}
+              onClose={() => dispatch({ type: 'close' })}
+            >
+              <ErrorBoundary what={`the ${PANEL_TITLE[panel].title} panel`} scope="panel">
+                <Suspense
+                  fallback={
+                    <p className="hint" role="status">
+                      Opening.
+                    </p>
+                  }
+                >
+                  <PanelBody
+                    panel={panel}
+                    newTank={newTank}
+                    food={food}
+                    onFood={setFood}
+                    onShop={openShop}
+                    onCollection={() => {
+                      dispatch({ type: 'close' });
+                      setBookOpen(true);
+                    }}
+                  />
+                </Suspense>
+              </ErrorBoundary>
+            </Sheet>
+          )}
+          {bookOpen && (
+            <ErrorBoundary
+              what="the collection book"
+              scope="app"
+              dismissible
+              onDismiss={() => setBookOpen(false)}
+            >
+              <Suspense fallback={null}>
+                <CollectionBook onClose={() => setBookOpen(false)} />
+              </Suspense>
+            </ErrorBoundary>
+          )}
+          <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
+          <GuardedTrimDialog dismissed={trimDismissed} onDismiss={() => setTrimDismissed(true)} />
+          <div className={home ? 'stage' : 'stage modal'}>
+            <Screen />
+          </div>
+          <div className="dock-wrap" ref={dock}>
+            <Dock panel={panel} onPress={toggle} onPhoto={startPhoto} />
+          </div>
+          <PhotoTools />
         </div>
-        <div className="dock-wrap" ref={dock}>
-          <Dock panel={panel} onPress={toggle} onPhoto={startPhoto} />
-        </div>
-        <PhotoTools />
+        <PhotoLayer />
+        {home && <LoadingScreen />}
       </div>
-      <PhotoLayer />
-      {home && <LoadingScreen />}
-    </div>
+    </ShowPacksContext.Provider>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventBus, type EngineEvents } from './engine/events';
-import { awaitAppModules, awaitTankModules, ROOM_LOAD_FAILED, TANK_LOAD_FAILED } from './tankLoad';
+import { awaitTankModules, TANK_LOAD_FAILED } from './tankLoad';
 
 function recordErrors() {
   const events = new EventBus<EngineEvents>();
@@ -35,36 +35,5 @@ describe('awaitTankModules', () => {
       cause: 'offline',
     });
     expect(errors).toEqual([{ message: 'The tank code failed to load', cause: 'offline' }]);
-  });
-
-  it('names the room when the room import fails', async () => {
-    const { events, errors } = recordErrors();
-    const cause = new TypeError('Failed to fetch dynamically imported module');
-    await expect(awaitTankModules(Promise.reject(cause), events, 'room')).rejects.toThrow(
-      ROOM_LOAD_FAILED,
-    );
-    expect(errors).toEqual([{ message: 'The room code failed to load', cause }]);
-  });
-
-  it('reports one error when both bundles fail to load', async () => {
-    const { events, errors } = recordErrors();
-    const tankCause = new TypeError('tank gone');
-    await expect(
-      awaitAppModules(
-        Promise.reject(tankCause),
-        Promise.reject(new TypeError('room gone')),
-        events,
-      ),
-    ).rejects.toThrow(TANK_LOAD_FAILED);
-    expect(errors).toEqual([{ message: 'The tank code failed to load', cause: tankCause }]);
-  });
-
-  it('reports the room when only the room bundle fails', async () => {
-    const { events, errors } = recordErrors();
-    const cause = new TypeError('room gone');
-    await expect(
-      awaitAppModules(Promise.resolve(1), Promise.reject(cause), events),
-    ).rejects.toThrow(ROOM_LOAD_FAILED);
-    expect(errors).toHaveLength(1);
   });
 });

@@ -42,6 +42,7 @@ export const WAVE_MAKER = {
   stressTauS: 5,
   refugeProbeBodyLengths: 1,
   refugeMinGradient: 0.05,
+  columnSamples: 5,
 } as const;
 
 /** Along the tank's length, the way a powerhead on the left pane pushes. */
@@ -74,24 +75,38 @@ export function waveMakerForTier(
 export function checkWaveMaker(settings: WaveMakerSettings): WaveMakerSettings {
   const { direction, speedMps, mode, periodS } = settings;
   const [dx, dz] = Array.isArray(direction) ? direction : [NaN, NaN];
-  const length = Math.hypot(dx ?? NaN, dz ?? NaN);
-  if (direction.length !== 2 || !Number.isFinite(length) || length === 0) {
+  const length = isNumber(dx) && isNumber(dz) ? Math.hypot(dx, dz) : NaN;
+  if (
+    !Array.isArray(direction) ||
+    direction.length !== 2 ||
+    !Number.isFinite(length) ||
+    length === 0
+  ) {
     throw new RangeError(
       `wave maker direction must be a finite, non-zero [x, z], got ${JSON.stringify(direction)}`,
     );
   }
-  if (!(speedMps >= 0 && speedMps <= WAVE_MAKER.maxSpeedMps)) {
+  if (!(isNumber(speedMps) && speedMps >= 0 && speedMps <= WAVE_MAKER.maxSpeedMps)) {
     throw new RangeError(
-      `wave maker speedMps must be from 0 to ${WAVE_MAKER.maxSpeedMps}, got ${speedMps}`,
+      `wave maker speedMps must be from 0 to ${WAVE_MAKER.maxSpeedMps}, got ${shown(speedMps)}`,
     );
   }
   if (!MODES.includes(mode)) {
     throw new RangeError(`wave maker mode must be one of ${MODES.join(', ')}, got "${mode}"`);
   }
-  if (!(periodS > 0 && Number.isFinite(periodS))) {
-    throw new RangeError(`wave maker periodS must be a positive number, got ${periodS}`);
+  if (!(isNumber(periodS) && periodS > 0 && Number.isFinite(periodS))) {
+    throw new RangeError(`wave maker periodS must be a positive number, got ${shown(periodS)}`);
   }
   return { direction: [(dx ?? 0) / length, (dz ?? 0) / length], speedMps, mode, periodS };
+}
+
+/** Settings cross the worker bridge untyped, and `>=` would let a string like "0" through. */
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number';
+}
+
+function shown(value: unknown): string {
+  return typeof value === 'string' ? JSON.stringify(value) : String(value);
 }
 
 /** The water box the current circulates in, in the frame the samples are taken in. */
@@ -210,8 +225,8 @@ export interface CurrentsHost {
  * The wave maker's effect on each fish: the water velocity where it is, after the shelter of
  * nearby surfaces and of rock upstream; how hard that is for it to hold against; and whether it
  * has had enough and makes for a refuge. Walkers cling to their surface and feel none of it, nor
- * does a fish lying on sand or rock, which holds station by pressing against it (Arnold & Weihs
- * 1978).
+ * does a fish lying on sand or rock or touching the glass, which holds station by pressing
+ * against it (Arnold & Weihs 1978; Geerinckx et al. 2007).
  */
 export class Currents {
   private field: FlowField | null = null;
@@ -364,6 +379,31 @@ export class Currents {
     out[0] = fx * share;
     out[1] = fy * share;
     out[2] = fz * share;
+  }
+
+  /**
+   * Whether fish `i` could hold against the flow, putting in no more than `effort` of its hold
+   * speed, everywhere straight up from (x, y, z) to height `top`. Always true with no wave maker.
+   */
+  holdsColumn(
+    host: CurrentsHost,
+    i: number,
+    x: number,
+    y: number,
+    z: number,
+    top: number,
+    effort: number,
+  ): boolean {
+    const field = this.field;
+    if (field === null) return true;
+    const easy = effort * this.holdSpeed(host, i);
+    const last = WAVE_MAKER.columnSamples - 1;
+    for (let k = 0; k <= last; k++) {
+      if (this.speedAt(host, field, x, y + ((top - y) * k) / last, z, host.time) > easy) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

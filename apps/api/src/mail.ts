@@ -98,8 +98,51 @@ export function reminderMessage(
   return { text, html };
 }
 
+export interface ReceiptDetails {
+  description: string;
+  amountCents: number;
+  pearls: number | null;
+  consentAt: Date | null;
+}
+
+const euros = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+
+export function receiptMessage(receipt: ReceiptDetails): { text: string; html: string } {
+  const lines = [
+    `You bought: ${receipt.description}`,
+    `Paid: ${euros(receipt.amountCents)}, VAT included`,
+    ...(receipt.pearls === null ? [] : [`Pearls added to your balance: ${receipt.pearls}`]),
+    'You asked for immediate delivery and acknowledged that you lose your 14-day right of withdrawal.',
+    ...(receipt.consentAt ? [`Confirmed on: ${receipt.consentAt.toISOString()}`] : []),
+    'Pearls you have not spent are lost when you delete your account.',
+  ];
+  const text = `${lines.join('\n')}\n`;
+  const items = lines.map(
+    (l) => `<p style="font-size:14px;line-height:1.5;margin:0 0 8px">${escapeHtml(l)}</p>`,
+  );
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Your Aquarium receipt</title></head><body style="margin:0;padding:24px;background:#f4f7f9;font-family:Arial,Helvetica,sans-serif;color:#12202b">
+<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px">
+<h1 style="font-size:20px;margin:0 0 16px">Your receipt</h1>
+${items.join('\n')}
+</div></body></html>
+`;
+  return { text, html };
+}
+
+// Each phase is bounded separately, so a stalled send ends within three of these, which must stay
+// under the receipt claim lease in payments/routes.ts.
+export const SMTP_TIMEOUT_MS = 45_000;
+
 export function createSmtpTransport(host: string, port: number): Transporter {
-  return nodemailer.createTransport({ host, port, secure: false });
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: false,
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
+  });
 }
 
 export interface Mailer {
@@ -109,6 +152,8 @@ export interface Mailer {
   sendPasswordReset(to: string, url: string): Promise<void>;
   /** Same limits again, tracked separately. Carries RFC 8058 one-click unsubscribe headers. */
   sendReminder(to: string, appUrl: string, unsubscribeUrl: string): Promise<void>;
+  /** Transactional, so it skips the cooldown and the global cap; only a per-recipient cap applies. */
+  sendReceipt(to: string, receipt: ReceiptDetails): Promise<void>;
   /**
    * Charges one flat per-IP slot per mail-triggering request, whatever the recipient; the mail slot is not charged while the global cap is spent.
    * A separate request counter is always charged first, in the shared store, so an IP cannot outrun its limit during a cap outage.
@@ -302,6 +347,17 @@ export function createMailer(
         to,
         subject: 'Reset your Aquarium password',
         ...passwordResetMessage(url),
+        textEncoding: 'base64',
+      });
+    },
+    // A receipt follows a payment Stripe confirmed, so it is the proof of the consent the buyer gave
+    // and is never throttled: a refused one would leave that proof undelivered.
+    async sendReceipt(to, receipt) {
+      await transport.sendMail({
+        from,
+        to,
+        subject: 'Your Aquarium receipt',
+        ...receiptMessage(receipt),
         textEncoding: 'base64',
       });
     },

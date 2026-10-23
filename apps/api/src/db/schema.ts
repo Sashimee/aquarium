@@ -138,21 +138,24 @@ export const eventKindEnum = pgEnum('event_kind', [
   'sick',
   'water_alert',
   'fish_moved',
+  'salt_dose',
+  'buffer_dose',
+  'add_botanicals',
 ]);
 
 export const tanks = pgTable(
   'tanks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    ownerId: text('owner_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    // null: owned by the system (the community tank), never by an account.
+    ownerId: text('owner_id').references(() => user.id, { onDelete: 'cascade' }),
     biome: biomeEnum('biome').notNull(),
     size: tankSizeEnum('size').notNull().default('standard'),
     quarantine: boolean('quarantine').notNull().default(false),
     shareTokenHash: text('share_token_hash').unique(),
     // A public link is not a gallery listing: this is a second opt-in, honoured only while the link is on.
     inGallery: boolean('in_gallery').notNull().default(false),
+    acceptsGifts: boolean('accepts_gifts').notNull().default(false),
     name: text('name').notNull(),
     // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
     // row, so this is what lets a retry find the tank it already got.
@@ -162,11 +165,24 @@ export const tanks = pgTable(
     // Recent treat requests (key, kind, potency, overdose) so a retry replays instead of dosing again.
     treatKeys: jsonb('treat_keys').notNull().default([]),
     decorLayout: jsonb('decor_layout'),
+    // Growth state of the layout plants and their offsets (storedPlantsSchema), reconciled with the
+    // layout on every tick.
+    plants: jsonb('plants').notNull().default([]),
+    // Recent trim requests (key, plantKey, size) so a retry replays instead of trimming twice.
+    plantTrimKeys: jsonb('plant_trim_keys').notNull().default([]),
+    // State of the layout corals and their fragments (storedCoralsSchema), reconciled with the layout
+    // on every tick.
+    corals: jsonb('corals').notNull().default([]),
+    // Recent frag requests (key, coralKey) so a retry replays instead of cutting twice.
+    coralFragKeys: jsonb('coral_frag_keys').notNull().default([]),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
+    // null: no room, the plain studio.
+    roomId: text('room_id').default('room-living'),
+    roomSetAt: timestamptz('room_set_at'),
     water: jsonb('water')
       .notNull()
-      .default(sql`'{"ammonia":0,"nitrate":0,"algae":0,"uneatenFood":0}'::jsonb`),
+      .default(sql`'{"ammonia":0,"nitrate":0,"algae":0,"uneatenFood":0,"tannin":0}'::jsonb`),
     lastTickAt: timestamptz('last_tick_at').notNull().defaultNow(),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
@@ -180,6 +196,8 @@ export const tanks = pgTable(
       .default(
         sql`'{"filter":{"tier":1},"heater":{"tier":1},"light":{"tier":1,"intensity":0.8,"onHour":8,"offHour":20},"co2":{"tier":0},"waveMaker":{"tier":0}}'::jsonb`,
       ),
+    // The highest CO2 tier this tank has been bought up to; the installed tier can sit below it.
+    co2OwnedTier: integer('co2_owned_tier').notNull().default(0),
   },
   (t) => [
     index('tanks_owner_id_idx').on(t.ownerId),
@@ -453,7 +471,199 @@ export const ledger = pgTable(
       .on(t.userId, t.idempotencyKey)
       .where(sql`${t.source} = 'game'`),
     index('ledger_user_id_created_at_idx').on(t.userId, t.createdAt),
-    check('ledger_delta_nonzero', sql`${t.delta} <> 0`),
+    check('ledger_delta_nonzero', sql`${t.delta} <> 0 or ${t.reason} = 'grant'`),
     check('ledger_game_has_user', sql`${t.source} <> 'game' or ${t.userId} is not null`),
   ],
+);
+
+// One row per paid room an account bought; a purchase unlocks the room for all its tanks. The free
+// rooms are never stored.
+export const ownedRooms = pgTable(
+  'owned_rooms',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    roomId: text('room_id').notNull(),
+    purchasedAt: timestamptz('purchased_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.roomId] })],
+);
+
+export const giftStatusEnum = pgEnum('gift_status', [
+  'open',
+  'countered',
+  'accepted',
+  'declined',
+  'cancelled',
+  'expired',
+]);
+
+// The sender's fish is deleted from the tank and kept here as a snapshot while the offer is open;
+// it is re-inserted with the same id into the sender's tank on a return, or the recipient's on
+// acceptance. to_user_id is SET NULL so deleting the recipient's account leaves the fish findable:
+// the next settle returns it to the sender. A deleted sender takes the offer, and its fish, along.
+export const giftOffers = pgTable(
+  'gift_offers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromUserId: text('from_user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    toUserId: text('to_user_id').references(() => user.id, { onDelete: 'set null' }),
+    fromTankId: uuid('from_tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    status: giftStatusEnum('status').notNull().default('open'),
+    fish: jsonb('fish').notNull(),
+    wantsReturn: boolean('wants_return').notNull().default(false),
+    recipientTankId: uuid('recipient_tank_id'),
+    pledgedFishId: uuid('pledged_fish_id'),
+    creationKey: text('creation_key').notNull(),
+    acceptKey: text('accept_key'),
+    confirmKey: text('confirm_key'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    settledAt: timestamptz('settled_at'),
+  },
+  (t) => [
+    uniqueIndex('gift_offers_creation_key_idx').on(t.fromUserId, t.creationKey),
+    index('gift_offers_from_user_idx').on(t.fromUserId, t.status),
+    index('gift_offers_to_user_idx').on(t.toUserId, t.status),
+    index('gift_offers_from_tank_idx').on(t.fromTankId),
+  ],
+);
+
+// At most one row: the id check pins it. The tank itself is an ordinary tanks row with no owner.
+export const communityTank = pgTable(
+  'community_tank',
+  {
+    id: integer('id').primaryKey().default(1),
+    tankId: uuid('tank_id')
+      .notNull()
+      .unique()
+      .references(() => tanks.id, { onDelete: 'restrict' }),
+  },
+  (t) => [check('community_tank_singleton', sql`${t.id} = 1`)],
+);
+
+// One row per accepted community feed. Cascades with the account, so the quota history is personal
+// data that leaves with it.
+export const communityFeeds = pgTable(
+  'community_feeds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    food: text('food').notNull(),
+    portion: doublePrecision('portion').notNull(),
+    fedAt: timestamptz('fed_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('community_feeds_user_key_idx').on(t.userId, t.idempotencyKey),
+    index('community_feeds_fed_at_idx').on(t.fedAt),
+  ],
+);
+
+// Append-only history: every confirm/withdraw cycle is a row, and at most one row per user is open.
+export const adultConfirmations = pgTable(
+  'adult_confirmations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    confirmedAt: timestamptz('confirmed_at').notNull().defaultNow(),
+    withdrawnAt: timestamptz('withdrawn_at'),
+  },
+  (t) => [
+    index('adult_confirmations_user_idx').on(t.userId, t.confirmedAt),
+    uniqueIndex('adult_confirmations_open_idx')
+      .on(t.userId)
+      .where(sql`${t.withdrawnAt} is null`),
+  ],
+);
+
+export const paymentChargeKindEnum = pgEnum('payment_charge_kind', ['pack', 'invoice']);
+
+// One row per paid Checkout Session (kind pack, id cs_...) or paid subscription invoice (kind
+// invoice, id in_...). SET NULL like the ledger: the accounting record outlives the account. A pack
+// row is written in the same transaction as the credit, so its existence means "credited".
+export const paymentCharges = pgTable(
+  'payment_charges',
+  {
+    id: text('id').primaryKey(),
+    kind: paymentChargeKindEnum('kind').notNull(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    paymentIntentId: text('payment_intent_id'),
+    amountCents: integer('amount_cents').notNull(),
+    packId: text('pack_id'),
+    packPearls: integer('pack_pearls'),
+    subscriptionId: text('subscription_id'),
+    periodStart: timestamptz('period_start'),
+    periodEnd: timestamptz('period_end'),
+    consentAt: timestamptz('consent_at'),
+    receiptPending: boolean('receipt_pending').notNull().default(false),
+    receiptAttempts: integer('receipt_attempts').notNull().default(0),
+    receiptNextTryAt: timestamptz('receipt_next_try_at'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('payment_charges_intent_idx')
+      .on(t.paymentIntentId)
+      .where(sql`${t.paymentIntentId} is not null`),
+    index('payment_charges_subscription_idx').on(t.subscriptionId),
+    check('payment_charges_amount_nonneg', sql`${t.amountCents} >= 0`),
+  ],
+);
+
+// invoice_payment.paid names the PaymentIntent of an invoice, which refunds and disputes later
+// refer to. It can arrive before invoice.paid created the charge row, so there is no foreign key.
+export const paymentIntentLinks = pgTable('payment_intent_links', {
+  paymentIntentId: text('payment_intent_id').primaryKey(),
+  invoiceId: text('invoice_id').notNull(),
+});
+
+export const paymentRefunds = pgTable('payment_refunds', {
+  refundId: text('refund_id').primaryKey(),
+  chargeId: text('charge_id')
+    .notNull()
+    .references(() => paymentCharges.id, { onDelete: 'cascade' }),
+  cents: integer('cents').notNull(),
+  pearls: integer('pearls').notNull(),
+  createdAt: timestamptz('created_at').notNull().defaultNow(),
+});
+
+export const paymentDisputeStateEnum = pgEnum('payment_dispute_state', ['lost', 'won']);
+
+export const paymentDisputes = pgTable('payment_disputes', {
+  disputeId: text('dispute_id').primaryKey(),
+  chargeId: text('charge_id')
+    .notNull()
+    .references(() => paymentCharges.id, { onDelete: 'cascade' }),
+  state: paymentDisputeStateEnum('state').notNull(),
+  cents: integer('cents').notNull(),
+  pearls: integer('pearls').notNull(),
+  updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+});
+
+// paidStart/paidEnd come from the latest paid invoice. Daily Pearls need status active, now inside
+// that window and paidRevoked false (the invoice was refunded in full or its dispute lost).
+export const clubSubscriptions = pgTable(
+  'club_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    status: text('status').notNull(),
+    statusEventAt: timestamptz('status_event_at').notNull().defaultNow(),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+    paidInvoiceId: text('paid_invoice_id'),
+    paidStart: timestamptz('paid_start'),
+    paidEnd: timestamptz('paid_end'),
+    paidRevoked: boolean('paid_revoked').notNull().default(false),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('club_subscriptions_user_idx').on(t.userId)],
 );

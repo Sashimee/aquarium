@@ -1,12 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  BoxGeometry,
+  DirectionalLight,
   getConsoleFunction,
   Group,
   Mesh,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
+  PerspectiveCamera,
   Scene,
   setConsoleFunction,
+  ShadowBaseNode,
   WebGLBackend,
 } from 'three/webgpu';
 import {
@@ -16,13 +20,33 @@ import {
   parsePipelineFailure,
   PipelineFailureHandler,
   type DroppableEffects,
-  usesMaterial,
+  materialUse,
   watchPipelineErrors,
   type FailureContext,
   type PipelineFailure,
   type ShaderLogs,
   type WatchedRenderer,
 } from './pipelineErrors';
+import { createInertRenderer } from './inertRenderer';
+import { TierShadow } from './tierShadow';
+
+/** A lit, shadow-casting box drawn once, and the material three drew its shadow pass with. */
+async function shadowedScene() {
+  const { renderer, renderObjects } = await createInertRenderer();
+  const scene = new Scene();
+  const light = new DirectionalLight();
+  new TierShadow(light, 1024).apply(1024);
+  const mesh = new Mesh(new BoxGeometry(), new MeshStandardNodeMaterial());
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(light, mesh);
+  const camera = new PerspectiveCamera();
+  camera.position.z = 5;
+  renderer.render(scene, camera);
+  const shadowPass = [...renderObjects()].find((r) => r.camera === light.shadow.camera);
+  if (shadowPass === undefined) throw new Error('three drew no shadow pass');
+  return { scene, light, mesh, shadowMaterialId: materialIdOf(shadowPass.material) ?? -1 };
+}
 
 describe('parsePipelineFailure', () => {
   it('reads the material id from a failed render pipeline', () => {
@@ -247,7 +271,7 @@ describe('watchPipelineErrors', () => {
   });
 });
 
-describe('usesMaterial', () => {
+describe('materialUse', () => {
   it('finds a material on a hidden, nested object and in a material array', () => {
     const scene = new Scene();
     const hiddenMaterial = new MeshBasicNodeMaterial();
@@ -258,13 +282,42 @@ describe('usesMaterial', () => {
     group.add(hidden);
     scene.add(group, new Mesh(undefined, [new MeshBasicNodeMaterial(), arrayMaterial]));
 
-    expect(usesMaterial(scene, materialIdOf(hiddenMaterial) ?? -1)).toBe(true);
-    expect(usesMaterial(scene, materialIdOf(arrayMaterial) ?? -1)).toBe(true);
-    expect(usesMaterial(scene, materialIdOf(new MeshBasicNodeMaterial()) ?? -1)).toBe(false);
+    expect(materialUse(scene, materialIdOf(hiddenMaterial) ?? -1)).toBe('object');
+    expect(materialUse(scene, materialIdOf(arrayMaterial) ?? -1)).toBe('object');
+    expect(materialUse(scene, materialIdOf(new MeshBasicNodeMaterial()) ?? -1)).toBeNull();
   });
 
   it('finds nothing in an empty scene', () => {
-    expect(usesMaterial(new Scene(), 0)).toBe(false);
+    expect(materialUse(new Scene(), 0)).toBeNull();
+  });
+
+  it("finds the material three draws a casting light's shadow pass with", async () => {
+    const { scene, light, mesh, shadowMaterialId } = await shadowedScene();
+    expect(shadowMaterialId).not.toBe(materialIdOf(mesh.material));
+    expect(materialUse(scene, shadowMaterialId)).toBe('shadow');
+
+    light.castShadow = false;
+    expect(materialUse(scene, shadowMaterialId)).toBeNull();
+  });
+
+  it('creates no shadow material for a casting light that has not drawn one', () => {
+    const create = vi.spyOn(ShadowBaseNode.prototype, 'getShadowMaterial');
+    const scene = new Scene();
+    const light = new DirectionalLight();
+    new TierShadow(light, 1024).apply(1024);
+    scene.add(light, new Mesh(new BoxGeometry(), new MeshBasicNodeMaterial()));
+
+    expect(light.castShadow).toBe(true);
+    expect(materialUse(scene, 0)).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('forgets the shadow material once three disposes it', async () => {
+    const { scene, light, shadowMaterialId } = await shadowedScene();
+    const node = light.shadow.shadowNode;
+    if (!(node instanceof ShadowBaseNode)) throw new Error('TierShadow set no shadow node');
+    node.disposeShadowMaterial();
+    expect(materialUse(scene, shadowMaterialId)).toBeNull();
   });
 });
 
@@ -329,15 +382,23 @@ describe('PipelineFailureHandler', () => {
     }
   }
 
-  function setup() {
+  /** `rebuilds` is how many scene rebuilds are left to try. */
+  function setup(rebuilds = 0) {
     const effects = new FakeEffects();
     const reports: { message: string; cause: unknown }[] = [];
+    const rebuild = { left: rebuilds, requested: 0 };
     const handler = new PipelineFailureHandler(
       effects,
-      (id) => id === 2,
+      (id) => (id === 2 ? 'object' : null),
       (message, cause) => reports.push({ message, cause }),
+      () => {
+        if (rebuild.left === 0) return false;
+        rebuild.left--;
+        rebuild.requested++;
+        return true;
+      },
     );
-    return { effects, reports, handler };
+    return { effects, reports, handler, rebuild };
   }
 
   const failure = (materialId: number | null, message = 'failed'): PipelineFailure => ({
@@ -448,6 +509,122 @@ describe('PipelineFailureHandler', () => {
     await settle();
     expect(effects.failures).toEqual([]);
     expect(effects.active).toBe(true);
+    expect(reports).toHaveLength(1);
+  });
+
+  it('drops effects attached again after a drop when they fail in turn', async () => {
+    const { effects, reports, handler } = setup();
+    handler.handle(failure(null, 'submit used a destroyed texture'));
+    await settle();
+    effects.active = true;
+    handler.handle(failure(null, 'post link failed'));
+    await settle();
+    expect(effects.failures).toEqual([
+      new Error('submit used a destroyed texture'),
+      new Error('post link failed'),
+    ]);
+    expect(reports).toEqual([]);
+  });
+
+  const destroyedShadow =
+    'WebGPURenderer: Async render pipeline creation failed (renderPipeline_fish:angelfish_2): ' +
+    'Destroyed texture [Texture "ShadowDepthTexture"] used in a submit.';
+
+  it('rebuilds a scene material hit by a transient failure instead of hiding or reporting it', async () => {
+    const { effects, reports, handler, rebuild } = setup(3);
+    handler.handle(failure(2, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(1);
+    expect(effects.failures).toEqual([]);
+    expect(reports).toEqual([]);
+  });
+
+  it('rebuilds the scene and keeps the effects for a transient failure it cannot name', async () => {
+    const { effects, reports, handler, rebuild } = setup(3);
+    handler.handle(failure(null, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(1);
+    expect(effects.failures).toEqual([]);
+    expect(reports).toEqual([]);
+  });
+
+  it('rebuilds the scene for a transient failure of its shadow pass', async () => {
+    const { scene, shadowMaterialId } = await shadowedScene();
+    const effects = new FakeEffects();
+    const reports: string[] = [];
+    let rebuilds = 0;
+    const handler = new PipelineFailureHandler(
+      effects,
+      (id) => materialUse(scene, id),
+      (message) => reports.push(message),
+      () => {
+        rebuilds++;
+        return true;
+      },
+    );
+
+    handler.handle(failure(shadowMaterialId, destroyedShadow));
+    await settle();
+    expect(rebuilds).toBe(1);
+    expect(effects.failures).toEqual([]);
+    expect(reports).toEqual([]);
+  });
+
+  it('reports a lasting failure of the shadow pass as a missing shadow', async () => {
+    const { scene, shadowMaterialId } = await shadowedScene();
+    const effects = new FakeEffects();
+    const reports: string[] = [];
+    const handler = new PipelineFailureHandler(
+      effects,
+      (id) => materialUse(scene, id),
+      (message) => reports.push(message),
+      () => false,
+    );
+
+    handler.handle(failure(shadowMaterialId, 'error: unresolved identifier'));
+    await settle();
+    expect(effects.active).toBe(true);
+    expect(reports).toEqual(["An object's shadow failed to build and is not drawn"]);
+  });
+
+  it('never rebuilds the scene for a transient failure of a pass outside it', async () => {
+    const { effects, reports, handler, rebuild } = setup(3);
+    handler.handle(failure(7, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(0);
+    expect(effects.failures).toEqual([new Error(destroyedShadow)]);
+    expect(reports).toEqual([]);
+
+    handler.handle(failure(8, destroyedShadow));
+    expect(rebuild.requested).toBe(0);
+    expect(reports.map((r) => r.message)).toEqual([
+      'A pass outside the scene failed to build and is skipped',
+    ]);
+  });
+
+  it('leaves a transient failure in the effects own passes to their recovery', async () => {
+    const { effects, handler, rebuild } = setup(3);
+    handler.handle(failure(1, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(0);
+    expect(effects.failures).toEqual([new Error(destroyedShadow)]);
+  });
+
+  it('reports a scene material once rebuilding stops helping', async () => {
+    const { effects, reports, handler, rebuild } = setup(1);
+    handler.handle(failure(2, destroyedShadow));
+    handler.handle(failure(2, destroyedShadow));
+    await settle();
+    expect(rebuild.requested).toBe(1);
+    expect(effects.active).toBe(true);
+    expect(reports.map((r) => r.message)).toEqual(['A material failed to build and is not drawn']);
+  });
+
+  it('never rebuilds for a real shader error', async () => {
+    const { reports, handler, rebuild } = setup(3);
+    handler.handle(failure(2, 'error: unresolved identifier'));
+    await settle();
+    expect(rebuild.requested).toBe(0);
     expect(reports).toHaveLength(1);
   });
 

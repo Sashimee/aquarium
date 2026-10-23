@@ -84,7 +84,50 @@ function inputOf(assets: OutputAsset[]): BudgetInput {
   };
 }
 
+function pileOf(id: string, member: OutputAsset): OutputAsset {
+  const own = textured(id, 'rock', 0, 0);
+  const [texture] = member.textures;
+  const lods = own.lods.map((l) => ({ ...l, bytes: l.bytes + 7 }));
+  return {
+    ...own,
+    lods,
+    textures: texture ? [texture] : [],
+    files: lods.map(({ file, bytes, sha256 }) => ({ file, bytes, sha256 })),
+  };
+}
+
 describe('presetDownloadBytes', () => {
+  it('counts a texture borrowed from a member rock once when both are in the preset', () => {
+    const rock = textured('rock', 'rock', 300, 9000);
+    const pile = pileOf('pile', rock);
+    const input = inputOf([hdri(2000), rock, pile]);
+    input.presets = [{ id: 'tank', biome: 'freshwater', assetIds: ['rock', 'pile'] }];
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(
+      2000 + (1000 + 200 + 300) + (1007 + 207),
+    );
+    expect(presetDownloadBytes(input, input.presets[0]!, 'desktop')).toBe(
+      2000 + (1000 + 200 + 300 + 9000) + (1007 + 207),
+    );
+  });
+
+  it('counts the borrowed texture once when the member rock is not in the preset', () => {
+    const rock = textured('rock', 'rock', 300, 9000);
+    const pile = pileOf('pile', rock);
+    const input = inputOf([hdri(2000), rock, pile]);
+    input.presets = [{ id: 'tank', biome: 'freshwater', assetIds: ['pile'] }];
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000 + 1007 + 207 + 300);
+  });
+
+  it('still throws when a texture is in no asset files[]', () => {
+    const rock = textured('rock', 'rock', 300, 9000);
+    const pile = pileOf('pile', rock);
+    const input = inputOf([hdri(2000), pile]);
+    input.presets = [{ id: 'tank', biome: 'freshwater', assetIds: ['pile'] }];
+    expect(() => presetDownloadBytes(input, input.presets[0]!, 'mobile')).toThrow(
+      /is not in files\[\]/,
+    );
+  });
+
   it('counts the HDRI, one LOD and the slot textures of mobile', () => {
     const input = inputOf([hdri(2000), textured('rock', 'rock', 300, 9000)]);
     expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000 + 1000 + 200 + 300);
@@ -148,6 +191,16 @@ describe('presetDownloadBytes', () => {
     const input = inputOf([hdri(2000)]);
     input.presets[0]!.assetIds = ['euphyllia-hammer-3', 'euphyllia-torch-8'];
     expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000);
+  });
+
+  it('skips the procedural mud bank but not a lookalike id', () => {
+    const input = inputOf([hdri(2000)]);
+    input.presets[0]!.assetIds = ['mud-bank'];
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000);
+    input.presets[0]!.assetIds = ['mud-bank-2'];
+    expect(() => presetDownloadBytes(input, input.presets[0]!, 'mobile')).toThrow(
+      /unknown asset "mud-bank-2"/,
+    );
   });
 
   it('throws on an asset id that is neither in the index nor procedural', () => {
@@ -214,7 +267,13 @@ describe('the committed presets', () => {
       resolve(import.meta.dirname, '../../..'),
     );
     expect(hdri.id).toBe('studio-small-09');
-    expect(presets.map((p) => p.biome).sort()).toEqual(['freshwater', 'reef']);
+    expect(presets.map((p) => p.biome).sort()).toEqual([
+      'blackwater',
+      'cichlid',
+      'freshwater',
+      'mangrove',
+      'reef',
+    ]);
     expect(presets.every((p) => p.assetIds.length > 1)).toBe(true);
     expect(speciesBiome.get('neon-tetra')).toBe('freshwater');
   });

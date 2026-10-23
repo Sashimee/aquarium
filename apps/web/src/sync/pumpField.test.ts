@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { tankSizeSchema } from '@aquarium/shared';
+import { MAX_EQUIPMENT_TIER, tankSizeSchema } from '@aquarium/shared';
 import { World } from '@aquarium/sim';
 import { TANK_DIMENSIONS } from '../engine/tank/dimensions';
+import { CurrentField } from '../scene/current';
 import { demoTank } from '../fish/demoStock';
 import { pumpFieldFor } from './pumpField';
 
@@ -37,5 +38,15 @@ describe.each(tankSizeSchema.options)('pumpFieldFor on a %s tank', (size) => {
 
   it('is null without a pump', () => {
     expect(pumpFieldFor(0, tank)).toBeNull();
+  });
+});
+
+describe('pumpFieldFor for every tier', () => {
+  it('gives each tier a field a real CurrentField accepts, a zero-speed one as no pump', () => {
+    const current = new CurrentField();
+    for (let tier = 0; tier <= MAX_EQUIPMENT_TIER; tier++) {
+      const field = pumpFieldFor(tier, TANK_DIMENSIONS.standard);
+      expect(() => current.setWaveMaker(field, 0)).not.toThrow();
+    }
   });
 });

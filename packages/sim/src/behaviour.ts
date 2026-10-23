@@ -1,18 +1,24 @@
+import { Banks } from './bank.ts';
 import type { Basin } from './basin.ts';
+import { Cleaning } from './cleaning.ts';
 import { CURIOSITY, Curiosity } from './curiosity.ts';
-import type { Point3 } from './decor.ts';
+import type { DecorBounds, Point3 } from './decor.ts';
 import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
 import type { FishResize } from './fishArrays.ts';
 import type { FoodStore } from './food.ts';
 import { GREETING, Greeting, type Visitor } from './greeting.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
+import { Night } from './night.ts';
+import { NookSearch, type NookDecor } from './nooks.ts';
 import { Personalities } from './personality.ts';
+import { Route } from './routes.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
 import type { SimSpecies, SimWalking } from './species.ts';
 import { TOYS, Toys, type SimToy } from './toys.ts';
+import { WAVE_MAKER } from './waveMaker.ts';
 import { BROOD, Brood, type SimBrood } from './brood.ts';
 
 /** Every tunable of the species behaviours; sources are in BEHAVIOUR.md. */
@@ -49,8 +55,6 @@ export const BEHAVIOUR = {
   habituationTauS: 120,
   restStartleDamping: 0.5,
 
-  nightLight: 0.25,
-  dayLight: 0.35,
   restTauS: 30,
   restTauJitter: 0.3,
   restSpeedFactor: 0.2,
@@ -75,6 +79,13 @@ export const BEHAVIOUR = {
   excursionMaxS: 6,
   excursionBodyLengths: 3,
   caveMouthBodyLengths: 1,
+  caveInBodyLengths: 0.5,
+  caveRouteClearanceBodyLengths: 0.25,
+  caveRouteReachBodyLengths: 2,
+  caveRouteAheadBodyLengths: 1,
+  caveRouteRiseBodyLengths: 1,
+  caveRouteBuildUnitsPerStep: 1024,
+  caveRouteEntrySteps: 6,
   caveLeashBodyLengths: 2.5,
   shelterAfterStartleS: 20,
   shelterComfort: 0.4,
@@ -94,6 +105,18 @@ export const BEHAVIOUR = {
   gulpArriveBodyLengths: 0.65,
   gulpHoldS: 0.3,
   gulpTimeoutS: 10,
+  gulpLandBodyLengths: 1.5,
+  gulpPathSamples: 5,
+  gulpPathClearBodyLengths: 0.5,
+  gulpSlideRings: 3,
+  gulpSlideDirections: 8,
+  gulpOverdueS: 30,
+  gulpClimbReachBodyLengths: 1,
+  gulpClimbStandoffBodyLengths: 0.5,
+  gulpClimbSlantBodyLengths: 1,
+  gulpClimbCornerBodyLengths: 1.5,
+  gulpGlassClearBodyLengths: 1,
+  gulpClimbTopBodyLengths: 0.45,
 
   grazeMeanIntervalS: 20,
   grazeMinS: 1.5,
@@ -103,6 +126,7 @@ export const BEHAVIOUR = {
   grazeBackRoomBodyLengths: 0.5,
   grazeComfort: 0.2,
   grazeSpeedFactor: 0.25,
+  grazePathSamples: 6,
   glassStandoffThickness: 1.3,
   glassCrawlFactor: 0.15,
   glassStayMinS: 5,
@@ -157,11 +181,17 @@ export const BEHAVIOUR = {
   bodySampleOffsets: [0.38, 0.19, 0, -0.19, -0.38],
 } as const;
 
-/** A scene point a species is drawn to: an anemone for clownfish, a cave for royal gramma. */
+/**
+ * A scene point a species is drawn to: an anemone for clownfish, a cave for royal gramma, an
+ * emergent bank for mudskippers.
+ */
 export interface Anchor {
   readonly id: string;
-  readonly kind: 'anemone' | 'cave';
-  /** A point in free water: the anemone's centre or the cave's interior. */
+  readonly kind: 'anemone' | 'cave' | 'bank';
+  /**
+   * The anemone's centre or the cave's interior, in free water; for a bank, the cling point at its
+   * top, above the water.
+   */
   readonly position: Point3;
   readonly radius: number;
   /** Outward direction of a cave mouth. */
@@ -198,6 +228,10 @@ export interface BehaviourHost {
   readonly substrateSdf: Sdf;
   /** Hard decor alone, or null when the tank is bare. */
   readonly decorSdf: Sdf | null;
+  /** The bounds of every hard decor collider, sorted by id. */
+  readonly decorBounds: readonly DecorBounds[];
+  /** The hard decor's shapes and reach, which say what a cached crevice search must redo. */
+  readonly decorShapes: NookDecor;
   /** Plants and other soft decor, or null when there are none. */
   readonly plantSdf: Sdf | null;
   /** Per fish `StageCode`. */
@@ -212,8 +246,17 @@ export interface BehaviourHost {
    * of its own length clear to turn round in.
    */
   canTurnAt(i: number, x: number, y: number, z: number): boolean;
+  /** The clearance a level fish of `length` needs round it to turn about, as `canTurnAt` asks. */
+  bodyTurnRoom(length: number): number;
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number;
+  /**
+   * Whether fish `i`, at no more than `effort` of its hold speed, could hold against the current
+   * everywhere straight up from (x, y, z) to height `top`.
+   */
+  holdsColumn(i: number, x: number, y: number, z: number, top: number, effort: number): boolean;
+  /** The free spot in the water nearest (x, y, z) with room for fish `i`, or null if none. */
+  waterSpotNear(i: number, x: number, y: number, z: number): Point3 | null;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -256,6 +299,13 @@ export class Plan {
   shunZ = 0;
   shunRadius = 0;
   shunWeight = 0;
+  /**
+   * A fish whose body this one's centre is held off, after it has moved: outside a capsule of
+   * `keepOffRadius` round that fish's spine, `keepOffHalf` either side of its centre; -1 for none.
+   */
+  keepOffFish = -1;
+  keepOffHalf = 0;
+  keepOffRadius = 0;
   /** 0 to 1: how far the fins are spread in display. */
   display = 0;
   /** 0 to 1: how far the gill covers are raised in display. */
@@ -289,6 +339,7 @@ export class Plan {
     this.pivot = false;
     this.homing = false;
     this.shunRadius = 0;
+    this.keepOffFish = -1;
     this.display = 0;
     this.gillFlare = 0;
     this.fan = 0;
@@ -310,11 +361,17 @@ export class Plan {
     this.shunRadius = radius;
     this.shunWeight = weight;
   }
+
+  keepOff(j: number, half: number, radius: number): void {
+    this.keepOffFish = j;
+    this.keepOffHalf = half;
+    this.keepOffRadius = radius;
+  }
 }
 
 const StartlePhase = { None: 0, Bend: 1, Burst: 2, Flee: 3 } as const;
 const TerritoryPhase = { Idle: 0, Approach: 1, Flare: 2, Charge: 3 } as const;
-const GulpPhase = { None: 0, Ascend: 1, Hold: 2, Descend: 3 } as const;
+const GulpPhase = { None: 0, Ascend: 1, Hold: 2, Descend: 3, Climb: 4 } as const;
 const GrazePhase = { None: 0, Approach: 1, Graze: 2, Roam: 3 } as const;
 
 const DT = 1 / 30;
@@ -323,8 +380,28 @@ function at(a: ArrayLike<number>, i: number): number {
   return a[i] ?? 0;
 }
 
+/**
+ * Whether a cave-dweller takes a crevice found in the hardscape when the scene has no cave. A
+ * walker rests in the open and a bottom forager already lies on the sand against the rock.
+ */
+function takesNook(sp: SimSpecies): boolean {
+  return sp.home === 'cave' && sp.walking === null && sp.gait !== 'forage';
+}
+
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
+}
+
+/** `v` kept `margin` inside [lo, hi], or the middle when the span is narrower than two margins. */
+function insetClamp(v: number, lo: number, hi: number, margin: number): number {
+  const a = lo + margin;
+  const b = hi - margin;
+  return a > b ? 0.5 * (lo + hi) : clamp(v, a, b);
+}
+
+/** How far out from the rock a grazer's body centre sits while it pecks. */
+function grazeStandoff(length: number): number {
+  return (BEHAVIOUR.bodyThicknessBodyLengths + BEHAVIOUR.grazeStandoffBodyLengths) * length;
 }
 
 /**
@@ -340,11 +417,33 @@ export class Behaviour {
   readonly brood: Brood;
   readonly personality: Personalities;
   readonly greeting: Greeting;
-  light = 1;
-  night = false;
+  readonly cleaning: Cleaning;
+  readonly banks: Banks;
+  readonly lighting = new Night();
 
   private readonly host: BehaviourHost;
   private anchors: readonly Anchor[] = [];
+  /** The scene's anemones and caves, before any nooks are added. */
+  private given: readonly Anchor[] = [];
+  /** The body length the nooks were found for, 0 when the scene's caves are used instead. */
+  private nookLength = 0;
+  private readonly nookSearch = new NookSearch();
+  /**
+   * Each cave's way in, per clearance a fish needs. A way is queued when the caves are dealt or the
+   * rock moves, or when a fish first needs it, and is found a bounded piece per step (#1505).
+   */
+  private readonly routes = new Map<Anchor, Map<number, Route>>();
+  private routeQueue: Route[] = [];
+  private _routeWork = 0;
+  private _routeLookupWork = 0;
+  /**
+   * Per fish, for its wide and its narrow way in: the way it last asked, the cell it joins it by,
+   * and the step until which that cell is kept, so a fish with no cell in sight does not follow
+   * up to eight lines of sight every step (#1515).
+   */
+  private entryRoute: (Route | null)[];
+  private entryCell: Int32Array;
+  private entryUntil: Int32Array;
   private readonly stimuli: Stimulus[] = [];
 
   private startlePhase: Uint8Array;
@@ -387,6 +486,13 @@ export class Behaviour {
 
   private gulpPhase: Uint8Array;
   private gulpTimer: Float64Array;
+  /** 1 while a fish needs a breath but has no open water above it to rise through. */
+  private gulpDue: Uint8Array;
+  private _gulpWait: Float64Array;
+  /** Failed climbs since the last breath, so the next climb tries another pane. */
+  private gulpTries: Uint8Array;
+  /** 0 until a climbing fish reaches its pane, then 1 or 2 for the way it slants along it. */
+  private climbing: Uint8Array;
 
   private grazePhase: Uint8Array;
   private grazeTimer: Float64Array;
@@ -413,6 +519,10 @@ export class Behaviour {
   private _gillFlare: Float64Array;
 
   private readonly n3 = new Float64Array(3);
+  private readonly climbPanes = new Float64Array(8);
+  private readonly climbOrder = new Uint8Array(4);
+  private readonly climbDist = new Float64Array(4);
+  private readonly spot = new Float64Array(3);
   private readonly greetBoldness = (i: number): number =>
     this.personality.effectiveBoldness(i, this.speciesOf(i).boldness);
   private readonly greetHunger = (i: number): number => this.feeding.motivation(i);
@@ -436,6 +546,45 @@ export class Behaviour {
     return this._anchor;
   }
 
+  /** What `anchor` indexes: the scene's anemones and caves, then any nooks found for them. */
+  get homes(): readonly Anchor[] {
+    return this.anchors;
+  }
+
+  /**
+   * Units of work spent finding ways to caves in the last step: at most
+   * `caveRouteBuildUnitsPerStep`, except that a single line of sight longer than the whole budget
+   * is followed in full when it is the first work of the step, and then is all the step's work.
+   */
+  get routeWork(): number {
+    return this._routeWork;
+  }
+
+  /** Water samples the fish took in the last step looking for where to join their ways in. */
+  get routeLookupWork(): number {
+    return this._routeLookupWork;
+  }
+
+  /** Ways to caves still being found. */
+  get routesPending(): number {
+    return this.routeQueue.length;
+  }
+
+  /** Ways to caves kept, found or not. */
+  get routesKept(): number {
+    let n = 0;
+    for (const byClearance of this.routes.values()) n += byClearance.size;
+    return n;
+  }
+
+  /** Entry slots that still hold a dropped way. */
+  get staleEntries(): number {
+    const kept = new Set(
+      [...this.routes.values()].flatMap((byClearance) => [...byClearance.values()]),
+    );
+    return this.entryRoute.filter((r) => r !== null && !kept.has(r)).length;
+  }
+
   /** Seconds each fish has left hiding in shelter after a startle. */
   get shelterTimer(): Float64Array {
     return this._shelterTimer;
@@ -443,6 +592,11 @@ export class Behaviour {
 
   get yieldTimer(): Float64Array {
     return this._yieldTimer;
+  }
+
+  /** Seconds since each fish's pending breath fell due; 0 once it has gulped. */
+  get gulpWait(): Float64Array {
+    return this._gulpWait;
   }
 
   get territoryTarget(): Int32Array {
@@ -464,12 +618,17 @@ export class Behaviour {
     const n = host.count;
     const s = host.species.length;
     this.plans = Array.from({ length: n }, () => new Plan());
+    this.entryRoute = Array.from({ length: 2 * n }, () => null);
+    this.entryCell = new Int32Array(2 * n).fill(-1);
+    this.entryUntil = new Int32Array(2 * n);
     this.personality = new Personalities(n);
     this.feeding = new Feeding(host, this.personality);
     this.curiosity = new Curiosity(host);
     this.toys = new Toys(host, this.personality);
     this.brood = new Brood(host);
     this.greeting = new Greeting(host);
+    this.cleaning = new Cleaning(host);
+    this.banks = new Banks(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -501,6 +660,10 @@ export class Behaviour {
     this._territoryTarget = new Int32Array(n).fill(-1);
     this.gulpPhase = new Uint8Array(n);
     this.gulpTimer = new Float64Array(n);
+    this.gulpDue = new Uint8Array(n);
+    this._gulpWait = new Float64Array(n);
+    this.gulpTries = new Uint8Array(n);
+    this.climbing = new Uint8Array(n);
     this.grazePhase = new Uint8Array(n);
     this.grazeTimer = new Float64Array(n);
     this.grazeNext = new Float64Array(n);
@@ -535,7 +698,14 @@ export class Behaviour {
   addFish(i: number): void {
     this.drawTimers(i);
     this.pickHome(i);
-    this.anchor[i] = this.freeAnchor(i);
+    const sp = this.speciesOf(i);
+    const needsNooks =
+      takesNook(sp) &&
+      !this.given.some((a) => a.kind === 'cave') &&
+      at(this.host.bodyLength, i) > this.nookLength;
+    // Nooks sized for smaller fish have no room for this one, so they are found and dealt anew.
+    if (needsNooks) this.redealNooks();
+    else this.anchor[i] = this.freeAnchor(i);
   }
 
   /**
@@ -545,6 +715,10 @@ export class Behaviour {
   resize(edit: FishResize): void {
     if (edit.removed >= 0) this.plans.splice(edit.removed, 1);
     else this.plans.push(new Plan());
+    if (edit.removed >= 0) this.entryRoute.splice(2 * edit.removed, 2);
+    else this.entryRoute.push(null, null);
+    this.entryCell = edit.array(this.entryCell, 2, -1);
+    this.entryUntil = edit.array(this.entryUntil, 2);
     this.startlePhase = edit.array(this.startlePhase);
     this.startleTimer = edit.array(this.startleTimer);
     this.startleElapsed = edit.array(this.startleElapsed);
@@ -576,6 +750,10 @@ export class Behaviour {
     this._territoryTarget = edit.array(this.territoryTarget, 1, -1);
     this.gulpPhase = edit.array(this.gulpPhase);
     this.gulpTimer = edit.array(this.gulpTimer);
+    this.gulpDue = edit.array(this.gulpDue);
+    this._gulpWait = edit.array(this._gulpWait);
+    this.gulpTries = edit.array(this.gulpTries);
+    this.climbing = edit.array(this.climbing);
     this.grazePhase = edit.array(this.grazePhase);
     this.grazeTimer = edit.array(this.grazeTimer);
     this.grazeNext = edit.array(this.grazeNext);
@@ -595,7 +773,10 @@ export class Behaviour {
     this.brood.resize(edit);
     this.personality.resize(edit);
     this.greeting.resize(edit);
+    this.cleaning.resize(edit);
+    this.banks.resize(edit);
     if (edit.removed < 0) return;
+    this.pruneRoutes();
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
       this.territoryTarget[i] = j;
@@ -632,7 +813,7 @@ export class Behaviour {
 
   /**
    * The anchor a newly added fish takes: the anemone holding the fewest of its species (they
-   * live in pairs, as `setAnchors` deals them out), or a cave none of its species holds; -1 if
+   * live in pairs, as `setAnchors` deals them out), or a cave no other swimmer holds; -1 if
    * there is none. Walkers share caves instead (see `walkerCave`).
    */
   private freeAnchor(i: number): number {
@@ -643,11 +824,18 @@ export class Behaviour {
     const own = at(this.host.speciesIndex, i);
     let best = -1;
     let bestHeld = Infinity;
-    for (let k = 0; k < this.anchors.length; k++) {
-      if (this.anchors[k]?.kind !== kind) continue;
+    const pool = kind === 'cave' && !takesNook(sp) ? this.given : this.anchors;
+    for (let k = 0; k < pool.length; k++) {
+      if (pool[k]?.kind !== kind) continue;
       let held = 0;
       for (let j = 0; j < this.host.count; j++) {
-        if (j !== i && at(this.anchor, j) === k && at(this.host.speciesIndex, j) === own) held++;
+        if (j === i || at(this.anchor, j) !== k) continue;
+        // Walkers share caves with anyone, but a swimmer's cave is its own.
+        const rival =
+          kind === 'cave'
+            ? this.speciesOf(j).walking === null
+            : at(this.host.speciesIndex, j) === own;
+        if (rival) held++;
       }
       if (held < bestHeld) {
         best = k;
@@ -670,7 +858,8 @@ export class Behaviour {
     let best = -1;
     let bestDist = Infinity;
     let bestHeld = Infinity;
-    for (let k = 0; k < this.anchors.length; k++) {
+    // Nooks follow the given anchors and are for swimmers; walkers rest in the open without a cave.
+    for (let k = 0; k < this.given.length; k++) {
       const a = this.anchors[k];
       if (a?.kind !== 'cave') continue;
       const room = Math.max(1, Math.floor(BEHAVIOUR.walkerCaveShare * (a.radius / length) ** 2));
@@ -698,9 +887,9 @@ export class Behaviour {
       }
       if (ids.has(a.id)) throw new Error(`anchor ids must be unique, "${a.id}" repeats`);
       ids.add(a.id);
-      if (a.kind !== 'anemone' && a.kind !== 'cave') {
+      if (a.kind !== 'anemone' && a.kind !== 'cave' && a.kind !== 'bank') {
         throw new RangeError(
-          `anchor "${a.id}": kind must be "anemone" or "cave", got ${String(a.kind)}`,
+          `anchor "${a.id}": kind must be "anemone", "cave" or "bank", got ${String(a.kind)}`,
         );
       }
       if (!Array.isArray(a.position) || a.position.length !== 3) {
@@ -715,25 +904,47 @@ export class Behaviour {
         }
       }
       const [x, y, z] = a.position;
-      const inside =
-        x > basin.minX &&
-        x < basin.maxX &&
-        z > basin.minZ &&
-        z < basin.maxZ &&
-        y > basin.ground(x, z) &&
-        y < basin.maxY;
-      if (!inside) throw new RangeError(`anchor "${a.id}" lies outside the tank`);
+      const inPlan = x > basin.minX && x < basin.maxX && z > basin.minZ && z < basin.maxZ;
+      if (a.kind === 'bank') {
+        if (!(inPlan && Number.isFinite(y))) {
+          throw new RangeError(`bank "${a.id}" lies outside the tank`);
+        }
+        if (!(y > basin.maxY)) {
+          throw new RangeError(
+            `bank "${a.id}" at height ${y} is not above the water (${basin.maxY}); a bank is an emergent surface`,
+          );
+        }
+      } else if (!(inPlan && y > basin.ground(x, z) && y < basin.maxY)) {
+        throw new RangeError(`anchor "${a.id}" lies outside the tank`);
+      }
       if (!(Number.isFinite(a.radius) && a.radius > 0)) {
         throw new RangeError(`anchor "${a.id}": radius must be positive, got ${a.radius}`);
       }
     }
-    this.anchors = anchors;
+    this.banks.setBanks(anchors.filter((a) => a.kind === 'bank'));
+    this.given = anchors.filter((a) => a.kind !== 'bank');
+    this.deal();
+  }
+
+  /**
+   * Deals the anemones and caves out to the fish. With no cave from the scene, the cave-dwellers
+   * that hover get crevices found in the hardscape instead (`findNooks`), sized for the longest
+   * of them.
+   */
+  private deal(): void {
+    const given = this.given;
+    this.dropRoutes();
+    this.nookLength = given.some((a) => a.kind === 'cave') ? 0 : this.longestCaveDweller();
+    const homes =
+      this.nookLength > 0 ? [...given, ...this.nooksFor(this.nookLength, given)] : given;
+    this.anchors = homes;
     this.anchor.fill(-1);
     // A swimmer's rest station does not depend on the anchors, so only walkers choose again.
     for (let i = 0; i < this.host.count; i++) {
       if (this.speciesOf(i).walking !== null) this.restSpotSet[i] = 0;
     }
-    const ordinal = new Map<string, number>();
+    const paired = new Map<string, number>();
+    let caves = 0;
     for (let i = 0; i < this.host.count; i++) {
       const sp = this.speciesOf(i);
       const kind = sp.home === 'anemone' || sp.home === 'cave' ? sp.home : null;
@@ -742,16 +953,65 @@ export class Behaviour {
         this.anchor[i] = this.walkerCave(i);
         continue;
       }
-      const matching = anchors.flatMap((a, k) => (a.kind === kind ? [k] : []));
+      const pool = kind === 'cave' && !takesNook(sp) ? given : homes;
+      const matching = pool.flatMap((a, k) => (a.kind === kind ? [k] : []));
       if (matching.length === 0) continue;
-      const k = ordinal.get(sp.id) ?? 0;
-      ordinal.set(sp.id, k + 1);
-      // Clownfish live in pairs per anemone; gramma each take a cave of their own.
-      const pick = kind === 'anemone' ? Math.floor(k / 2) : k;
-      // A gramma without a cave of its own holds a mid-water station instead of fighting for one.
-      if (kind === 'cave' && pick >= matching.length) continue;
-      this.anchor[i] = matching[pick % matching.length] ?? -1;
+      if (kind === 'anemone') {
+        // Clownfish live in pairs per anemone.
+        const k = paired.get(sp.id) ?? 0;
+        paired.set(sp.id, k + 1);
+        this.anchor[i] = matching[Math.floor(k / 2) % matching.length] ?? -1;
+        continue;
+      }
+      // Gramma, firefish and the other cave-dwellers each take a cave of their own; one without
+      // holds a mid-water station instead of fighting for one.
+      if (caves < matching.length) this.anchor[i] = matching[caves++] ?? -1;
     }
+    this.queueRoutes();
+  }
+
+  /**
+   * Finds the nooks again (the rock moved, or a longer cave-dweller came) and deals them out anew
+   * to the fish that take one. Every other fish keeps its anemone, cave or rest spot.
+   */
+  private redealNooks(): void {
+    const given = this.given;
+    this.dropRoutes();
+    this.nookLength = this.longestCaveDweller();
+    const nooks = this.nookLength > 0 ? this.nooksFor(this.nookLength, given) : [];
+    this.anchors = [...given, ...nooks];
+    let k = 0;
+    for (let i = 0; i < this.host.count; i++) {
+      if (!takesNook(this.speciesOf(i))) continue;
+      this.anchor[i] = k < nooks.length ? given.length + k : -1;
+      k++;
+    }
+    this.queueRoutes();
+  }
+
+  private longestCaveDweller(): number {
+    let longest = 0;
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      if (takesNook(sp)) {
+        longest = Math.max(longest, at(this.host.bodyLength, i));
+      }
+    }
+    return longest;
+  }
+
+  private nooksFor(length: number, given: readonly Anchor[]): Anchor[] {
+    const { basin, substrateSdf, sceneSdf, decorSdf } = this.host;
+    if (decorSdf === null) return [];
+    let prefix = 'nook:';
+    while (given.some((a) => a.id.startsWith(prefix))) prefix = `_${prefix}`;
+    return this.nookSearch.find(
+      { basin, cover: substrateSdf, water: sceneSdf, rock: decorSdf },
+      length,
+      this.host.bodyTurnRoom(length),
+      prefix,
+      this.host.decorShapes,
+    );
   }
 
   startle(stimulus: Stimulus): void {
@@ -807,11 +1067,12 @@ export class Behaviour {
     this.greeting.setVisitor(visitor);
   }
 
+  get light(): number {
+    return this.lighting.light;
+  }
+
   setLight(level: number): void {
-    if (!(level >= 0 && level <= 1)) {
-      throw new RangeError(`light level must be within [0, 1], got ${level}`);
-    }
-    this.light = level;
+    this.lighting.setLight(level);
   }
 
   isStartled(i: number): boolean {
@@ -820,9 +1081,7 @@ export class Behaviour {
 
   update(): void {
     const n = this.host.count;
-    if (this.light < BEHAVIOUR.nightLight) this.night = true;
-    else if (this.light > BEHAVIOUR.dayLight) this.night = false;
-    const restTarget = this.night ? 1 : 0;
+    const shock = this.lighting.step();
     const habDecay = Math.exp(-DT / BEHAVIOUR.habituationTauS);
     for (let i = 0; i < n; i++) {
       this.refractory[i] = Math.max(0, at(this.refractory, i) - DT);
@@ -830,9 +1089,13 @@ export class Behaviour {
       this._shelterTimer[i] = Math.max(0, at(this._shelterTimer, i) - DT);
       this.habituation[i] = at(this.habituation, i) * habDecay;
       const r = at(this.rest, i);
+      const restTarget = this.lighting.restTarget(this.speciesOf(i).activity);
       this.rest[i] = r + (restTarget - r) * (1 - Math.exp(-DT / at(this.restTau, i)));
     }
     this.updateGroups();
+    this.buildRoutes();
+    this._routeLookupWork = 0;
+    if (shock > 0) this.applyLightStartle(shock);
     for (const s of this.stimuli) this.applyStimulus(s);
     this.stimuli.length = 0;
     const tick = this.host.tick;
@@ -849,6 +1112,9 @@ export class Behaviour {
     this.curiosity.update(this.feeding);
     this.toys.update(this.curiosity.follow);
     this.greeting.update(this.greetBoldness, this.greetHunger);
+    this.prepareCleaning();
+    this.cleaning.update();
+    this.banks.update();
     const ease = 1 - Math.exp(-DT / TOYS.displayTauS);
     for (let i = 0; i < n; i++) {
       this.plan(i);
@@ -876,7 +1142,8 @@ export class Behaviour {
         at(this.yieldTimer, i) <= 0 &&
         at(this.gulpPhase, i) === GulpPhase.None &&
         at(this._shelterTimer, i) <= 0 &&
-        at(this.rest, i) <= 0.5
+        !this.banks.emersed(i) &&
+        (at(this.rest, i) <= 0.5 || this.lighting.restsInLight(this.speciesOf(i).activity))
           ? 1
           : 0;
       if (this.brood.fryLeash(i, leash)) continue;
@@ -935,6 +1202,33 @@ export class Behaviour {
     }
   }
 
+  /**
+   * Who may visit a cleaner this step, and which cleaners are free to clean: a fish with
+   * anything else on its mind (danger, food, a rival, a clutch, a toy, its owner, rest) neither
+   * visits nor cleans.
+   */
+  private prepareCleaning(): void {
+    const f = this.feeding;
+    const { eligible, open } = this.cleaning;
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      const free =
+        sp.walking === null &&
+        at(f.eligible, i) === 1 &&
+        at(f.target, i) < 0 &&
+        at(f.follow, i) < 0 &&
+        at(f.handling, i) <= 0 &&
+        at(this.territoryPhase, i) === TerritoryPhase.Idle &&
+        !this.brood.busy(i) &&
+        !this.toys.engaged(i) &&
+        at(this.curiosity.follow, i) === 0 &&
+        at(this.greeting.active, i) === 0 &&
+        at(this.host.flowShelter, i) === 0;
+      eligible[i] = free && !sp.cleaner ? 1 : 0;
+      open[i] = free && sp.cleaner ? 1 : 0;
+    }
+  }
+
   private speciesOf(i: number): SimSpecies {
     const s = this.host.species[at(this.host.speciesIndex, i)];
     if (s === undefined) throw new RangeError(`no fish at index ${i}`);
@@ -978,6 +1272,7 @@ export class Behaviour {
    * covers is chosen again soon. Walker nooks are rechecked every step by `nookHolds`.
    */
   decorMoved(): void {
+    this.dropRoutes();
     const { count, species } = this.host;
     for (let s = 0; s < species.length; s++) {
       const leader = at(this.groupLeader, s);
@@ -994,7 +1289,11 @@ export class Behaviour {
         this.restSpotSet[i] = 0;
       }
     }
+    if (this.nookLength > 0) this.redealNooks();
+    else this.queueRoutes();
     this.brood.decorMoved();
+    this.cleaning.decorMoved();
+    this.banks.decorMoved();
   }
 
   private covered(i: number, spots: Float64Array, o: number): boolean {
@@ -1099,6 +1398,27 @@ export class Behaviour {
     }
   }
 
+  /**
+   * A sudden change of the tank light: every swimmer that can see it may C-start, `intensity`
+   * playing the part of a tap's strength at the fish. With no point source each turns away from
+   * its own heading to a random side, so the school scatters, and the relay spreads it on.
+   */
+  private applyLightStartle(intensity: number): void {
+    const { rng, yaw } = this.host;
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      if (sp.walking !== null || !this.canStartle(i)) continue;
+      const p =
+        intensity *
+        (1 - BEHAVIOUR.boldnessDamping * this.personality.effectiveBoldness(i, sp.boldness)) *
+        this.responsiveness(i);
+      if (rng.next() >= p) continue;
+      const side = rng.next() < 0.5 ? -1 : 1;
+      const turn = rng.range(BEHAVIOUR.escapeOffsetRad, Math.PI);
+      this.schedule(i, this.host.tick, wrapAngle(at(yaw, i) + side * turn), 0);
+    }
+  }
+
   private beginStartle(i: number, yaw: number, pitch: number): void {
     if (at(this.refractory, i) > 0 || at(this.startlePhase, i) !== StartlePhase.None) return;
     const sp = this.speciesOf(i);
@@ -1125,6 +1445,9 @@ export class Behaviour {
     this.habituation[i] = at(this.habituation, i) + 1;
     this.startledAt[i] = this.host.tick;
     this.territoryPhase[i] = TerritoryPhase.Idle;
+    const gulping = at(this.gulpPhase, i);
+    // A breath cut off on the way up is still owed: its wait keeps counting toward gulpOverdueS.
+    if (gulping === GulpPhase.Ascend || gulping === GulpPhase.Climb) this.gulpDue[i] = 1;
     this.gulpPhase[i] = GulpPhase.None;
     if (this.grazePhase[i] !== GrazePhase.Roam) this.grazePhase[i] = GrazePhase.None;
     this.excursion[i] = 0;
@@ -1189,6 +1512,10 @@ export class Behaviour {
     if (plan === undefined) throw new RangeError(`no plan for fish ${i}`);
     this.bandAt(i, at(this.host.position, i * 3), at(this.host.position, i * 3 + 2));
     plan.reset(this.bandLo, this.bandHi);
+    const gulping = at(this.gulpPhase, i);
+    if (at(this.gulpDue, i) === 1 || gulping === GulpPhase.Ascend || gulping === GulpPhase.Climb) {
+      this._gulpWait[i] = at(this.gulpWait, i) + DT;
+    }
     const rest = at(this.rest, i);
     const calm = 1 - (1 - BEHAVIOUR.restSpeedFactor) * rest;
     plan.cruiseScale = calm * this.personality.activity(i);
@@ -1211,6 +1538,15 @@ export class Behaviour {
         BEHAVIOUR.cruiseSpeedFloor * at(this.host.cruiseSpeed, i) * plan.cruiseScale;
     }
 
+    if (this.banks.planEmersed(i, plan, at(this.startlePhase, i) !== StartlePhase.None)) {
+      this.startlePhase[i] = StartlePhase.None;
+      // Out on the perch it breathes air, so a breath it owed in the water is taken.
+      if (this.banks.perched(i)) {
+        this.gulpDue[i] = 0;
+        this._gulpWait[i] = 0;
+      }
+      return;
+    }
     if (at(this.startlePhase, i) !== StartlePhase.None) {
       this.planStartle(i, sp, plan);
       return;
@@ -1220,7 +1556,7 @@ export class Behaviour {
       return;
     }
     if (this.planFeed(i, sp, plan)) return;
-    if (sp.territorial) this.updateTerritory(i, sp);
+    if (sp.territorial && !this.cleaning.visiting(i)) this.updateTerritory(i, sp);
     if (at(this.territoryPhase, i) !== TerritoryPhase.Idle) {
       this.planTerritory(i, sp, plan);
       return;
@@ -1229,6 +1565,7 @@ export class Behaviour {
       this.planGulp(i, plan);
       return;
     }
+    if (this.planOverdueGulp(i, plan)) return;
     if (this.planShelter(i, sp, plan)) return;
     if (this.brood.planTend(i, plan)) return;
     if (this.brood.hides(i)) {
@@ -1239,7 +1576,9 @@ export class Behaviour {
     if (this.toys.planBall(i, sp, plan)) return;
     if (this.planLure(i, sp, plan)) return;
     if (this.planGreet(i, sp, plan)) return;
+    if (this.cleaning.plan(i, sp, plan)) return;
     if (this.planSpot(i, sp, plan)) return;
+    if (this.banks.planApproach(i, sp, plan, rest)) return;
     const guard = at(this.anchor, i) < 0 ? this.brood.guard(i) : null;
     if (guard !== null) {
       const [gx, gy, gz] = guard;
@@ -1253,10 +1592,11 @@ export class Behaviour {
         BROOD.guardBodyLengths * length,
         FishState.Station,
       );
-    } else if (sp.gait === 'forage') {
+    } else if (sp.gait === 'forage' && !this.grazesInsteadOfForaging(i, sp, rest)) {
+      this.grazePhase[i] = GrazePhase.None;
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
-      this.planGlassGrazer(i, plan);
+      this.planGlassGrazer(i, plan, rest);
     } else if (at(this.anchor, i) >= 0) {
       this.planAnchored(i, sp, plan);
     } else if (sp.home !== 'none') {
@@ -1735,6 +2075,7 @@ export class Behaviour {
     if (this.stalled(i, d, length, BEHAVIOUR.walkerCaveGiveUpS)) {
       this.restSpotSet[i] = 0;
       this.anchor[i] = -1;
+      this.pruneRoutes();
       return this.planNook(i, plan, px, pz, length);
     }
     const [tx, ty, tz] = this.approach(i, a, py);
@@ -1819,7 +2160,7 @@ export class Behaviour {
     const pz = at(position, o + 2);
     let cave: Anchor | undefined;
     let caveDist = Infinity;
-    for (const a of this.anchors) {
+    for (const a of this.given) {
       if (a.kind !== 'cave') continue;
       const d = Math.hypot(a.position[0] - px, a.position[2] - pz);
       if (d < caveDist) {
@@ -1916,7 +2257,7 @@ export class Behaviour {
     let best = -1;
     let bestD = r;
     for (let j = 0; j < count; j++) {
-      if (j === i) continue;
+      if (j === i || this.cleaning.tolerated(j)) continue;
       if (at(speciesIndex, j) === own) {
         // A mate sharing the anemone or cave is a partner, not a rival.
         if (home >= 0 && at(this.anchor, j) === home) continue;
@@ -1930,7 +2271,7 @@ export class Behaviour {
         at(position, j * 3 + 1) - cy,
         at(position, j * 3 + 2) - cz,
       );
-      if (d < bestD) {
+      if (d < bestD && this.inSight(i, j)) {
         bestD = d;
         best = j;
       }
@@ -1975,7 +2316,9 @@ export class Behaviour {
     const phase = at(this.territoryPhase, i);
     if (phase === TerritoryPhase.Approach) {
       plan.seek(jx, jy, jz, Math.min(vmax, 2 * cruise), 0.5);
-      if (d < 1.5 * (li + lj)) {
+      if (!this.inSight(i, j)) {
+        this.endTerritory(i);
+      } else if (d < 1.5 * (li + lj)) {
         if (sp.flare) {
           this.territoryPhase[i] = TerritoryPhase.Flare;
           this.territoryTimer[i] = rng.range(sp.flareMinS, sp.flareMaxS);
@@ -2202,6 +2545,10 @@ export class Behaviour {
     if (a?.kind !== 'cave') return false;
     const calm = at(this.host.flowShelter, i) === 0;
     if (at(this.rest, i) <= 0.5 && at(this._shelterTimer, i) <= 0 && calm) return false;
+    // A shoaling cave-dweller (firefish) holds its own hole, so the pull toward shoal mates in
+    // other holes would keep it hanging in the water between them.
+    plan.align = 0;
+    plan.cohesion = 0;
     plan.comfort = BEHAVIOUR.shelterComfort;
     const length = at(this.host.bodyLength, i);
     let entryY = a.position[1];
@@ -2234,7 +2581,11 @@ export class Behaviour {
 
   /**
    * Where to swim to reach an anchor: straight to it, except that a cave is entered through its
-   * mouth, so a fish beside or behind the rock first goes round to the front.
+   * mouth, so a fish beside or behind the rock follows the shortest way through the water round
+   * to it, by whichever side is open (#1499). Only where no way is found does it guess the side
+   * from where the mouth faces. A fish within half a body length of the hollow is still in it, and
+   * goes straight back to the middle: sent out round the mouth, it slid along the rock away from
+   * its crevice (#1464).
    */
   private approach(i: number, a: Anchor, ay = a.position[1]): Point3 {
     const [ax, , az] = a.position;
@@ -2249,15 +2600,164 @@ export class Behaviour {
     const rz = at(this.host.position, i * 3 + 2) - az;
     const along = rx * ux + ry * uy + rz * uz;
     const lateral = Math.hypot(rx - along * ux, ry - along * uy, rz - along * uz);
-    if (Math.hypot(rx, ry, rz) <= a.radius || (along > 0 && lateral < a.radius))
+    if (
+      Math.hypot(rx, ry, rz) <=
+        a.radius + BEHAVIOUR.caveInBodyLengths * at(this.host.bodyLength, i) ||
+      (along > 0 && lateral < a.radius)
+    )
       return [ax, ay, az];
-    const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * at(this.host.bodyLength, i);
+    const length = at(this.host.bodyLength, i);
+    const way = this.wayRound(i, a, length);
+    if (way !== null) return [way[0], ay, way[1]];
+    const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * length;
     if (along < 0.5 * out && lateral >= a.radius) {
       // Beside the rock, the straight line to the mouth cuts through the cave's own wall: the
-      // fish comes out past the face on its own side first, then crosses to the mouth.
-      return [ax + ux * out + rx - along * ux, ay + uy * out, az + uz * out + rz - along * uz];
+      // fish comes out past the face on its own side first, then crosses to the mouth. The point
+      // stays within a stand-off of the face, or it would slide along with a fish drifting
+      // sideways and lead it away from the cave (#1464); not for a fish far behind the face,
+      // whose line to such a point would cut the rock's corner.
+      const side = along >= -out ? Math.min(1, out / lateral) : 1;
+      return [
+        ax + ux * out + (rx - along * ux) * side,
+        ay + uy * out,
+        az + uz * out + (rz - along * uz) * side,
+      ];
     }
     return [ax + ux * out, ay + uy * out, az + uz * out];
+  }
+
+  /**
+   * The next body length of the way through the water to cave `a` for fish `i`, or null. The way
+   * is found in plan at the hollow's height, so a fish well above or below it, over a roof say,
+   * has none. It is as wide as the fish's radius where there is one: a fish steers poorly through
+   * a slot only just thicker than its body, so takes one only when nothing wider leads in.
+   */
+  private wayRound(i: number, a: Anchor, length: number): [number, number] | null {
+    const o = i * 3;
+    if (
+      Math.abs(at(this.host.position, o + 1) - a.position[1]) >
+      BEHAVIOUR.caveRouteRiseBodyLengths * length
+    ) {
+      return null;
+    }
+    const x = at(this.host.position, o);
+    const y = at(this.host.position, o + 1);
+    const z = at(this.host.position, o + 2);
+    const reach = BEHAVIOUR.caveRouteReachBodyLengths * length;
+    const ahead = BEHAVIOUR.caveRouteAheadBodyLengths * length;
+    const wide = this.routeTo(a, at(this.host.radius, i));
+    if (wide === null) return null;
+    const way = this.alongRoute(2 * i, wide, x, y, z, reach, ahead);
+    if (way !== null) return way;
+    const narrow = this.routeTo(a, BEHAVIOUR.caveRouteClearanceBodyLengths * length);
+    return narrow === null ? null : this.alongRoute(2 * i + 1, narrow, x, y, z, reach, ahead);
+  }
+
+  /**
+   * `route.toward` for the fish whose entry is kept in `slot`, looking for where to join the way
+   * only every `caveRouteEntrySteps` steps.
+   */
+  private alongRoute(
+    slot: number,
+    route: Route,
+    x: number,
+    y: number,
+    z: number,
+    reach: number,
+    ahead: number,
+  ): [number, number] | null {
+    const tick = this.host.tick;
+    if (this.entryRoute[slot] !== route || tick >= at(this.entryUntil, slot)) {
+      const before = route.sightSamplesTaken;
+      this.entryCell[slot] = route.entry(x, y, z, reach);
+      this._routeLookupWork += route.sightSamplesTaken - before;
+      this.entryRoute[slot] = route;
+      this.entryUntil[slot] = tick + BEHAVIOUR.caveRouteEntrySteps;
+    }
+    const c = at(this.entryCell, slot);
+    return c < 0 ? null : route.from(c, ahead);
+  }
+
+  /** The way to cave `a` for `clearance`, or null while it is still being found. */
+  private routeTo(a: Anchor, clearance: number): Route | null {
+    let byClearance = this.routes.get(a);
+    if (byClearance === undefined) {
+      byClearance = new Map();
+      this.routes.set(a, byClearance);
+    }
+    let route = byClearance.get(clearance);
+    if (route === undefined) {
+      const [x, y, z] = a.position;
+      const { basin, sceneSdf } = this.host;
+      route = new Route(basin, sceneSdf, x, y, z, a.radius, clearance, 0.5 * clearance);
+      byClearance.set(clearance, route);
+      this.routeQueue.push(route);
+    }
+    return route.ready ? route : null;
+  }
+
+  /**
+   * Queues the way to its cave each fish holding one needs first, so the ways are being found
+   * before the fish head home.
+   */
+  private queueRoutes(): void {
+    for (let i = 0; i < this.host.count; i++) {
+      const a = this.anchors[at(this.anchor, i)];
+      if (a?.kind === 'cave' && a.facing !== undefined) this.routeTo(a, at(this.host.radius, i));
+    }
+  }
+
+  /** Spends this step's budget on the queued ways, oldest first. */
+  private buildRoutes(): void {
+    const budget = BEHAVIOUR.caveRouteBuildUnitsPerStep;
+    const queue = this.routeQueue;
+    let work = 0;
+    let done = 0;
+    while (done < queue.length && work < budget) {
+      const route = queue[done];
+      if (route === undefined) break;
+      const spent = route.build(budget - work, work === 0);
+      work += spent;
+      if (route.ready) done++;
+      else if (spent === 0) break;
+    }
+    if (done > 0) queue.splice(0, done);
+    this._routeWork = work;
+  }
+
+  /** Drops every way, and each fish's hold on where it joined one. */
+  private dropRoutes(): void {
+    this.routes.clear();
+    this.routeQueue = [];
+    this.entryRoute.fill(null);
+  }
+
+  /** Drops the ways no fish still in the tank can take: to a cave none holds, or too wide or narrow. */
+  private pruneRoutes(): void {
+    const wanted = new Map<Anchor, Set<number>>();
+    for (let i = 0; i < this.host.count; i++) {
+      const a = this.anchors[at(this.anchor, i)];
+      if (a?.kind !== 'cave') continue;
+      const clearances = wanted.get(a) ?? new Set<number>();
+      clearances.add(at(this.host.radius, i));
+      clearances.add(BEHAVIOUR.caveRouteClearanceBodyLengths * at(this.host.bodyLength, i));
+      wanted.set(a, clearances);
+    }
+    for (const [a, byClearance] of this.routes) {
+      const keep = wanted.get(a);
+      for (const clearance of byClearance.keys()) {
+        if (keep?.has(clearance) !== true) byClearance.delete(clearance);
+      }
+      if (byClearance.size === 0) this.routes.delete(a);
+    }
+    const kept = new Set(
+      [...this.routes.values()].flatMap((byClearance) => [...byClearance.values()]),
+    );
+    this.routeQueue = this.routeQueue.filter((r) => kept.has(r));
+    for (let k = 0; k < this.entryRoute.length; k++) {
+      const route = this.entryRoute[k];
+      if (route !== undefined && route !== null && !kept.has(route)) this.entryRoute[k] = null;
+    }
   }
 
   private startExcursion(i: number, a: Anchor, length: number): void {
@@ -2316,6 +2816,16 @@ export class Behaviour {
     return Math.atan2(-nDotLeft, ny);
   }
 
+  /**
+   * A bottom forager that also rasps glass (a bristlenose pleco) sifts for food while it is hungry
+   * and food it eats lies settled, and grazes glass otherwise; resting, it sifts slowly as other
+   * foragers do.
+   */
+  private grazesInsteadOfForaging(i: number, sp: SimSpecies, rest: number): boolean {
+    if (sp.grazer !== 'glass' || rest > 0.5) return false;
+    return !(this.feeding.settledFor(sp) && this.feeding.hungry(i));
+  }
+
   private planForage(i: number, sp: SimSpecies, plan: Plan): void {
     const { rng } = this.host;
     const length = at(this.host.bodyLength, i);
@@ -2330,11 +2840,15 @@ export class Behaviour {
     plan.state = FishState.Forage;
     if (sp.airGulp) {
       const p = 1 - Math.exp(-(sp.gulpsPerHour / 3600) * DT);
-      if (rng.next() < p) {
-        this.gulpPhase[i] = GulpPhase.Ascend;
-        this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
-        this.planGulp(i, plan);
-        return;
+      if (rng.next() < p) this.gulpDue[i] = 1;
+      // Kramer 1983: an air-breather puts off a costly trip to the surface, so a breath waits
+      // for open water it can hold against rather than sweeping the fish into glass or rock.
+      if (at(this.gulpDue, i) === 1) {
+        if (this.gulpPathOpen(i, length)) {
+          this.startGulp(i, plan, GulpPhase.Ascend);
+          return;
+        }
+        if (this.planSlideOut(i, plan, length)) return;
       }
     }
     if (rest > 0.5) {
@@ -2359,7 +2873,99 @@ export class Behaviour {
     }
   }
 
-  /** Corydoras rise to the surface for a gulp of air and dart back down (Kramer & McClure 1980). */
+  private gulpTop(length: number): number {
+    return this.host.basin.maxY - BEHAVIOUR.gulpTopBodyLengths * length;
+  }
+
+  private startGulp(i: number, plan: Plan, phase: number): void {
+    this.gulpDue[i] = 0;
+    this.climbing[i] = 0;
+    this.gulpPhase[i] = phase;
+    this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
+    this.planGulp(i, plan);
+  }
+
+  /**
+   * Whether fish `i` has a clear rise straight up to the air: no rock or wood overhead, and no
+   * current on the way it would struggle against.
+   */
+  private gulpPathOpen(i: number, length: number): boolean {
+    const top = this.gulpTop(length);
+    const { position } = this.host;
+    const x = at(position, i * 3);
+    const y = at(position, i * 3 + 1);
+    const z = at(position, i * 3 + 2);
+    if (!this.clearAbove(x, y, z, top, length)) return false;
+    return this.host.holdsColumn(i, x, y, z, top, WAVE_MAKER.sustainedFraction);
+  }
+
+  /** Whether the water from `y` straight up to `top` is clear of rock and wood. */
+  private clearAbove(x: number, y: number, z: number, top: number, length: number): boolean {
+    const { decorSdf } = this.host;
+    if (decorSdf === null) return true;
+    const clear = BEHAVIOUR.gulpPathClearBodyLengths * length;
+    const last = BEHAVIOUR.gulpPathSamples - 1;
+    for (let k = 0; k <= last; k++) {
+      if (decorSdf.sample(x, y + ((top - y) * k) / last, z, this.n3) < clear) return false;
+    }
+    return true;
+  }
+
+  /**
+   * A fish due a breath under an overhang slides out level to the nearest open water before it
+   * rises: steering will not lift a fish into wood just above it, so rising in place only hovers.
+   * False when the water above is open, or nothing within `gulpSlideRings` body lengths is.
+   */
+  private planSlideOut(i: number, plan: Plan, length: number): boolean {
+    const { basin, decorSdf, position } = this.host;
+    if (decorSdf === null) return false;
+    const px = at(position, i * 3);
+    const py = at(position, i * 3 + 1);
+    const pz = at(position, i * 3 + 2);
+    const top = this.gulpTop(length);
+    if (this.clearAbove(px, py, pz, top, length)) return false;
+    const margin = BEHAVIOUR.gulpClimbStandoffBodyLengths * length;
+    const room = BEHAVIOUR.bodyThicknessBodyLengths * length;
+    const lift = BEHAVIOUR.forageBandHighBodyLengths * length;
+    const n = BEHAVIOUR.gulpSlideDirections;
+    for (let ring = 1; ring <= BEHAVIOUR.gulpSlideRings; ring++) {
+      for (let k = 0; k < n; k++) {
+        const a = (2 * Math.PI * k) / n;
+        const x = clamp(px + Math.sin(a) * ring * length, basin.minX + margin, basin.maxX - margin);
+        const z = clamp(pz + Math.cos(a) * ring * length, basin.minZ + margin, basin.maxZ - margin);
+        const y = Math.max(py, basin.ground(x, z) + lift);
+        if (decorSdf.sample(x, y, z, this.n3) < room) continue;
+        if (!this.clearAbove(x, y, z, top, length)) continue;
+        if (!this.host.holdsColumn(i, x, y, z, top, WAVE_MAKER.sustainedFraction)) continue;
+        plan.seek(x, y, z, at(this.host.cruiseSpeed, i), 0.6);
+        plan.wander = 0;
+        plan.cohesion = 0;
+        plan.align = 0;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * A fish whose breath has waited `gulpOverdueS` stops putting it off: it rises where it is if
+   * it can, and otherwise climbs to the air along the nearest pane.
+   */
+  private planOverdueGulp(i: number, plan: Plan): boolean {
+    if (at(this.gulpDue, i) !== 1 || at(this.gulpWait, i) < BEHAVIOUR.gulpOverdueS) return false;
+    const length = at(this.host.bodyLength, i);
+    if (this.gulpPathOpen(i, length)) {
+      this.startGulp(i, plan, GulpPhase.Ascend);
+      return true;
+    }
+    if (!this.planSlideOut(i, plan, length)) this.startGulp(i, plan, GulpPhase.Climb);
+    return true;
+  }
+
+  /**
+   * Corydoras rise to the surface for a gulp of air and dart back down (Kramer & McClure 1980),
+   * turning back for the bottom if the current above grows more than they can hold against.
+   */
   private planGulp(i: number, plan: Plan): void {
     const length = at(this.host.bodyLength, i);
     const { basin } = this.host;
@@ -2380,32 +2986,197 @@ export class Behaviour {
     plan.bandHi = h;
     const left = at(this.gulpTimer, i) - DT;
     this.gulpTimer[i] = left;
-    const top = h - BEHAVIOUR.gulpTopBodyLengths * length;
-    const phase = at(this.gulpPhase, i);
-    if (phase === GulpPhase.Ascend) {
-      plan.seek(px, top, pz, speed, 0.3);
+    const top = this.gulpTop(length);
+    // Turning over at the surface beside a pane sweeps the tail across it, so the breath and the
+    // dive back down are taken a body length clear of the glass.
+    const glass = BEHAVIOUR.gulpGlassClearBodyLengths * length;
+    let phase = at(this.gulpPhase, i);
+    if (
+      (phase === GulpPhase.Ascend || phase === GulpPhase.Hold) &&
+      !this.host.holdsColumn(i, px, py, pz, top, WAVE_MAKER.sustainedFraction)
+    ) {
+      if (phase === GulpPhase.Hold) {
+        phase = GulpPhase.Descend;
+      } else if (at(this._gulpWait, i) >= BEHAVIOUR.gulpOverdueS) {
+        phase = GulpPhase.Climb;
+        this.climbing[i] = 0;
+      } else {
+        this.gulpDue[i] = 1;
+        phase = GulpPhase.Descend;
+      }
+      this.gulpPhase[i] = phase;
+      this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
+    }
+    if (phase === GulpPhase.Ascend || phase === GulpPhase.Climb) {
+      if (phase === GulpPhase.Climb) {
+        this.planClimb(i, plan, length, h - BEHAVIOUR.gulpClimbTopBodyLengths * length, speed);
+      } else {
+        plan.seek(px, top, pz, speed, 0.6);
+      }
       if (py >= h - BEHAVIOUR.gulpArriveBodyLengths * length) {
         this.gulpPhase[i] = GulpPhase.Hold;
         this.gulpTimer[i] = BEHAVIOUR.gulpHoldS;
+        this._gulpWait[i] = 0;
+        this.gulpTries[i] = 0;
       } else if (left <= 0) {
+        if (phase === GulpPhase.Climb) this.gulpTries[i] = (at(this.gulpTries, i) + 1) % 4;
+        this.gulpDue[i] = 1;
         this.gulpPhase[i] = GulpPhase.Descend;
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
       }
     } else if (phase === GulpPhase.Hold) {
-      plan.seek(px, top, pz, 0.2 * speed, 0.3);
+      plan.seek(
+        insetClamp(px, basin.minX, basin.maxX, glass),
+        top,
+        insetClamp(pz, basin.minZ, basin.maxZ, glass),
+        0.2 * speed,
+        0.3,
+      );
       if (left <= 0) {
         this.gulpPhase[i] = GulpPhase.Descend;
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
       }
     } else {
+      plan.floor = true;
       const above = BEHAVIOUR.forageBandHighBodyLengths * length;
-      plan.seek(px, ground + above, pz, speed, 0.3);
-      if (py - ground <= 1.5 * above || left <= 0) this.gulpPhase[i] = GulpPhase.None;
+      plan.seek(
+        insetClamp(px, basin.minX, basin.maxX, glass),
+        ground + above,
+        insetClamp(pz, basin.minZ, basin.maxZ, glass),
+        speed,
+        0.6,
+      );
+      if (py - ground <= BEHAVIOUR.gulpLandBodyLengths * length || left <= 0) {
+        this.gulpPhase[i] = GulpPhase.None;
+      }
     }
   }
 
-  /** Surface grazers (otocinclus, plecos) attach belly-down to glass or decor and crawl. */
-  private planGlassGrazer(i: number, plan: Plan): void {
+  /**
+   * Fish `i` makes for a pane with no rock or wood up it and climbs it in the slow water against
+   * the glass, as corydoras and mudskippers work their way up glass. The nearest such pane comes
+   * first; each failed climb moves on to the next nearest.
+   */
+  private planClimb(i: number, plan: Plan, length: number, top: number, speed: number): void {
+    const { basin, position } = this.host;
+    const px = at(position, i * 3);
+    const pz = at(position, i * 3 + 2);
+    const standoff = BEHAVIOUR.gulpClimbStandoffBodyLengths * length;
+    const xLo = basin.minX + standoff;
+    const xHi = basin.maxX - standoff;
+    const zLo = basin.minZ + standoff;
+    const zHi = basin.maxZ - standoff;
+    const corner = BEHAVIOUR.gulpClimbCornerBodyLengths * length;
+    const cx = insetClamp(px, basin.minX, basin.maxX, corner);
+    const cz = insetClamp(pz, basin.minZ, basin.maxZ, corner);
+    const panes = this.climbPanes;
+    panes[0] = xLo;
+    panes[1] = cz;
+    panes[2] = xHi;
+    panes[3] = cz;
+    panes[4] = cx;
+    panes[5] = zLo;
+    panes[6] = cx;
+    panes[7] = zHi;
+    const order = this.climbOrder;
+    let open = 0;
+    for (let k = 0; k < 4; k++) {
+      const x = at(panes, k * 2);
+      const z = at(panes, k * 2 + 1);
+      const clear = this.climbClear(x, z, length, top);
+      const d = Math.hypot(x - px, z - pz) + (clear ? 0 : 1e6);
+      if (clear) open++;
+      let m = k;
+      while (m > 0 && at(this.climbDist, m - 1) > d) {
+        this.climbDist[m] = at(this.climbDist, m - 1);
+        order[m] = at(order, m - 1);
+        m--;
+      }
+      this.climbDist[m] = d;
+      order[m] = k;
+    }
+    const k = at(order, at(this.gulpTries, i) % Math.max(1, open));
+    const gx = at(panes, k * 2);
+    const gz = at(panes, k * 2 + 1);
+    const near = Math.hypot(gx - px, gz - pz) <= BEHAVIOUR.gulpClimbReachBodyLengths * length;
+    const alongX = k >= 2 ? 1 : 0;
+    const alongZ = 1 - alongX;
+    if (near && at(this.climbing, i) === 0) {
+      const ahead =
+        at(this.host.forward, i * 3) * alongX + at(this.host.forward, i * 3 + 2) * alongZ;
+      const y = Math.min(at(position, i * 3 + 1), top);
+      const side = this.slantSide(gx, y, gz, alongX, length, top, ahead);
+      this.climbing[i] = (side === 0 ? ahead : side) < 0 ? 2 : 1;
+    }
+    const latched = at(this.climbing, i);
+    if (latched === 0) {
+      plan.seek(gx, this.climbStart(gx, gz, length), gz, speed, 0.6);
+      return;
+    }
+    // Hugging the pane must not mean hugging rock or wood beside it.
+    const { decorSdf } = this.host;
+    const py = at(position, i * 3 + 1);
+    if (
+      decorSdf === null ||
+      decorSdf.sample(px, py, pz, this.n3) > BEHAVIOUR.gulpPathClearBodyLengths * length
+    ) {
+      plan.comfort = BEHAVIOUR.minComfort;
+    }
+    // Climbing head-on to the glass would put the nose into it, so it slants up along the pane on
+    // the side clear of decor, keeping the side it chose: re-picking it as the current swings the
+    // fish turns it on the glass.
+    const slant = (latched === 2 ? -1 : 1) * BEHAVIOUR.gulpClimbSlantBodyLengths * length;
+    plan.seek(
+      alongX === 1 ? insetClamp(gx + slant, basin.minX, basin.maxX, corner) : gx,
+      top,
+      alongZ === 1 ? insetClamp(gz + slant, basin.minZ, basin.maxZ, corner) : gz,
+      speed,
+      0.6,
+    );
+  }
+
+  /**
+   * The height a climber crosses to its pane at: mid-water, where a wave maker's gyre turns and
+   * the flow is slackest, and above the tall decor on the bottom.
+   */
+  private climbStart(x: number, z: number, length: number): number {
+    const { basin } = this.host;
+    return Math.max(basin.ground(x, z) + length, 0.5 * (basin.minY + basin.maxY));
+  }
+
+  private climbClear(x: number, z: number, length: number, top: number): boolean {
+    return this.clearAbove(x, this.climbStart(x, z, length), z, top, length);
+  }
+
+  /**
+   * The way along the pane at `x`, `z` a climber at height `y` slants up, preferring the way it
+   * faces: 1 or -1, or 0 if decor blocks both.
+   */
+  private slantSide(
+    x: number,
+    y: number,
+    z: number,
+    alongX: number,
+    length: number,
+    top: number,
+    ahead: number,
+  ): number {
+    const { basin } = this.host;
+    const corner = BEHAVIOUR.gulpClimbCornerBodyLengths * length;
+    const slant = BEHAVIOUR.gulpClimbSlantBodyLengths * length;
+    for (const side of ahead < 0 ? [-1, 1] : [1, -1]) {
+      const sx = alongX === 1 ? insetClamp(x + side * slant, basin.minX, basin.maxX, corner) : x;
+      const sz = alongX === 1 ? z : insetClamp(z + side * slant, basin.minZ, basin.maxZ, corner);
+      if (this.clearAbove(sx, y, sz, top, length)) return side;
+    }
+    return 0;
+  }
+
+  /**
+   * Surface grazers (otocinclus, plecos) attach belly-down to glass or decor and crawl. Resting,
+   * one settles onto the nearest surface and stays there without crawling or grazing.
+   */
+  private planGlassGrazer(i: number, plan: Plan, rest: number): void {
     const { rng } = this.host;
     const n3 = this.n3;
     const length = at(this.host.bodyLength, i);
@@ -2418,8 +3189,12 @@ export class Behaviour {
     const nx = at(n3, 0);
     const ny = at(n3, 1);
     const nz = at(n3, 2);
+    const resting = rest > 0.5;
+    if (resting && at(this.grazePhase, i) === GrazePhase.Roam) {
+      this.grazePhase[i] = GrazePhase.None;
+    }
     const phase = at(this.grazePhase, i);
-    const left = at(this.grazeTimer, i) - DT;
+    const left = resting ? at(this.grazeTimer, i) : at(this.grazeTimer, i) - DT;
     this.grazeTimer[i] = left;
     plan.floor = false;
     plan.bandLo = this.host.basin.ground(px, pz);
@@ -2445,6 +3220,15 @@ export class Behaviour {
         this.grazeTimer[i] = rng.range(BEHAVIOUR.glassStayMinS, BEHAVIOUR.glassStayMaxS);
         this.crawlSign[i] = rng.next() < 0.5 ? -1 : 1;
       }
+      return;
+    }
+    if (resting) {
+      plan.state = FishState.Rest;
+      plan.wander = 0;
+      plan.speedFloor = 0;
+      plan.speedCap = 0;
+      plan.roll = this.bellyRoll(i, n3);
+      if (d > 4 * standoff) this.grazePhase[i] = GrazePhase.None;
       return;
     }
     plan.state = FishState.Graze;
@@ -2545,6 +3329,13 @@ export class Behaviour {
         this.grazeYaw[i] = at(this.host.yaw, i);
       } else if (left <= 0) {
         this.grazePhase[i] = GrazePhase.None;
+      } else if (
+        d > length &&
+        !lineClear(this.host.sceneSdf, px, py, pz, gx, gy, gz, grazeStandoff(length), this.n3)
+      ) {
+        // Swept against the rock (by the wave maker, or a rival), the fish gives the spot up
+        // rather than grinding round to it.
+        this.grazePhase[i] = GrazePhase.None;
       } else if (ahead < 0.3 * d && !this.pickGrazeSpot(i)) {
         // Steering back onto a spot slipping past the flank would orbit it; take one ahead instead.
         this.grazePhase[i] = GrazePhase.None;
@@ -2571,55 +3362,31 @@ export class Behaviour {
 
   /** Projects a few random nearby points onto hard decor and keeps the closest standoff spot. */
   private pickGrazeSpot(i: number): boolean {
-    const { rng, decorSdf, substrateSdf, sceneSdf, basin } = this.host;
-    const field = decorSdf ?? substrateSdf;
-    const n3 = this.n3;
+    const { rng, decorSdf, substrateSdf, sceneSdf, basin, position, forward, bodyLength } =
+      this.host;
     const o = i * 3;
-    const px = at(this.host.position, o);
-    const py = at(this.host.position, o + 1);
-    const pz = at(this.host.position, o + 2);
-    const length = at(this.host.bodyLength, i);
-    const thickness = BEHAVIOUR.bodyThicknessBodyLengths * length;
-    const standoff = thickness + BEHAVIOUR.grazeStandoffBodyLengths * length;
-    const fx = at(this.host.forward, o);
-    const fz = at(this.host.forward, o + 2);
+    const probe: GrazeProbe = {
+      field: decorSdf ?? substrateSdf,
+      scene: sceneSdf,
+      maxY: basin.maxY,
+      x: at(position, o),
+      y: at(position, o + 1),
+      z: at(position, o + 2),
+      fx: at(forward, o),
+      fz: at(forward, o + 2),
+      length: at(bodyLength, i),
+    };
+    const spot = this.spot;
     let best = Infinity;
     for (let c = 0; c < 4; c++) {
-      let x = px + rng.signed() * 0.3;
-      let y = clamp(py + rng.signed() * 0.15, basin.minY, basin.maxY);
-      let z = pz + rng.signed() * 0.3;
-      let d = Infinity;
-      for (let k = 0; k < 8; k++) {
-        d = field.sample(x, y, z, n3);
-        x -= at(n3, 0) * d;
-        y -= at(n3, 1) * d;
-        z -= at(n3, 2) * d;
-        if (Math.abs(d) < 1e-4) break;
-      }
-      if (Math.abs(d) > 1e-3) continue;
-      field.sample(x, y, z, n3);
-      const nx = at(n3, 0);
-      const ny = at(n3, 1);
-      const nz = at(n3, 2);
-      // Only a face the fish is already swimming toward; grazing the far side means a U-turn.
-      if (nx * fx + nz * fz > 0.3) continue;
-      const gx = x + nx * standoff;
-      const gy = y + ny * standoff;
-      const gz = z + nz * standoff;
-      if (sceneSdf.sample(gx, gy, gz, n3) < thickness * 1.2) continue;
-      // The body trails back from the rock along its normal; a spot hemmed in by glass or a
-      // second rock behind leaves no room to back off and turn away after the bout.
-      const back = standoff + BEHAVIOUR.grazeBackRoomBodyLengths * length;
-      if (
-        sceneSdf.sample(x + nx * back, y + ny * back, z + nz * back, n3) <
-        BEHAVIOUR.grazeBackRoomBodyLengths * length
-      ) {
-        continue;
-      }
-      if (gy > basin.maxY - 2 * length) continue;
-      const dist = Math.hypot(gx - px, gy - py, gz - pz);
-      // Doubling back to a spot behind costs a U-turn; a forager picks what lies ahead.
-      if ((gx - px) * fx + (gz - pz) * fz < 0) continue;
+      const x = probe.x + rng.signed() * 0.3;
+      const y = clamp(probe.y + rng.signed() * 0.15, basin.minY, basin.maxY);
+      const z = probe.z + rng.signed() * 0.3;
+      if (!grazeSpotFor(probe, x, y, z, spot, this.n3)) continue;
+      const gx = at(spot, 0);
+      const gy = at(spot, 1);
+      const gz = at(spot, 2);
+      const dist = Math.hypot(gx - probe.x, gy - probe.y, gz - probe.z);
       if (dist < best) {
         best = dist;
         this.grazeTarget[o] = gx;
@@ -2629,4 +3396,122 @@ export class Behaviour {
     }
     return best < Infinity;
   }
+
+  /**
+   * Whether fish `j` is in plain view of fish `i`, with no rock between them. Rock that breaks
+   * the line of sight is what keeps rock-dwelling cichlids from chasing every neighbour
+   * (Konings 2007); charging round it would only grind the body along it. Glass, sand and the
+   * water surface hide nothing, so two fish skimming the floor still see each other.
+   */
+  private inSight(i: number, j: number): boolean {
+    const { position, bodyLength, decorSdf } = this.host;
+    if (decorSdf === null) return true;
+    return lineClear(
+      decorSdf,
+      at(position, i * 3),
+      at(position, i * 3 + 1),
+      at(position, i * 3 + 2),
+      at(position, j * 3),
+      at(position, j * 3 + 1),
+      at(position, j * 3 + 2),
+      BEHAVIOUR.bodyThicknessBodyLengths * at(bodyLength, i),
+      this.n3,
+    );
+  }
+}
+
+/** Whether a body `thickness` thick swims the straight line between two points clear of `sdf`. */
+export function lineClear(
+  sdf: Sdf,
+  ax: number,
+  ay: number,
+  az: number,
+  bx: number,
+  by: number,
+  bz: number,
+  thickness: number,
+  n3: Float64Array,
+): boolean {
+  for (let k = 1; k < BEHAVIOUR.grazePathSamples; k++) {
+    const t = k / BEHAVIOUR.grazePathSamples;
+    const room = sdf.sample(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t, n3);
+    if (room < thickness) return false;
+  }
+  return true;
+}
+
+/** A rock grazer looking for a spot: where it is, which way it heads and what it can graze. */
+export interface GrazeProbe {
+  /** The surfaces it grazes: hard decor, or the floor and glass of a bare tank. */
+  readonly field: Sdf;
+  /** Everything it must swim clear of. */
+  readonly scene: Sdf;
+  /** The water surface. */
+  readonly maxY: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** Horizontal heading. */
+  readonly fx: number;
+  readonly fz: number;
+  readonly length: number;
+}
+
+/**
+ * Projects the point (x, y, z) onto the grazed surface and writes the stand-off point the fish
+ * would peck from to `out`. False when the fish cannot graze there from where it is.
+ */
+export function grazeSpotFor(
+  probe: GrazeProbe,
+  x: number,
+  y: number,
+  z: number,
+  out: Float64Array,
+  n3: Float64Array,
+): boolean {
+  const { field, scene, length } = probe;
+  const px = probe.x;
+  const py = probe.y;
+  const pz = probe.z;
+  const thickness = BEHAVIOUR.bodyThicknessBodyLengths * length;
+  const standoff = grazeStandoff(length);
+  let d = Infinity;
+  for (let k = 0; k < 8; k++) {
+    d = field.sample(x, y, z, n3);
+    x -= at(n3, 0) * d;
+    y -= at(n3, 1) * d;
+    z -= at(n3, 2) * d;
+    if (Math.abs(d) < 1e-4) break;
+  }
+  if (Math.abs(d) > 1e-3) return false;
+  field.sample(x, y, z, n3);
+  const nx = at(n3, 0);
+  const ny = at(n3, 1);
+  const nz = at(n3, 2);
+  // Only a face the fish is already swimming toward; grazing the far side means a U-turn.
+  if (nx * probe.fx + nz * probe.fz > 0.3) return false;
+  // A face turned away from the fish (the underside of a log it is above) is reached only by
+  // swimming round the decor; a straight approach grinds the body along it the whole way.
+  if ((px - x) * nx + (py - y) * ny + (pz - z) * nz <= 0) return false;
+  const gx = x + nx * standoff;
+  const gy = y + ny * standoff;
+  const gz = z + nz * standoff;
+  if (scene.sample(gx, gy, gz, n3) < thickness * 1.2) return false;
+  // The body trails back from the rock along its normal; a spot hemmed in by glass or a
+  // second rock behind leaves no room to back off and turn away after the bout.
+  const back = standoff + BEHAVIOUR.grazeBackRoomBodyLengths * length;
+  if (
+    scene.sample(x + nx * back, y + ny * back, z + nz * back, n3) <
+    BEHAVIOUR.grazeBackRoomBodyLengths * length
+  ) {
+    return false;
+  }
+  if (gy > probe.maxY - 2 * length) return false;
+  if (!lineClear(scene, px, py, pz, gx, gy, gz, standoff, n3)) return false;
+  // Doubling back to a spot behind costs a U-turn; a forager picks what lies ahead.
+  if ((gx - px) * probe.fx + (gz - pz) * probe.fz < 0) return false;
+  out[0] = gx;
+  out[1] = gy;
+  out[2] = gz;
+  return true;
 }

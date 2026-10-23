@@ -1,0 +1,30 @@
+{
+  "roomId": "room-office",
+  "layout": [
+    {
+      "asset": "polyhaven-metal-office-desk",
+      "position": [-1.95, -0.75, 0.12],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-modern-arm-chair-01",
+      "position": [-1.95, -0.75, 1.15],
+      "rotationY": 3.142,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-classic-laptop",
+      "position": [-1.95, 0.037, 0.1],
+      "rotationY": 0,
+      "scale": 1
+    }
+  ],
+  "light": {
+    "keyColor": "#fff6e5",
+    "keyIntensity": 2.4,
+    "ambientColor": "#eef2ff",
+    "ambientIntensity": 0.55,
+    "windowPosition": [1.2, 0.85, -0.37]
+  }
+}

@@ -10,6 +10,7 @@ import {
   type PlaybackState,
   type ReplayMode,
 } from './replayPlayback';
+import { isTouchFirst } from '../engine/quality/profile';
 
 function run(
   mode: ReplayMode,
@@ -36,6 +37,15 @@ describe('replayModeFor', () => {
     expect(replayModeFor('ultra', false)).toBe('simulate');
     expect(replayModeFor('low', false)).toBe('crossfade');
     expect(replayModeFor('high', true)).toBe('crossfade');
+  });
+});
+
+describe('replay mode on an iPad with a trackpad', () => {
+  it('crossfades, because the mode follows device memory and not the input method', () => {
+    const ipad = { coarsePointer: false, platform: 'MacIntel', maxTouchPoints: 5 };
+    expect(replayModeFor('high', isTouchFirst(ipad))).toBe('crossfade');
+    const mac = { coarsePointer: false, platform: 'MacIntel', maxTouchPoints: 0 };
+    expect(replayModeFor('high', isTouchFirst(mac))).toBe('simulate');
   });
 });
 

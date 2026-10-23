@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { backgroundIdSchema } from './backgrounds.js';
+import { roomIdSchema } from './rooms.js';
 import { biomeSchema, decorLayoutResponseSchema, timestampSchema } from './common.js';
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema } from './equipment.js';
@@ -40,6 +41,9 @@ export const publicTankSchema = reactionStateSchema.extend({
   size: tankSizeSchema,
   seed: z.int().min(0).max(0xffffffff).describe('stable tank sim seed'),
   backgroundId: backgroundIdSchema,
+  roomId: roomIdSchema
+    .nullable()
+    .describe('the owner room, shown read-only; viewing it grants nothing'),
   decorLayout: decorLayoutResponseSchema,
   decorEdited: z.boolean().describe('false while the owner never edited the decor'),
   water: waterSchema,

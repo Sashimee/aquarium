@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { colonyCapacity } from '@aquarium/sim/lifecycle';
+import { MAX_EQUIPMENT_TIER } from '@aquarium/shared';
 import { loadChemistryParameters } from './chemistry.ts';
 import { loadEconomy } from './economy.ts';
 
 const prices = loadEconomy().items.equipment;
-const tables = loadChemistryParameters().equipment;
+const params = loadChemistryParameters();
+const tables = params.equipment;
 
 const rateTables = {
   light: [tables.light.algaeGrowthPerTier],
@@ -27,4 +30,18 @@ describe('equipment price lists against the chemistry rate tables', () => {
       }
     },
   );
+
+  it('sells heater and filter tiers up to the best one the schema allows', () => {
+    expect(prices.heater).toHaveLength(MAX_EQUIPMENT_TIER);
+    expect(prices.filter).toHaveLength(MAX_EQUIPMENT_TIER);
+  });
+
+  it('gives every sellable filter tier a larger colony than the one below, up to full', () => {
+    const capacity = (tier: number) =>
+      colonyCapacity(tier, params.bacteria.mediaCapacityPerFilterTier);
+    for (let tier = 1; tier <= prices.filter.length; tier++) {
+      expect(capacity(tier), `filter tier ${tier}`).toBeGreaterThan(capacity(tier - 1));
+    }
+    expect(capacity(prices.filter.length)).toBe(1);
+  });
 });

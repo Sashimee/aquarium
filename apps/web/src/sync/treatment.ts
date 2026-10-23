@@ -1,25 +1,20 @@
-import type {
-  DiseaseKind,
-  Economy,
-  Fish,
-  Medicine,
-  MedicinePotency,
-  SpeciesSummary,
-  Tank,
+import {
+  DISEASE_NAMES,
+  type ConflictReason,
+  type DiseaseKind,
+  type Economy,
+  type Fish,
+  type Medicine,
+  type MedicinePotency,
+  type SpeciesSummary,
+  type Tank,
 } from '@aquarium/shared';
-import { addDose, courseHours } from '@aquarium/sim/lifecycle';
+import { addDose, courseHours, ICH_HEAT_C } from '@aquarium/sim/lifecycle';
 import { pearlText } from './economy';
-
-// Mirrors ICH_HEAT_C in packages/sim/lifecycle/disease.ts, which the lifecycle index does not export.
-const ICH_HEAT_C = 30;
 
 export const DISEASE_KINDS: readonly DiseaseKind[] = ['ich', 'fin-rot', 'velvet'];
 
-export const DISEASE_LABEL: Record<DiseaseKind, string> = {
-  ich: 'Ich',
-  'fin-rot': 'Fin rot',
-  velvet: 'Velvet',
-};
+export const DISEASE_LABEL: Readonly<Record<DiseaseKind, string>> = DISEASE_NAMES;
 
 export const SYMPTOMS: Record<DiseaseKind, string> = {
   ich: 'tiny white spots, like grains of salt, on the body and fins',
@@ -74,9 +69,19 @@ export function doseSpend(
   };
 }
 
-/** Whatever the panel holds for a tank is shown under that tank only. */
-export function heldFor<T extends { tankId: string }>(held: T | null, tankId: string): T | null {
-  return held !== null && held.tankId === tankId ? held : null;
+export interface HeldDose<P, R> {
+  tankId: string;
+  pending: P | null;
+  refusal: R | null;
+}
+
+export function emptyHeld<P, R>(tankId: string): HeldDose<P, R> {
+  return { tankId, pending: null, refusal: null };
+}
+
+/** Anything held for another tank is dropped for good, so coming back to that tank starts clean. */
+export function reconcileHeld<P, R>(held: HeldDose<P, R>, tankId: string): HeldDose<P, R> {
+  return held.tankId === tankId ? held : emptyHeld(tankId);
 }
 
 /** One line per disease for the shared live region, so a screen reader hears a change once. */
@@ -153,9 +158,9 @@ export function blockedText(reason: Blocked): string {
   }
 }
 
-/** The server words both of its water refusals alike, and a water change cures both. */
-export function wantsWaterChange(message: string): boolean {
-  return /change the water/i.test(message);
+/** Both of the server's water refusals are cured by a water change. */
+export function wantsWaterChange(reason: ConflictReason | null): boolean {
+  return reason === 'other_medicine' || reason === 'dose_limit';
 }
 
 export function doseButtonText(

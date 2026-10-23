@@ -6,7 +6,27 @@ export type DeviceLostInfo = Parameters<WebGPURenderer['onDeviceLost']>[0];
 /** The part of the renderer that reports a lost GPU device or WebGL context. */
 export interface LossSource {
   onDeviceLost: (info: DeviceLostInfo) => void;
+  /** Typed as a string in @types/three, but three r186 passes `{ api, type, message }`. */
+  onError: WebGPURenderer['onError'];
   readonly backend: object;
+}
+
+/**
+ * An uncaptured WebGPU out-of-memory error as a loss. The device stays alive, but the texture or
+ * buffer it failed to create is invalid, and every later submit that binds it fails: the canvas
+ * goes black with no `device.lost` to say why (#1456).
+ */
+export function outOfMemoryLoss(error: unknown): DeviceLostInfo | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const type: unknown = Reflect.get(error, 'type');
+  if (type !== 'GPUOutOfMemoryError') return null;
+  const message: unknown = Reflect.get(error, 'message');
+  return {
+    api: 'WebGPU',
+    message: typeof message === 'string' && message !== '' ? message : 'Out of GPU memory',
+    reason: 'out-of-memory',
+    originalEvent: Reflect.get(error, 'originalEvent') ?? error,
+  };
 }
 
 interface LosableDevice {
@@ -36,7 +56,7 @@ export interface DeviceLossWatch {
  * own handler has stopped it drawing. Start it before `init()`: a loss while the engine starts
  * is held until the engine takes it. three ignores a WebGPU loss with reason `destroyed`, but
  * Chromium reports that reason too when its GPU process drops the device, so `device.lost` is
- * watched as well.
+ * watched as well. An uncaptured out-of-memory error counts as a loss (see `outOfMemoryLoss`).
  */
 export function watchDeviceLoss(renderer: LossSource): DeviceLossWatch {
   let watching = true;
@@ -51,6 +71,13 @@ export function watchDeviceLoss(renderer: LossSource): DeviceLossWatch {
     else handler(info);
   };
   renderer.onDeviceLost = hook;
+  const threeOnError = renderer.onError;
+  const onError: LossSource['onError'] = (error) => {
+    threeOnError.call(renderer, error);
+    const loss = outOfMemoryLoss(error);
+    if (loss !== null && watching) hook(loss);
+  };
+  renderer.onError = onError;
 
   return {
     watchDevice() {
@@ -79,6 +106,7 @@ export function watchDeviceLoss(renderer: LossSource): DeviceLossWatch {
       watching = false;
       held = null;
       if (renderer.onDeviceLost === hook) renderer.onDeviceLost = threeHandler;
+      if (renderer.onError === onError) renderer.onError = threeOnError;
     },
   };
 }
@@ -94,6 +122,51 @@ export function recoveryFor(
   preference: BackendPreference,
 ): LossRecovery {
   return api === 'WebGPU' && preference === 'auto' ? 'webgl' : 'reload';
+}
+
+export const LOST_NOTICE =
+  'The graphics device stopped responding, so the tank cannot be drawn. Reload to try again.';
+
+/** The engine's side of a loss, injected so the response runs without a renderer or a window. */
+export interface LossResponder {
+  halt(): void;
+  announce(event: { api: DeviceLostInfo['api']; message: string; recovery: LossRecovery }): void;
+  report(message: string, info: DeviceLostInfo): void;
+  readonly location: Pick<Location, 'href' | 'reload' | 'replace'>;
+  readonly store: SessionStore | null;
+  /** Shows `message` with a button that runs `action`, and returns what removes it. */
+  notify(message: string, action: { readonly label: string; run(): void }): () => void;
+}
+
+export function lossMessage(info: DeviceLostInfo): string {
+  const reason = info.reason ? ` (reason: ${info.reason})` : '';
+  return `The ${info.api} device was lost: ${info.message}${reason}`;
+}
+
+/**
+ * Stops drawing first, so the page never sits on a frozen or black canvas, then asks the user to
+ * reload, onto WebGL 2 where that is the recovery. It never reloads by itself: a phone that lost
+ * its GPU process to memory pressure can lose the reload's page as well, and then shows nothing
+ * at all (#1456). Returns the notice's remover.
+ */
+export function respondToDeviceLoss(
+  info: DeviceLostInfo,
+  preference: BackendPreference,
+  responder: LossResponder,
+): () => void {
+  responder.halt();
+  const recovery = recoveryFor(info.api, preference);
+  responder.announce({ api: info.api, message: info.message, recovery });
+  responder.report(lossMessage(info), info);
+  const { location } = responder;
+  const here = location.href;
+  // Recorded now, so a reload the user makes some other way also starts on WebGL 2.
+  const next = recovery === 'webgl' ? webglFallbackUrl(here, responder.store) : here;
+  const reload = () => {
+    if (next === here) location.reload();
+    else location.replace(next);
+  };
+  return responder.notify(LOST_NOTICE, { label: 'Reload', run: reload });
 }
 
 export interface SessionStore {

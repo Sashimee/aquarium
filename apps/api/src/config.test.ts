@@ -47,4 +47,67 @@ describe('loadConfig', () => {
     ).toThrow(/https/);
     expect(loadConfig({ ...valid, APP_URL: 'http://localhost:3000' }).appUrl.port).toBe('3000');
   });
+
+  describe('Stripe keys', () => {
+    const secret = `sk_test_${'a'.repeat(24)}`;
+    const webhook = `whsec_${'b'.repeat(24)}`;
+
+    it('leaves payments off when neither key is set', () => {
+      expect(loadConfig(valid).stripe).toBeNull();
+      expect(
+        loadConfig({ ...valid, STRIPE_SECRET_KEY: ' ', STRIPE_WEBHOOK_SECRET: '' }).stripe,
+      ).toBeNull();
+    });
+
+    it('turns payments on when both are set', () => {
+      const c = loadConfig({ ...valid, STRIPE_SECRET_KEY: secret, STRIPE_WEBHOOK_SECRET: webhook });
+      expect(c.stripe).toEqual({ secretKey: secret, webhookSecret: webhook });
+    });
+
+    it('refuses exactly one of the two, without echoing either', () => {
+      for (const only of [{ STRIPE_SECRET_KEY: secret }, { STRIPE_WEBHOOK_SECRET: webhook }]) {
+        const attempt = () => loadConfig({ ...valid, ...only });
+        expect(attempt).toThrow(/together or not at all/);
+        expect(attempt).not.toThrow(/aaaaaaaa|bbbbbbbb/);
+      }
+    });
+
+    it('refuses a live key unless PAYMENTS_LIVE=1, naming the variable and not the key', () => {
+      const live = `sk_live_${'c'.repeat(24)}`;
+      for (const flag of [undefined, '', '0', 'true']) {
+        const attempt = () =>
+          loadConfig({
+            ...valid,
+            STRIPE_SECRET_KEY: live,
+            STRIPE_WEBHOOK_SECRET: webhook,
+            ...(flag === undefined ? {} : { PAYMENTS_LIVE: flag }),
+          });
+        expect(attempt).toThrow(/PAYMENTS_LIVE=1/);
+        expect(attempt).not.toThrow(/cccccccc/);
+      }
+      const c = loadConfig({
+        ...valid,
+        STRIPE_SECRET_KEY: live,
+        STRIPE_WEBHOOK_SECRET: webhook,
+        PAYMENTS_LIVE: '1',
+      });
+      expect(c.stripe?.secretKey).toBe(live);
+    });
+
+    it('still takes a restricted live key only with the opt-in', () => {
+      const restricted = `rk_live_${'d'.repeat(24)}`;
+      expect(() =>
+        loadConfig({ ...valid, STRIPE_SECRET_KEY: restricted, STRIPE_WEBHOOK_SECRET: webhook }),
+      ).toThrow(/PAYMENTS_LIVE/);
+    });
+
+    it('refuses values that are not Stripe keys', () => {
+      expect(() =>
+        loadConfig({ ...valid, STRIPE_SECRET_KEY: 'pk_test_abc', STRIPE_WEBHOOK_SECRET: webhook }),
+      ).toThrow(/STRIPE_SECRET_KEY/);
+      expect(() =>
+        loadConfig({ ...valid, STRIPE_SECRET_KEY: secret, STRIPE_WEBHOOK_SECRET: 'abc' }),
+      ).toThrow(/STRIPE_WEBHOOK_SECRET/);
+    });
+  });
 });

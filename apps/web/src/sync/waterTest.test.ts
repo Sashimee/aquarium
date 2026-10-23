@@ -90,7 +90,7 @@ describe('readPad', () => {
 describe('dipStrip', () => {
   it('reads every pad of a freshwater strip from the tank values', () => {
     const tank = tankFixture({
-      water: { ammonia: 0.3, nitrate: 45, algae: 0, uneatenFood: 0 },
+      water: { ammonia: 0.3, nitrate: 45, algae: 0, tannin: 0, uneatenFood: 0 },
       chemistry: { ...newTankChemistry('freshwater'), nitrite: 0.5, ph: 6.4, kh: 4 },
     });
     const strip = dipStrip(tank.biome, rawValues(tank));
@@ -174,7 +174,7 @@ describe('verdictHazard', () => {
   const tetra = speciesFixture();
   const tank = (water: { ammonia: number; nitrate: number }) =>
     tankFixture({
-      water: { ...water, algae: 0, uneatenFood: 0 },
+      water: { ...water, algae: 0, tannin: 0, uneatenFood: 0 },
       fish: [
         fishFixture(FISH_1),
         fishFixture('10000000-0000-4000-8000-000000000009', { species: 'discus' }),
@@ -229,8 +229,8 @@ describe('verdictHazard', () => {
 describe('chart resolution matches verdicts', () => {
   const readBack = (id: PadId, value: number) => describeReading(readPad(id, value) ?? undefined);
 
-  it('reads a default mangrove tank at 15 ppt', () => {
-    expect(readBack('salinity', 15)).toBe('15 ppt');
+  it('reads a default mangrove tank at 10 ppt', () => {
+    expect(readBack('salinity', 10)).toBe('10 ppt');
   });
 
   it('reads a reef at 37 ppt as 37 and the verdict agrees', () => {

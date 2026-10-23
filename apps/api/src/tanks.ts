@@ -1,6 +1,7 @@
 import {
   addFishRequestSchema,
   ateBatchRequestSchema,
+  type AteBatchRequest,
   backgroundIdSchema,
   careActionSchema,
   careEventSchema,
@@ -9,17 +10,23 @@ import {
   createTankRequestSchema,
   DEFAULT_BACKGROUND_ID,
   decorLayoutSchema,
+  keptPresetDecor,
   diseaseStateSchema,
+  equipmentProblems,
   equipmentSchema,
   findDecorProblems,
   idSchema,
   isBackgroundForBiome,
+  isFreeRoom,
+  type RoomId,
   isPlayableBiome,
   legacyTintSeed,
   medicineSchema,
   MAX_DISPLAY_TANKS,
   MAX_QUARANTINE_TANKS,
+  MUD_BANK_ASSET_ID,
   newTankChemistry,
+  tankLengthRefusal,
   TANK_SIZES,
   personalitySchema,
   setGalleryRequestSchema,
@@ -34,8 +41,13 @@ import {
   type CareAction,
   type ChemistryParameters,
   type Economy,
+  type Coral,
+  type Plant,
+  type StoredCoral,
+  type StoredPlant,
   type Tank,
 } from '@aquarium/shared';
+import { adultLengthRefusal, tankMaxFishLengthM } from './fishFit.ts';
 import {
   applyCare,
   applyEating,
@@ -46,11 +58,15 @@ import {
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
+  STEP_MS,
   VACATION_FEEDER_ASSET_ID,
   type BirthRecord,
   type LifecycleFish,
   type LifecycleState,
+  type CoralTable,
+  type PlantTable,
 } from '@aquarium/sim/lifecycle';
+import { cleanupSurfaces } from '@aquarium/sim';
 import { randomInt, randomUUID } from 'node:crypto';
 import {
   and,
@@ -63,7 +79,6 @@ import {
   inArray,
   lt,
   lte,
-  ne,
   or,
   sql,
 } from 'drizzle-orm';
@@ -84,11 +99,22 @@ import {
   claimAchievementRewards,
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
+import { registerGiftRoutes } from './gifts.ts';
 import { registerMoveRoutes } from './moveFish.ts';
+import { registerPlantRoutes } from './plantTrim.ts';
+import { registerCoralRoutes } from './coralFrag.ts';
+import { currentCorals, wireCorals } from './corals.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
+import {
+  currentPlants,
+  plantObstacles,
+  shownTintSeeds,
+  substrateBounds,
+  uniqueTintSeeds,
+  wirePlants,
+} from './plants.ts';
 import type { Presets } from './presets.ts';
-import { legacyKey, legacyStage } from './legacyRequests.ts';
 import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
@@ -102,6 +128,7 @@ export interface CareLimits {
   wallet: Limit;
   purchase: Limit;
   replay: Limit;
+  gift: Limit;
 }
 
 export const DEFAULT_CARE_LIMITS: CareLimits = {
@@ -112,6 +139,7 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   wallet: { max: 60, windowMs: 60_000 },
   purchase: { max: 60, windowMs: 10 * 60_000 },
   replay: { max: 30, windowMs: 60_000 },
+  gift: { max: 20, windowMs: 60 * 60_000 },
 };
 
 const EVENT_RETENTION_MS = 90 * 86_400_000;
@@ -132,12 +160,14 @@ export interface TankRouteDeps {
   limits: CareLimits;
   economy: Economy;
   presets: Presets;
+  plants: PlantTable;
+  corals: CoralTable;
   currentUser: (req: FastifyRequest) => Promise<SessionUser | null>;
 }
 
 export type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
-type TankRow = typeof schema.tanks.$inferSelect;
-type FishRow = typeof schema.fish.$inferSelect;
+export type TankRow = typeof schema.tanks.$inferSelect;
+export type FishRow = typeof schema.fish.$inferSelect;
 
 const feedPayloadSchema = z.looseObject({ portion: z.number().positive() });
 const atePayloadSchema = z.looseObject({ fishId: idSchema, portion: z.number().positive() });
@@ -146,6 +176,35 @@ const tankParamsSchema = z.strictObject({ tankId: idSchema });
 const fishParamsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
 
 const CURSOR_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
+function pricedConsumable(
+  action: CareAction,
+  economy: Economy,
+): { ref: string; key: string; amount: number } | null {
+  const { consumables } = economy.items;
+  switch (action.type) {
+    case 'bottled_bacteria':
+      return {
+        ref: 'consumable:bottled-bacteria',
+        key: action.idempotencyKey,
+        amount: consumables.bottledBacteria,
+      };
+    case 'buffer_dose':
+      return {
+        ref: 'consumable:buffer-dose',
+        key: action.idempotencyKey,
+        amount: consumables.bufferDose,
+      };
+    case 'add_botanicals':
+      return {
+        ref: 'consumable:botanicals',
+        key: action.idempotencyKey,
+        amount: consumables.botanicals,
+      };
+    default:
+      return null;
+  }
+}
 
 function encodeReplayCursor(row: { atUs: string; id: string }): string {
   return Buffer.from(`${row.atUs}|${row.id}`).toString('base64url');
@@ -178,7 +237,7 @@ const nameNotPublic = () =>
 
 const notFound = () => new HttpError(404, apiError('not_found', 'Tank not found.'));
 
-function toLifecycleFish(row: FishRow): LifecycleFish {
+export function toLifecycleFish(row: FishRow): LifecycleFish {
   return {
     id: row.id,
     species: row.species,
@@ -217,8 +276,12 @@ export function storedBackground(row: TankRow) {
   return DEFAULT_BACKGROUND_ID[row.biome];
 }
 
-function hasShelter(row: TankRow): boolean {
-  return storedLayout(row).some((item) => BREEDING_SHELTER_ASSET_IDS.includes(item.assetId));
+export function hasShelter(row: TankRow, presets: Presets): boolean {
+  const shown =
+    row.decorLayout === null
+      ? keptPresetDecor(presets[row.biome]?.decor ?? [], row.size)
+      : storedLayout(row);
+  return shown.some((item) => BREEDING_SHELTER_ASSET_IDS.includes(item.assetId));
 }
 
 function hasVacationFeeder(row: TankRow): boolean {
@@ -231,6 +294,10 @@ export interface Ticked {
   state: LifecycleState;
   away: AwaySummary | null;
   nowMs: number;
+  plants: StoredPlant[];
+  plantView: Plant[];
+  corals: StoredCoral[];
+  coralView: Coral[];
 }
 
 async function lockTank(tx: Tx, tankId: string, user: SessionUser): Promise<TankRow> {
@@ -253,11 +320,40 @@ async function lockAndTick(
   return tickLocked(tx, deps, await lockTank(tx, tankId, user), user);
 }
 
-async function tickLocked(
+/** The tank as it stands, when no catch-up step is due; null when one is, so the caller must lock and tick. */
+export async function readTicked(
   tx: Tx,
   deps: TankRouteDeps,
   tank: TankRow,
-  user: SessionUser,
+): Promise<Ticked | null> {
+  const now = deps.clock.now();
+  if (now - tank.lastTickAt.getTime() >= STEP_MS) return null;
+  const fishRows = await tx.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
+  const plants = currentPlants(tank, deps.presets, deps.plants);
+  const corals = currentCorals(tank, deps.presets, deps.corals);
+  return {
+    tank,
+    fishRows,
+    state: {
+      water: waterSchema.parse(tank.water),
+      chemistry: chemistrySchema.parse(tank.chemistry),
+      fish: fishRows.map(toLifecycleFish),
+      medicine: simMedicine(tank.medicine),
+    },
+    away: null,
+    nowMs: now,
+    plants,
+    plantView: wirePlants(tank, deps.presets, deps.plants, plants),
+    corals,
+    coralView: wireCorals(tank, deps.presets, deps.corals, corals),
+  };
+}
+
+export async function tickLocked(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tank: TankRow,
+  user: SessionUser | null,
 ): Promise<Ticked> {
   const now = deps.clock.now();
   const fishRows = await tx.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
@@ -267,6 +363,9 @@ async function tickLocked(
     fish: fishRows.map(toLifecycleFish),
     medicine: simMedicine(tank.medicine),
   };
+  const dims = TANK_SIZES[tank.size].dimensions;
+  const reconciled = currentPlants(tank, deps.presets, deps.plants);
+  const reconciledCorals = currentCorals(tank, deps.presets, deps.corals);
   const result = catchUp({
     state: initial,
     fromMs: tank.lastTickAt.getTime(),
@@ -274,16 +373,32 @@ async function tickLocked(
     biome: tank.biome,
     litres: TANK_SIZES[tank.size].litres,
     bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
+    maxFishLengthM: tankMaxFishLengthM(tank.size),
     equipment: equipmentSchema.parse(tank.equipment),
     species: new Map([...deps.species].map(([id, s]) => [id, s.lifecycle])),
     speciesChemistry: new Map([...deps.species].map(([id, s]) => [id, s.chemistry])),
     params: DEFAULT_WATER_PARAMETERS,
     chemistryParams: deps.chemistryParams,
-    graceEndsAtMs: user.createdAt.getTime() + GRACE_PERIOD_MS,
+    crew: {
+      species: deps.species.crew,
+      surfaces: cleanupSurfaces({
+        width: dims.length - 2 * dims.glass,
+        depth: dims.depth - 2 * dims.glass,
+        height: dims.height - dims.glass - dims.freeboard,
+      }),
+    },
+    plants: {
+      table: deps.plants,
+      state: reconciled,
+      bounds: substrateBounds(tank.size),
+      obstacles: plantObstacles(tank, deps.presets, deps.plants),
+    },
+    corals: { table: deps.corals, state: reconciledCorals },
+    graceEndsAtMs: user ? user.createdAt.getTime() + GRACE_PERIOD_MS : 0,
     vacationFeeder: hasVacationFeeder(tank),
     breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),
     breedingEnvironment: {
-      hasCave: hasShelter(tank),
+      hasCave: hasShelter(tank, deps.presets),
       maxAnimals: TANK_SIZES[tank.size].maxAnimals,
       bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
       newId: randomUUID,
@@ -299,7 +414,19 @@ async function tickLocked(
       ),
     );
 
-  if (result.steps === 0) return { tank, fishRows, state: initial, away: null, nowMs: now };
+  if (result.steps === 0) {
+    return {
+      tank,
+      fishRows,
+      state: initial,
+      away: null,
+      nowMs: now,
+      plants: reconciled,
+      plantView: wirePlants(tank, deps.presets, deps.plants, reconciled),
+      corals: reconciledCorals,
+      coralView: wireCorals(tank, deps.presets, deps.corals, reconciledCorals),
+    };
+  }
 
   const updatedRows = await persistFish(tx, fishRows, result.state);
   const bornRows = await insertNewborns(tx, tank.id, result.births, result.state, deps);
@@ -316,8 +443,10 @@ async function tickLocked(
       observed.push({ species: b.species, kind: 'raised', atMs: result.advancedToMs });
     }
   }
-  await recordCollection(tx, user.id, deps.species, observed, new Date(now));
-  if (observed.length > 0) await claimAchievementRewards(tx, deps.economy, user.id, now);
+  if (user) {
+    await recordCollection(tx, user.id, deps.species, observed, new Date(now));
+    if (observed.length > 0) await claimAchievementRewards(tx, deps.economy, user.id, now);
+  }
   const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
     fromAt: tank.lastTickAt.toISOString(),
@@ -353,6 +482,8 @@ async function tickLocked(
       water: result.state.water,
       chemistry: result.state.chemistry,
       medicine: wireMedicine(result.state.medicine),
+      plants: result.plants,
+      corals: result.corals,
       lastTickAt: advancedTo,
       updatedAt: new Date(now),
     })
@@ -405,12 +536,18 @@ async function tickLocked(
       water: result.state.water,
       chemistry: result.state.chemistry,
       medicine: wireMedicine(result.state.medicine),
+      plants: result.plants,
+      corals: result.corals,
       lastTickAt: advancedTo,
     },
     fishRows: [...updatedRows, ...bornRows.values()],
     state: result.state,
     away,
     nowMs: now,
+    plants: [...result.plants],
+    plantView: wirePlants(tank, deps.presets, deps.plants, result.plants),
+    corals: [...result.corals],
+    coralView: wireCorals(tank, deps.presets, deps.corals, result.corals),
   };
 }
 
@@ -486,7 +623,12 @@ async function persistFish(
   return out;
 }
 
-async function persistState(tx: Tx, tank: TankRow, fishRows: FishRow[], state: LifecycleState) {
+export async function persistState(
+  tx: Tx,
+  tank: TankRow,
+  fishRows: FishRow[],
+  state: LifecycleState,
+) {
   await tx
     .update(schema.tanks)
     .set({ water: state.water, chemistry: state.chemistry, medicine: wireMedicine(state.medicine) })
@@ -494,7 +636,7 @@ async function persistState(tx: Tx, tank: TankRow, fishRows: FishRow[], state: L
   return persistFish(tx, fishRows, state);
 }
 
-async function render(
+export async function render(
   tx: Tx,
   ticked: Ticked,
   fishRows = ticked.fishRows,
@@ -515,6 +657,8 @@ async function render(
     quarantine: tank.quarantine,
     shared: tank.shareTokenHash !== null,
     inGallery: tank.inGallery,
+    acceptsGifts: tank.acceptsGifts,
+    co2OwnedTier: tank.co2OwnedTier,
     shareToken: issuedShareToken,
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
@@ -523,11 +667,15 @@ async function render(
     decorEdited: tank.decorLayout !== null,
     medicine: tank.medicine === null ? null : medicineSchema.parse(tank.medicine),
     backgroundId: storedBackground(tank),
+    roomId: tank.roomId,
+    roomSetAt: tank.roomSetAt?.toISOString() ?? null,
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
     chemistry: chemistrySchema.parse(tank.chemistry),
     equipment: equipmentSchema.parse(tank.equipment),
     recentVisitDays,
+    plants: ticked.plantView,
+    corals: ticked.coralView,
     fish: fishRows
       .toSorted((a, b) => a.bornAt.getTime() - b.bornAt.getTime() || a.id.localeCompare(b.id))
       .map((f) => ({
@@ -558,6 +706,82 @@ async function render(
     })),
     ...(away ? { away } : {}),
   });
+}
+
+export type AteOutcome =
+  { replayed: true } | { replayed: false; fishRows: FishRow[]; tank: TankRow };
+
+export async function applyAteBatch(
+  tx: Tx,
+  ticked: Ticked,
+  body: AteBatchRequest,
+  nowMs: number,
+): Promise<AteOutcome> {
+  const tankId = ticked.tank.id;
+  if (body.batchId) {
+    const claimed = await tx
+      .insert(schema.ateBatches)
+      .values({ tankId, batchId: body.batchId })
+      .onConflictDoNothing()
+      .returning({ batchId: schema.ateBatches.batchId });
+    // The replay's payload isn't compared with the original, so a client reusing an id would
+    // drop reports silently; the caller's log is the only trace.
+    if (claimed.length === 0) return { replayed: true };
+  }
+  const windowMs = FEEDING_WINDOW_MINUTES * 60_000;
+  const recent = await tx
+    .select({ kind: schema.events.kind, payload: schema.events.payload })
+    .from(schema.events)
+    .where(
+      and(
+        eq(schema.events.tankId, tankId),
+        inArray(schema.events.kind, ['feed', 'ate']),
+        gte(schema.events.at, new Date(nowMs - windowMs)),
+      ),
+    );
+  let fedInWindow = 0;
+  let eatenInWindow = 0;
+  const eatenByFishInWindow = new Map<string, number>();
+  for (const e of recent) {
+    if (e.kind === 'feed') {
+      fedInWindow += feedPayloadSchema.parse(e.payload).portion;
+    } else {
+      const { fishId, portion } = atePayloadSchema.parse(e.payload);
+      eatenInWindow += portion;
+      eatenByFishInWindow.set(fishId, (eatenByFishInWindow.get(fishId) ?? 0) + portion);
+    }
+  }
+  const reports = body.reports.map((r) => ({
+    fishId: r.fishId,
+    portion: r.portion,
+    atMs: Date.parse(r.at),
+  }));
+  const applied = applyEating(ticked.state, reports, {
+    nowMs,
+    windowMs,
+    fedInWindow,
+    eatenInWindow,
+    eatenByFishInWindow,
+  });
+  if (!applied.ok) {
+    throw new HttpError(422, apiError('feeding_rejected', applied.reason));
+  }
+  const fishRows = await persistState(tx, ticked.tank, ticked.fishRows, applied.value);
+  const perFish = new Map<string, number>();
+  for (const r of reports) perFish.set(r.fishId, (perFish.get(r.fishId) ?? 0) + r.portion);
+  await tx.insert(schema.events).values(
+    [...perFish].map(([fishId, portion]) => ({
+      tankId,
+      at: new Date(nowMs),
+      kind: 'ate' as const,
+      payload: { fishId, portion },
+    })),
+  );
+  return {
+    replayed: false,
+    fishRows,
+    tank: { ...ticked.tank, water: applied.value.water, chemistry: applied.value.chemistry },
+  };
 }
 
 export function registerTankRoutes(deps: TankRouteDeps): void {
@@ -605,32 +829,55 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     return database.db.transaction(async (tx) => fn(tx, await lockAndTick(tx, deps, tankId, user)));
   }
 
-  async function withTanks<T>(
-    user: SessionUser,
-    tankIds: readonly string[],
+  async function withTanksOf<T>(
+    targets: readonly { user: SessionUser; tankId: string }[],
     fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
   ): Promise<T> {
     return database.db.transaction(async (tx) => {
       // Every tank row is locked, in id order, before any catch-up runs: a catch-up can claim an
       // achievement reward and take the wallet lock, and the order must stay user, tank, wallet.
-      // Id order also makes two opposite moves wait for each other instead of deadlocking.
+      // Id order also makes two opposite moves wait for each other instead of deadlocking. The
+      // catch-ups then run grouped by owner in user-id order, so two requests touching the same two
+      // players always reach their wallets in the same order.
+      const ownerOf = new Map(targets.map((t) => [t.tankId, t.user]));
       const locked = new Map<string, TankRow>();
-      for (const id of [...new Set(tankIds)].toSorted()) {
-        locked.set(id, await lockTank(tx, id, user));
+      for (const id of [...ownerOf.keys()].toSorted()) {
+        const owner = ownerOf.get(id);
+        if (!owner) throw new Error('withTanksOf lost a target it listed');
+        locked.set(id, await lockTank(tx, id, owner));
       }
       const byId = new Map<string, Ticked>();
-      for (const [id, tank] of locked) {
-        byId.set(id, await tickLocked(tx, deps, tank, user));
+      const inTickOrder = [...locked].toSorted(([idA, a], [idB, b]) => {
+        const ownerA = ownerOf.get(idA)?.id ?? '';
+        const ownerB = ownerOf.get(idB)?.id ?? '';
+        if (ownerA !== ownerB) return ownerA < ownerB ? -1 : 1;
+        return a.id < b.id ? -1 : 1;
+      });
+      for (const [id, tank] of inTickOrder) {
+        const owner = ownerOf.get(id);
+        if (!owner) throw new Error('withTanksOf lost a target it listed');
+        byId.set(id, await tickLocked(tx, deps, tank, owner));
       }
       return fn(
         tx,
-        tankIds.map((id) => {
-          const ticked = byId.get(id);
-          if (!ticked) throw new Error('withTanks lost a tank it locked');
+        targets.map(({ tankId }) => {
+          const ticked = byId.get(tankId);
+          if (!ticked) throw new Error('withTanksOf lost a tank it locked');
           return ticked;
         }),
       );
     });
+  }
+
+  function withTanks<T>(
+    user: SessionUser,
+    tankIds: readonly string[],
+    fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
+  ): Promise<T> {
+    return withTanksOf(
+      tankIds.map((tankId) => ({ user, tankId })),
+      fn,
+    );
   }
 
   const buyFirst = (what: string) =>
@@ -651,6 +898,30 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     if (!(await owns(tx, userId, backgroundRef(backgroundId)))) throw buyFirst('That background');
   }
 
+  async function requireOwnedRoom(
+    tx: Tx,
+    userId: string,
+    roomId: RoomId | null | undefined,
+  ): Promise<void> {
+    if (roomId === undefined || roomId === null || isFreeRoom(roomId)) return;
+    const [row] = await tx
+      .select({ roomId: schema.ownedRooms.roomId })
+      .from(schema.ownedRooms)
+      .where(and(eq(schema.ownedRooms.userId, userId), eq(schema.ownedRooms.roomId, roomId)))
+      .limit(1);
+    if (row === undefined) {
+      throw new HttpError(
+        409,
+        apiError(
+          'conflict',
+          'That room is not unlocked yet. Buy it first.',
+          undefined,
+          'room_not_owned',
+        ),
+      );
+    }
+  }
+
   async function requireOwnedPieces(
     tx: Tx,
     userId: string,
@@ -663,11 +934,19 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       return out;
     };
     const shown =
-      tank.decorLayout === null ? (presets[tank.biome]?.decor ?? []) : storedLayout(tank);
+      tank.decorLayout === null
+        ? keptPresetDecor(presets[tank.biome]?.decor ?? [], tank.size)
+        : storedLayout(tank);
     const before = count(shown);
     const needed = new Set<string>();
     for (const [assetId, n] of count(layout)) {
-      if (assetId === VACATION_FEEDER_ASSET_ID || n <= (before.get(assetId) ?? 0)) continue;
+      if (
+        assetId === VACATION_FEEDER_ASSET_ID ||
+        assetId === MUD_BANK_ASSET_ID ||
+        n <= (before.get(assetId) ?? 0)
+      ) {
+        continue;
+      }
       needed.add(licenseFor(economy, assetId).ref);
     }
     for (const ref of needed) {
@@ -706,7 +985,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const body = createTankRequestSchema.parse(req.body);
       const sizeRef = `tank:${body.size}:`;
-      const tankKey = legacyKey(body.idempotencyKey);
+      const tankKey = body.idempotencyKey;
       const outcome = await database.db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tanks:${user.id}`}))`);
         const nowMs = clock.now();
@@ -774,6 +1053,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           })
           .returning();
         if (!row) throw new Error('tank insert returned no row');
+        const plants = currentPlants(row, presets, deps.plants);
+        const corals = currentCorals(row, presets, deps.corals);
         return {
           created: await render(tx, {
             tank: row,
@@ -786,6 +1067,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             },
             away: null,
             nowMs,
+            plants,
+            plantView: wirePlants(row, presets, deps.plants, plants),
+            corals,
+            coralView: wireCorals(row, presets, deps.corals, corals),
           }),
         };
       });
@@ -828,7 +1113,6 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .where(
             and(
               eq(schema.events.tankId, tankId),
-              ne(schema.events.kind, 'fish_moved'),
               gt(schema.events.at, since),
               lte(schema.events.at, until),
               ...(cursor
@@ -913,9 +1197,26 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
-        const equipment =
-          body.light === undefined ? undefined : equipmentSchema.parse(ticked.tank.equipment);
+        const current = equipmentSchema.parse(ticked.tank.equipment);
+        if (body.co2 !== undefined) {
+          const problems = equipmentProblems(ticked.tank.biome, { ...current, co2: body.co2 });
+          if (body.co2.tier > ticked.tank.co2OwnedTier) {
+            problems.push(`this tank has not bought CO2 tier ${body.co2.tier}`);
+          }
+          if (problems.length > 0) {
+            throw new HttpError(
+              400,
+              apiError(
+                'validation_failed',
+                `${problems.join('; ')}. Pick a tier this tank owns, or 0 for off.`,
+                [{ path: ['co2', 'tier'], message: 'not a tier this tank can run' }],
+              ),
+            );
+          }
+        }
+        const equipment = body.light === undefined && body.co2 === undefined ? undefined : current;
         await requireOwnedBackground(tx, user.id, ticked.tank, body.backgroundId);
+        await requireOwnedRoom(tx, user.id, body.roomId);
         if (body.decorLayout !== undefined) {
           await requireOwnedPieces(tx, user.id, ticked.tank, body.decorLayout);
         }
@@ -923,25 +1224,47 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .update(schema.tanks)
           .set({
             ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
+            ...(body.roomId !== undefined
+              ? { roomId: body.roomId, roomSetAt: new Date(clock.now()) }
+              : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
-            ...(equipment !== undefined && body.light !== undefined
+            ...(body.acceptsGifts !== undefined ? { acceptsGifts: body.acceptsGifts } : {}),
+            ...(equipment !== undefined
               ? {
-                  equipment: { ...equipment, light: { tier: equipment.light.tier, ...body.light } },
+                  equipment: {
+                    ...equipment,
+                    ...(body.co2 !== undefined ? { co2: body.co2 } : {}),
+                    ...(body.light !== undefined
+                      ? { light: { tier: equipment.light.tier, ...body.light } }
+                      : {}),
+                  },
                 }
               : {}),
             ...(body.decorLayout !== undefined
               ? {
-                  decorLayout: body.decorLayout.map((item) => ({
-                    ...item,
-                    tintSeed: item.tintSeed ?? legacyTintSeed(item),
-                  })),
+                  decorLayout: uniqueTintSeeds(
+                    body.decorLayout,
+                    shownTintSeeds(ticked.tank, presets),
+                  ),
                 }
               : {}),
             updatedAt: new Date(clock.now()),
           })
           .where(eq(schema.tanks.id, tankId))
           .returning();
-        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+        const tank = row ?? ticked.tank;
+        if (body.decorLayout === undefined) return render(tx, { ...ticked, tank });
+        const plants = currentPlants(tank, presets, deps.plants);
+        const corals = currentCorals(tank, presets, deps.corals);
+        await tx.update(schema.tanks).set({ plants, corals }).where(eq(schema.tanks.id, tankId));
+        return render(tx, {
+          ...ticked,
+          tank: { ...tank, plants, corals },
+          plants,
+          plantView: wirePlants(tank, presets, deps.plants, plants),
+          corals,
+          coralView: wireCorals(tank, presets, deps.corals, corals),
+        });
       });
     }),
   );
@@ -1071,8 +1394,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .code(400)
           .send(apiError('validation_failed', `Unknown species "${body.species}".`));
       }
-      const stage = legacyStage(body.stage);
-      const idempotencyKey = legacyKey(body.idempotencyKey);
+      const { stage, idempotencyKey } = body;
       const price = Object.hasOwn(economy.species, spec.id)
         ? economy.species[spec.id]?.[stage]
         : undefined;
@@ -1082,19 +1404,23 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           apiError('validation_failed', `${spec.commonName} is not for sale.`),
         );
       }
-      throttle(user.id, 'addFish');
       const itemRef = `species:${spec.id}:${stage}`;
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
         await lockWallet(tx, economy, user.id, nowMs, true);
         const replay = await findReplay(tx, user.id, idempotencyKey, itemRef);
         if (replay) return { tank: await render(tx, ticked), created: false };
+        throttle(user.id, 'addFish');
         if (spec.biome !== ticked.tank.biome) {
           throw new HttpError(
             400,
             apiError('validation_failed', `${spec.commonName} needs a ${spec.biome} tank.`),
           );
         }
+        const tooShort = tankLengthRefusal(economy, spec.id, ticked.tank, spec.commonName);
+        if (tooShort) throw new HttpError(400, apiError('validation_failed', tooShort));
+        const tooLong = adultLengthRefusal(spec, ticked.tank);
+        if (tooLong) throw new HttpError(400, apiError('validation_failed', tooLong));
         const existing = ticked.fishRows.map((f) => ({
           alive: f.status === 'alive',
           maxBioload: species.get(f.species)?.lifecycle.bioload ?? 0,
@@ -1186,26 +1512,26 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
       const action: CareAction = careActionSchema.parse(req.body);
-      throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
+      if (!pricedConsumable(action, economy))
+        throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
-        const bacteriaRef = 'consumable:bottled-bacteria';
-        const bacteriaKey =
-          action.type === 'bottled_bacteria' ? legacyKey(action.idempotencyKey) : '';
-        if (action.type === 'bottled_bacteria') {
+        const priced = pricedConsumable(action, economy);
+        if (priced) {
           await lockWallet(tx, economy, user.id, nowMs, true);
-          const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
+          const replay = await findReplay(tx, user.id, priced.key, priced.ref);
           if (replay) return { tank: await render(tx, ticked) };
+          throttle(user.id, 'care');
         }
         const applied = applyCare(ticked.state, action, ticked.tank.biome, chemistryParams, nowMs);
         if (!applied.ok) {
           throw new HttpError(422, apiError('feeding_rejected', applied.reason));
         }
-        if (action.type === 'bottled_bacteria') {
+        if (priced) {
           await spend(tx, user.id, {
-            amount: economy.items.consumables.bottledBacteria,
-            itemRef: bacteriaRef,
-            key: bacteriaKey,
+            amount: priced.amount,
+            itemRef: priced.ref,
+            key: priced.key,
             nowMs,
           });
         }
@@ -1247,74 +1573,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = ateBatchRequestSchema.parse(req.body);
       throttle(user.id, 'ate');
       const result = await withTank(user, tankId, async (tx, ticked) => {
-        if (body.batchId) {
-          const claimed = await tx
-            .insert(schema.ateBatches)
-            .values({ tankId, batchId: body.batchId })
-            .onConflictDoNothing()
-            .returning({ batchId: schema.ateBatches.batchId });
-          if (claimed.length === 0) {
-            // The replay's payload isn't compared with the original, so a client reusing an id would
-            // drop reports silently; this log is the only trace.
-            req.log.debug({ tankId, batchId: body.batchId }, 'ate batch replay ignored');
-            return { tank: await render(tx, ticked) };
-          }
-        }
         const nowMs = clock.now();
-        const windowMs = FEEDING_WINDOW_MINUTES * 60_000;
-        const recent = await tx
-          .select({ kind: schema.events.kind, payload: schema.events.payload })
-          .from(schema.events)
-          .where(
-            and(
-              eq(schema.events.tankId, tankId),
-              inArray(schema.events.kind, ['feed', 'ate']),
-              gte(schema.events.at, new Date(nowMs - windowMs)),
-            ),
-          );
-        let fedInWindow = 0;
-        let eatenInWindow = 0;
-        const eatenByFishInWindow = new Map<string, number>();
-        for (const e of recent) {
-          if (e.kind === 'feed') {
-            fedInWindow += feedPayloadSchema.parse(e.payload).portion;
-          } else {
-            const { fishId, portion } = atePayloadSchema.parse(e.payload);
-            eatenInWindow += portion;
-            eatenByFishInWindow.set(fishId, (eatenByFishInWindow.get(fishId) ?? 0) + portion);
-          }
+        const outcome = await applyAteBatch(tx, ticked, body, nowMs);
+        if (outcome.replayed) {
+          req.log.debug({ tankId, batchId: body.batchId }, 'ate batch replay ignored');
+          return { tank: await render(tx, ticked) };
         }
-        const reports = body.reports.map((r) => ({
-          fishId: r.fishId,
-          portion: r.portion,
-          atMs: Date.parse(r.at),
-        }));
-        const applied = applyEating(ticked.state, reports, {
-          nowMs,
-          windowMs,
-          fedInWindow,
-          eatenInWindow,
-          eatenByFishInWindow,
-        });
-        if (!applied.ok) {
-          throw new HttpError(422, apiError('feeding_rejected', applied.reason));
-        }
-        const fishRows = await persistState(tx, ticked.tank, ticked.fishRows, applied.value);
-        const perFish = new Map<string, number>();
-        for (const r of reports) perFish.set(r.fishId, (perFish.get(r.fishId) ?? 0) + r.portion);
-        await tx.insert(schema.events).values(
-          [...perFish].map(([fishId, portion]) => ({
-            tankId,
-            at: new Date(nowMs),
-            kind: 'ate' as const,
-            payload: { fishId, portion },
-          })),
-        );
-        const tank = {
-          ...ticked.tank,
-          water: applied.value.water,
-          chemistry: applied.value.chemistry,
-        };
+        const { fishRows, tank } = outcome;
         return { tank: await render(tx, { ...ticked, tank }, fishRows) };
       });
       return result.tank;
@@ -1336,12 +1601,50 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
   registerMoveRoutes({
     app,
     species,
+    economy,
     clock,
     authorize,
     throttle,
     guarded,
     withTanks,
     render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
+
+  registerGiftRoutes({
+    app,
+    database,
+    species,
+    economy,
+    chemistryParams,
+    clock,
+    authorize,
+    throttle,
+    guarded,
+    withTanksOf,
+    render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
+
+  registerPlantRoutes({
+    app,
+    table: deps.plants,
+    presets,
+    authorize,
+    throttle,
+    guarded,
+    withTank,
+    render: (tx, ticked) => render(tx, ticked),
+  });
+
+  registerCoralRoutes({
+    app,
+    table: deps.corals,
+    plants: deps.plants,
+    presets,
+    authorize,
+    throttle,
+    guarded,
+    withTank,
+    render: (tx, ticked) => render(tx, ticked),
   });
 
   registerTreatmentRoutes({

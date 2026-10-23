@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { behaviourSchema, speciesContentSchema, traitSchema } from './species.js';
+import { activitySchema, behaviourSchema, speciesContentSchema, traitSchema } from './species.js';
 
 const dir = join(import.meta.dirname, '../../../content/species');
 const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
@@ -45,6 +45,16 @@ describe('behaviour traits', () => {
       excursion: { meanIntervalS: 20 },
     });
     expect(r.error).toBeUndefined();
+  });
+
+  it('takes an optional activity and rejects an unknown one', () => {
+    expect(behaviourSchema.parse(base.behaviour).activity).toBeUndefined();
+    for (const activity of activitySchema.options) {
+      expect(behaviourSchema.parse({ ...base.behaviour, activity }).activity).toBe(activity);
+    }
+    expect(behaviourSchema.safeParse({ ...base.behaviour, activity: 'nightly' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects out-of-range parameters and unknown keys', () => {
@@ -198,11 +208,22 @@ describe('walking invertebrates', () => {
       ...tetra,
       behaviour: { ...tetra.behaviour, traits },
     });
-    expect(issuePaths(noWalking(['cleaner']))).toEqual(['behaviour.traits']);
-    expect(issuePaths(noWalking(['biofilm-grazer', 'cleaner']))).toEqual([
-      'behaviour.traits',
-      'behaviour.traits',
-    ]);
+    expect(issuePaths(noWalking(['biofilm-grazer']))).toEqual(['behaviour.traits']);
+    expect(issuePaths(noWalking(['biofilm-grazer', 'shoal']))).toEqual(['behaviour.traits']);
+  });
+
+  it('requires amphibious to come with air-gulp', () => {
+    const withTraits = (traits: string[]): unknown => ({
+      ...tetra,
+      behaviour: { ...tetra.behaviour, traits },
+    });
+    expect(issuePaths(withTraits(['amphibious']))).toEqual(['behaviour.traits']);
+    expect(issuePaths(withTraits(['amphibious', 'air-gulp']))).toEqual([]);
+  });
+
+  it('lets a swimmer be a cleaner', () => {
+    const wrasse = { ...tetra, behaviour: { ...tetra.behaviour, traits: ['cleaner'] } };
+    expect(issuePaths(wrasse)).toEqual([]);
   });
 
   describe('speed bounds', () => {
@@ -251,14 +272,19 @@ describe('walking invertebrates', () => {
       expect(issuePaths(withBehaviour({ territorial: true }))).toEqual(['behaviour.territorial']);
     });
 
-    it.each(['shoal', 'air-gulp', 'glass-grazer', 'rock-grazer', 'anemone-host', 'flare-display'])(
-      'rejects swimmer trait %s',
-      (trait) => {
-        expect(issuePaths(withBehaviour({ traits: ['biofilm-grazer', trait] }))).toEqual([
-          'behaviour.traits',
-        ]);
-      },
-    );
+    it.each([
+      'shoal',
+      'air-gulp',
+      'amphibious',
+      'glass-grazer',
+      'rock-grazer',
+      'anemone-host',
+      'flare-display',
+    ])('rejects swimmer trait %s', (trait) => {
+      expect(issuePaths(withBehaviour({ traits: ['biofilm-grazer', trait] }))).toEqual([
+        'behaviour.traits',
+      ]);
+    });
 
     it('keeps cave-dweller and cleaner allowed', () => {
       expect(ok(withBehaviour({ traits: ['cave-dweller', 'cleaner'] }))).toBe(true);

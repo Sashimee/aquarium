@@ -53,13 +53,13 @@ describe('emitAsset parts that carry their own levels of detail', () => {
   });
   afterAll(() => rmSync(outRoot, { recursive: true, force: true }));
 
-  const emit = (parts: Part[]) =>
+  const emit = (parts: Part[], ratios: [number, number, number] = [1, 0.5, 0.25]) =>
     emitAsset({
       outRoot,
       kind: 'fish',
       id: 'test-fish',
       built: buildDocument('test-fish', parts, [material('Body'), material('Eye')]),
-      plan: { ratios: [1, 0.5, 0.25], minTriangles: 10 },
+      plan: { ratios, minTriangles: 10 },
       meta: { origin: 'model', sources: [], licence: 'CC0', modifications: [] },
     });
 
@@ -83,6 +83,13 @@ describe('emitAsset parts that carry their own levels of detail', () => {
     expect(triangles[0]!).toBe(800);
     expect(triangles[1]!).toBeLessThan(triangles[0]!);
     expect(triangles[2]!).toBeLessThan(triangles[1]!);
+  });
+
+  it('simplifies LOD0 too when the plan ratio for it is below 1', async () => {
+    const full = await emit([gridPart(20, 'Body')]);
+    const planned = await emit([gridPart(20, 'Body')], [0.5, 0.25, 0.1]);
+    expect(planned.lods[0]!.triangles).toBeLessThan(0.6 * full.lods[0]!.triangles);
+    expect(planned.lods[0]!.triangles).toBeGreaterThan(planned.lods[1]!.triangles);
   });
 
   it('fails loudly when a level would have no geometry at all', async () => {

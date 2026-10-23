@@ -23,6 +23,7 @@ import {
   pass,
   perspectiveDepthToViewZ,
   renderOutput,
+  rtt,
   uniform,
   vec2,
   vec4,
@@ -123,6 +124,13 @@ export class PostNodeLoader {
 const BLOOM = { strength: 0.12, radius: 0.35, threshold: 0.9 };
 /** A macro lens on a fish 15-40 cm away: a shallow but not paper-thin focal zone. */
 const DOF = { focalLength: 0.12, bokehScale: 2.5 };
+/**
+ * The light shafts' share of the drawing buffer's width and height. They are soft streaks made
+ * softer by their per-pixel jitter, so a quarter of the pixels draws them alike, and their 12-step
+ * march was the most expensive screen-space work on high and ultra (#1020). The bloom's bright
+ * pass reads them from this texture too, instead of marching them a second time.
+ */
+export const SHAFT_RESOLUTION = 0.5;
 /** Autofocus taps around the centre, in UV; the nearest wins so a small fish is not missed. */
 const FOCUS_TAPS = [
   [0, 0],
@@ -234,7 +242,12 @@ export class PostPipeline {
 
     let colour: Node<'vec4'> = scenePass.getTextureNode('output');
     if (settings.godRays) {
-      colour = vec4(max(colour.rgb.add(shafts.node(depth)), 0), colour.a);
+      const rays = rtt(shafts.node(depth), null, null, {
+        resolutionScale: SHAFT_RESOLUTION,
+        depthBuffer: false,
+      });
+      this.owned.push(rays);
+      colour = vec4(max(colour.rgb.add(shafts.upscale(rays, depth)), 0), colour.a);
     }
     if (chain === 'smaa-bloom' || chain === 'taa-bloom') {
       const glow = this.nodes.get('bloom')(colour, BLOOM.strength, BLOOM.radius, BLOOM.threshold);

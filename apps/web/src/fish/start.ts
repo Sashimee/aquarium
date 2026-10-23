@@ -7,7 +7,9 @@ import type { InteractionEvents } from '../interaction/events';
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import type { SceneAnchor } from '../scene/anemone';
 import type { Collider as SceneCollider } from '../scene/colliders';
+import type { PolypSource } from '../scene/polyps';
 import type { FishSystem } from './FishSystem';
+import { PolypRelay } from './polypRelay';
 import { SimColliders } from './simColliders';
 
 type TankEventName =
@@ -82,6 +84,8 @@ export interface FishSimBridge {
 
 export interface FishHandle {
   readonly sim: FishSimBridge;
+  /** Coral polyp extension: the running sim world's, or the hood's darkness while none runs. */
+  readonly polyps: PolypSource;
   /**
    * Settles once the first fish are in the scene: a saved tank's own, once the session has said
    * whether one is coming. Also settles once starting them has failed or stopped.
@@ -189,6 +193,10 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   const abort = new AbortController();
   const ateListeners = new Set<(events: readonly FishBite[]) => void>();
   const nudgeListeners = new Set<(nudge: BallNudge) => void>();
+  const polyps = new PolypRelay(engine.daylight);
+  const stopDaylight = engine.events.on('engine:daylight', ({ level }) =>
+    polyps.setDaylight(level),
+  );
   let toys: readonly SimToy[] = [];
   let waveMakerTier = 0;
   let ready: FishSystem | null = null;
@@ -238,6 +246,8 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       fish.onToyNudge((nudge) => {
         for (const listener of nudgeListeners) listener(nudge);
       });
+      fish.onSimClient((client) => polyps.follow(client));
+      fish.onWorld((epoch) => polyps.world(epoch));
       ready = fish;
       if (tank !== built) fish.setTank(tank);
       if (toys.length > 0) fish.setToys(toys);
@@ -272,6 +282,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
         abort.signal.removeEventListener('abort', onAbort);
       }
     }),
+    polyps,
     sim: {
       startle: (stimulus) => ready?.startle(stimulus),
       setFood: (buffer) => ready?.setFood(buffer),
@@ -327,6 +338,8 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       stopDecor();
       ateListeners.clear();
       nudgeListeners.clear();
+      stopDaylight();
+      polyps.dispose();
       ready = null;
       void system.then((fish) => {
         try {

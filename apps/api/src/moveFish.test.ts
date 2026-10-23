@@ -10,7 +10,9 @@ import { and, eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
-import { APP_ORIGIN, createHarness, topUp, type Harness } from './test-harness.ts';
+import { tankMaxFishLengthM } from './fishFit.ts';
+import { DEFAULT_CARE_LIMITS } from './tanks.ts';
+import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -69,13 +71,15 @@ const error = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).
 async function makeTank(
   h: Harness,
   who: Account,
-  body: { biome?: 'freshwater' | 'reef'; quarantine?: boolean } = {},
+  body: { biome?: 'freshwater' | 'reef' | 'mangrove'; quarantine?: boolean; size?: string } = {},
 ): Promise<string> {
   await topUp(h);
   const res = await call(h, who, 'POST', '/api/tanks', {
     name: 'Tank',
+    idempotencyKey: randomUUID(),
     biome: body.biome ?? 'freshwater',
     ...(body.quarantine ? { quarantine: true, size: 'nano30' } : {}),
+    ...(body.size ? { size: body.size } : {}),
   });
   expect(res.statusCode).toBe(201);
   return tankSchema.parse(res.json()).id;
@@ -85,6 +89,8 @@ interface FishOptions {
   status?: 'alive' | 'dead';
   disease?: { kind: 'ich' | 'fin-rot' | 'velvet'; severity: number } | null;
   introducedAt?: Date | null;
+  species?: string;
+  size?: number;
 }
 
 async function addFish(h: Harness, tankId: string, opts: FishOptions = {}): Promise<string> {
@@ -93,10 +99,10 @@ async function addFish(h: Harness, tankId: string, opts: FishOptions = {}): Prom
     .insert(schema.fish)
     .values({
       tankId,
-      species: 'neon-tetra',
+      species: opts.species ?? 'neon-tetra',
       name: 'Pip',
       sex: 'female',
-      size: 0.03,
+      size: opts.size ?? 0.03,
       personality: { boldness: 0.6, greed: 0.4, sociability: 0.5 },
       health: 0.8,
       status: opts.status ?? 'alive',
@@ -191,12 +197,46 @@ describe('moving a fish between tanks', () => {
     it('rate limits like other care actions', async () => {
       const who = await account(h);
       const a = await makeTank(h, who);
+      const b = await makeTank(h, who);
       const fishId = await addFish(h, a);
       const codes = new Set<number>();
+      let from = a;
+      let to = b;
       for (let i = 0; i < 70; i++) {
-        codes.add((await move(h, who, a, fishId, { toTankId: a })).statusCode);
+        const res = await move(h, who, from, fishId, {
+          toTankId: to,
+          idempotencyKey: randomUUID(),
+        });
+        codes.add(res.statusCode);
+        [from, to] = [to, from];
       }
-      expect(codes).toEqual(new Set([400, 429]));
+      expect(codes.has(429)).toBe(true);
+    });
+  });
+
+  describe('idempotent replay before the rate limit', () => {
+    it('replays a move retried past the care limit instead of answering 429', async () => {
+      const limited = await createHarness({
+        careLimits: { ...DEFAULT_CARE_LIMITS, care: { max: 1, windowMs: 60_000 } },
+      });
+      try {
+        const who = await account(limited);
+        const a = await makeTank(limited, who);
+        const b = await makeTank(limited, who);
+        const fishId = await addFish(limited, a);
+        const body = { toTankId: b, idempotencyKey: randomUUID() };
+        expect((await move(limited, who, a, fishId, body)).statusCode).toBe(200);
+        const retry = await move(limited, who, a, fishId, body);
+        expect(retry.statusCode).toBe(200);
+        expect(moveFishResponseSchema.parse(retry.json()).destination.fish).toHaveLength(1);
+        const fresh = await move(limited, who, b, fishId, {
+          toTankId: a,
+          idempotencyKey: randomUUID(),
+        });
+        expect(fresh.statusCode).toBe(429);
+      } finally {
+        await limited.close();
+      }
     });
   });
 
@@ -220,6 +260,45 @@ describe('moving a fish between tanks', () => {
       expect(res.statusCode).toBe(409);
       expect(error(res).reason).toBe('wrong_biome');
       expect((await fishRow(h, fishId)).tankId).toBe(a);
+    });
+
+    it('will not move a silver mono into a tank shorter than 150 cm', async () => {
+      const who = await account(h);
+      const long = await makeTank(h, who, { biome: 'mangrove', size: 'long300' });
+      const standard = await makeTank(h, who, { biome: 'mangrove' });
+      const fishId = await addFish(h, long, { species: 'silver-mono' });
+      const res = await move(h, who, long, fishId, { toTankId: standard });
+      expect(res.statusCode).toBe(409);
+      expect(error(res).message).toContain('150 cm');
+      expect((await fishRow(h, fishId)).tankId).toBe(long);
+      const events = await h.database.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.kind, 'fish_moved'));
+      expect(events.filter((e) => e.tankId === long || e.tankId === standard)).toHaveLength(0);
+    });
+
+    it('will not move a species that outgrows the destination into the quarantine tank', async () => {
+      const who = await account(h);
+      const long = await makeTank(h, who, { biome: 'mangrove', size: 'long300' });
+      const quarantine = await makeTank(h, who, { biome: 'mangrove', quarantine: true });
+      const fishId = await addFish(h, long, { species: 'silver-mono' });
+      const res = await move(h, who, long, fishId, { toTankId: quarantine });
+      expect(res.statusCode).toBe(409);
+      expect(error(res).message).toMatch(
+        /Silver mono grows to 27 cm, but this tank only holds fish up to 21 cm. A quarantine tank is too small for it, so it cannot go there\./,
+      );
+      expect((await fishRow(h, fishId)).tankId).toBe(long);
+    });
+
+    it('lets a species that fits a nano tank into the quarantine tank', async () => {
+      const who = await account(h);
+      const standard = await makeTank(h, who);
+      const quarantine = await makeTank(h, who, { quarantine: true });
+      const fishId = await addFish(h, standard);
+      const res = await move(h, who, standard, fishId, { toTankId: quarantine });
+      expect(res.statusCode, res.body).toBe(200);
+      expect((await fishRow(h, fishId)).tankId).toBe(quarantine);
     });
 
     it('will not move a fish into a full tank', async () => {
@@ -281,7 +360,10 @@ describe('moving a fish between tanks', () => {
       const q = await makeTank(h, who, { quarantine: true });
       const fishId = await addFish(h, a, { disease: { kind: 'ich', severity: 0.3 } });
       await addFish(h, q, { disease: { kind: 'ich', severity: 0.2 } });
-      const dosed = await call(h, who, 'POST', `/api/tanks/${q}/treat`, { kind: 'ich' });
+      const dosed = await call(h, who, 'POST', `/api/tanks/${q}/treat`, {
+        kind: 'ich',
+        idempotencyKey: randomUUID(),
+      });
       expect(dosed.statusCode).toBe(200);
       const until = (await getTank(h, who, q)).medicine?.until;
       expect(until).toBeDefined();
@@ -325,7 +407,7 @@ describe('moving a fish between tanks', () => {
       expect((await fishRow(h, fishId)).introducedAt).toBeNull();
     });
 
-    it('logs a fish_moved event in each tank without breaking the replay', async () => {
+    it('logs a fish_moved event in each tank and includes it in the replay', async () => {
       const who = await account(h);
       const a = await makeTank(h, who);
       const q = await makeTank(h, who, { quarantine: true });
@@ -349,7 +431,8 @@ describe('moving a fish between tanks', () => {
         `/api/tanks/${a}/replay?since=${encodeURIComponent(since)}`,
       );
       expect(replay.statusCode).toBe(200);
-      replayResponseSchema.parse(replay.json());
+      const parsed = replayResponseSchema.parse(replay.json());
+      expect(parsed.events.map((e) => e.kind)).toContain('fish_moved');
     });
   });
 
@@ -456,10 +539,13 @@ describe('moving a fish between tanks', () => {
 
         const results = await Promise.all([
           move(h, who, source, fishId, { toTankId: destination }),
-          call(h, who, 'POST', `/api/tanks/${destination}/fish`, {
-            species: 'neon-tetra',
-            name: 'Buyer',
-          }),
+          call(
+            h,
+            who,
+            'POST',
+            `/api/tanks/${destination}/fish`,
+            fishPayload('neon-tetra', 'Buyer'),
+          ),
           call(h, who, 'POST', `/api/tanks/${destination}/care`, {
             type: 'bottled_bacteria',
             idempotencyKey: randomUUID(),
@@ -483,6 +569,17 @@ describe('moving a fish between tanks', () => {
       expect(results.map((r) => r.statusCode)).toEqual([200, 200]);
       expect((await fishRow(h, inA)).tankId).toBe(b);
       expect((await fishRow(h, inB)).tankId).toBe(a);
+    });
+  });
+
+  describe('fish already longer than their tank', () => {
+    it('trims them to the tank limit when the tank is read', async () => {
+      const who = await account(h);
+      const nano = await makeTank(h, who, { biome: 'reef', quarantine: true });
+      const fishId = await addFish(h, nano, { species: 'blue-tang', size: 0.267 });
+      h.clock.advance(HOUR_MS);
+      await getTank(h, who, nano);
+      expect((await fishRow(h, fishId)).size).toBe(tankMaxFishLengthM('nano30'));
     });
   });
 });

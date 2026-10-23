@@ -98,6 +98,16 @@ describe('plantReach', () => {
     expect(reach(0.5) - reach(0)).toBeGreaterThan(0);
   });
 
+  it('stays finite for zero-height bounds in a still current', () => {
+    const flat = { min: [-0.05, 0, -0.05], max: [0.05, 0, 0.05] };
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    const reach = plantReach('vallisneria', flat, still);
+    expect(Number.isFinite(reach(0))).toBe(true);
+    expect(Number.isFinite(reach(0, 'x'))).toBe(true);
+    expect(Number.isFinite(reach(1))).toBe(true);
+    expect(reach(1)).toBeGreaterThan(0);
+  });
+
   it('scales footprint diagonal and two-axis tilt lean, then adds the full sway', () => {
     const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
     const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);

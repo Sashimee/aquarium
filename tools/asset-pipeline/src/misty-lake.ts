@@ -17,7 +17,7 @@ export const MISTY_LAKE_WIDTH = 4096;
 export const MISTY_LAKE_HEIGHT = 2048;
 export const MISTY_LAKE_RENDER = join(RAW_ROOT, MISTY_LAKE_ID, 'render.png');
 
-const SIGMA_LEVELS = [0, 2, 4, 7, 11] as const;
+export const SIGMA_LEVELS = [0, 2, 4, 7, 11] as const;
 const MAX_FAR_SIGMA = 11;
 const MAX_NEAR_SIGMA = 4;
 
@@ -67,11 +67,25 @@ export function applyDepthOfField(
   return out;
 }
 
-const ABSORPTION = [0.34, 0.085, 0.06] as const;
-const VEIL_DENSITY = 0.13;
-const VEIL_TOP = [64, 148, 138] as const;
-const VEIL_BOTTOM = [6, 34, 40] as const;
-const RAY_COLOUR = [190, 245, 225] as const;
+type Rgb3 = readonly [number, number, number];
+
+export interface WaterPalette {
+  absorption: Rgb3;
+  veilDensity: number;
+  veilTop: Rgb3;
+  veilBottom: Rgb3;
+  rayColour: Rgb3;
+  rayStrength: number;
+}
+
+export const CLEAR_WATER: WaterPalette = {
+  absorption: [0.34, 0.085, 0.06],
+  veilDensity: 0.13,
+  veilTop: [64, 148, 138],
+  veilBottom: [6, 34, 40],
+  rayColour: [190, 245, 225],
+  rayStrength: 0.34,
+};
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -105,28 +119,30 @@ export function gradeUnderwater(
   params: DepthParams,
   width: number,
   height: number,
+  palette: WaterPalette = CLEAR_WATER,
 ): Uint8Array {
+  const { absorption, veilDensity, veilTop, veilBottom, rayColour, rayStrength } = palette;
   const out = new Uint8Array(rgb.length);
   const grain = mulberry32(617);
   for (let y = 0; y < height; y++) {
     const v = y / (height - 1);
-    const veil = VEIL_TOP.map(
-      (top, c) => (VEIL_BOTTOM[c] ?? 0) + (top - (VEIL_BOTTOM[c] ?? 0)) * Math.pow(1 - v, 1.4),
+    const veil = veilTop.map(
+      (top, c) => (veilBottom[c] ?? 0) + (top - (veilBottom[c] ?? 0)) * Math.pow(1 - v, 1.4),
     );
     for (let x = 0; x < width; x++) {
       const p = y * width + x;
       const u = x / (width - 1);
       const distance = distanceFromDepthByte(depthRed[p] ?? 255, params);
-      const veilAmount = 1 - Math.exp(-VEIL_DENSITY * Math.max(0, distance - 1.2));
-      const rays = godRayStrength(u, v) * (0.25 + 0.75 * veilAmount) * 0.34;
+      const veilAmount = 1 - Math.exp(-veilDensity * Math.max(0, distance - 1.2));
+      const rays = godRayStrength(u, v) * (0.25 + 0.75 * veilAmount) * rayStrength;
       const edge = Math.hypot(u - 0.5, (v - 0.5) * 0.9) * 1.4;
       const vignette = 1 - 0.38 * edge * edge;
       const noise = (grain() + grain() - 1) * 5;
       for (let c = 0; c < 3; c++) {
-        const transmit = Math.exp(-(ABSORPTION[c] ?? 0) * Math.max(0, distance - 1.2));
+        const transmit = Math.exp(-(absorption[c] ?? 0) * Math.max(0, distance - 1.2));
         const lit = (rgb[p * 3 + c] ?? 0) * transmit * (1 - veilAmount * 0.5);
         const hazed = lit * (1 - veilAmount) + (veil[c] ?? 0) * veilAmount;
-        const value = (hazed + (RAY_COLOUR[c] ?? 0) * rays) * vignette + noise;
+        const value = (hazed + (rayColour[c] ?? 0) * rays) * vignette + noise;
         out[p * 3 + c] = Math.max(0, Math.min(255, Math.round(value)));
       }
     }
@@ -196,6 +212,27 @@ async function decodePng(dataUrl: string): Promise<Buffer> {
   return Buffer.from(dataUrl.slice(prefix.length), 'base64');
 }
 
+/** Depth-of-field blur, underwater grade and a metadata-free PNG from a raw beauty pass and a depth byte per pixel. */
+export async function developRender(
+  rgb: Uint8Array,
+  depthRed: Uint8Array,
+  params: DepthParams,
+  width: number,
+  height: number,
+  palette?: WaterPalette,
+): Promise<Buffer> {
+  const levels: Uint8Array[] = [];
+  for (const sigma of SIGMA_LEVELS) {
+    const image = sharp(rgb, { raw: { width, height, channels: 3 } });
+    levels.push(new Uint8Array(await (sigma === 0 ? image : image.blur(sigma)).raw().toBuffer()));
+  }
+  const blurred = applyDepthOfField(levels, depthRed, params, width * height, 3);
+  const graded = gradeUnderwater(blurred, depthRed, params, width, height, palette);
+  return sharp(Buffer.from(graded), { raw: { width, height, channels: 3 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
 export async function renderMistyLake(repoRoot: string): Promise<string> {
   const { chromium } = await import('@playwright/test');
   const publicAssets = realpathSync(join(repoRoot, 'apps', 'web', 'public', 'assets'));
@@ -241,21 +278,7 @@ export async function renderMistyLake(repoRoot: string): Promise<string> {
   const depthRed = new Uint8Array(pixels);
   for (let p = 0; p < pixels; p++) depthRed[p] = depthRaw[p * 3] ?? 255;
 
-  const levels: Uint8Array[] = [];
-  for (const sigma of SIGMA_LEVELS) {
-    const image = sharp(beauty.data, {
-      raw: { width: info.width, height: info.height, channels: 3 },
-    });
-    levels.push(new Uint8Array(await (sigma === 0 ? image : image.blur(sigma)).raw().toBuffer()));
-  }
-  const blurred = applyDepthOfField(levels, depthRed, passes, pixels, 3);
-
-  const graded = gradeUnderwater(blurred, depthRed, passes, info.width, info.height);
-  const png = await sharp(Buffer.from(graded), {
-    raw: { width: info.width, height: info.height, channels: 3 },
-  })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
+  const png = await developRender(beauty.data, depthRed, passes, info.width, info.height);
   mkdirSync(join(RAW_ROOT, MISTY_LAKE_ID), { recursive: true });
   writeFileSync(MISTY_LAKE_RENDER, png);
   return MISTY_LAKE_RENDER;

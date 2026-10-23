@@ -6,22 +6,28 @@ import {
   idSchema,
   isBackgroundForBiome,
   isDecorAssetForBiome,
+  isFreeRoom,
+  ownedRoomsResponseSchema,
+  PAID_ROOM_IDS,
   purchaseRequestSchema,
   purchaseResponseSchema,
+  roomIdSchema,
   sellFryResponseSchema,
   walletResponseSchema,
   type BackgroundId,
   type Economy,
   type PurchaseResponse,
+  type RoomId,
   type Tank,
 } from '@aquarium/shared';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { claimAchievementRewards, fryItemRef, fryRoom } from './earn.ts';
 import { apiError, HttpError } from './errors.ts';
+import { claimClubGrant } from './payments/club.ts';
 import { EUPHYLLIA_LICENSE_REF, licenseForRef, type License } from './items.ts';
 import type { CareLimits, SessionUser, Ticked, Tx } from './tanks.ts';
 import {
@@ -44,7 +50,8 @@ type Device = keyof Economy['items']['equipment'];
 type Item =
   | { kind: 'background'; id: BackgroundId; price: number }
   | { kind: 'equipment'; device: Device; tier: number; price: number }
-  | { kind: 'license'; license: License };
+  | { kind: 'license'; license: License }
+  | { kind: 'room'; id: RoomId; price: number };
 
 export interface ShopContext {
   app: FastifyInstance;
@@ -82,6 +89,11 @@ function parseItem(economy: Economy, itemRef: string): Item {
     if (!id.success) throw refused(`Unknown background "${itemRef}".`);
     return { kind: 'background', id: id.data, price: economy.items.background.price };
   }
+  if (itemRef.startsWith('room:')) {
+    const id = roomIdSchema.safeParse(itemRef.slice('room:'.length));
+    if (!id.success) throw refused(`Unknown room "${itemRef}".`);
+    return { kind: 'room', id: id.data, price: economy.rooms[id.data] };
+  }
   const equipment = EQUIPMENT_REF.exec(itemRef);
   if (equipment) {
     const device = equipment[1] as Device;
@@ -93,6 +105,21 @@ function parseItem(economy: Economy, itemRef: string): Item {
   const license = licenseForRef(economy, itemRef);
   if (license) return { kind: 'license', license };
   throw refused(`"${itemRef}" cannot be bought here.`);
+}
+
+const roomAlreadyOwned = () =>
+  new HttpError(
+    409,
+    apiError('conflict', 'You already own this room.', undefined, 'room_already_owned'),
+  );
+
+async function ownsRoom(tx: Tx, userId: string, roomId: RoomId): Promise<boolean> {
+  const [row] = await tx
+    .select({ roomId: schema.ownedRooms.roomId })
+    .from(schema.ownedRooms)
+    .where(and(eq(schema.ownedRooms.userId, userId), eq(schema.ownedRooms.roomId, roomId)))
+    .limit(1);
+  return row !== undefined;
 }
 
 const conflict = (message: string) => new HttpError(409, apiError('conflict', message));
@@ -113,9 +140,10 @@ export function registerShopRoutes(ctx: ShopContext): void {
     user: SessionUser,
     body: z.infer<typeof purchaseRequestSchema>,
     item: Item,
+    { userRowLocked }: { userRowLocked: boolean },
   ): Promise<PurchaseResponse> {
     const nowMs = clock.now();
-    await lockWallet(tx, economy, user.id, nowMs, ticked !== null);
+    await lockWallet(tx, economy, user.id, nowMs, userRowLocked);
     const replay = await findReplay(tx, user.id, body.idempotencyKey, body.itemRef);
     if (replay) return respond(replay);
 
@@ -145,22 +173,49 @@ export function registerShopRoutes(ctx: ShopContext): void {
       return respond(charged);
     }
 
+    if (item.kind === 'room') {
+      if (isFreeRoom(item.id)) throw refused('That room is free; there is nothing to buy.');
+      if (await ownsRoom(tx, user.id, item.id)) throw roomAlreadyOwned();
+      const charged = await charge(item.price);
+      const inserted = await tx
+        .insert(schema.ownedRooms)
+        .values({ userId: user.id, roomId: item.id, purchasedAt: new Date(nowMs) })
+        .onConflictDoNothing()
+        .returning({ roomId: schema.ownedRooms.roomId });
+      if (inserted.length === 0) throw roomAlreadyOwned();
+      return respond(charged);
+    }
+
     if (item.kind === 'equipment') {
       if (!ticked) throw refused('Say which tank the equipment is for.');
       const equipment = equipmentSchema.parse(ticked.tank.equipment);
-      if (item.tier <= equipment[item.device].tier) {
+      const owned = Math.max(
+        equipment[item.device].tier,
+        item.device === 'co2' ? ticked.tank.co2OwnedTier : 0,
+      );
+      if (item.tier <= owned) {
         throw conflict(`This tank already has a ${item.device} of tier ${item.tier} or better.`);
       }
       const upgraded = {
         ...equipment,
         [item.device]: { ...equipment[item.device], tier: item.tier },
       };
-      const problems = equipmentProblems(ticked.tank.biome, equipmentSchema.parse(upgraded));
-      if (problems.length > 0) throw refused(`${problems.join('; ')}.`);
+      const before = new Set(equipmentProblems(ticked.tank.biome, equipment));
+      const introduced = equipmentProblems(
+        ticked.tank.biome,
+        equipmentSchema.parse(upgraded),
+      ).filter((problem) => !before.has(problem));
+      if (introduced.length > 0) throw refused(`${introduced.join('; ')}.`);
       const charged = await charge(item.price);
       await tx
         .update(schema.tanks)
-        .set({ equipment: upgraded, updatedAt: new Date(nowMs) })
+        .set({
+          equipment: upgraded,
+          ...(item.device === 'co2'
+            ? { co2OwnedTier: Math.max(ticked.tank.co2OwnedTier, item.tier) }
+            : {}),
+          updatedAt: new Date(nowMs),
+        })
         .where(eq(schema.tanks.id, ticked.tank.id));
       return respond(charged);
     }
@@ -186,6 +241,7 @@ export function registerShopRoutes(ctx: ShopContext): void {
       return database.db.transaction(async (tx) => {
         const nowMs = clock.now();
         await lockWallet(tx, economy, user.id, nowMs);
+        await claimClubGrant(tx, economy, user.id, nowMs);
         await claimAchievementRewards(tx, economy, user.id, nowMs);
         const rows = await tx
           .select()
@@ -202,6 +258,22 @@ export function registerShopRoutes(ctx: ShopContext): void {
     }),
   );
 
+  app.get(
+    '/api/rooms',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      throttle(user.id, 'wallet');
+      const rows = await database.db
+        .select({ roomId: schema.ownedRooms.roomId })
+        .from(schema.ownedRooms)
+        .where(eq(schema.ownedRooms.userId, user.id));
+      const bought = new Set(rows.map((r) => r.roomId));
+      return ownedRoomsResponseSchema.parse({
+        owned: PAID_ROOM_IDS.filter((id) => bought.has(id)),
+      });
+    }),
+  );
+
   app.post(
     '/api/shop/purchase',
     guarded(async (req) => {
@@ -209,10 +281,17 @@ export function registerShopRoutes(ctx: ShopContext): void {
       const body = purchaseRequestSchema.parse(req.body);
       throttle(user.id, 'purchase');
       const item = parseItem(economy, body.itemRef);
-      if (body.tankId === undefined) {
-        return database.db.transaction((tx) => buy(tx, null, user, body, item));
+      if (item.kind === 'room' && body.tankId !== undefined) {
+        throw refused('Rooms belong to your account, not to a tank. Leave tankId out.');
       }
-      return withTank(user, body.tankId, (tx, ticked) => buy(tx, ticked, user, body, item));
+      if (body.tankId === undefined) {
+        return database.db.transaction((tx) =>
+          buy(tx, null, user, body, item, { userRowLocked: false }),
+        );
+      }
+      return withTank(user, body.tankId, (tx, ticked) =>
+        buy(tx, ticked, user, body, item, { userRowLocked: true }),
+      );
     }),
   );
 

@@ -14,6 +14,7 @@ import {
   WATER_CHANGE_FRACTION,
 } from './params.ts';
 import { diluteMedicine, syncTreatment } from './disease.ts';
+import { hasSettledFood } from '../src/crew.ts';
 import type { LifecycleState } from './types.ts';
 
 const FRESHWATER_FOODS: readonly FoodType[] = ['flakes', 'pellets', 'bloodworms', 'algae-wafer'];
@@ -45,6 +46,17 @@ function accept(
   };
 }
 
+function moveToward(value: number, target: number, fraction: number): number {
+  return value + (target - value) * fraction;
+}
+
+function withFoodType(water: Water, food: FoodType): FoodType[] | undefined {
+  if (!hasSettledFood(water.uneatenFood)) return [food];
+  if (water.uneatenFoodTypes === undefined) return undefined;
+  const kept = water.uneatenFoodTypes ?? [];
+  return kept.includes(food) ? kept : [...kept, food];
+}
+
 export function applyCare(
   state: LifecycleState,
   action: CareAction,
@@ -64,23 +76,80 @@ export function applyCare(
           reason: 'There is already too much uneaten food in the tank. Vacuum the gravel first.',
         };
       }
-      return accept(state, { uneatenFood: water.uneatenFood + action.portion });
+      return accept(state, {
+        uneatenFood: water.uneatenFood + action.portion,
+        uneatenFoodTypes: withFoodType(water, action.food),
+      });
     }
     case 'water_change':
       return accept(
         { ...state, medicine: diluteMedicine(state.medicine, nowMs) },
         {
           ammonia: water.ammonia * (1 - WATER_CHANGE_FRACTION),
+          tannin: water.tannin * (1 - params.tannin.restoredPerWaterChange),
           nitrate: water.nitrate * (1 - WATER_CHANGE_FRACTION),
         },
         {
           ...chemistry,
+          salinity: moveToward(
+            chemistry.salinity,
+            params.salinity.target[biome],
+            params.salinity.restoredPerWaterChange,
+          ),
           nitrite: chemistry.nitrite * (1 - WATER_CHANGE_FRACTION),
           kh:
             chemistry.kh +
             (params.kh.sourceWater[biome] - chemistry.kh) * params.kh.restoredPerWaterChange,
         },
       );
+    case 'salt_dose': {
+      const mix = params.salinity.target[biome];
+      if (mix <= 0) {
+        return { ok: false, reason: `Salt cannot be dosed in a ${biome} tank.` };
+      }
+      if (chemistry.salinity >= mix) {
+        return { ok: false, reason: 'The water is already as salty as a salt dose can make it.' };
+      }
+      return accept(
+        state,
+        {},
+        {
+          ...chemistry,
+          salinity: moveToward(chemistry.salinity, mix, params.salinity.saltDoseFraction),
+        },
+      );
+    }
+    case 'buffer_dose': {
+      const ceiling = params.kh.bufferCeiling[biome];
+      if (ceiling <= 0) {
+        return { ok: false, reason: `Buffer cannot be dosed in a ${biome} tank.` };
+      }
+      if (chemistry.kh >= ceiling) {
+        return { ok: false, reason: 'The water is already as hard as a buffer dose can make it.' };
+      }
+      return accept(
+        state,
+        {},
+        { ...chemistry, kh: Math.min(ceiling, chemistry.kh + params.kh.bufferDoseKh) },
+      );
+    }
+    case 'add_botanicals': {
+      const { ceiling, perDose, phPullPerDose, phFloor } = params.tannin;
+      if (ceiling[biome] <= 0) {
+        return { ok: false, reason: `Botanicals do not belong in a ${biome} tank.` };
+      }
+      if (water.tannin >= ceiling[biome]) {
+        return { ok: false, reason: 'The water is already as dark as botanicals can make it.' };
+      }
+      return accept(
+        state,
+        { tannin: Math.min(ceiling[biome], water.tannin + perDose) },
+        {
+          ...chemistry,
+          ph: Math.min(chemistry.ph, Math.max(phFloor, chemistry.ph - phPullPerDose)),
+        },
+      );
+    }
     case 'bottled_bacteria': {
       const dose = params.bacteria.bottledBoost;
       return accept(
@@ -110,7 +179,7 @@ export function applyCare(
       );
     }
     case 'gravel_vacuum':
-      return accept(state, { uneatenFood: 0 });
+      return accept(state, { uneatenFood: 0, uneatenFoodTypes: [] });
     case 'algae_scrape':
       return accept(state, { algae: 0 });
   }

@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { addFishRequestSchema } from './tank.js';
 import { DECOR_ASSET_IDS, VACATION_FEEDER_ASSET_ID } from './decorRules.js';
 import { diseaseKindSchema } from './fishState.js';
+import { plantContentSchema } from './plants.js';
 import {
-  DEFAULT_PURCHASE_STAGE,
   decorPrice,
   economySchema,
   idempotencyKeySchema,
@@ -22,6 +22,14 @@ const placeableIds = [...new Set(Object.values(DECOR_ASSET_IDS).flatMap((ids) =>
 describe('content/economy.json', () => {
   const economy = economySchema.parse(readJson('economy.json'));
   const fixture = (): Economy => structuredClone(economy);
+
+  it('has a growth entry for every priced plant, so the sim never drops one', () => {
+    const grown = new Set(
+      plantContentSchema.parse(readJson('plants.json')).plants.map((p) => p.id),
+    );
+    const missing = Object.keys(economy.items.plant.prices).filter((id) => !grown.has(id));
+    expect(missing).toEqual([]);
+  });
 
   it('prices every species juvenile and adult, adult above juvenile', () => {
     const files = readdirSync(join(content, 'species')).filter((f) => f.endsWith('.json'));
@@ -129,7 +137,9 @@ describe('content/economy.json', () => {
       expect(text).not.toContain(free);
     }
     expect(Object.keys(economy.items.consumables).sort()).toEqual([
+      'botanicals',
       'bottledBacteria',
+      'bufferDose',
       'premiumFood',
       'premiumMedicine',
       'testKit',
@@ -244,11 +254,16 @@ describe('economy contract', () => {
     expect(idempotencyKeySchema.safeParse('server:daily-care-2026-10-19').success).toBe(false);
   });
 
-  it('keeps add-fish backward compatible and takes a stage', () => {
+  it('requires add-fish to name a stage and carry a key', () => {
     const base = { species: 'neon-tetra', name: 'Blip' };
-    expect(addFishRequestSchema.parse(base).stage).toBeUndefined();
-    expect(DEFAULT_PURCHASE_STAGE).toBe('adult');
-    expect(addFishRequestSchema.parse({ ...base, stage: 'juvenile' }).stage).toBe('juvenile');
-    expect(addFishRequestSchema.safeParse({ ...base, stage: 'fry' }).success).toBe(false);
+    const full = { ...base, stage: 'juvenile', idempotencyKey: 'abcdefgh1' };
+    expect(addFishRequestSchema.parse(full).stage).toBe('juvenile');
+    for (const field of ['stage', 'idempotencyKey']) {
+      const rest = Object.fromEntries(Object.entries(full).filter(([key]) => key !== field));
+      const result = addFishRequestSchema.safeParse(rest);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual([field]);
+    }
+    expect(addFishRequestSchema.safeParse({ ...full, stage: 'fry' }).success).toBe(false);
   });
 });

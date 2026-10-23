@@ -1,5 +1,6 @@
 import type { Tank } from '@aquarium/shared';
 import { useId, useRef, useState } from 'react';
+import { galleryToggle } from '../sync/gallery';
 import { publicUrl, shareView } from '../sync/share';
 import type { SessionState, TankSession } from '../sync/session';
 
@@ -102,6 +103,7 @@ export function ShareSection({
         {copied === 'copied' && 'Link copied.'}
         {copied === 'manual' && 'Copying is blocked here. The link is selected, copy it by hand.'}
       </p>
+      <GalleryToggle session={session} state={state} tank={tank} />
       {view.kind !== 'private' && (
         <div className="row">
           {pending === null ? (
@@ -137,5 +139,42 @@ export function ShareSection({
         </div>
       )}
     </section>
+  );
+}
+
+function GalleryToggle({
+  session,
+  state,
+  tank,
+}: {
+  session: TankSession;
+  state: SessionState;
+  tank: Tank;
+}) {
+  const id = useId();
+  const toggle = galleryToggle(tank);
+  return (
+    <div className="gallery-toggle">
+      <div className="row">
+        <input
+          id={`${id}-box`}
+          type="checkbox"
+          aria-describedby={`${id}-hint`}
+          checked={toggle.kind === 'available' && toggle.listed}
+          disabled={state.busy || toggle.kind !== 'available'}
+          onChange={(e) => void session.setGalleryListed(e.currentTarget.checked)}
+        />
+        <label htmlFor={`${id}-box`}>Show in gallery</label>
+      </div>
+      <p id={`${id}-hint`} className="hint">
+        {toggle.kind === 'needs-link' &&
+          'Create a public link first. A link alone never lists your tank; this is a second, separate choice.'}
+        {toggle.kind === 'quarantine' && 'A quarantine tank cannot be listed in the gallery.'}
+        {toggle.kind === 'available' &&
+          (toggle.listed
+            ? 'Your tank is in the tank of the week gallery, where verified players can vote for it. Stopping sharing also takes it out.'
+            : 'Off. Turn this on to put your tank in the weekly gallery. Only its name, fish and decor are shown.')}
+      </p>
+    </div>
   );
 }

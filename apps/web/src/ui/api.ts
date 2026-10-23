@@ -5,15 +5,45 @@ import {
   ateBatchRequestSchema,
   careActionSchema,
   collectionSchema,
+  galleryQuerySchema,
+  galleryResponseSchema,
+  galleryWinnersResponseSchema,
+  setGalleryRequestSchema,
+  voteRequestSchema,
+  voteStateSchema,
   replayQuerySchema,
   replayResponseSchema,
   createTankRequestSchema,
+  moveFishRequestSchema,
+  acceptGiftRequestSchema,
+  acceptGiftResponseSchema,
+  cancelGiftResponseSchema,
+  confirmGiftRequestSchema,
+  confirmGiftResponseSchema,
+  createGiftRequestSchema,
+  createGiftResponseSchema,
+  declineGiftResponseSchema,
+  giftListResponseSchema,
+  type AcceptGiftRequest,
+  type AcceptGiftResponse,
+  type CancelGiftResponse,
+  type ConfirmGiftRequest,
+  type ConfirmGiftResponse,
+  type CreateGiftRequest,
+  type CreateGiftResponse,
+  type DeclineGiftResponse,
+  type GiftListResponse,
+  moveFishResponseSchema,
   errorCodeSchema,
   speciesListSchema,
   tankListSchema,
   tankSchema,
   updateTankRequestSchema,
   creditsSchema,
+  communityFeedRequestSchema,
+  communityFeedResponseSchema,
+  communityStateSchema,
+  handleResponseSchema,
   dataExportSchema,
   privacyPolicySchema,
   publicTankSchema,
@@ -32,15 +62,32 @@ import {
   signUpRequestSchema,
   userSchema,
   walletResponseSchema,
+  adultConfirmationRequestSchema,
+  checkoutResponseSchema,
+  packCheckoutRequestSchema,
+  packsResponseSchema,
+  paymentsStateSchema,
+  subscriptionCheckoutRequestSchema,
+  ownedRoomsResponseSchema,
   purchaseRequestSchema,
   purchaseResponseSchema,
   treatRequestSchema,
   treatResponseSchema,
+  trimPlantRequestSchema,
+  fragCoralRequestSchema,
   type AchievementList,
   type AteReport,
   type BackgroundId,
+  type RoomId,
   type CareAction,
+  type FragCoralRequest,
   type Collection,
+  type CommunityFeedRequest,
+  type CommunityFeedResponse,
+  type CommunityState,
+  type GalleryResponse,
+  type GalleryWinnersResponse,
+  type VoteState,
   type ReplayResponse,
   type DecorLayout,
   type Credits,
@@ -49,11 +96,19 @@ import {
   type LightSchedule,
   type PurchasableStage,
   type PurchaseResponse,
+  type CheckoutConsent,
+  type CheckoutResponse,
+  type PacksResponse,
+  type PaymentsState,
   type SpeciesSummary,
   type Tank,
   type TreatRequest,
+  type TrimPlantRequest,
   type TreatResponse,
+  type ConflictReason,
   type ErrorCode,
+  type MoveFishRequest,
+  type MoveFishResponse,
   type PrivacyPolicy,
   type PublicTank,
   type ReactionKind,
@@ -85,6 +140,7 @@ export class ApiRequestError extends Error {
     message: string,
     readonly fields: FieldErrors = {},
     readonly retryAfterSeconds: number | null = null,
+    readonly reason: ConflictReason | null = null,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -162,8 +218,15 @@ async function toError(res: Response): Promise<ApiRequestError> {
   }
   const own = apiErrorSchema.safeParse(body);
   if (own.success) {
-    const { code, message, issues } = own.data.error;
-    return new ApiRequestError(res.status, code, message, issuesToFields(issues ?? []), retryAfter);
+    const { code, message, issues, reason } = own.data.error;
+    return new ApiRequestError(
+      res.status,
+      code,
+      message,
+      issuesToFields(issues ?? []),
+      retryAfter,
+      reason ?? null,
+    );
   }
   const loose = body as { code?: unknown; message?: unknown } | null;
   const message =
@@ -185,8 +248,6 @@ export interface WalletView {
   balance: number;
   /** Item refs the recent ledger shows as bought and not refunded, so the shop can mark them instead of offering a 409. */
   owned: readonly string[];
-  /** Item refs whose latest ledger entry is a refund, so an earlier purchase no longer counts. */
-  released?: readonly string[];
 }
 
 /** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
@@ -228,19 +289,32 @@ export interface ApiClient {
   tank(tankId: string): Promise<Tank>;
   createTank(input: CreateTankInput): Promise<Tank>;
   renameTank(tankId: string, name: string): Promise<Tank>;
+  setAcceptsGifts(tankId: string, acceptsGifts: boolean): Promise<Tank>;
   saveDecorLayout(tankId: string, layout: DecorLayout): Promise<Tank>;
   saveBackground(tankId: string, backgroundId: BackgroundId): Promise<Tank>;
+  saveRoom(tankId: string, roomId: RoomId | null): Promise<Tank>;
+  ownedRooms(): Promise<RoomId[]>;
   addFish(tankId: string, input: AddFishInput): Promise<Tank>;
   wallet(): Promise<WalletView>;
+  paymentsState(): Promise<PaymentsState>;
+  paymentsPacks(): Promise<PacksResponse>;
+  checkoutPack(packId: string, consent: CheckoutConsent): Promise<CheckoutResponse>;
+  checkoutSubscription(consent: CheckoutConsent): Promise<CheckoutResponse>;
+  cancelSubscription(): Promise<PaymentsState>;
+  setAdultConfirmation(confirmed: boolean, password?: string): Promise<PaymentsState>;
   purchase(request: {
     itemRef: string;
     idempotencyKey: string;
     tankId?: string;
   }): Promise<PurchaseResponse>;
   saveLight(tankId: string, light: LightSchedule): Promise<Tank>;
+  setCo2(tankId: string, tier: number): Promise<Tank>;
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   treat(tankId: string, request: TreatRequest): Promise<TreatResponse>;
+  trimPlant(tankId: string, request: TrimPlantRequest): Promise<Tank>;
+  fragCoral(tankId: string, request: FragCoralRequest): Promise<Tank>;
+  moveFish(tankId: string, fishId: string, request: MoveFishRequest): Promise<MoveFishResponse>;
   replay(
     tankId: string,
     query: { since: string; until?: string; cursor?: string; limit?: number },
@@ -251,9 +325,25 @@ export interface ApiClient {
   shareTank(tankId: string): Promise<Tank>;
   rotateShare(tankId: string): Promise<Tank>;
   revokeShare(tankId: string): Promise<Tank>;
+  setGallery(tankId: string, listed: boolean): Promise<Tank>;
   publicTank(token: string): Promise<PublicTank>;
+  gallery(query?: { limit?: number; offset?: number }): Promise<GalleryResponse>;
+  galleryWinners(): Promise<GalleryWinnersResponse>;
+  galleryTank(tankId: string): Promise<PublicTank>;
+  castVote(tankId: string): Promise<VoteState>;
+  clearVote(): Promise<VoteState>;
   setReaction(token: string, kind: ReactionKind): Promise<ReactionState>;
   clearReaction(token: string): Promise<ReactionState>;
+  community(): Promise<CommunityState>;
+  communityFeed(request: CommunityFeedRequest): Promise<CommunityFeedResponse>;
+  communityAte(reports: readonly AteReport[], batchId?: string): Promise<CommunityState>;
+  myHandle(): Promise<string | null>;
+  gifts(): Promise<GiftListResponse>;
+  createGift(request: CreateGiftRequest): Promise<CreateGiftResponse>;
+  acceptGift(offerId: string, request: AcceptGiftRequest): Promise<AcceptGiftResponse>;
+  confirmGift(offerId: string, request: ConfirmGiftRequest): Promise<ConfirmGiftResponse>;
+  declineGift(offerId: string): Promise<DeclineGiftResponse>;
+  cancelGift(offerId: string): Promise<CancelGiftResponse>;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -676,6 +766,10 @@ export function createApiClient(
       const body = validate(updateTankRequestSchema, { name });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
     },
+    async setAcceptsGifts(tankId, acceptsGifts) {
+      const body = validate(updateTankRequestSchema, { acceptsGifts });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
     async saveDecorLayout(tankId, layout) {
       const body = validate(updateTankRequestSchema, { decorLayout: layout });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
@@ -684,24 +778,54 @@ export function createApiClient(
       const body = validate(updateTankRequestSchema, { backgroundId });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
     },
+    async saveRoom(tankId, roomId) {
+      const body = validate(updateTankRequestSchema, { roomId });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async ownedRooms() {
+      const res = await send('/api/rooms');
+      if (!res.ok) throw await toError(res);
+      return (await parsed(res, ownedRoomsResponseSchema)).owned;
+    },
     async wallet() {
       const res = await send('/api/wallet');
       if (!res.ok) throw await toError(res);
       const body = await parsed(res, walletResponseSchema);
-      const latest = new Map<string, boolean>();
-      for (const e of body.ledger) {
-        if (e.itemRef === null || latest.has(e.itemRef)) continue;
-        if (e.reason === 'purchase') latest.set(e.itemRef, true);
-        else if (e.reason === 'refund') latest.set(e.itemRef, false);
-      }
-      const held = new Set(body.owned);
       return {
         balance: body.wallet.balance,
         owned: body.owned,
-        released: [...latest]
-          .filter(([ref, bought]) => !bought && !held.has(ref))
-          .map(([ref]) => ref),
       };
+    },
+    async paymentsState() {
+      const res = await send('/api/payments/state');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, paymentsStateSchema);
+    },
+    async paymentsPacks() {
+      const res = await send('/api/payments/packs');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, packsResponseSchema);
+    },
+    async checkoutPack(packId, consent) {
+      const body = validate(packCheckoutRequestSchema, { packId, consent });
+      return parsed(await post('/api/payments/checkout/pack', body), checkoutResponseSchema);
+    },
+    async checkoutSubscription(consent) {
+      const body = validate(subscriptionCheckoutRequestSchema, { consent });
+      return parsed(
+        await post('/api/payments/checkout/subscription', body),
+        checkoutResponseSchema,
+      );
+    },
+    async cancelSubscription() {
+      return parsed(await post('/api/payments/subscription/cancel', {}), paymentsStateSchema);
+    },
+    async setAdultConfirmation(confirmed, password) {
+      const body = validate(
+        adultConfirmationRequestSchema,
+        confirmed && password ? { confirmed, password } : { confirmed },
+      );
+      return parsed(await put('/api/payments/adult-confirmation', body), paymentsStateSchema);
     },
     async purchase(request) {
       const body = validate(purchaseRequestSchema, request);
@@ -709,6 +833,10 @@ export function createApiClient(
     },
     async saveLight(tankId, light) {
       const body = validate(updateTankRequestSchema, { light });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async setCo2(tankId, tier) {
+      const body = validate(updateTankRequestSchema, { co2: { tier } });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
     },
     async addFish(tankId, input) {
@@ -736,11 +864,6 @@ export function createApiClient(
       return parsed(res, replayResponseSchema);
     },
     async care(tankId, action) {
-      if (action.type === 'bottled_bacteria' && action.idempotencyKey === undefined) {
-        throw new ClientValidationError({
-          idempotencyKey: 'Bottled bacteria cost Pearls and need a request key.',
-        });
-      }
       const body = validate(careActionSchema, action);
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/care`, body), tankSchema);
     },
@@ -749,6 +872,30 @@ export function createApiClient(
       return parsed(
         await post(`/api/tanks/${encodeURIComponent(tankId)}/treat`, body),
         treatResponseSchema,
+      );
+    },
+    async trimPlant(tankId, request) {
+      const body = validate(trimPlantRequestSchema, request);
+      return parsed(
+        await post(`/api/tanks/${encodeURIComponent(tankId)}/plants/trim`, body),
+        tankSchema,
+      );
+    },
+    async fragCoral(tankId, request) {
+      const body = validate(fragCoralRequestSchema, request);
+      return parsed(
+        await post(`/api/tanks/${encodeURIComponent(tankId)}/corals/frag`, body),
+        tankSchema,
+      );
+    },
+    async moveFish(tankId, fishId, request) {
+      const body = validate(moveFishRequestSchema, request);
+      return parsed(
+        await post(
+          `/api/tanks/${encodeURIComponent(tankId)}/fish/${encodeURIComponent(fishId)}/move`,
+          body,
+        ),
+        moveFishResponseSchema,
       );
     },
     async reportAte(tankId, reports, batchId) {
@@ -770,6 +917,104 @@ export function createApiClient(
       });
       if (!res.ok) throw await toError(res);
       return parsed(res, tankSchema);
+    },
+    async setGallery(tankId, listed) {
+      const body = validate(setGalleryRequestSchema, { listed });
+      const res = await send(`/api/tanks/${encodeURIComponent(tankId)}/gallery`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, tankSchema);
+    },
+    async gallery(query = {}) {
+      const checked = validate(galleryQuerySchema, query);
+      const res = await send(
+        `/api/gallery?${new URLSearchParams(
+          Object.entries(checked).map(([k, v]) => [k, String(v)]),
+        )}`,
+      );
+      if (!res.ok) throw await toError(res);
+      return parsed(res, galleryResponseSchema);
+    },
+    async galleryWinners() {
+      const res = await send('/api/gallery/winners');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, galleryWinnersResponseSchema);
+    },
+    async galleryTank(tankId) {
+      const res = await send(`/api/gallery/${encodeURIComponent(tankId)}`);
+      if (!res.ok) throw await toError(res);
+      return parsed(res, publicTankSchema);
+    },
+    async castVote(tankId) {
+      const body = validate(voteRequestSchema, { tankId });
+      const res = await send('/api/gallery/vote', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, voteStateSchema);
+    },
+    async clearVote() {
+      const res = await send('/api/gallery/vote', { method: 'DELETE' });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, voteStateSchema);
+    },
+    async community() {
+      const res = await send('/api/community');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, communityStateSchema);
+    },
+    async myHandle() {
+      const res = await send('/api/me/handle');
+      if (!res.ok) throw await toError(res);
+      return (await parsed(res, handleResponseSchema)).handle;
+    },
+    async communityFeed(request) {
+      const body = validate(communityFeedRequestSchema, request);
+      return parsed(await post('/api/community/feed', body), communityFeedResponseSchema);
+    },
+    async communityAte(reports, batchId) {
+      const body = validate(ateBatchRequestSchema, { reports, ...(batchId ? { batchId } : {}) });
+      return parsed(await post('/api/community/ate', body), communityStateSchema);
+    },
+    async gifts() {
+      const res = await send('/api/gifts');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, giftListResponseSchema);
+    },
+    async createGift(request) {
+      const body = validate(createGiftRequestSchema, request);
+      return parsed(await post('/api/gifts', body), createGiftResponseSchema);
+    },
+    async acceptGift(offerId, request) {
+      const body = validate(acceptGiftRequestSchema, request);
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/accept`, body),
+        acceptGiftResponseSchema,
+      );
+    },
+    async confirmGift(offerId, request) {
+      const body = validate(confirmGiftRequestSchema, request);
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/confirm`, body),
+        confirmGiftResponseSchema,
+      );
+    },
+    async declineGift(offerId) {
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/decline`, {}),
+        declineGiftResponseSchema,
+      );
+    },
+    async cancelGift(offerId) {
+      return parsed(
+        await post(`/api/gifts/${encodeURIComponent(offerId)}/cancel`, {}),
+        cancelGiftResponseSchema,
+      );
     },
     async publicTank(token) {
       const res = await send(`/api/public/${encodeURIComponent(token)}`);

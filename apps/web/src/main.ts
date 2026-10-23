@@ -2,12 +2,15 @@ import { broodTarget, followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
-import { parseEngineOptions } from './engine/options';
+import { type ClockSetting } from './engine/daylight';
 import type { Biome, Collider } from '@aquarium/shared';
 import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig, orbitDistanceFor, tankBounds } from './interaction/camera';
 import { syncRoomLimit } from './interaction/roomLimit';
+import { ShownRoom } from './interaction/shownRoom';
+import { bindRoomLight } from './interaction/roomLight';
+import { IdleOrbit, bindIdleInput } from './interaction/idleOrbit';
 import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
@@ -31,11 +34,15 @@ import {
   watchSwitches,
   type AssetWatch,
 } from './ui/loadSignals';
+import { engineOptionsFor } from './ui/dayNight';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { LampFeed } from './sync/lampFeed';
-import { WaveMakerFeed } from './sync/waveMakerFeed';
-import { awaitAppModules } from './tankLoad';
+import { CoralFeed } from './sync/coralFeed';
+import { PlantFeed } from './sync/plantFeed';
+import { RoomSeedFeed } from './sync/roomSeed';
+import { bindPump, WaveMakerFeed } from './sync/waveMakerFeed';
+import { awaitTankModules } from './tankLoad';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -55,7 +62,6 @@ async function boot(): Promise<void> {
   const container = requireElement('app');
   const uiRoot = requireElement('ui');
   const tank = import('./tank');
-  const roomModule = import('./scene/room');
 
   const events = new EventBus<EngineEvents>(undefined, ['engine:ready']);
   const interaction = new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS);
@@ -70,6 +76,10 @@ async function boot(): Promise<void> {
   const tankEvents = queueTankEvents(interaction);
   const waveMaker = new WaveMakerFeed(interaction);
   const lamp = new LampFeed(interaction);
+  const plantFeed = new PlantFeed(interaction);
+  const coralFeed = new CoralFeed(interaction);
+  const roomSeed = new RoomSeedFeed(interaction);
+  const shownRoom = new ShownRoom(interaction);
   const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
@@ -81,7 +91,15 @@ async function boot(): Promise<void> {
       Promise.all([import('./interaction/decor/system'), tank]).then(
         ([{ createDecorSystem }, { FeederLayer }]) =>
           (scene, initial) =>
-            createDecorSystem(engine, scene, interaction, initial, new FeederLayer()),
+            createDecorSystem(
+              engine,
+              scene,
+              interaction,
+              initial,
+              new FeederLayer(),
+              coralFeed,
+              plantFeed,
+            ),
       ),
     (message, cause) => console.error(message, cause),
   );
@@ -100,17 +118,25 @@ async function boot(): Promise<void> {
   });
   mountUi(uiRoot, { engine: events, interaction });
 
+  let pinnedClock: ClockSetting = null;
+  let clockPressed = false;
+  let liveEngine: Engine | null = null;
+  const stopClockRequests = interaction.on('clock:request', ({ clock }) => {
+    pinnedClock = clock;
+    clockPressed = true;
+    liveEngine?.setClock(clock);
+  });
   let modules: Awaited<typeof tank>;
-  let roomModules: Awaited<typeof roomModule>;
   let engine: Engine;
   let assetWatch: AssetWatch;
   try {
-    [modules, roomModules] = await awaitAppModules(tank, roomModule, events);
+    modules = await awaitTankModules(tank, events);
     tracker.reach('code');
-    engine = await modules.Engine.create(container, {
-      options: parseEngineOptions(window.location.search),
-      events,
-    });
+    const engineOptions = engineOptionsFor(window.location.search);
+    if (!clockPressed) pinnedClock = engineOptions.clock;
+    engine = await modules.Engine.create(container, { options: engineOptions, events });
+    liveEngine = engine;
+    engine.setClock(pinnedClock);
     tracker.reach('renderer');
     const { DefaultLoadingManager } = await import('three');
     assetWatch = watchAssets(
@@ -120,9 +146,14 @@ async function boot(): Promise<void> {
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     tracker.fail(message);
+    stopClockRequests();
     switches.stop();
     waveMaker.stop();
     lamp.stop();
+    plantFeed.stop();
+    coralFeed.stop();
+    roomSeed.stop();
+    shownRoom.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
@@ -153,18 +184,43 @@ async function boot(): Promise<void> {
     },
   });
 
-  const { mountRoom, RoomPreference, browserRoomStorage } = roomModules;
-  const roomPreference = new RoomPreference(browserRoomStorage());
-  const room = mountRoom(engine, roomPreference);
-  const limitToRoom = (): void => syncRoomLimit(rig, room.backdrop.layout);
+  const { RoomLight } = await import('./engine/room');
+  const roomLight = bindRoomLight({
+    shown: shownRoom,
+    room: () => engine.room,
+    seed: roomSeed,
+    create: (seed) => {
+      const environment = engine.scene.environment;
+      if (!environment) throw new Error('Room light needs the engine room environment');
+      return new RoomLight({ environment, tier: engine.quality.tier, seed });
+    },
+    tier: () => engine.quality.tier,
+    hood: () => engine.daylight,
+    clock: () => engine.roomClockMinute(),
+    now: () => Date.now(),
+    onFrame: (callback) => engine.onFrame(callback),
+  });
+  const limitToRoom = (): void => syncRoomLimit(rig, engine.room?.layout ?? null);
+  const showRoom = (): void => {
+    void engine.setRoom(shownRoom.snapshot()).then(() => {
+      roomLight.sync();
+      limitToRoom();
+    });
+  };
   limitToRoom();
   const stopRoomLimit = [
-    roomPreference.subscribe(limitToRoom),
+    shownRoom.subscribe(showRoom),
     engine.events.on('engine:tank-resized', limitToRoom),
     engine.events.on('quality:tier-changed', limitToRoom),
+    engine.events.on('quality:tier-changed', ({ to }) => roomLight.setTier(to)),
   ];
 
-  const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
+  const idleOrbit = new IdleOrbit(rig);
+  const stopMotionWatch = watchReducedMotion((reduced) => {
+    rig.setReducedMotion(reduced);
+    idleOrbit.setReducedMotion(reduced);
+  });
+  const stopIdleInput = bindIdleInput(window, idleOrbit);
   let play: PlaySystem | null = null;
   const photo = new PhotoController({
     port: engine.photo,
@@ -227,9 +283,9 @@ async function boot(): Promise<void> {
       interaction,
     );
   });
-  engine.onFrame(() => waveMaker.syncScene());
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
+    idleOrbit.update(deltaS, photo.active || exposePose);
     rig.update(deltaS);
     photo.update(deltaS);
     if (!exposePose) return;
@@ -293,6 +349,10 @@ async function boot(): Promise<void> {
       tracker.finish();
     });
   let sceneBiome: Biome | null = null;
+  let unbindPump = (): void => undefined;
+  let detachCorals = (): void => undefined;
+  let detachAnchors = (): void => undefined;
+  let detachPlants = (): void => undefined;
   const showBackground = (state: InteractionEvents['background:state'] | undefined): void => {
     if (!state || state.biome !== sceneBiome) return;
     container.dataset['backgroundId'] = state.backgroundId ?? '';
@@ -305,14 +365,18 @@ async function boot(): Promise<void> {
       sceneBiome = scene.biome;
       showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
-      fish.setAnchors(scene.anchors);
+      void engine.useRoomIndex({ assets: [...scene.catalogEntries()] }).then(showRoom);
+      fish.setAnchors([...scene.anchors, ...scene.banks]);
+      detachAnchors = scene.onAnchorsChanged((anchors) =>
+        fish.setAnchors([...anchors, ...scene.banks]),
+      );
+      scene.polyps.bind(fish.polyps);
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
+      detachPlants = plantFeed.attach(scene);
+      detachCorals = coralFeed.attach(scene);
       fish.setSceneColliders(scene.colliderList);
-      waveMaker.attachScene(scene, {
-        field: (tier) => modules.pumpFieldFor(tier, engine.tank.dimensions),
-        simTimeS: () => fish.simTimeS(),
-      });
+      unbindPump = bindPump(waveMaker, engine, scene, modules.pumpFieldFor, () => fish.simTimeS());
       play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
       playChoices.applyTo(play.controller);
       sceneDecor.mount(scene);
@@ -320,12 +384,20 @@ async function boot(): Promise<void> {
       firstSceneMounted();
       if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
     },
-    unmounting() {
+    unmounting(scene) {
+      scene.polyps.dispose();
+      detachPlants();
+      detachPlants = () => undefined;
+      detachCorals();
+      detachCorals = () => undefined;
+      detachAnchors();
+      detachAnchors = () => undefined;
       delete container.dataset['sceneBiome'];
       delete container.dataset['backgroundId'];
       sceneBiome = null;
       sceneDecor.unmount();
-      waveMaker.detachScene();
+      unbindPump();
+      unbindPump = () => undefined;
       play?.dispose();
       play = null;
       fish.setAnchors([]);
@@ -351,9 +423,14 @@ async function boot(): Promise<void> {
     switches.stop();
     waveMaker.stop();
     lamp.stop();
+    plantFeed.stop();
+    coralFeed.stop();
     stopResize();
     for (const off of stopRoomLimit) off();
-    room.dispose();
+    roomLight.dispose();
+    roomSeed.stop();
+    shownRoom.stop();
+    stopIdleInput();
     stopTankSize();
     tankSize.stop();
     assetWatch.stop();
@@ -370,6 +447,7 @@ async function boot(): Promise<void> {
     unbindPhotoKeys();
     photo.dispose();
     stopRequests();
+    stopClockRequests();
     stopFocusFish();
     fish.stop();
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));

@@ -3,16 +3,12 @@ import {
   Box3,
   Color,
   ConstNode,
-  ConvertNode,
   LinearMipmapLinearFilter,
   MathNode,
   Mesh,
   MeshBasicNodeMaterial,
-  OperatorNode,
   PlaneGeometry,
-  SplitNode,
   TextureNode,
-  UniformNode,
   VarNode,
   Vector3,
   type Node,
@@ -23,7 +19,7 @@ import { Caustics, castingShare, causticContrast } from './caustics';
 import { daylightAt, parseClock } from '../daylight';
 import { BAKE } from './causticPattern';
 import { WaterMedium } from './medium';
-import { buildShaders } from '../shaderFixtures';
+import { buildShaders, evaluate } from '../shaderFixtures';
 
 const DARK_SAND = 0.08;
 const REEF_SAND = 0.68;
@@ -259,50 +255,6 @@ describe('Caustics.terms', () => {
     expect(dispersion).toBeGreaterThan(layered);
   });
 });
-
-/**
- * Evaluates the arithmetic subset of a TSL graph on the CPU, so a JS mirror of shader maths can be
- * held to the graph itself instead of to a third copy of the formula.
- */
-function evaluate(node: Node): number[] {
-  if (node instanceof UniformNode || node instanceof ConstNode) {
-    const value: unknown = node.value;
-    if (typeof value === 'number') return [value];
-    if (value instanceof Vector3) return value.toArray();
-    if (value instanceof Color) return value.toArray();
-    throw new Error(`evaluate: unsupported ${node.type} value`);
-  }
-  if (node instanceof VarNode || node instanceof ConvertNode) return evaluate(node.node);
-  if (node instanceof SplitNode) {
-    const v = evaluate(node.node);
-    return [...node.components].map((c) => v['xyzw'.indexOf(c)] ?? Number.NaN);
-  }
-  const zip = (a: number[], b: number[], f: (x: number, y: number) => number): number[] =>
-    Array.from({ length: Math.max(a.length, b.length) }, (_, i) =>
-      f(a.length === 1 ? (a[0] ?? 0) : (a[i] ?? 0), b.length === 1 ? (b[0] ?? 0) : (b[i] ?? 0)),
-    );
-  if (node instanceof OperatorNode) {
-    const a = evaluate(node.aNode);
-    const b = evaluate(node.bNode);
-    if (node.op === '+') return zip(a, b, (x, y) => x + y);
-    if (node.op === '-') return zip(a, b, (x, y) => x - y);
-    if (node.op === '*') return zip(a, b, (x, y) => x * y);
-    if (node.op === '/') return zip(a, b, (x, y) => x / y);
-    throw new Error(`evaluate: unsupported operator ${node.op}`);
-  }
-  if (node instanceof MathNode) {
-    const a = evaluate(node.aNode);
-    if (node.method === MathNode.EXP) return a.map(Math.exp);
-    if (node.method === MathNode.NEGATE) return a.map((x) => -x);
-    if (node.bNode === null) throw new Error(`evaluate: unsupported math ${node.method}`);
-    const b = evaluate(node.bNode);
-    if (node.method === MathNode.MAX) return zip(a, b, Math.max);
-    if (node.method === MathNode.MIN) return zip(a, b, Math.min);
-    if (node.method === MathNode.POW) return zip(a, b, Math.pow);
-    throw new Error(`evaluate: unsupported math ${node.method}`);
-  }
-  throw new Error(`evaluate: unsupported node ${node.type}`);
-}
 
 describe('Caustics.reachAtDepth', () => {
   // The substrate bounce reads the CPU side once per frame while every lit shader reads the graph,

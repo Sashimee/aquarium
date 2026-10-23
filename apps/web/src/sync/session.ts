@@ -1,8 +1,9 @@
 import type {
   AwaySummary,
   BackgroundId,
-  PlayableBiome,
+  CreatableBiome,
   CareAction,
+  ConflictReason,
   DecorLayout,
   DiseaseKind,
   FoodType,
@@ -13,7 +14,14 @@ import type {
   TankSize,
   User,
 } from '@aquarium/shared';
-import { DEFAULT_TANK_SIZE, ONE_TIME_REF } from '@aquarium/shared';
+import {
+  DEFAULT_TANK_SIZE,
+  isFreeRoom,
+  ONE_TIME_REF,
+  roomIdSchema,
+  roomRef,
+  type RoomId,
+} from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -29,9 +37,13 @@ import {
   shouldShowAway,
   speciesNameMap,
 } from './life';
+import { DEVICE_ROOM_KEY, planRoomMigration } from './roomMigration';
 import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
+import { moveRefusalText } from './moveFish';
 import { INITIAL_STATE, type SessionState } from './state';
+import { coralLabel, fragRefusalText, sameCorals } from './coralCare';
+import { plantLabel, samePlants, trimRefusalText } from './plantTrim';
 import { DISEASE_LABEL } from './treatment';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
 
@@ -58,6 +70,23 @@ export interface TreatOutcome {
   overdose: boolean;
   /** The server's reason when it refused the dose with a 409. */
   refusal: string | null;
+  /** The server's machine-readable reason for the 409. */
+  reason: ConflictReason | null;
+}
+
+export interface MoveOutcome {
+  ok: boolean;
+  refusal: string | null;
+}
+
+export interface TrimOutcome {
+  ok: boolean;
+  refusal: string | null;
+}
+
+export interface FragOutcome {
+  ok: boolean;
+  refusal: string | null;
 }
 
 export interface ShareOutcome {
@@ -68,6 +97,7 @@ export interface ShareOutcome {
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
+const TRIM_KEY_TTL_MS = 10 * 60_000;
 
 export class TankSession {
   private state: SessionState = INITIAL_STATE;
@@ -92,11 +122,13 @@ export class TankSession {
   private readonly now: () => number;
   private readonly sleep: Sleep;
   private readonly keys: IntentKeys;
+  private readonly trimKeys: IntentKeys;
 
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
     this.keys = new IntentKeys(deps.newKey);
+    this.trimKeys = new IntentKeys(deps.newKey, TRIM_KEY_TTL_MS, this.now);
     const saveStatus = new SaveStatusMerge((status, message, source, reported) =>
       deps.interaction.emit('decor:save-state', { status, message, source, reported }),
     );
@@ -178,6 +210,7 @@ export class TankSession {
 
   async load(): Promise<void> {
     const id = ++this.loadId;
+    this.roomsKnown = false;
     this.switchId++;
     this.unloadScene('switch')?.dispose();
     this.patch({
@@ -186,6 +219,7 @@ export class TankSession {
       activeId: null,
       awayByTank: {},
       owned: [],
+      ownedRooms: [],
       pendingNet: null,
       error: null,
       notice: null,
@@ -204,6 +238,7 @@ export class TankSession {
       const activeId = tanks.find((t) => t.id === stored)?.id ?? tanks[0]?.id ?? null;
       this.patch({ phase: 'ready', species, tanks, awayByTank, activeId });
       void this.refreshWallet();
+      void this.refreshRooms();
       if (activeId) this.activate(activeId);
       else this.deps.interaction.emit('tank:none', {});
     } catch (error) {
@@ -306,6 +341,122 @@ export class TankSession {
     }
   }
 
+  /**
+   * An empty list means "owns nothing" only once a read has succeeded, so the device-room migration
+   * waits for that and a failed read never loses it.
+   */
+  private roomsKnown = false;
+  private roomMigration: Promise<void> = Promise.resolve();
+
+  /** The paid rooms the account owns. A failed read keeps the last list; the server checks every use. */
+  async refreshRooms(): Promise<void> {
+    const gen = this.loadId;
+    try {
+      const owned = await this.deps.api.ownedRooms();
+      if (gen !== this.loadId) return;
+      this.roomsKnown = true;
+      this.patch({ ownedRooms: owned });
+      await this.migrateDeviceRoom(gen);
+    } catch (error) {
+      if (!(error instanceof ApiRequestError)) throw error;
+    }
+  }
+
+  private readonly buyingRooms = new Set<RoomId>();
+
+  /**
+   * Buys a paid room for the whole account. A room that is free or already owned is never charged,
+   * and a second press while the first is out is dropped; a retry after an unknown outcome carries
+   * the same key, so the server replays instead of charging twice.
+   */
+  async buyRoom(roomId: RoomId): Promise<boolean> {
+    if (isFreeRoom(roomId) || this.state.ownedRooms.includes(roomId)) return true;
+    if (this.buyingRooms.has(roomId)) return false;
+    this.buyingRooms.add(roomId);
+    const itemRef = roomRef(roomId);
+    const gen = this.loadId;
+    try {
+      return await this.paid(`buy:${itemRef}`, async (idempotencyKey) => {
+        let bought;
+        try {
+          bought = await this.deps.api.purchase({ itemRef, idempotencyKey });
+        } catch (error) {
+          if (error instanceof ApiRequestError && error.reason === 'room_already_owned') {
+            this.patch({ ownedRooms: [...new Set([...this.state.ownedRooms, roomId])] });
+          }
+          throw error;
+        }
+        if (gen !== this.loadId) return;
+        this.walletApplied = ++this.walletSeq;
+        this.patch({
+          balance: bought.wallet.balance,
+          ownedRooms: [...new Set([...this.state.ownedRooms, roomId])],
+        });
+      });
+    } finally {
+      this.buyingRooms.delete(roomId);
+    }
+  }
+
+  /** Sets the active tank's room; null is the plain studio. A paid room has to be bought first. */
+  async setRoom(roomId: RoomId | null): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    if (roomId !== null && !roomIdSchema.safeParse(roomId).success) {
+      this.patch({ error: 'That room does not exist.' });
+      return false;
+    }
+    if (roomId !== null && !isFreeRoom(roomId) && !this.state.ownedRooms.includes(roomId)) {
+      this.patch({ error: 'That room is not unlocked yet. Buy it first.' });
+      return false;
+    }
+    if (roomId === tank.roomId && tank.roomSetAt !== null) return true;
+    const gen = this.loadId;
+    return this.perform(async () => {
+      try {
+        const next = await this.deps.api.saveRoom(tank.id, roomId);
+        if (gen === this.loadId) this.apply(next);
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.reason === 'room_not_owned') {
+          void this.refreshRooms();
+        }
+        throw error;
+      }
+    });
+  }
+
+  /** Runs after any earlier migration has stopped, so a reload never has two writing at once. */
+  private migrateDeviceRoom(loadId: number): Promise<void> {
+    const run = this.roomMigration.then(() => this.runRoomMigration(loadId));
+    this.roomMigration = run.catch(() => undefined);
+    return run;
+  }
+
+  private async runRoomMigration(loadId: number): Promise<void> {
+    const storage = this.deps.storage;
+    if (!storage || !this.roomsKnown) return;
+    if (loadId !== this.loadId || this.state.phase !== 'ready') return;
+    let deviceRoom: string | null = null;
+    try {
+      deviceRoom = storage.getItem(DEVICE_ROOM_KEY);
+    } catch {
+      // Some privacy modes throw on any storage read; the device room is then simply absent.
+    }
+    const plan = planRoomMigration(deviceRoom, this.state.tanks, this.state.ownedRooms);
+    for (const move of plan.moves) {
+      if (loadId !== this.loadId) return;
+      const moved = await this.perform(async () => {
+        if (loadId !== this.loadId) return;
+        const current = this.state.tanks.find((t) => t.id === move.tankId);
+        if (!current || current.roomSetAt !== null) return;
+        const next = await this.deps.api.saveRoom(move.tankId, move.roomId);
+        if (loadId === this.loadId) this.apply(next);
+      });
+      if (!moved) return;
+    }
+    if (plan.done && loadId === this.loadId) storage.removeItem(DEVICE_ROOM_KEY);
+  }
+
   dismissEarned(): void {
     if (this.state.earned !== null) this.patch({ earned: null });
   }
@@ -335,7 +486,7 @@ export class TankSession {
 
   async createTank(
     name: string,
-    biome: PlayableBiome,
+    biome: CreatableBiome,
     size: TankSize = DEFAULT_TANK_SIZE,
     quarantine = false,
   ): Promise<boolean> {
@@ -405,11 +556,25 @@ export class TankSession {
     return { ok, token };
   }
 
+  async setGalleryListed(listed: boolean): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    const gen = this.loadId;
+    return this.perform(async () => {
+      const next = await this.deps.api.setGallery(tank.id, listed);
+      if (gen !== this.loadId) return;
+      this.apply({ ...next, shareToken: null });
+      this.patch({
+        notice: listed ? 'Your tank is in the gallery.' : 'Your tank is out of the gallery.',
+      });
+    });
+  }
+
   async feed(food: FoodType, portion: number): Promise<boolean> {
     return this.careAction({ type: 'feed', food, portion });
   }
 
-  async careAction(action: CareAction): Promise<boolean> {
+  async careAction(action: CareRequest): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
     const gen = this.loadId;
@@ -420,20 +585,31 @@ export class TankSession {
       this.deps.interaction.emit('tank:care', { tankId: tank.id, action: sent.type });
       if (sent.type !== 'feed') this.patch({ notice: CARE_DONE[sent.type] });
     };
-    if (action.type !== 'bottled_bacteria') {
-      const ok = await this.perform(() => run(action));
-      await this.refreshWallet({ afterWrite: true });
-      return ok;
+    switch (action.type) {
+      case 'bottled_bacteria':
+        return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
+          run({ type: 'bottled_bacteria', idempotencyKey }),
+        );
+      case 'buffer_dose':
+        return this.paid(`buffer:${tank.id}`, (idempotencyKey) =>
+          run({ type: 'buffer_dose', idempotencyKey }),
+        );
+      case 'add_botanicals':
+        return this.paid(`botanicals:${tank.id}`, (idempotencyKey) =>
+          run({ type: 'add_botanicals', idempotencyKey }),
+        );
+      default: {
+        const ok = await this.perform(() => run(action));
+        await this.refreshWallet({ afterWrite: true });
+        return ok;
+      }
     }
-    return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
-      run({ type: 'bottled_bacteria', idempotencyKey }),
-    );
   }
 
   /** Doses the active tank. The key is kept across an unknown outcome, so a retry is never charged twice. */
   async treat(kind: DiseaseKind, potency: MedicinePotency): Promise<TreatOutcome> {
     const tank = this.activeTank;
-    const outcome: TreatOutcome = { ok: false, overdose: false, refusal: null };
+    const outcome: TreatOutcome = { ok: false, overdose: false, refusal: null, reason: null };
     if (!tank) return outcome;
     const gen = this.loadId;
     outcome.ok = await this.paid(`treat:${tank.id}:${kind}:${potency}`, async (idempotencyKey) => {
@@ -443,6 +619,7 @@ export class TankSession {
       } catch (error) {
         if (error instanceof ApiRequestError && error.code === 'conflict') {
           outcome.refusal = error.message;
+          outcome.reason = error.reason;
           return;
         }
         throw error;
@@ -459,6 +636,120 @@ export class TankSession {
           ? 'The medicine is in, but the water now holds more than one dose. It poisons your fish until you change the water.'
           : `The ${DISEASE_LABEL[kind].toLowerCase()} medicine is in the water.`,
       });
+    });
+    if (outcome.refusal !== null) outcome.ok = false;
+    return outcome;
+  }
+
+  /**
+   * Cuts one plant of the active tank back to `size`. The key is kept across an unknown outcome, so
+   * pressing again is a retry the server replays instead of trimming twice.
+   */
+  async trimPlant(plantKey: string, size: number): Promise<TrimOutcome> {
+    const tank = this.activeTank;
+    const outcome: TrimOutcome = { ok: false, refusal: null };
+    const plant = tank?.plants?.find((p) => p.key === plantKey);
+    if (!tank || !plant) return outcome;
+    const label = plantLabel(plant.assetId);
+    const gen = this.loadId;
+    const intent = `trim:${tank.id}:${plantKey}:${size}`;
+    const key = this.trimKeys.keyFor(intent);
+    outcome.ok = await this.perform(async () => {
+      let next;
+      try {
+        next = await this.deps.api.trimPlant(tank.id, {
+          plantKey,
+          size,
+          idempotencyKey: key,
+        });
+      } catch (error) {
+        const refusal = trimRefusalText(error, label);
+        if (!outcomeUnknown(error)) this.trimKeys.settle(intent);
+        if (refusal === null) throw error;
+        outcome.refusal = refusal;
+        if (error instanceof ApiRequestError && error.reason === 'plant_not_grown') {
+          await this.resyncTank(tank.id, gen);
+        }
+        return;
+      }
+      this.trimKeys.settle(intent);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({ notice: `The ${label} was trimmed.` });
+    });
+    if (outcome.refusal !== null) outcome.ok = false;
+    return outcome;
+  }
+
+  /**
+   * Cuts a fragment off one coral of the active tank. The key is kept across an unknown outcome, so
+   * pressing again is a retry the server replays instead of cutting twice.
+   */
+  async fragCoral(coralKey: string): Promise<FragOutcome> {
+    const tank = this.activeTank;
+    const outcome: FragOutcome = { ok: false, refusal: null };
+    const coral = tank?.corals?.find((c) => c.key === coralKey);
+    if (!tank || !coral) return outcome;
+    const label = coralLabel(coral.assetId);
+    const gen = this.loadId;
+    const intent = `frag:${tank.id}:${coralKey}`;
+    const key = this.trimKeys.keyFor(intent);
+    outcome.ok = await this.perform(async () => {
+      let next;
+      try {
+        next = await this.deps.api.fragCoral(tank.id, { coralKey, idempotencyKey: key });
+      } catch (error) {
+        const refusal = fragRefusalText(error, label);
+        if (!outcomeUnknown(error)) this.trimKeys.settle(intent);
+        if (refusal === null) throw error;
+        outcome.refusal = refusal;
+        if (error instanceof ApiRequestError && (error.status === 409 || error.status === 404)) {
+          await this.resyncTank(tank.id, gen);
+        }
+        return;
+      }
+      this.trimKeys.settle(intent);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({ notice: `A fragment was cut from the ${label}.` });
+    });
+    if (outcome.refusal !== null) outcome.ok = false;
+    return outcome;
+  }
+
+  /** Moves a fish out of the active tank. A refusal is handed back as text for the player. */
+  async move(fishId: string, toTankId: string): Promise<MoveOutcome> {
+    const tank = this.activeTank;
+    const outcome: MoveOutcome = { ok: false, refusal: null };
+    const fish = tank?.fish.find((f) => f.id === fishId);
+    const target = this.state.tanks.find((t) => t.id === toTankId);
+    if (!tank || !fish || !target) return outcome;
+    const gen = this.loadId;
+    const intent = `move:${tank.id}:${fishId}:${toTankId}`;
+    const key = this.keys.keyFor(intent);
+    outcome.ok = await this.perform(async () => {
+      let result;
+      try {
+        result = await this.deps.api.moveFish(tank.id, fishId, {
+          toTankId,
+          idempotencyKey: key,
+        });
+      } catch (error) {
+        const refusal = moveRefusalText(error, fish.name, target.name);
+        if (refusal === null) {
+          if (!outcomeUnknown(error)) this.keys.settle(intent);
+          throw error;
+        }
+        outcome.refusal = refusal;
+        if (!outcomeUnknown(error)) this.keys.settle(intent);
+        return;
+      }
+      this.keys.settle(intent);
+      this.keys.settle(`move:${toTankId}:${fishId}:${tank.id}`);
+      if (gen !== this.loadId) return;
+      this.apply(result.source);
+      this.apply(result.destination);
+      this.patch({ notice: `${fish.name} was moved to ${target.name}.` });
     });
     if (outcome.refusal !== null) outcome.ok = false;
     return outcome;
@@ -527,6 +818,18 @@ export class TankSession {
     });
   }
 
+  async setCo2(tier: number): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    const gen = this.loadId;
+    return this.perform(async () => {
+      const next = await this.deps.api.setCo2(tank.id, tier);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({ notice: tier === 0 ? 'The CO₂ is off.' : `The CO₂ runs at tier ${tier}.` });
+    });
+  }
+
   /** Asks to net a dead fish; nothing happens to the tank until `confirmNet`. */
   requestNet(fishId: string): void {
     const fish = this.activeTank?.fish.find((f) => f.id === fishId);
@@ -560,9 +863,40 @@ export class TankSession {
     return ok;
   }
 
+  async setAcceptsGifts(tankId: string, acceptsGifts: boolean): Promise<boolean> {
+    const gen = this.loadId;
+    return this.perform(async () => {
+      const next = await this.deps.api.setAcceptsGifts(tankId, acceptsGifts);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({
+        notice: acceptsGifts
+          ? `${next.name} now accepts gifted and traded fish.`
+          : `${next.name} no longer accepts gifted fish.`,
+      });
+    });
+  }
+
+  /** A tank the gift calls changed; an arriving fish goes through the acclimation bag. */
+  applyGiftTank(tank: Tank, arrived: boolean): void {
+    this.apply(tank, { acclimateNew: arrived });
+  }
+
   /** Releases a bagged fish now instead of waiting out the acclimation. */
   releaseNow(fishId: string): void {
     this.release(fishId);
+  }
+
+  private async resyncTank(tankId: string, gen: number): Promise<void> {
+    try {
+      const next = await this.deps.api.tank(tankId);
+      if (gen === this.loadId) this.apply(next);
+    } catch (error) {
+      console.warn(
+        'could not refresh the tank after a refused trim or cut; the next sync will',
+        error,
+      );
+    }
   }
 
   private async reset(phase: 'anonymous' | 'unverified'): Promise<void> {
@@ -573,6 +907,7 @@ export class TankSession {
     this.layoutSaver.reset();
     this.backgroundSaver.reset();
     this.keys.clear();
+    this.trimKeys.clear();
     this.shownLayout.clear();
     this.shownBackground.clear();
     this.deps.storage?.removeItem(ACTIVE_KEY);
@@ -617,9 +952,12 @@ export class TankSession {
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,
       backgroundId: tank.backgroundId,
+      roomId: tank.roomId,
       recentVisitDays: tank.recentVisitDays,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
+    this.deps.interaction.emit('tank:plants', { tankId, plants: tank.plants ?? [] });
+    this.deps.interaction.emit('tank:corals', { tankId, corals: tank.corals ?? [] });
     this.deps.interaction.emit('tank:wave-maker', {
       tankId,
       tier: tank.equipment.waveMaker.tier,
@@ -785,8 +1123,17 @@ export class TankSession {
       this.shownBackground.set(tank.id, tank.backgroundId);
       interaction.emit('tank:background', { tankId: tank.id, backgroundId: tank.backgroundId });
     }
+    if (held.roomId !== tank.roomId) {
+      interaction.emit('tank:room', { tankId: tank.id, roomId: tank.roomId });
+    }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
+    if (!samePlants(held.plants, tank.plants)) {
+      interaction.emit('tank:plants', { tankId: tank.id, plants: tank.plants ?? [] });
+    }
+    if (!sameCorals(held.corals, tank.corals)) {
+      interaction.emit('tank:corals', { tankId: tank.id, corals: tank.corals ?? [] });
+    }
     if (held.equipment.waveMaker.tier !== tank.equipment.waveMaker.tier) {
       interaction.emit('tank:wave-maker', {
         tankId: tank.id,
@@ -795,6 +1142,7 @@ export class TankSession {
     }
     const lamp = held.equipment.light;
     if (
+      lamp.intensity !== tank.equipment.light.intensity ||
       lamp.onHour !== tank.equipment.light.onHour ||
       lamp.offHour !== tank.equipment.light.offHour
     )
@@ -802,8 +1150,8 @@ export class TankSession {
   }
 
   private emitLamp(tank: Tank): void {
-    const { onHour, offHour } = tank.equipment.light;
-    this.deps.interaction.emit('tank:lamp', { tankId: tank.id, onHour, offHour });
+    const { intensity, onHour, offHour } = tank.equipment.light;
+    this.deps.interaction.emit('tank:lamp', { tankId: tank.id, intensity, onHour, offHour });
   }
 
   private bag(tankId: string, fishId: string, name: string): void {
@@ -845,10 +1193,18 @@ function decorKey(edited: boolean, layout: DecorLayout): string {
   return `${edited ? 'edited' : 'preset'}:${layoutKey(layout)}`;
 }
 
+export type PaidCareType = 'bottled_bacteria' | 'buffer_dose' | 'add_botanicals';
+
+/** A care action as the UI asks for it: the session adds the Pearls request key to the paid ones. */
+export type CareRequest = Exclude<CareAction, { type: PaidCareType }> | { type: PaidCareType };
+
 const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {
   water_change: 'Half the water was changed.',
   gravel_vacuum: 'The gravel is clean.',
   algae_scrape: 'The glass is clear.',
   bottled_bacteria: 'Beneficial bacteria were added to the filter.',
   filter_rinse: 'The filter was rinsed. Its bacteria took a hit.',
+  salt_dose: 'Salt mix was dissolved into the water.',
+  buffer_dose: 'Buffer was dissolved into the water.',
+  add_botanicals: 'Botanicals were added to the water.',
 };

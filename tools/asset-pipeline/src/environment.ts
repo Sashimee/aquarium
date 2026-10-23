@@ -23,6 +23,7 @@ import {
   type MaterialDef,
   type MaterialOptions,
   type Part,
+  type TextureSource,
 } from './parts.ts';
 import { RAW_ROOT, bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 import {
@@ -33,7 +34,35 @@ import {
   flipVertical,
   halve,
 } from './rgbe.ts';
-import { decodeImage, encodeHdrKtx2, type Rgba } from './textures.ts';
+import { decodeImage, encodeHdrKtx2, resizeImage, type Rgba } from './textures.ts';
+
+export interface LeafColourVariation {
+  /** Largest relative change of each linear channel, 0.15 is plus or minus 15 %. */
+  spread: number;
+  /** Extra weight of the red channel against blue, so older leaves read yellower; 0 keeps the hue. */
+  yellowing: number;
+}
+
+export function varyLeafColour(
+  base: readonly [number, number, number, number],
+  index: number,
+  variation: LeafColourVariation,
+): [number, number, number, number] {
+  const unit = (salt: number): number => {
+    let h = Math.imul(index + 1, 374761393) + Math.imul(salt, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const light = 1 + (unit(1) * 2 - 1) * variation.spread;
+  const age = unit(2) * variation.yellowing;
+  const clamp = (v: number): number => Math.min(1, Math.max(0, v));
+  return [
+    clamp(base[0] * light * (1 + age)),
+    clamp(base[1] * light),
+    clamp(base[2] * light * (1 - age)),
+    base[3],
+  ];
+}
 
 export interface EnvironmentRecipe {
   id: string;
@@ -48,6 +77,10 @@ export interface EnvironmentRecipe {
   longestM: number;
   /** Triangle budget for LOD0; the source is simplified to it when heavier. */
   maxTriangles: number;
+  /** LOD1 triangle count as a fraction of LOD0, default 0.35; LOD2 is 0.3 of LOD1 when set, else 0.12 of LOD0. */
+  lod1Fraction?: number;
+  /** Per-primitive triangle floor when simplifying, default 200; lower it for a model made of many small leaf meshes. */
+  minTriangles?: number;
   /** Removes triangles whose centroid lies in the lowest fraction of the height (a museum plinth, a scan base). */
   clipBelowFraction?: number;
   /** With `clipBelowFraction`, scales so `longestM` refers to the uncropped scan, keeping the metric scale the full scan would have had. */
@@ -55,10 +88,14 @@ export interface EnvironmentRecipe {
   material?: MaterialOptions;
   /** Paint a green leaf texture for sources that only carry a flat colour. */
   proceduralLeafTexture?: boolean;
+  /** Gives every flat-coloured material its own deterministic shade of the source colour, so the leaves of a flat-green model differ. */
+  leafColourVariation?: LeafColourVariation;
   /** Recolours the base colour map by luminance. */
   tint?: TintSpec;
   /** Adds procedural pores to the normal and colour maps; both are upscaled to 2048 px first. */
   pores?: PoreSpec;
+  /** Caps the colour map at this size and the normal map at half of it, so the 2k tier carries no more detail than the 1k tier. */
+  maxTexturePx?: number;
   modifications: string[];
 }
 
@@ -200,7 +237,20 @@ function assertTexcoordZero(doc: Document, source: Material, recipe: string): vo
   }
 }
 
+async function capTextures(def: MaterialDef, maxPx: number): Promise<MaterialDef> {
+  return {
+    ...def,
+    ...(def.baseColor
+      ? { baseColor: { ...def.baseColor, image: await resizeImage(def.baseColor.image, maxPx) } }
+      : {}),
+    ...(def.normal
+      ? { normal: { ...def.normal, image: await resizeImage(def.normal.image, maxPx / 2) } }
+      : {}),
+  };
+}
+
 async function finishMaterial(def: MaterialDef, recipe: EnvironmentRecipe): Promise<MaterialDef> {
+  if (recipe.maxTexturePx) def = await capTextures(def, recipe.maxTexturePx);
   if (!recipe.tint && !recipe.pores) return def;
   if (!def.baseColor) throw new Error(`${recipe.id}: tint and pores need a base colour texture`);
   let image = recipe.pores ? await upscaleTo(def.baseColor.image, 2048) : def.baseColor.image;
@@ -232,10 +282,34 @@ export function cropForRecipe(
   return { parts: kept, longestM };
 }
 
-export async function buildEnvironment(
+export function sceneMaterial(
+  materials: ReadonlyMap<string, MaterialDef>,
+  partMaterial: string,
+  owner: string,
+): MaterialDef {
+  const material = materials.get(partMaterial);
+  if (!material)
+    throw new Error(`${owner}: part material "${partMaterial}" is not in the loaded materials`);
+  return material;
+}
+
+export function sceneBaseColor(
+  material: MaterialDef,
+  partMaterial: string,
+  owner: string,
+): TextureSource | undefined {
+  if (!material.baseColor) {
+    console.warn(
+      `${owner}: material "${partMaterial}" has no base colour texture; rendering it mid-grey times its factor`,
+    );
+  }
+  return material.baseColor;
+}
+
+export async function loadEnvironment(
   recipe: EnvironmentRecipe,
-  ctx: FishContext,
-): Promise<OutputAsset> {
+  ctx: Pick<FishContext, 'verifySource'>,
+): Promise<{ parts: Part[]; materials: MaterialDef[] }> {
   ctx.verifySource(recipe.sourceId);
   const doc = await readGltf(recipe.sourceId, recipe.gltf ?? 'gltf/scene.gltf');
   const dropMesh = recipe.dropMeshes;
@@ -258,6 +332,16 @@ export async function buildEnvironment(
     assertTexcoordZero(doc, source, recipe.id);
     let def = await materialDefFrom(source, { metallic: 0, ...recipe.material });
     def = await finishMaterial(def, recipe);
+    if (recipe.leafColourVariation) {
+      def = {
+        ...def,
+        baseColorFactor: varyLeafColour(
+          def.baseColorFactor,
+          materials.length,
+          recipe.leafColourVariation,
+        ),
+      };
+    }
     if (recipe.proceduralLeafTexture && !def.baseColor) {
       materials.push({
         ...def,
@@ -270,9 +354,22 @@ export async function buildEnvironment(
   }
   if (materials.length === 0) throw new Error(`${recipe.id}: no material survived`);
 
+  return { parts, materials };
+}
+
+export async function buildEnvironment(
+  recipe: EnvironmentRecipe,
+  ctx: FishContext,
+): Promise<OutputAsset> {
+  const { parts, materials } = await loadEnvironment(recipe, ctx);
   const triangles = parts.reduce((s, p) => s + p.indices.length / 3, 0);
   const lod0 = Math.min(1, recipe.maxTriangles / triangles);
-  const plan: LodPlan = { ratios: [lod0, lod0 * 0.35, lod0 * 0.12], minTriangles: 200 };
+  const lod1 = recipe.lod1Fraction ?? 0.35;
+  const lod2 = recipe.lod1Fraction === undefined ? 0.12 : lod1 * 0.3;
+  const plan: LodPlan = {
+    ratios: [lod0, lod0 * lod1, lod0 * lod2],
+    minTriangles: recipe.minTriangles ?? 200,
+  };
 
   const built = buildDocument(recipe.id, parts, materials);
   return emitAsset({
@@ -289,9 +386,15 @@ export async function buildEnvironment(
         'merged meshes, dropped unused attributes, skeleton and animation',
         `origin at the centre of the base, scaled so the longest edge is ${recipe.longestM} m${recipe.keepUncroppedScale ? ' before cropping' : ''}`,
         `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
-        recipe.pores
-          ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
-          : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+        ...(materials.some((m) => m.baseColor)
+          ? [
+              recipe.maxTexturePx
+                ? `textures capped at ${recipe.maxTexturePx} px (normal ${recipe.maxTexturePx / 2} px) and re-encoded to KTX2`
+                : recipe.pores
+                  ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
+                  : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+            ]
+          : ['no textures: flat base colours kept as material factors, PBR metallic-roughness']),
         ...recipe.modifications,
       ],
     },

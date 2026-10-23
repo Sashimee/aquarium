@@ -1,9 +1,13 @@
-import type { Biome, DecorItem, DecorLayout } from '@aquarium/shared';
+import type { Biome, Coral, DecorItem, DecorLayout, Plant } from '@aquarium/shared';
 import type { EventBus } from '../../engine/events';
 import type { CatalogEntry } from '../../scene/assets';
+import type { ScaleCap } from '../../scene/coralGrowth';
 import type { InteractionEvents } from '../events';
 import type { FeederLayer } from './feederLayer';
 import { collidersFor } from './colliders';
+import { growCorals, type GrownCorals } from './coralColliders';
+import { pickCoral } from './coralPick';
+import type { RayLike } from './footprint';
 import { layoutKey } from './key';
 import {
   composeLayout,
@@ -13,6 +17,7 @@ import {
   type Piece,
   type PlantFit,
 } from './layout';
+import { growPlants, type GrownPlants } from './plantColliders';
 import { FEEDER_SPEC, specsFromCatalog, type DecorSpec } from './spec';
 
 /** What the decor layer needs from the tank scene; `TankScene` satisfies it. */
@@ -30,6 +35,18 @@ export interface DecorScenePort {
   moveHardDecor(index: number, item: DecorItem): void;
 }
 
+type CoralBounds = {
+  min: [number, number, number];
+  max: [number, number, number];
+};
+
+/** What the world needs to size grown corals the way the scene draws them. */
+export interface CoralEnv {
+  cap(): ScaleCap;
+  /** Model-space bounds of a procedural coral, whose asset ids are not in the catalog. */
+  proceduralBounds(assetId: string): CoralBounds | null;
+}
+
 /**
  * The placed pieces as the scene, the sim and the server see them. Applying a saved layout and
  * editing both go through here so the three never disagree.
@@ -39,6 +56,9 @@ export class DecorWorld {
   private current: readonly Piece[];
   private applied: Promise<void> = Promise.resolve();
   private unmanaged: readonly DecorItem[];
+  private corals: readonly Coral[] = [];
+  private plants: readonly Plant[] = [];
+  private readonly catalogBounds = new Map<string, CoralBounds>();
   private presetLayoutKey: string;
   /** Says what loading a saved layout had to drop; shown while decorating. */
   notice: string | null = null;
@@ -47,8 +67,18 @@ export class DecorWorld {
     private readonly scene: DecorScenePort,
     private readonly interaction: EventBus<InteractionEvents>,
     private readonly feeders: Pick<FeederLayer, 'sync' | 'dispose'>,
+    private readonly coralEnv?: CoralEnv,
   ) {
-    this.specs = specsFromCatalog(scene.catalogEntries());
+    const entries = [...scene.catalogEntries()];
+    this.specs = specsFromCatalog(entries);
+    for (const entry of entries) {
+      if (entry.kind === 'coral' && entry.bounds) {
+        this.catalogBounds.set(entry.id, {
+          min: [...entry.bounds.min],
+          max: [...entry.bounds.max],
+        });
+      }
+    }
     this.unmanaged = scene.fixedDecor;
     this.current = numberPieces(scene.presetHardDecor);
     this.presetLayoutKey = layoutKey(scene.presetHardDecor);
@@ -135,12 +165,69 @@ export class DecorWorld {
     this.scene.moveHardDecor(hardIndex, piece.item);
   }
 
+  /** The coral state to size the corals' colliders by; absent or empty is the corals as placed. */
+  setCorals(corals: readonly Coral[] | undefined): void {
+    this.corals = corals ?? [];
+    this.emitColliders();
+  }
+
+  /** The plant state to size the plants' colliders by, and to give offsets colliders of their own. */
+  setPlants(plants: readonly Plant[] | undefined): void {
+    this.plants = plants ?? [];
+    this.emitColliders();
+  }
+
   emitColliders(): void {
-    const colliders = this.current.flatMap((p) => {
-      const spec = this.specs.get(p.item.assetId);
-      return spec ? collidersFor(p.id, spec, p.item) : [];
-    });
+    const plants = this.grownPlants();
+    const grown = this.grownCorals(plants.pieces);
+    const colliders = [
+      ...grown.pieces.flatMap((p) => {
+        const spec = this.specs.get(p.item.assetId);
+        return spec ? collidersFor(p.id, spec, p.item) : [];
+      }),
+      ...plants.extra,
+      ...grown.extra,
+    ];
     this.interaction.emit('decor:colliders', { colliders });
+  }
+
+  /** The coral a world-space ray enters first, at the size and spot it is drawn. */
+  coralAt(ray: RayLike): Coral | null {
+    const env = this.coralEnv;
+    if (!env) return null;
+    return pickCoral(this.grownCorals().placed, this.specs, this.boundsOf(env), ray);
+  }
+
+  private boundsOf(env: CoralEnv): (assetId: string) => CoralBounds | null {
+    return (assetId) => this.catalogBounds.get(assetId) ?? env.proceduralBounds(assetId);
+  }
+
+  private grownPlants(): GrownPlants {
+    const { waterTop } = this.scene;
+    if (waterTop === undefined || this.plants.length === 0) {
+      return { pieces: this.current, extra: [] };
+    }
+    return growPlants({
+      pieces: this.current,
+      specs: this.specs,
+      plants: this.plants,
+      ground: (x, z) => this.scene.groundHeight(x, z),
+      waterTop,
+    });
+  }
+
+  private grownCorals(pieces: readonly Piece[] = this.current): GrownCorals {
+    const env = this.coralEnv;
+    if (!env || this.corals.length === 0) return { pieces, extra: [], placed: [] };
+    return growCorals({
+      pieces,
+      fixed: this.unmanaged,
+      specs: this.specs,
+      corals: this.corals,
+      cap: env.cap(),
+      ground: (x, z) => this.scene.groundHeight(x, z),
+      boundsOf: this.boundsOf(env),
+    });
   }
 
   dispose(): void {

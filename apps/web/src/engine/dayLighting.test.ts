@@ -11,10 +11,13 @@ import {
 import {
   applyDayLighting,
   FRESHWATER_FILL_LEVEL,
+  LAMP_GAIN_MAX,
+  LAMP_GAIN_MIN,
+  lampGain,
   MOONLIGHT,
   type DayLightingRig,
 } from './dayLighting';
-import { daylightAt, parseClock } from './daylight';
+import { DEFAULT_LAMP_SCHEDULE, daylightAt, parseClock } from './daylight';
 import { roomDaylightAt } from './room/timeOfDay';
 import { DEFAULT_TANK, waterBounds } from './tank/dimensions';
 import { meanSubstrateHeight } from './tank/substrate';
@@ -25,7 +28,10 @@ import { WaterMedium } from './water/medium';
 const luminance = (c: Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
 const at = (clock: string): number => daylightAt(parseClock(clock));
 
-function rig(fillLevel = FRESHWATER_FILL_LEVEL): DayLightingRig {
+function rig(
+  fillLevel = FRESHWATER_FILL_LEVEL,
+  intensity = DEFAULT_LAMP_SCHEDULE.intensity,
+): DayLightingRig {
   const d = DEFAULT_TANK;
   const medium = new WaterMedium(waterBounds(d), { cdom440: 0.05, turbidity: 0.08 });
   const caustics = new Caustics(medium);
@@ -56,6 +62,7 @@ function rig(fillLevel = FRESHWATER_FILL_LEVEL): DayLightingRig {
     substrateAlbedo,
     roomBackgroundIntensity: 0.45,
     roomDaylight: 1,
+    lampGain: lampGain(intensity),
   };
 }
 
@@ -166,6 +173,90 @@ describe('the daytime fill', () => {
     expect(r.scene.environmentNode).toBe(environmentNode);
     expect(r.scene.fogNode).toBe(fogNode);
     expect(fills.size).toBeGreaterThan(2);
+  });
+});
+
+describe('lampGain', () => {
+  it('spans two stops under the tuned level to half a stop over', () => {
+    expect(lampGain(0)).toBeCloseTo(LAMP_GAIN_MIN, 12);
+    expect(lampGain(1)).toBeCloseTo(LAMP_GAIN_MAX, 12);
+    expect(LAMP_GAIN_MIN).toBe(0.25);
+    expect(LAMP_GAIN_MAX).toBeCloseTo(Math.SQRT2, 12);
+    expect(Math.log2(LAMP_GAIN_MIN)).toBeCloseTo(-2, 12);
+    expect(Math.log2(LAMP_GAIN_MAX)).toBeCloseTo(0.5, 12);
+  });
+
+  it('leaves the default setting at exactly the tuned level', () => {
+    expect(DEFAULT_LAMP_SCHEDULE.intensity).toBe(0.8);
+    expect(lampGain(0.8)).toBe(1);
+  });
+
+  it('rises with every step of the slider', () => {
+    for (let step = 1; step <= 100; step++) {
+      expect(lampGain(step / 100)).toBeGreaterThan(lampGain((step - 1) / 100));
+    }
+  });
+
+  it('refuses a setting outside 0..1', () => {
+    for (const bad of [-0.01, 1.01, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => lampGain(bad)).toThrow(RangeError);
+    }
+  });
+});
+
+describe('the lamp strength', () => {
+  const noonLight = (intensity: number): number => {
+    const r = rig(FRESHWATER_FILL_LEVEL, intensity);
+    applyDayLighting(r, at('12:00'));
+    return luminance(r.caustics.lightRadiance.value);
+  };
+
+  it('brightens the hood light, its caustics and in-scatter as it rises', () => {
+    let previous = { light: 0, inScatter: 0, fill: 0 };
+    for (const intensity of [0, 0.25, 0.5, 0.8, 0.9, 1]) {
+      const r = rig(FRESHWATER_FILL_LEVEL, intensity);
+      applyDayLighting(r, at('12:00'));
+      const now = {
+        light: luminance(r.caustics.lightRadiance.value),
+        inScatter: luminance(r.medium.hoodInScatter.value),
+        fill: luminance(r.interior.fill.value),
+      };
+      expect(now.light).toBeGreaterThan(previous.light);
+      expect(now.inScatter).toBeGreaterThan(previous.inScatter);
+      expect(now.fill).toBeGreaterThan(previous.fill);
+      previous = now;
+    }
+  });
+
+  it('keeps the dimmest lamp well above the moonlight and the brightest within half a stop', () => {
+    const tuned = noonLight(DEFAULT_LAMP_SCHEDULE.intensity);
+    const night = rig();
+    applyDayLighting(night, 0);
+    const moonlight = luminance(night.caustics.lightRadiance.value);
+    expect(noonLight(0)).toBeCloseTo(tuned * LAMP_GAIN_MIN, 9);
+    expect(noonLight(0)).toBeGreaterThan(5 * moonlight);
+    expect(noonLight(1)).toBeCloseTo(tuned * LAMP_GAIN_MAX, 9);
+  });
+
+  it('leaves the moonlight alone', () => {
+    const dim = rig(FRESHWATER_FILL_LEVEL, 0);
+    const bright = rig(FRESHWATER_FILL_LEVEL, 1);
+    applyDayLighting(dim, 0);
+    applyDayLighting(bright, 0);
+    expect(dim.caustics.lightRadiance.value.equals(bright.caustics.lightRadiance.value)).toBe(true);
+  });
+
+  it('scales the dawn and dusk ramps without changing their shape', () => {
+    for (const intensity of [0, 0.5, 1]) {
+      const r = rig(FRESHWATER_FILL_LEVEL, intensity);
+      applyDayLighting(r, at('12:00'));
+      const noon = r.caustics.getCasting(new Color());
+      for (const clock of ['08:10', '08:30', '08:50', '20:10', '20:30', '20:50']) {
+        applyDayLighting(r, at(clock));
+        const casting = r.caustics.getCasting(new Color());
+        expect(casting.g / noon.g).toBeCloseTo(at(clock), 12);
+      }
+    }
   });
 });
 
