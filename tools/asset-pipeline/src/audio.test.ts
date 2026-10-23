@@ -6,6 +6,7 @@ import {
   AUDIO_RECIPES,
   decodeAudio,
   encodeM4a,
+  LIMITER_CEILING_DB,
   modificationNotes,
   processAudio,
   rawAudioPath,
@@ -140,6 +141,8 @@ describe('processAudio with a limiter', () => {
     const notes = modificationNotes(unreachable, missed).join('; ');
     expect(notes).not.toContain('normalised to');
     expect(notes).toContain('instead of the 0 LUFS target');
+    expect(notes).toContain(`limited by the ${LIMITER_CEILING_DB} dBFS peak ceiling`);
+    expect(notes).toContain('-2.5 dBFS peak ceiling');
   });
 });
 

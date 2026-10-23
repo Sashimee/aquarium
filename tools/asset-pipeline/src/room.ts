@@ -61,7 +61,7 @@ function onlyFile(sourceId: string, extension: string): string {
   return file;
 }
 
-// staticCacheControl marks only files listed in the Vite manifest as immutable, not names matching `name-<8 chars>.ext`; underscores keep these ids out of any such pattern anyway.
+// Only files in the Vite manifest are served immutable, so these public ids need no hash-shaped name.
 export function roomHdriOutput(id: string): string {
   return `${id.replaceAll('-', '_')}_1k.ktx2`;
 }
