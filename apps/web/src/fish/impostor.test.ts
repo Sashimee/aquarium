@@ -6,6 +6,7 @@ import {
   IMPOSTOR_STRIDE,
   ImpostorInstanceData,
   ImpostorSlot,
+  droppedNormalLevels,
   loadImpostorAtlas,
   type ImpostorValues,
 } from './impostor';
@@ -87,6 +88,15 @@ describe('ImpostorInstanceData', () => {
   });
 });
 
+describe('droppedNormalLevels', () => {
+  it('halves the frames down to 64 px and no further', () => {
+    expect(droppedNormalLevels(32)).toBe(0);
+    expect(droppedNormalLevels(64)).toBe(0);
+    expect(droppedNormalLevels(128)).toBe(1);
+    expect(droppedNormalLevels(256)).toBe(2);
+  });
+});
+
 describe('loadImpostorAtlas', () => {
   const info: ImpostorAtlasInfo = {
     grid: 9,
@@ -97,20 +107,20 @@ describe('loadImpostorAtlas', () => {
     normalFile: 'fish/x/impostor_normal.ktx2',
   };
 
-  function texture(mips: number): CompressedTexture {
-    const levels = Array.from({ length: mips }, () => ({
+  function texture(mips: number, size = 2 ** (mips - 1)): CompressedTexture {
+    const levels = Array.from({ length: mips }, (_, level) => ({
       data: new Uint8Array(4),
-      width: 1,
-      height: 1,
+      width: Math.max(1, size >> level),
+      height: Math.max(1, size >> level),
     }));
-    const t = new CompressedTexture(levels, 1, 1);
+    const t = new CompressedTexture(levels, size, size);
     t.generateMipmaps = true;
     return t;
   }
 
   it('loads both atlases from the asset root, filtered on their own mips', async () => {
     const albedo = texture(5);
-    const normal = texture(1);
+    const normal = texture(2);
     const loadAsync = vi.fn((url: string) =>
       Promise.resolve(url.endsWith('albedo.ktx2') ? albedo : normal),
     );
@@ -124,6 +134,46 @@ describe('loadImpostorAtlas', () => {
     expect(atlas.albedo.minFilter).toBe(LinearMipmapLinearFilter);
     expect(atlas.normal.minFilter).toBe(LinearFilter);
     expect(atlas.albedo.generateMipmaps).toBe(false);
+  });
+
+  it('uploads the normal atlas of 128 px frames from its second level, at 64 px frames', async () => {
+    const albedo = texture(11, 1152);
+    const normal = texture(11, 1152);
+    const top = normal.mipmaps[1];
+    const ktx2 = {
+      loadAsync: (url: string) => Promise.resolve(url.endsWith('albedo.ktx2') ? albedo : normal),
+    } as unknown as Ktx2Textures;
+    const atlas = await loadImpostorAtlas(ktx2, '/assets/', info);
+    expect(atlas.albedo.image).toEqual({ width: 1152, height: 1152 });
+    expect(atlas.albedo.mipmaps).toHaveLength(11);
+    expect(atlas.normal.image).toEqual({ width: 576, height: 576 });
+    expect(atlas.normal.mipmaps).toHaveLength(10);
+    expect(atlas.normal.mipmaps[0]).toBe(top);
+    expect(atlas.normal.minFilter).toBe(LinearMipmapLinearFilter);
+  });
+
+  it('keeps every level of an atlas already at 64 px frames', async () => {
+    const normal = texture(10, 576);
+    const ktx2 = {
+      loadAsync: (url: string) =>
+        Promise.resolve(url.endsWith('albedo.ktx2') ? texture(10, 576) : normal),
+    } as unknown as Ktx2Textures;
+    const atlas = await loadImpostorAtlas(ktx2, '/assets/', { ...info, frameSize: 64 });
+    expect(atlas.normal.image).toEqual({ width: 576, height: 576 });
+    expect(atlas.normal.mipmaps).toHaveLength(10);
+  });
+
+  it('rejects a normal atlas without the level it would shrink to, and frees both', async () => {
+    const albedo = texture(5);
+    const normal = texture(1);
+    const disposed = [vi.spyOn(albedo, 'dispose'), vi.spyOn(normal, 'dispose')];
+    const ktx2 = {
+      loadAsync: (url: string) => Promise.resolve(url.endsWith('albedo.ktx2') ? albedo : normal),
+    } as unknown as Ktx2Textures;
+    await expect(loadImpostorAtlas(ktx2, '/assets/', info)).rejects.toThrow(
+      /impostor_normal\.ktx2 has 1 mip levels/,
+    );
+    for (const dispose of disposed) expect(dispose).toHaveBeenCalledOnce();
   });
 
   it('disposes the atlas that loaded when the other fails, and says which failed', async () => {

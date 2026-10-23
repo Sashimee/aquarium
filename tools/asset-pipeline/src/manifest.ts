@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { manifestAssetCreditFieldsSchema } from '@aquarium/shared';
 import { z } from 'zod';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
@@ -67,6 +68,17 @@ export const manifestSchema = z.looseObject({
 });
 export type Manifest = z.infer<typeof manifestSchema>;
 
+/** The fields the API parses at startup (apps/api/src/credits.ts), built from the same shared primitives. */
+export function apiSchemaProblems(manifest: Manifest): string[] {
+  const result = z.array(manifestAssetCreditFieldsSchema).safeParse(manifest.assets);
+  if (result.success) return [];
+  return result.error.issues.map((issue) => {
+    const [index, ...rest] = issue.path;
+    const id = typeof index === 'number' ? manifest.assets[index]?.id : undefined;
+    return `manifest asset ${id ?? String(index)}: ${rest.map(String).join('.') || 'entry'} fails the API schema: ${issue.message}`;
+  });
+}
+
 export const PENDING_STATUS = 'selected-pending-download';
 
 export function aggregateSha256(files: readonly { path: string; sha256: string }[]): string {
@@ -121,7 +133,7 @@ export function requiresCredit(licence: string): boolean {
 }
 
 export function validateManifest(manifest: Manifest, credits: string): string[] {
-  const problems: string[] = [];
+  const problems: string[] = apiSchemaProblems(manifest);
   const seen = new Set<string>();
   for (const asset of manifest.assets) {
     const at = `manifest asset ${asset.id}`;

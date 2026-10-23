@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 118052089,
+  "totalBytes": 118641470,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -7323,6 +7323,76 @@
       ]
     },
     {
+      "id": "amazon-sword",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-3701243a"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
+        "no textures: flat base colours kept as material factors, PBR metallic-roughness",
+        "the source is unitless and about 55 x 161 x 11 units",
+        "colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower"
+      ],
+      "bounds": {
+        "min": [
+          -0.117969,
+          0,
+          -0.07923
+        ],
+        "max": [
+          0.117969,
+          0.3,
+          0.07923
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/amazon-sword/lod0.glb",
+          "bytes": 108316,
+          "sha256": "20dadb0062b31cc521896fa0194a57d75b1fd6c2005ed19f59739998cccd9da1",
+          "triangles": 3632,
+          "vertices": 7120
+        },
+        {
+          "file": "plant/amazon-sword/lod1.glb",
+          "bytes": 54924,
+          "sha256": "e2bfebcbb6bf12237e2da6d480cd9ac5fbfa5eabcdee2bad3e911ec8b8a2e9fe",
+          "triangles": 1194,
+          "vertices": 1940
+        },
+        {
+          "file": "plant/amazon-sword/lod2.glb",
+          "bytes": 39372,
+          "sha256": "05c10a2089805627718213ca32f66021370eb4a761a52689a230a025b9d495e6",
+          "triangles": 458,
+          "vertices": 664
+        }
+      ],
+      "textures": [],
+      "files": [
+        {
+          "file": "plant/amazon-sword/lod0.glb",
+          "bytes": 108316,
+          "sha256": "20dadb0062b31cc521896fa0194a57d75b1fd6c2005ed19f59739998cccd9da1"
+        },
+        {
+          "file": "plant/amazon-sword/lod1.glb",
+          "bytes": 54924,
+          "sha256": "e2bfebcbb6bf12237e2da6d480cd9ac5fbfa5eabcdee2bad3e911ec8b8a2e9fe"
+        },
+        {
+          "file": "plant/amazon-sword/lod2.glb",
+          "bytes": 39372,
+          "sha256": "05c10a2089805627718213ca32f66021370eb4a761a52689a230a025b9d495e6"
+        }
+      ]
+    },
+    {
       "id": "java-fern",
       "kind": "plant",
       "origin": "model",
@@ -10697,6 +10767,105 @@
           "file": "rock/rock-pile-stack/lod2.glb",
           "bytes": 30652,
           "sha256": "102bcc15608e280231d7767339063ab30d3bc0c5393a5c4743fb97daf1a4982b"
+        }
+      ]
+    },
+    {
+      "id": "catappa-leaf-card",
+      "kind": "decor",
+      "origin": "procedural",
+      "sources": [
+        "ambientcg-LeafSet015"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "flat 0.3 m card carrying the leaf set, colour map and opacity map merged into one alpha-cutout texture",
+        "colour map re-encoded to KTX2 at 1k and 2k",
+        "leaf colours multiplied by a warm tannin-brown tint (red 1.0, green 0.82, blue 0.58) for blackwater"
+      ],
+      "bounds": {
+        "min": [
+          -0.15,
+          0,
+          -0.15
+        ],
+        "max": [
+          0.15,
+          0,
+          0.15
+        ]
+      },
+      "lods": [
+        {
+          "file": "decor/catappa-leaf-card/lod0.glb",
+          "bytes": 2780,
+          "sha256": "4b3262ec92af83b059d27f4fa316fecbb8b765f4745365335f7dce0cbd57f08a",
+          "triangles": 32,
+          "vertices": 25
+        },
+        {
+          "file": "decor/catappa-leaf-card/lod1.glb",
+          "bytes": 2596,
+          "sha256": "44fb765e3f35214e85e2b7d29ffa0e3497503141a3136c776d6d960c4bdbf2bc",
+          "triangles": 8,
+          "vertices": 7
+        },
+        {
+          "file": "decor/catappa-leaf-card/lod2.glb",
+          "bytes": 2556,
+          "sha256": "dcf81b1c178becd0828096180f7750663e72e5ab9a1f0a38d796ed71d922e89a",
+          "triangles": 2,
+          "vertices": 4
+        }
+      ],
+      "textures": [
+        {
+          "name": "catappa-leaf-card_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "decor/catappa-leaf-card/textures/catappa-leaf-card_basecolor_1k.ktx2",
+              "bytes": 94746,
+              "sha256": "e0c1506f3c360c53359ecb5e282b05f60ae91e9f730662be46293c0674814022",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "decor/catappa-leaf-card/textures/catappa-leaf-card_basecolor_2k.ktx2",
+              "bytes": 284091,
+              "sha256": "47d4cb234d2ced04698d78711caf4ad9a26b63b6299ee0d43ed57a6972614cc2",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "decor/catappa-leaf-card/lod0.glb",
+          "bytes": 2780,
+          "sha256": "4b3262ec92af83b059d27f4fa316fecbb8b765f4745365335f7dce0cbd57f08a"
+        },
+        {
+          "file": "decor/catappa-leaf-card/lod1.glb",
+          "bytes": 2596,
+          "sha256": "44fb765e3f35214e85e2b7d29ffa0e3497503141a3136c776d6d960c4bdbf2bc"
+        },
+        {
+          "file": "decor/catappa-leaf-card/lod2.glb",
+          "bytes": 2556,
+          "sha256": "dcf81b1c178becd0828096180f7750663e72e5ab9a1f0a38d796ed71d922e89a"
+        },
+        {
+          "file": "decor/catappa-leaf-card/textures/catappa-leaf-card_basecolor_1k.ktx2",
+          "bytes": 94746,
+          "sha256": "e0c1506f3c360c53359ecb5e282b05f60ae91e9f730662be46293c0674814022"
+        },
+        {
+          "file": "decor/catappa-leaf-card/textures/catappa-leaf-card_basecolor_2k.ktx2",
+          "bytes": 284091,
+          "sha256": "47d4cb234d2ced04698d78711caf4ad9a26b63b6299ee0d43ed57a6972614cc2"
         }
       ]
     },

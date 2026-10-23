@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -32,6 +33,8 @@ import { navigate } from './router';
 import { Sheet } from './Sheet';
 import { SoundButton } from './SoundSetting';
 import { useSessionState } from './session';
+import { ShowPacksContext, useShowPacks } from './spend';
+import { useShopAfterCheckout } from './useShopAfterCheckout';
 import {
   CreditsScreen,
   NotFoundScreen,
@@ -277,7 +280,7 @@ function Shell() {
   const [food, setFood] = useFood();
   const [bookOpen, setBookOpen] = useState(false);
   const [trimDismissed, setTrimDismissed] = useState(false);
-  const { user } = useAuth();
+  const { user, status } = useAuth();
   const { interaction } = useBridge();
   const photoActive = usePhotoView()?.state.active ?? false;
   const shell = useRef<HTMLDivElement>(null);
@@ -307,6 +310,12 @@ function Shell() {
     if (!home && photoActive) interaction.emit('photo:request', { type: 'exit' });
   }, [home, photoActive, interaction]);
 
+  const openShop = useCallback(() => dispatch({ type: 'open', panel: 'shop' }), [dispatch]);
+
+  const showPacks = useShowPacks(openShop);
+
+  useShopAfterCheckout(home, openShop, status === 'ready' && !user);
+
   const startPhoto = () => {
     dispatch({ type: 'close' });
     interaction.emit('photo:request', { type: 'enter' });
@@ -329,103 +338,105 @@ function Shell() {
   };
 
   return (
-    <div className={photoActive ? 'shell photo-on' : 'shell'} ref={shell}>
-      <a
-        className="skip"
-        href="#tank"
-        onClick={(e) => {
-          e.preventDefault();
-          document.getElementById('tank')?.focus();
-        }}
-      >
-        Skip to the tank
-      </a>
-      <div id="photo-chrome" className="chrome">
-        <header className="hud">
-          <div className="hud-left">
-            <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
-            <ChemistryChip open={panel === 'care'} onPress={() => toggle('care')} />
-            <CameraControls />
-          </div>
-          <div className="hud-right">
-            <div className="hud-buttons">
-              {user && <CollectionButton onPress={() => setBookOpen(true)} />}
-              <PearlBalance open={panel === 'shop'} onPress={() => toggle('shop')} />
-              <SoundButton />
-              <DayNightButton />
-              <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
-              <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
+    <ShowPacksContext.Provider value={showPacks}>
+      <div className={photoActive ? 'shell photo-on' : 'shell'} ref={shell}>
+        <a
+          className="skip"
+          href="#tank"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById('tank')?.focus();
+          }}
+        >
+          Skip to the tank
+        </a>
+        <div id="photo-chrome" className="chrome">
+          <header className="hud">
+            <div className="hud-left">
+              <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
+              <ChemistryChip open={panel === 'care'} onPress={() => toggle('care')} />
+              <CameraControls />
             </div>
-            <TankTypeSwitch
-              onCreate={(biome) => {
-                if (!home) navigate('/');
-                dispatch({ type: 'new-tank', biome });
-              }}
-            />
+            <div className="hud-right">
+              <div className="hud-buttons">
+                {user && <CollectionButton onPress={() => setBookOpen(true)} />}
+                <PearlBalance open={panel === 'shop'} onPress={() => toggle('shop')} />
+                <SoundButton />
+                <DayNightButton />
+                <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
+                <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
+              </div>
+              <TankTypeSwitch
+                onCreate={(biome) => {
+                  if (!home) navigate('/');
+                  dispatch({ type: 'new-tank', biome });
+                }}
+              />
+            </div>
+          </header>
+          <div className="toasts">
+            <LifeStatus />
+            <BirthStatus />
+            <FeedToast />
+            <TrimUnavailableToast active={trimDismissed} />
           </div>
-        </header>
-        <div className="toasts">
-          <LifeStatus />
-          <BirthStatus />
-          <FeedToast />
-          <TrimUnavailableToast active={trimDismissed} />
-        </div>
-        {isOpen(panel) && (
-          <Sheet
-            key={panel}
-            panel={panel}
-            label={PANEL_TITLE[panel].label}
-            title={PANEL_TITLE[panel].title}
-            closeLabel={panel === 'decor' ? 'Done' : 'Close'}
-            onClose={() => dispatch({ type: 'close' })}
-          >
-            <ErrorBoundary what={`the ${PANEL_TITLE[panel].title} panel`} scope="panel">
-              <Suspense
-                fallback={
-                  <p className="hint" role="status">
-                    Opening.
-                  </p>
-                }
-              >
-                <PanelBody
-                  panel={panel}
-                  newTank={newTank}
-                  food={food}
-                  onFood={setFood}
-                  onShop={() => dispatch({ type: 'open', panel: 'shop' })}
-                  onCollection={() => {
-                    dispatch({ type: 'close' });
-                    setBookOpen(true);
-                  }}
-                />
+          {isOpen(panel) && (
+            <Sheet
+              key={panel}
+              panel={panel}
+              label={PANEL_TITLE[panel].label}
+              title={PANEL_TITLE[panel].title}
+              closeLabel={panel === 'decor' ? 'Done' : 'Close'}
+              onClose={() => dispatch({ type: 'close' })}
+            >
+              <ErrorBoundary what={`the ${PANEL_TITLE[panel].title} panel`} scope="panel">
+                <Suspense
+                  fallback={
+                    <p className="hint" role="status">
+                      Opening.
+                    </p>
+                  }
+                >
+                  <PanelBody
+                    panel={panel}
+                    newTank={newTank}
+                    food={food}
+                    onFood={setFood}
+                    onShop={openShop}
+                    onCollection={() => {
+                      dispatch({ type: 'close' });
+                      setBookOpen(true);
+                    }}
+                  />
+                </Suspense>
+              </ErrorBoundary>
+            </Sheet>
+          )}
+          {bookOpen && (
+            <ErrorBoundary
+              what="the collection book"
+              scope="app"
+              dismissible
+              onDismiss={() => setBookOpen(false)}
+            >
+              <Suspense fallback={null}>
+                <CollectionBook onClose={() => setBookOpen(false)} />
               </Suspense>
             </ErrorBoundary>
-          </Sheet>
-        )}
-        {bookOpen && (
-          <ErrorBoundary
-            what="the collection book"
-            scope="app"
-            dismissible
-            onDismiss={() => setBookOpen(false)}
-          >
-            <Suspense fallback={null}>
-              <CollectionBook onClose={() => setBookOpen(false)} />
-            </Suspense>
-          </ErrorBoundary>
-        )}
-        <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-        <GuardedTrimDialog dismissed={trimDismissed} onDismiss={() => setTrimDismissed(true)} />
-        <div className={home ? 'stage' : 'stage modal'}>
-          <Screen />
+          )}
+          <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
+          <GuardedTrimDialog dismissed={trimDismissed} onDismiss={() => setTrimDismissed(true)} />
+          <div className={home ? 'stage' : 'stage modal'}>
+            <Screen />
+          </div>
+          <div className="dock-wrap" ref={dock}>
+            <Dock panel={panel} onPress={toggle} onPhoto={startPhoto} />
+          </div>
+          <PhotoTools />
         </div>
-        <div className="dock-wrap" ref={dock}>
-          <Dock panel={panel} onPress={toggle} onPhoto={startPhoto} />
-        </div>
-        <PhotoTools />
+        <PhotoLayer />
+        {home && <LoadingScreen />}
       </div>
-      <PhotoLayer />
-      {home && <LoadingScreen />}
-    </div>
+    </ShowPacksContext.Provider>
   );
 }

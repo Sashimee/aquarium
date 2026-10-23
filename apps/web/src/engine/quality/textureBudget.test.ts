@@ -2,10 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { LoaderUtils } from 'three';
-import { BACKGROUND_IDS, type PlayableBiome } from '@aquarium/shared';
+import { BACKGROUND_IDS, speciesSchema, type PlayableBiome } from '@aquarium/shared';
 import { EventBus, type EngineEvents } from '../events';
-import { backgroundFile, parseBackgroundFiles } from '../tank/background';
+import { backgroundFile, parseBackgroundFiles, posterTier } from '../tank/background';
 import { parseFishAssets } from '../../fish/assetIndex';
+import { fishTextureSize } from '../../fish/assets';
+import { droppedNormalLevels } from '../../fish/impostor';
 import { DEMO_STOCKS } from '../../fish/demoStock';
 import {
   ASSET_BASE,
@@ -59,15 +61,25 @@ function ktx2Layout(bytes: Uint8Array, label: string): Ktx2Layout {
  */
 type DecodeTarget = 'etc' | 'bc' | 'rgba8';
 
-/** Bytes the GPU holds once KTX2Loader has transcoded the file, mips included. */
-function decodedBytes(layout: Ktx2Layout, target: DecodeTarget, label: string): number {
+/**
+ * Bytes the GPU holds once KTX2Loader has transcoded the file, mips included, less the
+ * `dropped` top levels the engine does not upload.
+ */
+function decodedBytes(
+  layout: Ktx2Layout,
+  target: DecodeTarget,
+  label: string,
+  dropped = 0,
+): number {
   let blockBytes: number;
   if (layout.colorModel === KHR_DF_MODEL_ETC1S)
     blockBytes = target === 'etc' && layout.samples === 1 ? 8 : 16;
   else if (layout.colorModel === KHR_DF_MODEL_UASTC) blockBytes = 16;
   else throw new Error(`${label}: colour model ${layout.colorModel} is not a Basis texture`);
   let total = 0;
-  for (let level = 0; level < layout.levels; level++) {
+  if (dropped >= layout.levels)
+    throw new Error(`${label}: cannot drop ${dropped} of ${layout.levels} levels`);
+  for (let level = dropped; level < layout.levels; level++) {
     const w = Math.max(1, layout.width >> level);
     const h = Math.max(1, layout.height >> level);
     total += target === 'rgba8' ? w * h * 4 : Math.ceil(w / 4) * Math.ceil(h / 4) * blockBytes;
@@ -108,6 +120,7 @@ const BIOMES = Object.keys(BACKGROUND_IDS) as PlayableBiome[];
 interface TextureUse {
   readonly owner: string;
   readonly file: string;
+  readonly droppedLevels?: number;
 }
 
 /**
@@ -125,14 +138,41 @@ function catalogModels(owner: string, assetIds: readonly string[]): Set<string> 
   return models;
 }
 
+const contentSpecies = import.meta.glob<unknown>('../../../../../content/species/*.json', {
+  eager: true,
+  import: 'default',
+});
+
 /**
- * Every texture the demo tank of `biome` holds at `tier`. A scene model is counted with the maps of
- * all its LODs, since a tier change loads the new LOD before freeing the old. Impostor atlases are
- * counted on every tier: they load the first time a tier wants them and stay, and phones start on
- * medium, which does. The room HDRI is left out: it is freed once drawn into the PMREM.
+ * Every species content has for `biome`. Textures load per stocked species, and the animal cap
+ * limits counts, not species, so one of each is the most a player's tank of the biome can hold.
  */
+function fullRoster(biome: PlayableBiome): Set<string> {
+  const species = Object.values(contentSpecies).map((raw) =>
+    speciesSchema.partial({ render: true }).parse(raw),
+  );
+  return new Set(species.filter((s) => s.biome === biome).map((s) => s.id));
+}
+
 function demoTextures(
   biome: PlayableBiome,
+  tier: Tier,
+  size: 1024 | 2048,
+  target: DecodeTarget,
+): TextureUse[] {
+  return tankTextures(biome, new Set(Object.keys(DEMO_STOCKS[biome].counts)), tier, size, target);
+}
+
+/**
+ * Every texture a `biome` tank stocked with `species` holds at `tier`, with its preset's decor. A
+ * scene model is counted with the maps of all its LODs, since a tier change loads the new LOD
+ * before freeing the old. Impostor atlases are counted on every tier: they load the first time a
+ * tier wants them and stay, and phones start on medium, which does. The room HDRI is left out: it
+ * is freed once drawn into the PMREM.
+ */
+function tankTextures(
+  biome: PlayableBiome,
+  species: ReadonlySet<string>,
   tier: Tier,
   size: 1024 | 2048,
   target: DecodeTarget,
@@ -162,21 +202,29 @@ function demoTextures(
       uses.push({ owner: assetId, file });
     }
   }
-  const species = new Set(Object.keys(DEMO_STOCKS[biome].counts));
   for (const entry of fishAssets.values()) {
     if (!species.has(entry.species)) continue;
     const maps = new Set<string>();
+    const fishSize = fishTextureSize(entry, size);
     for (const file of entry.lodFiles) {
       for (const uri of glbImageUris(file)) {
         const small = resolvedMap(file, uri);
-        maps.add(size === 2048 ? (entry.sharperTextures.get(small) ?? small) : small);
+        maps.add(fishSize === 2048 ? (entry.sharperTextures.get(small) ?? small) : small);
       }
     }
-    if (entry.impostor) maps.add(entry.impostor.albedoFile).add(entry.impostor.normalFile);
     for (const file of maps) uses.push({ owner: entry.id, file });
+    const { impostor } = entry;
+    if (impostor) {
+      uses.push({ owner: entry.id, file: impostor.albedoFile });
+      uses.push({
+        owner: entry.id,
+        file: impostor.normalFile,
+        droppedLevels: droppedNormalLevels(impostor.frameSize),
+      });
+    }
   }
   const largestBackdrop = BACKGROUND_IDS[biome]
-    .map((id) => backgroundFile(backgrounds, id, tier))
+    .map((id) => backgroundFile(backgrounds, id, posterTier(tier, size)))
     .map((file) => ({ file, bytes: decodedBytes(layoutOf(file), target, file) }))
     .sort((a, b) => b.bytes - a.bytes)[0];
   if (largestBackdrop) uses.push({ owner: 'background', file: largestBackdrop.file });
@@ -194,7 +242,10 @@ function layoutOf(file: string): Ktx2Layout {
 }
 
 function mib(uses: readonly TextureUse[], target: DecodeTarget): number {
-  const bytes = uses.reduce((sum, u) => sum + decodedBytes(layoutOf(u.file), target, u.file), 0);
+  const bytes = uses.reduce(
+    (sum, u) => sum + decodedBytes(layoutOf(u.file), target, u.file, u.droppedLevels),
+    0,
+  );
   return bytes / MIB;
 }
 
@@ -232,6 +283,11 @@ describe('decodedBytes', () => {
 
   it('counts four bytes a texel when nothing is transcoded to a compressed format', () => {
     expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 1), 'rgba8', 'rgb')).toBe((64 + 16) * 4);
+  });
+
+  it('leaves out the top levels the engine does not upload', () => {
+    expect(decodedBytes(layout(KHR_DF_MODEL_UASTC, 1), 'bc', 'normal', 1)).toBe(16);
+    expect(() => decodedBytes(layout(KHR_DF_MODEL_UASTC, 1), 'bc', 'normal', 2)).toThrow(/normal/);
   });
 
   it('rounds a level smaller than a block up to one block', () => {
@@ -287,4 +343,33 @@ describe('texture memory budget of the demo tanks', () => {
     expect(desktop).toBeGreaterThan(2 * phone);
     expect(desktop).toBeGreaterThan(MOBILE_PROFILE.textureBudgetMiB.high);
   });
+
+  it("counts a phone on high with medium's 1024x512 poster, not high's 2048x1024 one", () => {
+    const poster = demoTextures('freshwater', 'high', textureSizeOn(MOBILE_PROFILE, 'high'), 'etc')
+      .filter((u) => u.owner === 'background')
+      .map((u) => layoutOf(u.file).width);
+    expect(poster).toEqual([1024]);
+  });
+});
+
+describe('texture memory budget of a tank holding every species of its biome', () => {
+  it.each(BIOMES)('finds every %s species in the shipped fish assets', (biome) => {
+    const roster = fullRoster(biome);
+    for (const id of Object.keys(DEMO_STOCKS[biome].counts)) expect(roster.has(id), id).toBe(true);
+    const shipped = new Set([...fishAssets.values()].map((e) => e.species));
+    for (const id of roster) expect(shipped.has(id), id).toBe(true);
+  });
+
+  for (const [name, profile, target] of [
+    ['phone', MOBILE_PROFILE, 'etc'],
+    ['desktop', DESKTOP_PROFILE, 'bc'],
+  ] as const) {
+    for (const tier of TIERS) {
+      it.each(BIOMES)(`keeps every %s species on a ${name} at ${tier} within budget`, (biome) => {
+        const size = textureSizeOn(profile, tier);
+        const used = mib(tankTextures(biome, fullRoster(biome), tier, size, target), target);
+        expect(used).toBeLessThanOrEqual(profile.textureBudgetMiB[tier]);
+      });
+    }
+  }
 });

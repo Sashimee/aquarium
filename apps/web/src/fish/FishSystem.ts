@@ -59,6 +59,10 @@ import {
 } from './instances';
 import {
   drawsAsImpostor,
+  IMPOSTOR_LOD,
+  inDisplay,
+  meshLod,
+  modelFraming,
   mouthFade,
   rankMeshes,
   selectLod,
@@ -252,6 +256,15 @@ interface FishRuntime {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
+
+/**
+ * A tier that caps its meshes draws the fish outside the cap at lod2 rather than drop their shadow
+ * (`drawsAsImpostor`), so lod2 casts there too.
+ */
+function castsAtLevel(settings: Readonly<TierSettings> | null, level: number): boolean {
+  if (settings === null || settings.shadowMapSize <= 0) return false;
+  return level < (settings.fishImpostors === null ? SHADOW_LODS : IMPOSTOR_LOD + 1);
+}
 /** The away replay's fast-forward, per PLAN §9.2. */
 const MAX_TIME_SCALE = 20;
 const MAX_OWED_STEPS = 60;
@@ -273,11 +286,7 @@ function youthOfFish(fish: RosterFish): number {
 }
 
 function atlasFramingOf(rt: FishRuntime): AtlasFraming {
-  const impostor = rt.batch.impostor;
-  if (impostor === null) {
-    throw new Error(`fish: ${rt.batch.input.id} ranked for a mesh slot without an impostor atlas`);
-  }
-  return impostor.info;
+  return modelFraming(rt.batch.model.entry);
 }
 
 function capacityFor(needed: number): number {
@@ -720,7 +729,8 @@ export class FishSystem {
 
   /**
    * Moves the swimming space to `tank`: the fish box and the sim's world are rebuilt around it, so
-   * nobody swims outside the new glass. Stock and the saved tank stay as they are.
+   * nobody swims outside the new glass. The demo stock is re-picked for the new size and shown if no
+   * tank is loaded; a loaded tank's stock and the saved tank stay as they are.
    */
   setTank(tank: TankDimensions): void {
     if (this.disposed || sameTank(tank, this.tank)) return;
@@ -1615,9 +1625,8 @@ export class FishSystem {
   }
 
   private applyShadows(batch: SpeciesBatch): void {
-    const cast = (this.shadows?.shadowMapSize ?? 0) > 0;
     batch.lods.forEach((lod, level) => {
-      const castShadow = cast && level < SHADOW_LODS;
+      const castShadow = castsAtLevel(this.shadows, level);
       for (const mesh of lod.meshes) {
         if (mesh.castShadow !== castShadow) lod.warmed = false;
         mesh.castShadow = castShadow;
@@ -1847,12 +1856,11 @@ export class FishSystem {
       const distance = this.position.distanceTo(camera);
       rt.cameraDistance = distance;
       rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, rt.batch.lods.length);
-      if (rt.batch.impostor !== null) ranked.push(rt);
-      else rt.full = true;
+      ranked.push(rt);
     }
     this.bags.end();
     if (impostors !== null) rankMeshes(ranked, atlasFramingOf, impostors.fullMeshes);
-    const castsShadow = (this.shadows?.shadowMapSize ?? 0) > 0;
+    else for (const rt of ranked) rt.full = true;
 
     for (const rt of this.runtimes.values()) {
       if (!rt.shown) continue;
@@ -1871,12 +1879,13 @@ export class FishSystem {
       choice.available = impostor !== null && motion instanceof SwimState;
       choice.lod = rt.lod;
       choice.full = rt.full;
-      choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
+      choice.castsShadow = castsAtLevel(this.shadows, rt.lod);
       choice.display = rt.batch.displays ? Math.max(rt.display, rt.gillFlare) : 0;
       if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
         this.drawImpostor(rt, motion, impostor, camera);
       } else {
-        this.drawMesh(rt);
+        const full = rt.full || inDisplay(choice.display);
+        this.drawMesh(rt, meshLod(rt.lod, full, rt.batch.lods.length));
       }
     }
 
@@ -1917,9 +1926,9 @@ export class FishSystem {
     );
   }
 
-  /** Draws the runtime placed in `position`/`quaternion` with its LOD's mesh. */
-  private drawMesh(rt: FishRuntime): void {
-    const lod = rt.batch.lods[rt.lod];
+  /** Draws the runtime placed in `position`/`quaternion` with its mesh at `level`. */
+  private drawMesh(rt: FishRuntime, level: number): void {
+    const lod = rt.batch.lods[level];
     if (lod === undefined) return;
     const slot = this.placeInstance(lod, rt);
     const { motion, liveliness } = rt;

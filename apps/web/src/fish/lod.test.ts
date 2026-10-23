@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   atlasDistance,
+  bakeFraming,
   drawsAsImpostor,
   effectiveDistance,
   IMPOSTOR_LOD,
+  inDisplay,
   markNearest,
+  meshLod,
+  modelFraming,
   MOUTH_LODS,
   mouthFade,
   rankMeshes,
@@ -225,6 +229,67 @@ describe('drawsAsImpostor', () => {
   it('never swaps on a tier without impostors', () => {
     expect(choose({ tierImpostors: false, lod: IMPOSTOR_LOD })).toBe(false);
     expect(choose({ tierImpostors: false, lod: 0, full: false })).toBe(false);
+  });
+});
+
+describe('inDisplay', () => {
+  it('counts a display as shown until it has all but closed', () => {
+    expect(inDisplay(0)).toBe(false);
+    expect(inDisplay(0.01)).toBe(false);
+    expect(inDisplay(0.02)).toBe(true);
+    expect(inDisplay(1)).toBe(true);
+  });
+});
+
+describe('meshLod', () => {
+  it('keeps the distance level for one of the nearest few', () => {
+    expect(meshLod(0, true, 3)).toBe(0);
+    expect(meshLod(1, true, 3)).toBe(1);
+  });
+
+  it('draws one outside them a level coarser, down to lod2, so crossing the cap steps once', () => {
+    expect(meshLod(0, false, 3)).toBe(1);
+    expect(meshLod(1, false, 3)).toBe(IMPOSTOR_LOD);
+    expect(meshLod(2, false, 3)).toBe(IMPOSTOR_LOD);
+  });
+
+  it('falls back to the coarsest level a model with fewer levels has', () => {
+    expect(meshLod(0, false, 2)).toBe(1);
+    expect(meshLod(1, false, 2)).toBe(1);
+    expect(meshLod(0, false, 1)).toBe(0);
+  });
+
+  it('rejects a model without levels', () => {
+    expect(() => meshLod(0, false, 0)).toThrow(RangeError);
+  });
+});
+
+describe('bakeFraming', () => {
+  it('frames a small animal in 64 px and a larger one in 128 px, as the bake does', () => {
+    expect(bakeFraming(0.0144)).toEqual({ frameSize: 64, radius: 0.0144 });
+    expect(bakeFraming(64 / 700 / 2).frameSize).toBe(64);
+    expect(bakeFraming(0.05).frameSize).toBe(128);
+  });
+
+  it('rejects a model without extent', () => {
+    expect(() => bakeFraming(0)).toThrow(RangeError);
+  });
+});
+
+describe('modelFraming', () => {
+  const min = [-0.01, -0.02, -0.03] as const;
+  const max = [0.01, 0.02, 0.03] as const;
+
+  it("ranks a model with a baked atlas by that atlas's framing, loaded or not", () => {
+    const impostor = { frameSize: 128, radius: 0.04 };
+    expect(modelFraming({ min, max, impostor })).toBe(impostor);
+  });
+
+  it('ranks one without by the bake framing of half its diagonal, the same every frame', () => {
+    const walker = { min, max, impostor: null };
+    const framing = modelFraming(walker);
+    expect(framing).toEqual(bakeFraming(Math.hypot(0.02, 0.04, 0.06) / 2));
+    expect(modelFraming(walker)).toBe(framing);
   });
 });
 

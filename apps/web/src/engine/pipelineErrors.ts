@@ -4,10 +4,10 @@ import {
   LightShadow,
   Material,
   setConsoleFunction,
-  ShadowBaseNode,
   type Object3D,
 } from 'three/webgpu';
 import { isTransientFailure } from './effectsSlot';
+import { TierShadowNode } from './tierShadow';
 
 /**
  * A pipeline three failed to build. It logs the failure and from then on skips every draw that
@@ -201,28 +201,33 @@ export function materialIdOf(material: Material): number | null {
   return 'id' in material && typeof material.id === 'number' ? material.id : null;
 }
 
+/** How the scene draws a material: on an object or in a light's shadow pass; null if it does not. */
+export type MaterialUse = 'object' | 'shadow' | null;
+
 /**
- * Whether anything under `root`, hidden ones included, draws with material `id`. A light's shadow
+ * How anything under `root`, hidden ones included, draws with material `id`. A light's shadow
  * passes draw its casters with the light's shadow material, so three labels their pipelines with
- * that; it counts for a light that casts through a shadow node set on its shadow (TierShadow).
+ * that; it counts for a light that casts through a TierShadow node that has drawn, and is read
+ * from the node, as `getShadowMaterial` would create one for a light that has none.
  */
-export function usesMaterial(root: Object3D, id: number): boolean {
-  let found = false;
+export function materialUse(root: Object3D, id: number): MaterialUse {
+  let use: MaterialUse = null;
   root.traverse((object) => {
-    if (found) return;
+    if (use !== null) return;
     if (object instanceof Light) {
       const shadow: unknown = 'shadow' in object ? object.shadow : undefined;
       const node =
         object.castShadow && shadow instanceof LightShadow ? shadow.shadowNode : undefined;
-      found = node instanceof ShadowBaseNode && materialIdOf(node.getShadowMaterial()) === id;
+      const drawn = node instanceof TierShadowNode ? node.shadowMaterial : null;
+      if (drawn !== null && materialIdOf(drawn) === id) use = 'shadow';
       return;
     }
     if (!('material' in object)) return;
     const material: unknown = object.material;
     const materials: unknown[] = Array.isArray(material) ? material : [material];
-    found = materials.some((m) => m instanceof Material && materialIdOf(m) === id);
+    if (materials.some((m) => m instanceof Material && materialIdOf(m) === id)) use = 'object';
   });
-  return found;
+  return use;
 }
 
 export interface FailureContext {
@@ -272,7 +277,7 @@ export type RebuildMaterials = () => boolean;
  * transient failure (a submit that bound a freed resource, reported by whichever async compile had
  * its error scope open) says nothing about the material, so for a scene material, or one it cannot
  * name, it rebuilds the scene's materials instead, which three would otherwise skip for the
- * session; a shadow pass counts as the scene's (`usesMaterial`), since its render objects go with
+ * session; a shadow pass counts as the scene's (`materialUse`), since its render objects go with
  * their casters' materials. A transient failure outside the scene is answered like any other.
  *
  * The engine rebuilds dropped effects only after a transient failure, so under a temporal resolve
@@ -290,10 +295,12 @@ export class PipelineFailureHandler {
 
   constructor(
     private readonly effects: DroppableEffects,
-    private readonly inScene: (materialId: number) => boolean,
+    private readonly sceneUse: (materialId: number) => MaterialUse,
     private readonly report: ReportFailure,
     private readonly rebuild: RebuildMaterials,
   ) {}
+
+  private readonly inScene = (materialId: number): boolean => this.sceneUse(materialId) !== null;
 
   handle(failure: PipelineFailure): void {
     const id = failure.materialId;
@@ -309,7 +316,7 @@ export class PipelineFailureHandler {
     const key = id ?? failure.message;
     if (this.reported.has(key)) return;
     this.reported.add(key);
-    this.report(reportMessage(failure, id !== null && !this.inScene(id)), cause);
+    this.report(reportMessage(failure, id === null ? 'object' : this.sceneUse(id)), cause);
   }
 
   private rebuildsFor(failure: PipelineFailure, cause: Error): boolean {
@@ -350,9 +357,10 @@ export class PipelineFailureHandler {
   }
 }
 
-function reportMessage(failure: PipelineFailure, outsideScene: boolean): string {
+function reportMessage(failure: PipelineFailure, use: MaterialUse): string {
   if (failure.kind === 'compute') return 'A GPU compute pass failed to build and does not run';
-  // Left over from dropped effects or a shadow map: nothing tells the two apart.
-  if (outsideScene) return 'A pass outside the scene failed to build and is skipped';
+  if (use === 'shadow') return "An object's shadow failed to build and is not drawn";
+  // Left over from dropped effects or another offscreen pass: nothing tells them apart.
+  if (use === null) return 'A pass outside the scene failed to build and is skipped';
   return 'A material failed to build and is not drawn';
 }

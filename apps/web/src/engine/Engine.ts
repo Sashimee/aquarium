@@ -51,7 +51,7 @@ import {
   type DisplayPreference,
 } from './displayPreference';
 import { EffectsRecovery, EffectsSlot } from './effectsSlot';
-import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
+import { materialUse, PipelineFailureHandler, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
@@ -69,7 +69,7 @@ import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { MAX_SHADOW_MAP_SIZE, renderPixelRatio, type TierSettings } from './quality/tiers';
-import { TankBackground } from './tank/background';
+import { posterTier, TankBackground } from './tank/background';
 import {
   defaultView,
   TANK_DIMENSIONS,
@@ -322,7 +322,7 @@ export class Engine {
     });
     const pipelineFailures = new PipelineFailureHandler(
       this.effects,
-      (id) => usesMaterial(this.scene, id),
+      (id) => materialUse(this.scene, id),
       (message, cause) => this.reportError(message, cause),
       () => this.materialRebuild.request(performance.now()),
     );
@@ -371,7 +371,11 @@ export class Engine {
       roomDaylight: 1,
       lampGain: lampGain(DEFAULT_LAMP_SCHEDULE.intensity),
     };
-    this.background = new TankBackground(this.ktx2, this.quality.tier, ASSET_BASE);
+    this.background = new TankBackground(
+      this.ktx2,
+      posterTier(this.quality.tier, this.quality.settings.textureSize),
+      ASSET_BASE,
+    );
     cleanup.add(() => this.background.dispose());
     this.tank = new Tank(
       dimensions,
@@ -624,6 +628,12 @@ export class Engine {
     applyDayLighting(this.dayRig, this.daylightFeed.level);
   }
 
+  /** The minute the room's sky and sun are read at, easing after a clock change like the hood. */
+  roomClockMinute(): number {
+    const target = roomMinute(this.clockPin.clock) ?? minuteOfDay(new Date());
+    return this.clockPin.blendMinute(target, performance.now());
+  }
+
   /** The hood level now; the room light behind the tank follows on the same read. */
   private readDaylight(): number {
     const setting = this.clockPin.clock;
@@ -651,9 +661,9 @@ export class Engine {
     });
     // A tier change can rebuild pipelines without touching a material, e.g. by toggling shadows.
     this.quality.register('cull-prewarm', () => this.cullPrewarm.invalidate());
-    this.quality.register('background', (_, tier) => {
+    this.quality.register('background', (s, tier) => {
       this.background
-        .setTier(tier)
+        .setTier(posterTier(tier, s.textureSize))
         .catch((cause: unknown) =>
           this.reportError('The tank background failed to load at the new tier', cause),
         );

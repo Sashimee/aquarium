@@ -3,9 +3,11 @@ import {
   isPlayableBiome,
   sampleFloor,
   speciesSchema,
+  tankSizeSchema,
   tankWaterTop,
   type Biome,
   type PlayableBiome,
+  type TankSize,
   type TankSpace,
 } from '@aquarium/shared';
 import {
@@ -40,7 +42,7 @@ import royalGrammaContent from '../../../../content/species/royal-gramma.json';
 import rummyNoseTetraContent from '../../../../content/species/rummy-nose-tetra.json';
 import yellowTangContent from '../../../../content/species/yellow-tang.json';
 import type { TankDimensions } from '../engine/tank/dimensions';
-import { WATER_INSET } from '../engine/tank/dimensions';
+import { sameTank, TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { SceneAnchor } from '../scene/anemone';
 
@@ -158,6 +160,46 @@ export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
   ),
 };
 
+/**
+ * The 30 l nano holds 12 animals in 40 cm, so each biome shows a nano community instead of a cut
+ * of its big one: a betta over a neon school, a clownfish pair with banggai and a royal gramma,
+ * a shell-dweller colony of multies, pencilfish with an apistogramma pair, and bumblebee gobies.
+ * Angelfish, tangs, the larger cichlids, archerfish and mudskippers all outgrow it.
+ */
+export const NANO_DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
+  freshwater: demoStock([neonTetraContent, bettaContent], { 'neon-tetra': 10, betta: 1 }),
+  reef: demoStock([ocellarisClownfishContent, royalGrammaContent, banggaiCardinalfishContent], {
+    'ocellaris-clownfish': 2,
+    'royal-gramma': 1,
+    'banggai-cardinalfish': 3,
+  }),
+  cichlid: demoStock([neolamprologusMultifasciatusContent], {
+    'neolamprologus-multifasciatus': 6,
+  }),
+  blackwater: demoStock([dwarfPencilfishContent, apistogrammaHongsloiContent], {
+    'dwarf-pencilfish': 8,
+    'apistogramma-hongsloi': 2,
+  }),
+  mangrove: demoStock([bumblebeeGobyContent], { 'bumblebee-goby': 4 }),
+};
+
+/** The demo of `biome` for a tank of `size`. */
+export function demoStockFor(biome: PlayableBiome, size: TankSize): DemoStock {
+  return size === 'nano30' ? NANO_DEMO_STOCKS[biome] : DEMO_STOCKS[biome];
+}
+
+/** The shared tank size whose dimensions `tank` is; the scene only ever builds those. */
+export function tankSizeOf(tank: TankDimensions): TankSize {
+  const size = tankSizeSchema.options.find((s) => sameTank(TANK_DIMENSIONS[s], tank));
+  if (size === undefined) {
+    throw new Error(
+      `demo stock: a ${tank.length} x ${tank.depth} x ${tank.height} m tank is none of the ` +
+        'shared tank sizes; build it from TANK_DIMENSIONS',
+    );
+  }
+  return size;
+}
+
 const LENGTH_SPREAD = 0.08;
 
 export interface DemoTank {
@@ -182,7 +224,7 @@ export function tankSpaceOf(tank: TankDimensions): TankSpace {
 
 export function demoTank(tank: TankDimensions, seed: number, biome: Biome): DemoTank {
   if (!isPlayableBiome(biome)) throw new Error(`demo stock: no stock for the ${biome} biome yet`);
-  const { species, counts, maxLengthM } = DEMO_STOCKS[biome];
+  const { species, counts, maxLengthM } = demoStockFor(biome, tankSizeOf(tank));
   const rng = new Rng(seed);
   const fish: FishSpawn[] = [];
   for (const s of species) {

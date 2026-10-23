@@ -224,6 +224,37 @@ describe('PaneMirror', () => {
     expect(mirror.frame.copyCount).toBe(0);
   });
 
+  it('frees the copy when its target is resized, and keeps the same one for the next frame', () => {
+    const mirror = new PaneMirror();
+    const tap = mirror.frame.sample(vec2(0.5));
+    const target = new RenderTarget(8, 4);
+    const renderer = {
+      copyFramebufferToTexture: vi.fn(),
+      getRenderTarget: () => target,
+      getCanvasTarget: () => null,
+    };
+    const frame = { renderer } as unknown as NodeFrame;
+    tap.updateBefore(frame);
+    const copy = tap.getTextureForReference(target);
+    const freed = vi.fn();
+    copy.addEventListener('dispose', freed);
+
+    target.setSize(16, 6);
+    expect(freed).toHaveBeenCalledOnce();
+    expect(mirror.frame.copyCount).toBe(0);
+
+    tap.updateBefore(frame);
+    expect(renderer.copyFramebufferToTexture).toHaveBeenLastCalledWith(copy);
+    expect(copy.image).toMatchObject({ width: 16, height: 6 });
+    expect(mirror.frame.copyCount).toBe(1);
+
+    target.setSize(16, 6);
+    expect(freed).toHaveBeenCalledOnce();
+    target.setSize(32, 12);
+    expect(freed).toHaveBeenCalledTimes(2);
+    expect(mirror.frame.copyCount).toBe(0);
+  });
+
   it('frees every copy still held, and its own, when disposed', () => {
     const mirror = new PaneMirror();
     const targets = [new RenderTarget(4, 4), new RenderTarget(8, 8)];

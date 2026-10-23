@@ -1,6 +1,7 @@
 import {
   MIN_FIT_SCALE,
-  fitPresetItem,
+  fitPresetDecor,
+  keptPresetDecor,
   presetFit,
   type DecorItem,
   type PlantPatch,
@@ -137,13 +138,13 @@ function standsClear(assetId: string, y: number, scale: number, waterTop: number
 
 function fitItem(
   item: DecorItem,
+  stretched: DecorItem,
   size: TankSize,
   dimensions: TankDimensions,
   boundsOf: BoundsOf,
   perch = isPerch(item),
 ): DecorItem {
-  const stretched = fitPresetItem(item, size);
-  const { scale: k } = presetFit(size);
+  const { decorScale: k } = presetFit(size);
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
   const halfD = dimensions.depth / 2 - dimensions.glass - WALL_MARGIN;
   const waterTop = dimensions.height - dimensions.freeboard;
@@ -192,7 +193,9 @@ function fitItem(
   if (perch && !standsClear(item.assetId, y, scale, waterTop)) {
     const ordinary: DecorItem = { ...item };
     delete ordinary.perch;
-    return fitItem(ordinary, size, dimensions, boundsOf, false);
+    const fittedOrdinary: DecorItem = { ...stretched, scale: ordinary.scale * k };
+    delete fittedOrdinary.perch;
+    return fitItem(ordinary, fittedOrdinary, size, dimensions, boundsOf, false);
   }
   return {
     ...stretched,
@@ -231,9 +234,11 @@ function fitPatch(
 }
 
 /**
- * Presets are authored for the standard tank. Positions stretch with the glass, sizes shrink with
- * the smaller of its length and depth, and anything that would still cross the glass or break the
- * waterline is scaled or nudged back inside.
+ * Presets are authored for the standard tank. Positions stretch with the glass and decor scales
+ * with the smaller of its length and depth, held at `DECOR_MIN_SCALE`; a tank too small for all of
+ * it keeps the head of the preset and drops the tail (`keptPresetDecor`). Anything that would
+ * still cross the glass or break the waterline is scaled or nudged back inside. Plant patches
+ * shrink in count and radius with the floor instead of being dropped.
  */
 export function fitPresetToTank(
   preset: PresetLayout,
@@ -242,9 +247,15 @@ export function fitPresetToTank(
   boundsOf: BoundsOf,
   patchReach: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PresetLayout {
+  const kept = keptPresetDecor(preset.decor, size);
+  const stretched = fitPresetDecor(preset.decor, size);
   return {
     ...preset,
-    decor: preset.decor.map((item) => fitItem(item, size, dimensions, boundsOf)),
+    decor: kept.map((item, i) => {
+      const fitted = stretched[i];
+      if (!fitted) throw new Error(`${item.assetId} is missing from the server decor fit`);
+      return fitItem(item, fitted, size, dimensions, boundsOf);
+    }),
     plantPatches:
       size === 'standard'
         ? preset.plantPatches

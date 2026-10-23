@@ -195,6 +195,8 @@ export interface InteractionEvents {
    * changes.
    */
   'tank:lamp': { tankId: string; intensity: number; onHour: number; offHour: number };
+  /** The lamp hours the hood light is running on, for the day/night button's label. */
+  'lamp:schedule': { intensity: number; onHour: number; offHour: number };
   /** The loading screen: from app start, and from each tank switch, until the tank has drawn. */
   'load:state': LoadState;
   /** The failure card was closed; the loading screen stays away until the next load begins. */
@@ -265,4 +267,5 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'decor:load-failed',
   'load:state',
   'photo:view',
+  'lamp:schedule',
 ];

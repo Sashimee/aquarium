@@ -64,6 +64,14 @@ describe('the day/night button', () => {
     expect(localStorage.getItem(DAY_NIGHT_KEY)).toBe('auto');
   });
 
+  it('labels a ?clock= page by the lamp, which an afternoon schedule leaves off at 13:00', () => {
+    window.history.replaceState(null, '', '/?clock=day');
+    show();
+    act(() => interaction.emit('lamp:schedule', { intensity: 0.8, onHour: 14, offHour: 22 }));
+    expect(button()?.dataset['mode']).toBe('night');
+    window.history.replaceState(null, '', '/');
+  });
+
   it('starts from the saved mode', () => {
     localStorage.setItem(DAY_NIGHT_KEY, 'night');
     show();

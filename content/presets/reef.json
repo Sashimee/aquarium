@@ -9,10 +9,52 @@
   },
   "decor": [
     {
-      "assetId": "reef-arch",
-      "position": [-0.22, 0.098, -0.1],
-      "rotationY": 0.1,
-      "scale": 1.7
+      "assetId": "host-anemone",
+      "position": [-0.34, 0.069, 0.06],
+      "rotationY": 0.8,
+      "scale": 0.5
+    },
+    {
+      "assetId": "acropora-palmata",
+      "position": [0.41, 0.059, 0.14],
+      "rotationY": -0.7,
+      "scale": 0.42
+    },
+    {
+      "assetId": "euphyllia-hammer-3",
+      "position": [-0.12, 0.066, 0.04],
+      "rotationY": 0.6,
+      "scale": 1
+    },
+    {
+      "assetId": "brain-coral",
+      "position": [-0.49, 0.054, 0.15],
+      "rotationY": 4.4,
+      "scale": 0.75
+    },
+    {
+      "assetId": "brain-coral",
+      "position": [0.52, 0.05, 0.06],
+      "rotationY": 2.4,
+      "scale": 0.55
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.45, 0.097, -0.1],
+      "rotationY": 1.2,
+      "scale": 0.6
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.4, 0.058, 0.09],
+      "rotationY": 0.9,
+      "scale": 0.34
+    },
+    {
+      "assetId": "lambis-shell",
+      "position": [0.25, 0.055, 0.185],
+      "rotationY": 0.2,
+      "scale": 0.9
     },
     {
       "assetId": "reef-arch",
@@ -27,34 +69,16 @@
       "scale": 0.7
     },
     {
-      "assetId": "boulder-01",
-      "position": [0.04, 0.093, -0.07],
-      "rotationY": -0.5,
-      "scale": 0.75
+      "assetId": "brain-coral",
+      "position": [-0.22, 0.073, 0.165],
+      "rotationY": 5.5,
+      "scale": 0.62
     },
     {
-      "assetId": "boulder-01",
-      "position": [0.45, 0.097, -0.1],
-      "rotationY": 1.2,
-      "scale": 0.6
-    },
-    {
-      "assetId": "host-anemone",
-      "position": [-0.34, 0.069, 0.06],
-      "rotationY": 0.8,
-      "scale": 0.5
-    },
-    {
-      "assetId": "boulder-01",
-      "position": [0.04, 0.06, 0.09],
-      "rotationY": 2.0,
-      "scale": 0.4
-    },
-    {
-      "assetId": "boulder-01",
-      "position": [0.4, 0.058, 0.09],
-      "rotationY": 0.9,
-      "scale": 0.34
+      "assetId": "reef-arch",
+      "position": [-0.22, 0.098, -0.1],
+      "rotationY": 0.1,
+      "scale": 1.7
     },
     {
       "assetId": "acropora-cytherea",
@@ -63,46 +87,22 @@
       "scale": 0.58
     },
     {
-      "assetId": "acropora-palmata",
-      "position": [0.41, 0.059, 0.14],
-      "rotationY": -0.7,
-      "scale": 0.42
-    },
-    {
-      "assetId": "brain-coral",
-      "position": [0.52, 0.05, 0.06],
-      "rotationY": 2.4,
-      "scale": 0.55
-    },
-    {
-      "assetId": "brain-coral",
-      "position": [-0.49, 0.054, 0.15],
-      "rotationY": 4.4,
-      "scale": 0.75
-    },
-    {
-      "assetId": "brain-coral",
-      "position": [-0.22, 0.073, 0.165],
-      "rotationY": 5.5,
-      "scale": 0.62
-    },
-    {
-      "assetId": "euphyllia-hammer-3",
-      "position": [-0.12, 0.066, 0.04],
-      "rotationY": 0.6,
-      "scale": 1
-    },
-    {
       "assetId": "euphyllia-torch-8",
       "position": [0.28, 0.068, -0.01],
       "rotationY": -0.3,
       "scale": 1
     },
     {
-      "assetId": "lambis-shell",
-      "position": [0.25, 0.055, 0.185],
-      "rotationY": 0.2,
-      "scale": 0.9
+      "assetId": "boulder-01",
+      "position": [0.04, 0.093, -0.07],
+      "rotationY": -0.5,
+      "scale": 0.75
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.04, 0.06, 0.09],
+      "rotationY": 2,
+      "scale": 0.4
     }
   ],
   "plantPatches": [],

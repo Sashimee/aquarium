@@ -82,6 +82,20 @@ export type PrivacyPolicy = z.infer<typeof privacyPolicySchema>;
 
 export const httpUrlSchema = z.url({ protocol: /^https?$/ });
 
+export const manifestAssetCreditFieldsSchema = z.looseObject({
+  id: z.string().min(1),
+  kind: z.string().min(1),
+  title: z.string().min(1),
+  author: z.string().min(1),
+  author_url: httpUrlSchema,
+  source_url: httpUrlSchema,
+  licence: z.string().min(1),
+  licence_url: httpUrlSchema,
+  species: slugSchema.optional(),
+  modifications: z.array(z.string()),
+  status: z.string(),
+});
+
 export const creditEntrySchema = z.strictObject({
   id: z.string().min(1),
   kind: z.string().min(1),

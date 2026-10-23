@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flatCard, withOpacity } from './leaf-card.ts';
+import { LEAF_CARD_RECIPES, flatCard, tintRgb, withOpacity } from './leaf-card.ts';
 import type { Rgba } from './textures.ts';
 
 function image(width: number, height: number, rgba: [number, number, number, number]): Rgba {
@@ -48,5 +48,23 @@ describe('flatCard', () => {
   it('maps the whole atlas onto the card', () => {
     expect(Math.min(...card.uvs)).toBe(0);
     expect(Math.max(...card.uvs)).toBe(1);
+  });
+});
+
+describe('tintRgb', () => {
+  it('scales the colour channels, keeps alpha and leaves the input untouched', () => {
+    const source = image(1, 1, [200, 100, 50, 77]);
+    const tinted = tintRgb(source, [1, 0.5, 0]);
+    expect(Array.from(tinted.data)).toEqual([200, 50, 0, 77]);
+    expect(Array.from(source.data)).toEqual([200, 100, 50, 77]);
+  });
+});
+
+describe('catappa-leaf-card recipe', () => {
+  it('darkens blue most so the atlas reads as tannin brown', () => {
+    const recipe = LEAF_CARD_RECIPES.find((r) => r.id === 'catappa-leaf-card');
+    const [r, g, b] = recipe?.tint ?? [0, 0, 0];
+    expect(r).toBeGreaterThan(g);
+    expect(g).toBeGreaterThan(b);
   });
 });

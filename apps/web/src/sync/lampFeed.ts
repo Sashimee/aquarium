@@ -19,7 +19,7 @@ export class LampFeed {
   private activeTankId: string | null = null;
   private readonly unsubscribe: (() => void)[];
 
-  constructor(interaction: EventBus<InteractionEvents>) {
+  constructor(private readonly interaction: EventBus<InteractionEvents>) {
     this.unsubscribe = [
       interaction.on('tank:loaded', ({ tankId }) => {
         this.activeTankId = tankId;
@@ -60,5 +60,6 @@ export class LampFeed {
       return;
     this.schedule = schedule;
     this.sink?.setLampSchedule(schedule);
+    this.interaction.emit('lamp:schedule', schedule);
   }
 }

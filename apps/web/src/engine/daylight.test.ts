@@ -2,6 +2,7 @@ import { DEFAULT_EQUIPMENT } from '@aquarium/shared';
 import { NIGHT } from '@aquarium/sim';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
+import { roomDaylightAt } from './room/timeOfDay';
 import { EventBus, type EngineEvents } from './events';
 import {
   CLOCK_EASE_MS,
@@ -376,6 +377,138 @@ describe('ClockPin', () => {
     pin.blend(night, 0);
     expect(pin.set(0, 10)).toBe(false);
     expect(pin.easing).toBe(false);
+  });
+});
+
+describe('ClockPin room minute', () => {
+  it('shows the target at once until a clock change', () => {
+    const pin = new ClockPin(null);
+    expect(pin.blendMinute(10 * 60, 0)).toBe(10 * 60);
+  });
+
+  it('runs the sun forward from the shown minute to the new one over the ease', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 1000);
+    expect(pin.blendMinute(0, 1000)).toBeCloseTo(13 * 60);
+    expect(pin.blendMinute(0, 1000 + CLOCK_EASE_MS / 2)).toBeCloseTo(18.5 * 60);
+    expect(pin.blendMinute(0, 1000 + CLOCK_EASE_MS)).toBe(0);
+  });
+
+  it('keeps the direction chosen at the start when a live target creeps past 12 h away', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 1000);
+    pin.blendMinute(60, 1000);
+    const quarter = pin.blendMinute(60 + 10 / 60, 1000 + CLOCK_EASE_MS / 4);
+    expect(quarter).toBeGreaterThan(13 * 60);
+    expect(quarter).toBeLessThan(18 * 60);
+    expect(pin.blendMinute(60 + 20 / 60, 1000 + CLOCK_EASE_MS)).toBeCloseTo(60 + 20 / 60);
+  });
+
+  it('does not spin a day when the live target starts just behind the shown minute and passes it', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 0);
+    const live = 13 * 60 - 10 / 60;
+    for (let seconds = 0; seconds <= 20; seconds += 2) {
+      const minute = pin.blendMinute(live + seconds / 60, seconds * 1000);
+      expect(Math.abs(minute - 13 * 60)).toBeLessThan(1);
+    }
+  });
+
+  it('chooses the direction afresh for the next fade', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 0);
+    pin.blendMinute(60, 0);
+    pin.blendMinute(60, CLOCK_EASE_MS);
+    pin.set(13 * 60, 2 * CLOCK_EASE_MS);
+    const mid = pin.blendMinute(13 * 60, 2 * CLOCK_EASE_MS + CLOCK_EASE_MS / 2);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(13 * 60);
+  });
+
+  it('wraps past midnight on the way', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(23 * 60, 0);
+    pin.set(0, 0);
+    expect(pin.blendMinute(0, CLOCK_EASE_MS / 2)).toBeCloseTo(23.5 * 60);
+  });
+
+  const STEPS = 20;
+  const samples = (pin: ClockPin, target: number, from: number): number[] =>
+    Array.from({ length: STEPS + 1 }, (_, i) =>
+      pin.blendMinute(target, from + (CLOCK_EASE_MS * i) / STEPS),
+    );
+  const steps = (values: number[]): number[] => values.slice(1).map((v, i) => v - (values[i] ?? v));
+
+  it('reaches night in the room and the tank together, neither going the wrong way', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 0);
+    const hood: number[] = [];
+    const room: number[] = [];
+    for (let i = 0; i <= STEPS; i += 1) {
+      const nowMs = (CLOCK_EASE_MS * i) / STEPS;
+      hood.push(pin.blend({ hood: 0, room: 0 }, nowMs).hood);
+      room.push(roomDaylightAt(pin.blendMinute(0, nowMs)));
+    }
+    expect(hood.at(-1)).toBe(0);
+    expect(room.at(-1)).toBeCloseTo(roomDaylightAt(0));
+    expect(roomDaylightAt(0)).toBeLessThan(0.1);
+    expect(steps(hood).every((d) => d <= 1e-9)).toBe(true);
+    expect(steps(room).every((d) => d <= 1e-9)).toBe(true);
+    expect(room.some((v) => v > 0.1 && v < (room[0] ?? 0) - 0.1)).toBe(true);
+  });
+
+  it('goes back a little rather than round the day when the target is just behind', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(13 * 60 + 1, 0);
+    pin.set('day', 0);
+    const path = samples(pin, 13 * 60, 0);
+    expect(path.every((m) => m >= 13 * 60 && m <= 13 * 60 + 1)).toBe(true);
+    expect(path.at(-1)).toBe(13 * 60);
+  });
+
+  it('never passes through night going from the live afternoon to day', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(15 * 60, 0);
+    pin.set('day', 0);
+    const path = samples(pin, 13 * 60, 0);
+    expect(path.every((m) => m >= 13 * 60 && m <= 15 * 60)).toBe(true);
+    expect(Math.min(...path.map(roomDaylightAt))).toBeGreaterThan(0.5);
+    expect(steps(path).every((d) => d <= 1e-9)).toBe(true);
+  });
+
+  it('never passes through day going from night back to the live evening', () => {
+    const pin = new ClockPin('night');
+    pin.blendMinute(0, 0);
+    pin.set(null, 0);
+    const path = samples(pin, 23 * 60, 0);
+    expect(Math.max(...path.map(roomDaylightAt))).toBeLessThan(0.1);
+    expect(path.every((m) => m >= 23 * 60 || m === 0)).toBe(true);
+    expect(path.at(-1)).toBe(23 * 60);
+  });
+
+  it('restarts both the tank light and the sky from where they were on a second press', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 0);
+    const half = CLOCK_EASE_MS / 2;
+    const hoodBefore = pin.blend({ hood: 0, room: 0 }, half);
+    const minuteBefore = pin.blendMinute(0, half);
+    expect(minuteBefore).toBeGreaterThan(13 * 60);
+    pin.set('day', half);
+    expect(pin.blend({ hood: 1, room: 1 }, half)).toEqual(hoodBefore);
+    expect(pin.blendMinute(13 * 60, half)).toBeCloseTo(minuteBefore);
+    const later = pin.blend({ hood: 1, room: 1 }, half + CLOCK_EASE_MS / 2);
+    expect(later.hood).toBeGreaterThan(hoodBefore.hood);
+    expect(later.hood).toBeLessThan(1);
+    expect(pin.blendMinute(13 * 60, half + CLOCK_EASE_MS)).toBe(13 * 60);
+    expect(pin.blend({ hood: 1, room: 1 }, half + CLOCK_EASE_MS)).toEqual({ hood: 1, room: 1 });
   });
 });
 

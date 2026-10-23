@@ -8,6 +8,7 @@ import {
 import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
+import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { storedFishSchema } from './gifts.ts';
@@ -42,6 +43,7 @@ export interface LegalDeps {
   limits: LegalLimits;
   currentSession: (req: FastifyRequest) => Promise<CurrentSession | null>;
   payments?: PaymentProvider | null;
+  clock: Clock;
 }
 
 export function registerLegalRoutes(deps: LegalDeps): void {
@@ -377,6 +379,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           .code(403)
           .send(apiError('forbidden', 'Password confirmation is required and must be correct.'));
       }
+      // Wall clock on purpose: better-auth stamps the session with the real time, not the injected one.
     } else if (Date.now() - current.session.createdAt.getTime() > FRESH_SESSION_MS) {
       return reply
         .code(403)
@@ -412,7 +415,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       (row) =>
         Boolean(deps.payments) ||
         row.status !== 'incomplete' ||
-        Date.now() - row.createdAt.getTime() < 24 * 3_600_000,
+        deps.clock.now() - row.createdAt.getTime() < 24 * 3_600_000,
     );
     if (running.length > 0) {
       if (!deps.payments) {

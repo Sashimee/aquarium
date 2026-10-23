@@ -239,6 +239,19 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     ],
   },
   {
+    id: 'amazon-sword',
+    kind: 'plant',
+    sourceId: 'sketchfab-3701243a',
+    longestM: 0.3,
+    maxTriangles: 4000,
+    minTriangles: 12,
+    leafColourVariation: { spread: 0.14, yellowing: 0.1 },
+    modifications: [
+      'the source is unitless and about 55 x 161 x 11 units',
+      'colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower',
+    ],
+  },
+  {
     id: 'water-plant',
     kind: 'plant',
     sourceId: 'sketchfab-b536fec3',
