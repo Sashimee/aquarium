@@ -1321,6 +1321,7 @@ export class FishSystem {
             input.locomotion.strouhal,
             swimModeFor(SWIM_MODES[swimmingMode], profile),
             phaseOffset,
+            (input.locomotion.maxSpeedMps * length) / input.locomotion.bodyLengthM,
           )
         : new WalkState(length, phaseOffset, walkerGait(batch.locomotion)),
       seed,

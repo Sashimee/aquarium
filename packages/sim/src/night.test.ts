@@ -339,6 +339,49 @@ describe('nocturnal fish in the world', { timeout: LONG }, () => {
   });
 });
 
+describe('resting tetras in the dark', { timeout: LONG }, () => {
+  it('swim slowly on their fins instead of gliding tail-still (#1567)', () => {
+    const neon = speciesContentSchema.parse(
+      JSON.parse(
+        readFileSync(join(import.meta.dirname, '../../../content/species/neon-tetra.json'), 'utf8'),
+      ),
+    );
+    for (const seed of [1, 2]) {
+      const w = new World({
+        seed,
+        tank: SHOW_TANK,
+        species: [neon],
+        fish: spawnMany(neon.id, 11),
+        light: 0,
+      });
+      for (let t = 0; t < 150 * STEP_HZ; t++) w.step();
+      const still = new Float64Array(w.count);
+      let resting = 0;
+      let coasting = 0;
+      let longest = 0;
+      for (let t = 0; t < 60 * STEP_HZ; t++) {
+        w.step();
+        for (let i = 0; i < w.count; i++) {
+          if (at(w.state, i) !== FishState.Rest) continue;
+          resting++;
+          const tailStill = at(w.thrust, i) === 0;
+          if (tailStill) coasting++;
+          const brisk = at(w.speed, i) > at(w.bodyLength, i);
+          still[i] = tailStill && brisk ? at(still, i) + 1 / STEP_HZ : 0;
+          longest = Math.max(longest, at(still, i));
+        }
+      }
+      expect(resting, `seed ${seed}`).toBeGreaterThan(0.9 * 60 * STEP_HZ * w.count);
+      // Steady swimming still lets the tail rest while easing off; gliding from kick to kick
+      // left it still for 96% of the night with runs of up to 10 s.
+      expect(coasting / resting, `seed ${seed}: share of resting steps tail-still`).toBeLessThan(
+        0.45,
+      );
+      expect(longest, `seed ${seed}: longest tail-still run above 1 BL/s`).toBeLessThan(1);
+    }
+  });
+});
+
 describe('lights on/off startle in the world', { timeout: LONG }, () => {
   function startledSince(w: World, tick: number): number {
     let n = 0;

@@ -26,9 +26,9 @@ export const BEHAVIOUR = {
   burstSpeedFactor: 1.35,
   burstResponseS: 0.1,
   burstMaxS: 0.2,
-  coastReleaseFactor: 0.75,
+  coastReleaseFactor: 0.7,
   coastMaxS: 1.2,
-  glideDragFactor: 1 / 3,
+  glideTauS: 0.8,
   coastTurnGain: 0.3,
 
   stimulusRangeM: 0.4,
@@ -575,6 +575,22 @@ export class Behaviour {
     let n = 0;
     for (const byClearance of this.routes.values()) n += byClearance.size;
     return n;
+  }
+
+  /**
+   * A copy of fish `i`'s wide and narrow entry slots: the way it last looked along, and the cell
+   * where it looked to join it (-1 for none).
+   */
+  entrySlots(i: number): { routes: (Route | null)[]; cells: number[] } {
+    if (!Number.isInteger(i) || i < 0 || 2 * i >= this.entryCell.length) {
+      throw new RangeError(
+        `entrySlots: no fish ${String(i)} among ${String(this.entryCell.length / 2)}`,
+      );
+    }
+    return {
+      routes: [this.entryRoute[2 * i] ?? null, this.entryRoute[2 * i + 1] ?? null],
+      cells: [at(this.entryCell, 2 * i), at(this.entryCell, 2 * i + 1)],
+    };
   }
 
   /** Entry slots that still hold a dropped way. */
@@ -1606,6 +1622,9 @@ export class Behaviour {
     }
     if (rest > 0.5 && (plan.state === FishState.Cruise || plan.state === FishState.Station)) {
       plan.state = FishState.Rest;
+      // Burst-and-coast pays only at speed (Weihs 1974); a resting fish drifts on steady, slow
+      // fin beats rather than gliding tail-still between kicks.
+      plan.continuous = true;
     }
   }
 
@@ -1683,7 +1702,14 @@ export class Behaviour {
       // with their fins as they do over rock rather than swimming arcs past it.
       const grazed = f.grazes(k);
       plan.pivot = grazed && d < length;
-      const facing = grazed ? NaN : this.facingInsideTurnCircle(i, fx, fz);
+      // Food in open water steeper below or above than the fish can pitch is reached only by
+      // swimming on along a dive or climb; turning on the spot over it would hold the fish there.
+      // Bottom foragers are left to wait for food to settle.
+      const steep =
+        sp.gait !== 'forage' &&
+        fy - floorY >= length &&
+        Math.abs(ty - py) > Math.tan(sp.maxPitch) * Math.hypot(fx - px, fz - pz);
+      const facing = grazed || steep ? NaN : this.facingInsideTurnCircle(i, fx, fz);
       if (!Number.isNaN(facing)) {
         // Swimming on at any speed past food abeam only circles it; the fish holds back until
         // the turn on the spot has brought the food round in front of it.
