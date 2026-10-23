@@ -135,6 +135,19 @@ export function mainBodyDepths(source: string): { line: string; depth: number }[
  * held to the graph itself instead of to a third copy of the formula.
  */
 export function evaluate(node: Node): number[] {
+  return evaluateShared(node, new Map());
+}
+
+// A graph reuses a node wherever it is read (a `toVar` above all), so each is worked out once.
+function evaluateShared(node: Node, done: Map<Node, number[]>): number[] {
+  const known = done.get(node);
+  if (known !== undefined) return known;
+  const value = evaluateNode(node, (part) => evaluateShared(part, done));
+  done.set(node, value);
+  return value;
+}
+
+function evaluateNode(node: Node, of: (part: Node) => number[]): number[] {
   if (node instanceof UniformNode || node instanceof ConstNode) {
     const value: unknown = node.value;
     if (typeof value === 'number') return [value];
@@ -142,10 +155,10 @@ export function evaluate(node: Node): number[] {
     if (value instanceof Color) return value.toArray();
     throw new Error(`evaluate: unsupported ${node.type} value`);
   }
-  if (node instanceof VarNode || node instanceof ConvertNode) return evaluate(node.node);
-  if (node instanceof JoinNode) return node.nodes.flatMap((part) => evaluate(part));
+  if (node instanceof VarNode || node instanceof ConvertNode) return of(node.node);
+  if (node instanceof JoinNode) return node.nodes.flatMap((part) => of(part));
   if (node instanceof SplitNode) {
-    const v = evaluate(node.node);
+    const v = of(node.node);
     return [...node.components].map((c) => v['xyzw'.indexOf(c)] ?? Number.NaN);
   }
   const zip = (a: number[], b: number[], f: (x: number, y: number) => number): number[] =>
@@ -153,8 +166,8 @@ export function evaluate(node: Node): number[] {
       f(a.length === 1 ? (a[0] ?? 0) : (a[i] ?? 0), b.length === 1 ? (b[0] ?? 0) : (b[i] ?? 0)),
     );
   if (node instanceof OperatorNode) {
-    const a = evaluate(node.aNode);
-    const b = evaluate(node.bNode);
+    const a = of(node.aNode);
+    const b = of(node.bNode);
     if (node.op === '+') return zip(a, b, (x, y) => x + y);
     if (node.op === '-') return zip(a, b, (x, y) => x - y);
     if (node.op === '*') return zip(a, b, (x, y) => x * y);
@@ -162,21 +175,21 @@ export function evaluate(node: Node): number[] {
     throw new Error(`evaluate: unsupported operator ${node.op}`);
   }
   if (node instanceof MathNode) {
-    const a = evaluate(node.aNode);
+    const a = of(node.aNode);
     if (node.method === MathNode.EXP) return a.map(Math.exp);
     if (node.method === MathNode.NEGATE) return a.map((x) => -x);
     if (node.method === MathNode.ABS) return a.map(Math.abs);
     if (node.method === MathNode.ONE_MINUS) return a.map((x) => 1 - x);
     if (node.method === MathNode.SQRT) return a.map(Math.sqrt);
     if (node.bNode === null) throw new Error(`evaluate: unsupported math ${node.method}`);
-    const b = evaluate(node.bNode);
+    const b = of(node.bNode);
     if (node.method === MathNode.MAX) return zip(a, b, Math.max);
     if (node.method === MathNode.MIN) return zip(a, b, Math.min);
     if (node.method === MathNode.POW) return zip(a, b, Math.pow);
     // GLSL step(edge, x): 0 where x < edge.
     if (node.method === MathNode.STEP) return zip(a, b, (edge, x) => (x < edge ? 0 : 1));
     if (node.method === MathNode.MIX && node.cNode !== null) {
-      const t = evaluate(node.cNode);
+      const t = of(node.cNode);
       return zip(
         zip(a, t, (x, s) => x * (1 - s)),
         zip(b, t, (y, s) => y * s),
