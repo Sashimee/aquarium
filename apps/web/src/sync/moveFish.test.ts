@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiRequestError } from '../ui/api';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
+import { adultLengthRefusal } from './fishFit';
 import { movableFish, moveRefusalText, moveTargets } from './moveFish';
 
 const display = tankFixture();
@@ -13,14 +14,15 @@ const quarantine = tankFixture({
 
 describe('moveTargets', () => {
   it('sends a display tank fish to the quarantine tank only', () => {
-    expect(moveTargets(display, [display, other, quarantine], 'neon-tetra')).toEqual([quarantine]);
+    expect(
+      moveTargets(display, [display, other, quarantine], 'neon-tetra', speciesFixture()),
+    ).toEqual([quarantine]);
   });
 
   it('sends a quarantine fish back to the display tanks', () => {
-    expect(moveTargets(quarantine, [display, other, quarantine], 'neon-tetra')).toEqual([
-      display,
-      other,
-    ]);
+    expect(
+      moveTargets(quarantine, [display, other, quarantine], 'neon-tetra', speciesFixture()),
+    ).toEqual([display, other]);
   });
 
   it('skips tanks of the other kind of water', () => {
@@ -30,7 +32,9 @@ describe('moveTargets', () => {
       biome: 'reef',
       quarantine: true,
     });
-    expect(moveTargets(display, [display, reef, quarantine], 'neon-tetra')).toEqual([quarantine]);
+    expect(
+      moveTargets(display, [display, reef, quarantine], 'neon-tetra', speciesFixture()),
+    ).toEqual([quarantine]);
   });
 
   describe('adult length gate', () => {
@@ -46,9 +50,12 @@ describe('moveTargets', () => {
         quarantine: true,
         size: 'nano30',
       });
-      expect(moveTargets(display, [display, nanoQuarantine], 'blue-tang', undefined, tang)).toEqual(
-        [],
-      );
+      expect(moveTargets(display, [display, nanoQuarantine], 'blue-tang', tang)).toEqual([]);
+    });
+
+    it('says why quarantine is out of reach', () => {
+      expect(adultLengthRefusal(tang, 'nano30', true)).toContain('quarantine');
+      expect(adultLengthRefusal(tang, 'nano30', false)).toContain('Choose a bigger tank');
     });
 
     it('still offers a tank it fits', () => {
@@ -57,9 +64,7 @@ describe('moveTargets', () => {
         quarantine: true,
         size: 'standard',
       });
-      expect(moveTargets(display, [display, standard], 'blue-tang', undefined, tang)).toEqual([
-        standard,
-      ]);
+      expect(moveTargets(display, [display, standard], 'blue-tang', tang)).toEqual([standard]);
     });
   });
 
@@ -69,15 +74,19 @@ describe('moveTargets', () => {
     const long = tankFixture({ id: '00000000-0000-4000-8000-0000000000c5', size: 'long300' });
 
     it('drops tanks shorter than the species minimum', () => {
-      expect(moveTargets(home, [home, standard, long], 'silver-mono')).toEqual([long]);
+      expect(moveTargets(home, [home, standard, long], 'silver-mono', speciesFixture())).toEqual([
+        long,
+      ]);
     });
 
     it('keeps a tank exactly at the minimum length', () => {
-      expect(moveTargets(home, [home, long], 'silver-mono')).toEqual([long]);
+      expect(moveTargets(home, [home, long], 'silver-mono', speciesFixture())).toEqual([long]);
     });
 
     it('does not gate species without a minimum', () => {
-      expect(moveTargets(home, [home, standard], 'neon-tetra')).toEqual([standard]);
+      expect(moveTargets(home, [home, standard], 'neon-tetra', speciesFixture())).toEqual([
+        standard,
+      ]);
     });
 
     it('lets a gated fish into a short quarantine tank', () => {
@@ -87,14 +96,14 @@ describe('moveTargets', () => {
         size: 'nano30',
         quarantine: true,
       });
-      expect(moveTargets(longHome, [longHome, shortQuarantine], 'silver-mono')).toEqual([
-        shortQuarantine,
-      ]);
+      expect(
+        moveTargets(longHome, [longHome, shortQuarantine], 'silver-mono', speciesFixture()),
+      ).toEqual([shortQuarantine]);
     });
   });
 
   it('has no target without a quarantine tank', () => {
-    expect(moveTargets(display, [display, other], 'neon-tetra')).toEqual([]);
+    expect(moveTargets(display, [display, other], 'neon-tetra', speciesFixture())).toEqual([]);
   });
 });
 

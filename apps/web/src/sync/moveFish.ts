@@ -14,8 +14,8 @@ export function moveTargets(
   from: Tank,
   tanks: readonly Tank[],
   speciesId: string,
+  species: Pick<SpeciesSummary, 'commonName' | 'lifecycle'>,
   economy: Economy = BUNDLED_ECONOMY,
-  species?: Pick<SpeciesSummary, 'commonName' | 'lifecycle'>,
 ): Tank[] {
   return tanks.filter(
     (t) =>
@@ -23,7 +23,7 @@ export function moveTargets(
       t.quarantine !== from.quarantine &&
       t.biome === from.biome &&
       tankLengthRefusal(economy, speciesId, t, speciesId) === undefined &&
-      (species === undefined || adultLengthRefusal(species, t.size) === undefined),
+      adultLengthRefusal(species, t.size, t.quarantine) === undefined,
   );
 }
 
