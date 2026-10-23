@@ -98,6 +98,25 @@ function rotatedReach(bounds: Footprint, rotationY: number): { x: number; z: num
 }
 
 /**
+ * The largest scale whose `reach` fits `room`. A swaying item's lean saturates with its scale, so
+ * the chord from scale 0 to 1 understates its reach below 1; bisect the real curve instead.
+ */
+function scaleWithin(room: number, reach: (scale: number) => number): number {
+  if (reach(0) > room) return 0;
+  const slope = reach(1) - reach(0);
+  if (slope <= 0) return Infinity;
+  let low = 0;
+  let high = Math.max(1, (room - reach(0)) / slope);
+  if (reach(high) <= room) return high;
+  for (let i = 0; i < 40; i++) {
+    const mid = (low + high) / 2;
+    if (reach(mid) <= room) low = mid;
+    else high = mid;
+  }
+  return low;
+}
+
+/**
  * The largest scale an item can take at its own position and yaw before it crosses the glass or
  * the waterline, by the same reach model `fitPresetToTank` places it with. Rigid items reach in
  * proportion to scale; swaying ones add their lean.
@@ -116,11 +135,8 @@ export function maxScaleAt(
   const { swayReach } = model;
   const reachAt = (axis: 'x' | 'z', scale: number) =>
     swayReach ? swayReach({ ...item, scale }) : footprint[axis] * scale;
-  const growth = (room: number, axis: 'x' | 'z') => {
-    const base = reachAt(axis, 0);
-    const slope = reachAt(axis, 1) - base;
-    return slope > 0 ? (room - base) / slope : Infinity;
-  };
+  const growth = (room: number, axis: 'x' | 'z') =>
+    scaleWithin(room, (scale) => reachAt(axis, scale));
   const ceiling = isPerch(item) ? dimensions.height - BANK_RIM_MARGIN : waterTop - SURFACE_MARGIN;
   const surface = height > 0 ? (ceiling - item.position[1]) / height : Infinity;
   return Math.max(
@@ -168,16 +184,10 @@ function fitItem(
     let reachZ = (s: number) => footprint.z * s;
     const { swayReach } = model;
     if (swayReach) {
-      const base = swayReach({ ...item, scale: 0 });
-      const slope = swayReach({ ...item, scale: 1 }) - base;
-      reachX = (s) => base + slope * s;
+      reachX = (s) => swayReach({ ...item, scale: s });
       reachZ = reachX;
     }
-    const growth = (room: number, reach: (s: number) => number) => {
-      const base = reach(0);
-      const slope = reach(1) - base;
-      return slope > 0 ? (room - base) / slope : Infinity;
-    };
+    const growth = scaleWithin;
     // Nudging a perch off the glass moves it down the sloping bed, which lets it grow back toward
     // the rim; settle that before judging its clearance.
     for (let pass = 0; pass < (perch ? PERCH_SETTLE_PASSES : 1); pass++) {
