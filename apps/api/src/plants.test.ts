@@ -1,10 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { apiErrorSchema, tankSchema, type Plant, type Tank } from '@aquarium/shared';
+import {
+  apiErrorSchema,
+  DECOR_MIN_SCALE,
+  keptPresetDecor,
+  tankSchema,
+  type Plant,
+  type Tank,
+} from '@aquarium/shared';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
 import { APP_ORIGIN, createHarness, topUp, type Harness } from './test-harness.ts';
+import { layoutPlants } from './plants.ts';
+import { loadPresets } from './presets.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -109,6 +118,20 @@ const grow = async (h: Harness, who: Account, tankId: string, days: number): Pro
   h.clock.advance(days * DAY_MS);
   return tankOf(await call(h, who, 'GET', `/api/tanks/${tankId}`));
 };
+
+describe('default layout of a small tank', () => {
+  it('uses only the preset decor a nano blackwater tank keeps, at the decor scale', () => {
+    const presets = loadPresets();
+    const authored = presets.blackwater?.decor ?? [];
+    const layout = layoutPlants(
+      { biome: 'blackwater', size: 'nano30', decorLayout: null, plants: [] },
+      presets,
+    );
+    expect(layout.length).toBeLessThan(authored.length);
+    expect(layout.length).toBe(keptPresetDecor(authored, 'nano30').length);
+    expect(layout[0]?.scale).toBeCloseTo((authored[0]?.scale ?? 0) * DECOR_MIN_SCALE, 6);
+  });
+});
 
 describe('growing plants', () => {
   let h: Harness;

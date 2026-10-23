@@ -99,6 +99,7 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
       throw new HttpError(
         429,
         apiError('rate_limited', `Too many requests. Try again in ${wait} s.`),
+        { 'retry-after': String(wait) },
       );
     }
   }
@@ -109,7 +110,8 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
       try {
         return await handler(req, reply);
       } catch (err) {
-        if (err instanceof HttpError) return reply.code(err.status).send(err.body);
+        if (err instanceof HttpError)
+          return reply.code(err.status).headers(err.headers).send(err.body);
         throw err;
       }
     };
@@ -274,11 +276,7 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         await db
           .insert(schema.adultConfirmations)
           .values({ userId: user.id, confirmedAt: new Date(clock.now()) })
-          .onConflictDoUpdate({
-            target: schema.adultConfirmations.userId,
-            set: { confirmedAt: new Date(clock.now()), withdrawnAt: null },
-            setWhere: sql`${schema.adultConfirmations.withdrawnAt} is not null`,
-          });
+          .onConflictDoNothing();
       } else {
         await db
           .update(schema.adultConfirmations)

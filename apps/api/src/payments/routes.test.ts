@@ -521,7 +521,7 @@ describe('order status', () => {
     try {
       const res = await status(who, ids.session);
       expect(res.code).toBe(502);
-      expect(JSON.stringify(res.body)).toContain('did not answer');
+      expect(JSON.stringify(res.body)).toContain('Try again in a moment');
     } finally {
       kit.failRetrieval = false;
     }
@@ -628,11 +628,14 @@ describe('order status', () => {
     });
     try {
       const who = await account(limited);
-      const codes: number[] = [];
+      const responses = [];
       for (let i = 0; i < 3; i++) {
-        codes.push((await call(limited, who, 'GET', '/api/payments/orders/cs_test_x')).statusCode);
+        responses.push(await call(limited, who, 'GET', '/api/payments/orders/cs_test_x'));
       }
-      expect(codes).toEqual([404, 404, 429]);
+      expect(responses.map((r) => r.statusCode)).toEqual([404, 404, 429]);
+      const wait = Number(responses[2]?.headers['retry-after']);
+      expect(Number.isInteger(wait) && wait >= 1 && wait <= 60).toBe(true);
+      expect(JSON.stringify(responses[2]?.json())).toContain(`Try again in ${wait} s`);
     } finally {
       await limited.close();
     }

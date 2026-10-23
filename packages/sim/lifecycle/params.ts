@@ -66,6 +66,8 @@ export const MAX_YOUNG_FRACTION = 0.5;
 export const BREEDING_SHELTER_ASSET_IDS: readonly string[] = [
   'reef-arch',
   'rock-pile-cave',
+  'rock-pile-stack',
+  'neothauma-shell',
   'lambis-shell',
   'boulder-01',
   'coast-rocks-05',
