@@ -31,7 +31,7 @@ export interface AudioRecipe {
   highpassHz?: number;
   lowpassHz?: number;
   /** Loops are cut from a stationary window of `loopS` and joined with a `crossfadeS` crossfade. */
-  loop?: { crossfadeS: number; loopS?: number };
+  loop?: { crossfadeS: number; loopS?: number; searchS?: [number, number] };
   fadeOutS?: number;
 }
 
@@ -166,7 +166,10 @@ export function processAudio(source: Float32Array, recipe: AudioRecipe): Process
     let segment = source;
     if (recipe.loop.loopS !== undefined) {
       const length = Math.round(recipe.loop.loopS * rate) + fade;
-      const start = stationaryStart(source, length);
+      const [from, to] = recipe.loop.searchS ?? [0, source.length / rate];
+      const offset = Math.round(from * rate);
+      const region = source.subarray(offset, Math.min(source.length, Math.round(to * rate)));
+      const start = offset + stationaryStart(region, length);
       segment = source.slice(start, start + length);
     }
     samples = loopCrossfade(segment, fade);
@@ -190,7 +193,7 @@ function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): stri
   if (recipe.lowpassHz) notes.push(`low-pass at ${recipe.lowpassHz} Hz`);
   if (recipe.loop) {
     const window = recipe.loop.loopS
-      ? `trimmed to a ${recipe.loop.loopS} s stationary section; `
+      ? `trimmed to a ${recipe.loop.loopS} s stationary section${recipe.loop.searchS ? ` chosen between ${recipe.loop.searchS[0]} s and ${recipe.loop.searchS[1]} s of the recording` : ''}; `
       : '';
     notes.push(`${window}${recipe.loop.crossfadeS} s equal-power crossfade of the loop seam`);
   } else {

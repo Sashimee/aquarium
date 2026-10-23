@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
-import { backgroundFileSchema } from '@aquarium/shared';
+import { backgroundFileSchema, type RoomEntry } from '@aquarium/shared';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { speciesLengthM } from './fish.ts';
 import { readKtx2Info } from './textures.ts';
@@ -16,6 +16,8 @@ import {
   type ContentBackground,
 } from './backgrounds.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
+import { roomHdriIds, loadRooms } from './room.ts';
+import { roomProblems } from './room-budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
@@ -54,6 +56,7 @@ export interface CheckInput {
   repoRoot: string;
   content?: Pick<BudgetInput, 'presets' | 'speciesBiome' | 'hdri'>;
   backgrounds?: ContentBackground[];
+  rooms?: RoomEntry[];
 }
 
 export function readGlbJson(buffer: Uint8Array): {
@@ -723,9 +726,10 @@ export function intraAssetDuplicateTextureProblems(assets: readonly OutputAsset[
 export function unreferencedHdriProblems(
   assets: readonly OutputAsset[],
   loaded: BudgetInput['hdri'],
+  roomHdris: ReadonlySet<string> = new Set(),
 ): string[] {
   return assets
-    .filter((a) => a.kind === 'hdri' && a.id !== loaded.id)
+    .filter((a) => a.kind === 'hdri' && a.id !== loaded.id && !roomHdris.has(a.id))
     .map(
       (a) =>
         `asset hdri/${a.id}: apps/web never loads it (DEFAULT_HDRI_URL is hdri/${loaded.id}); remove its recipe or wire it to a use`,
@@ -853,8 +857,28 @@ export function checkAssets(input: CheckInput): string[] {
     problems.push(...backgroundContentProblems(input.backgrounds, builtBackgrounds));
   }
   if (input.content) {
-    problems.push(...unreferencedHdriProblems(index.assets, input.content.hdri));
+    problems.push(
+      ...unreferencedHdriProblems(
+        index.assets,
+        input.content.hdri,
+        new Set(roomHdriIds(input.rooms ?? [])),
+      ),
+    );
     problems.push(...budgetProblems({ index, ...input.content }));
+  }
+  if (input.rooms) {
+    problems.push(
+      ...roomProblems(input.rooms, {
+        manifestIds: new Set(manifest.assets.map((a) => a.id)),
+        index,
+        drawCallsOf: (file) => {
+          const path = join(assetsDir, file);
+          if (!existsSync(path)) return 0;
+          const json = readGlbJson(new Uint8Array(readFileSync(path)));
+          return (json.meshes ?? []).reduce((sum, m) => sum + m.primitives.length, 0);
+        },
+      }),
+    );
   }
   return problems;
 }
@@ -886,5 +910,6 @@ export function loadCheckInput(repoRoot: string): CheckInput {
     repoRoot,
     content: loadBudgetContent(repoRoot),
     backgrounds,
+    rooms: loadRooms(repoRoot),
   };
 }

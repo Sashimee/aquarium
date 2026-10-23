@@ -125,6 +125,8 @@ export function buildDocument(
     if (base) material.setBaseColorTexture(base);
     const normal = addTexture('normal', def.normal);
     if (normal) material.setNormalTexture(normal).setNormalScale(def.normalScale);
+    const roughness = addTexture('metallicroughness', def.metallicRoughness);
+    if (roughness) material.setMetallicRoughnessTexture(roughness);
     materials.set(def.name, material);
   }
 

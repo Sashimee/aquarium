@@ -949,6 +949,15 @@ describe('unreferencedHdriProblems', () => {
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('hdri/sky');
   });
+
+  it('lets a room hdri ship without the web app loading it', () => {
+    const problems = unreferencedHdriProblems(
+      [hdri('studio-small-09'), hdri('polyhaven-cabin')],
+      loaded,
+      new Set(['polyhaven-cabin']),
+    );
+    expect(problems).toEqual([]);
+  });
 });
 
 describe('duplicateTextureProblems', () => {

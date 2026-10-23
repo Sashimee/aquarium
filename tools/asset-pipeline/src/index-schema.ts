@@ -176,6 +176,7 @@ export const assetKindSchema = z.enum([
   'driftwood',
   'rock',
   'decor',
+  'room-furniture',
   'substrate',
   'hdri',
   'audio',

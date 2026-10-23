@@ -52,6 +52,35 @@ describe('processAudio', () => {
     expect(processed.loudnessLufs).toBeCloseTo(-23, 1);
   });
 
+  it('takes the loop from inside the search range', () => {
+    const quiet = tone(8, 440, 0.01);
+    const loud = tone(8, 440, 0.4);
+    const source = new Float32Array(quiet.length + loud.length);
+    source.set(quiet);
+    source.set(loud, quiet.length);
+    const recipe = {
+      id: 'l',
+      source: 's',
+      role: 'l',
+      targetLufs: -30,
+      loop: { crossfadeS: 0.5, loopS: 4, searchS: [8, 16] as [number, number] },
+    };
+    const inRange = processAudio(source, recipe);
+    expect(inRange.samples.length).toBe(Math.round(4 * AUDIO_SAMPLE_RATE));
+    expect(inRange.gainDb).toBeLessThan(0);
+  });
+
+  it('refuses a search range shorter than the loop', () => {
+    const recipe = {
+      id: 'l',
+      source: 's',
+      role: 'l',
+      targetLufs: -23,
+      loop: { crossfadeS: 0.2, loopS: 5, searchS: [0, 3] as [number, number] },
+    };
+    expect(() => processAudio(tone(10), recipe)).toThrow();
+  });
+
   it('trims a one-shot and fades its end', () => {
     const lead = new Float32Array(AUDIO_SAMPLE_RATE / 2);
     const click = tone(0.2);
