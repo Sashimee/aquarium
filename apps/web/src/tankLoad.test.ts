@@ -39,7 +39,7 @@ describe('awaitTankModules', () => {
 });
 
 describe('awaitAppModules', () => {
-  it('resolves both modules and starts neither import after the other settles', async () => {
+  it('resolves both modules in order', async () => {
     const { events, errors } = recordErrors();
     let releaseTank: (value: string) => void = () => {};
     const tank = new Promise<string>((resolve) => (releaseTank = resolve));

@@ -10,6 +10,7 @@ const sizes = Object.keys(TANK_DIMENSIONS) as Size[];
 const presets: Preset[] = ['living-room', 'office'];
 const rates = [30, 60, 144, 240];
 const SETTLE_SECONDS = 8;
+const HOLD_SECONDS = 0.5;
 
 function fakeCamera() {
   const camera = {
@@ -78,7 +79,12 @@ function expectRestsOnGoal(rig: CameraRig, cam: { pos: Vec3 }, hz: number, label
     rig.update(1 / hz);
     frames++;
   }
-  expect(gap(cam.pos, rig.goalPosition), `${label} after ${frames / hz} s`).toBeLessThan(1e-3);
+  const arrived = `${label} after ${frames / hz} s`;
+  expect(gap(cam.pos, rig.goalPosition), arrived).toBeLessThan(1e-3);
+  for (let held = 0; held < HOLD_SECONDS * hz; held++) {
+    rig.update(1 / hz);
+    expect(gap(cam.pos, rig.goalPosition), `${arrived}, held ${held / hz} s`).toBeLessThan(1e-3);
+  }
 }
 
 describe('camera in a room: the eye always rests on its goal', () => {
@@ -157,5 +163,5 @@ describe('camera in a room: the eye always rests on its goal', () => {
       rig.setOrbit(...orbit);
       expectRestsOnGoal(rig, cam, hz, `${label} setOrbit`);
     }
-  });
+  }, 20_000);
 });
