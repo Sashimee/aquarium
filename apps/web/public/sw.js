@@ -11,9 +11,10 @@ const SHELL = [
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
 ];
+// The placeholder stays an array so an unstamped worker parses; dev never registers it (src/pwa/register.ts).
 // Files Vite emitted carry a content hash; public/ files that merely look hashed keep stable
 // contents under their name and are left to the HTTP cache.
-const EMITTED = new Set(JSON.parse('__EMITTED_ASSETS__'));
+const EMITTED = new Set(['__EMITTED_ASSETS__']);
 
 function isApi(pathname) {
   return pathname === '/api' || pathname.startsWith('/api/');

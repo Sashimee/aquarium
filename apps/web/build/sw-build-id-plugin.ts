@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import type { Plugin } from 'vite';
 
 const PLACEHOLDER = '__BUILD_ID__';
-const EMITTED_PLACEHOLDER = '__EMITTED_ASSETS__';
+// Parses as an array so an unstamped worker is still valid JS; dev never registers it (src/pwa/register.ts).
+const EMITTED_PLACEHOLDER = "['__EMITTED_ASSETS__']";
 
 /** Paths the worker precaches, read from its own SHELL list so the two cannot drift apart. */
 export function shellPaths(source: string): string[] {
@@ -52,7 +53,7 @@ export function stampWorker(source: string, id: string, emitted: readonly string
   }
   return source
     .replaceAll(PLACEHOLDER, id)
-    .replaceAll(EMITTED_PLACEHOLDER, JSON.stringify([...emitted].sort()));
+    .replaceAll(EMITTED_PLACEHOLDER, () => JSON.stringify([...emitted].sort()));
 }
 
 export function swBuildIdPlugin(): Plugin {
