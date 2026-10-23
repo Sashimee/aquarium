@@ -61,7 +61,7 @@ function onlyFile(sourceId: string, extension: string): string {
   return file;
 }
 
-// Underscores only: staticCacheControl treats `name-<8 chars>.ext` under assets/ as a content-hashed bundle and marks it immutable.
+// staticCacheControl marks only files listed in the Vite manifest as immutable, not names matching `name-<8 chars>.ext`; underscores keep these ids out of any such pattern anyway.
 export function roomHdriOutput(id: string): string {
   return `${id.replaceAll('-', '_')}_1k.ktx2`;
 }
