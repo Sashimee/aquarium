@@ -3,10 +3,8 @@ import {
   InstancedMesh,
   Matrix4,
   Mesh,
-  PointLight,
   Quaternion,
   Vector3,
-  Color,
   type BufferGeometry,
   type Material,
   type Texture,
@@ -97,12 +95,6 @@ export class RoomProps {
       root: roots[i] as Object3D,
     }));
     for (const { asset, placements, root } of loaded) this.instance(asset, placements, root);
-    for (const lamp of plan.light.practical) {
-      const light = new PointLight(new Color(lamp.color), lamp.intensity, lamp.distance, 2);
-      light.name = `room-lamp-${lamp.asset}`;
-      light.position.set(...lamp.position);
-      this.group.add(light);
-    }
   }
 
   dispose(): void {
