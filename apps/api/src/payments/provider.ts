@@ -44,7 +44,7 @@ export interface ProviderSubscription {
 export interface ProviderCheckoutSession {
   userId: string | null;
   status: 'open' | 'complete' | 'expired';
-  paymentStatus?: 'paid' | 'unpaid';
+  paymentStatus: 'paid' | 'unpaid';
   subscriptionId: string | null;
 }
 
