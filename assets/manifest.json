@@ -2748,7 +2748,12 @@
       "textures": "photo 5472x3072",
       "rigged": false,
       "notes": "Tank background (reef, coral-reef-wall). Reef wall, Naama Bay (Red Sea): dense hard corals filling the lower two thirds under turquoise water, a few small fish, no people. Source 5472x3072; 2:1 crop box left=0 top=336 width=5472 height=2736 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 4.0); Commons sha1 44db1ccd84c6d966d04e9f87c25e88ae413c648c matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-coral-wall/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 336, "width": 5472, "height": 2736 },
+      "crop": {
+        "left": 0,
+        "top": 336,
+        "width": 5472,
+        "height": 2736
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 336, 5472x2736 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2774,7 +2779,12 @@
       "textures": "photo 3648x2736",
       "rigged": false,
       "notes": "Tank background (reef, open-blue-light-rays). Staghorn reef under bright cyan open water with a dense cloud of small fish and light falling from the upper right. Soft light fall-off rather than distinct sun shafts: no Commons photo with an allowed licence showed clear rays over a reef. Source 3648x2736; 2:1 crop box left=0 top=300 width=3648 height=1824 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 1648b72f7d06cb0d0aee4d9d78b1fead0c4fc173 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-light-rays/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 300, "width": 3648, "height": 1824 },
+      "crop": {
+        "left": 0,
+        "top": 300,
+        "width": 3648,
+        "height": 1824
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 300, 3648x1824 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2800,7 +2810,12 @@
       "textures": "photo 3618x2373",
       "rigged": false,
       "notes": "Tank background (reef, reef-slope-fish). Coral pinnacle in saturated blue water with a cloud of orange anthias (Coral Bay, Sharm el-Sheikh). The smallest source of the set; the crop is 3618 px wide. Source 3618x2373; 2:1 crop box left=0 top=300 width=3618 height=1809 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 4.0); Commons sha1 0f3d7e91cc8173d92bbd974435fe43d96f0a3515 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-fish-slope/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 300, "width": 3618, "height": 1809 },
+      "crop": {
+        "left": 0,
+        "top": 300,
+        "width": 3618,
+        "height": 1809
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 300, 3618x1809 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2826,7 +2841,12 @@
       "textures": "photo 4000x3000",
       "rigged": false,
       "notes": "Tank background (reef, soft-coral-garden). Large red gorgonian sea fan filling the frame against turquoise water, Bali. A close-up of one colony, so it reads as a soft-coral garden rather than a wide scene. Source 4000x3000; 2:1 crop box left=0 top=500 width=4000 height=2000 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 4.0); Commons sha1 19cee16a681125186ed55576093efb5631714796 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-soft-coral/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 500, "width": 4000, "height": 2000 },
+      "crop": {
+        "left": 0,
+        "top": 500,
+        "width": 4000,
+        "height": 2000
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 500, 4000x2000 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2852,7 +2872,12 @@
       "textures": "photo 5184x3888",
       "rigged": false,
       "notes": "Tank background (reef, deep-blue-distant-reef). Davy Crocker Reef (Florida Keys): upper half is open blue water with a faint school of snapper over a distant reef, reef floor along the bottom. Source 5184x3888; 2:1 crop box left=0 top=600 width=5184 height=2592 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 e4a02235276279db96d5af85787073af42ca97c1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-deep-blue/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 600, "width": 5184, "height": 2592 },
+      "crop": {
+        "left": 0,
+        "top": 600,
+        "width": 5184,
+        "height": 2592
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 600, 5184x2592 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2878,7 +2903,12 @@
       "textures": "photo 4724x3543",
       "rigged": false,
       "notes": "Tank background (freshwater, planted-stream). Underwater bed of Canadian waterweed (Elodea canadensis) in a freshwater lake or river, plants streaming in the current over a sand bottom, blue-green water above. Real freshwater, no fish, no people. Source 4724x3543; 2:1 crop box left=0 top=700 width=4724 height=2362 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 996c70e07ed7e7df52af73463c7e73bc2ceed959 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-planted-stream/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 700, "width": 4724, "height": 2362 },
+      "crop": {
+        "left": 0,
+        "top": 700,
+        "width": 4724,
+        "height": 2362
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 700, 4724x2362 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2904,7 +2934,12 @@
       "textures": "photo 3872x2592",
       "rigged": false,
       "notes": "Tank background (freshwater, root-tangle). Common alder (Alnus glutinosa) roots trailing red in a clear freshwater stream over stones, rippled light from the surface. Dark and contrasty, a close view of the roots rather than a wide tangle. Source 3872x2592; 2:1 crop box left=0 top=400 width=3872 height=1936 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 3.0); Commons sha1 75afecabfb8639f1277d5493c80d51c2ce72bb13 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-root-tangle/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 400, "width": 3872, "height": 1936 },
+      "crop": {
+        "left": 0,
+        "top": 400,
+        "width": 3872,
+        "height": 1936
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 400, 3872x1936 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2930,7 +2965,12 @@
       "textures": "photo 7360x4912",
       "rigged": false,
       "notes": "Tank background (freshwater, rocky-riverbed). Stones and gravel of the Rio Doce (Brazil) seen through shallow clear water with rippled sunlight. Submerged riverbed, warm brown-gold; soft and slightly hazy, no fish. Source 7360x4912; 2:1 crop box left=0 top=600 width=7360 height=3680 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 ea5496f627b56e765851d13914a63b345ed6f6bd matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-rocky-riverbed/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 600, "width": 7360, "height": 3680 },
+      "crop": {
+        "left": 0,
+        "top": 600,
+        "width": 7360,
+        "height": 3680
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 600, 7360x3680 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -2956,7 +2996,12 @@
       "textures": "photo 4032x3024",
       "rigged": false,
       "notes": "Tank background (freshwater, deep-green-plant-wall). Densely planted freshwater aquarium shot from inside the planting: stem plants, grasses and a few small neon-type tetras, deep greens with bright lime accents. The closest thing to an aquascape plant wall in the set; no glass rim or hardware visible. Source 4032x3024; 2:1 crop box left=0 top=400 width=4032 height=2016 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 388d900fb10aea93d1d40323cf8741a9f430a4af matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-plant-wall/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": { "left": 0, "top": 400, "width": 4032, "height": 2016 },
+      "crop": {
+        "left": 0,
+        "top": 400,
+        "width": 4032,
+        "height": 2016
+      },
       "modifications": [
         "cropped to the 2:1 box left 0, top 400, 4032x2016 px of the original photo",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
@@ -4889,6 +4934,2097 @@
           "bytes": 39119
         }
       ]
+    },
+    {
+      "id": "polyhaven-armchair-01",
+      "kind": "room-furniture",
+      "title": "Arm Chair 01",
+      "author": "Kirill Sannikov",
+      "author_url": "https://polyhaven.com/a/ArmChair_01",
+      "source_url": "https://polyhaven.com/a/ArmChair_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "c4f083015b341db4e417695e2b602e85580096561e5ca7b08fb2aed7b33c0757",
+      "polycount": 5626,
+      "textures": "PBR jpg 1k: Armchair_01_arm_1k.jpg, Armchair_01_diff_1k.jpg, Armchair_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Castle library. Source mesh is the full-detail one shared by every Poly Haven resolution (5626 triangles, 1 draw call(s)); the 1k jpg textures are 612489 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "ArmChair_01.bin",
+          "sha256": "42a4206ea8bb3f7c3c1500ca3e408e084e8687cd3cc9cbf095b3344e215e0db6",
+          "bytes": 154012
+        },
+        {
+          "path": "ArmChair_01_1k.gltf",
+          "sha256": "91e39d5b35f36c8074b7b6432f6fd77f5f1a257c4d6af3924c0b263eb674286b",
+          "bytes": 2643
+        },
+        {
+          "path": "textures/Armchair_01_arm_1k.jpg",
+          "sha256": "d272c68e8180f2a381314ac0cef5a9165d15d951a0558cb40a17af71cf6a51c6",
+          "bytes": 138327
+        },
+        {
+          "path": "textures/Armchair_01_diff_1k.jpg",
+          "sha256": "db30fc9ab61ac50c91ab7573583d2855a2910df1ecade02b89e3e8ab8d4e4c2d",
+          "bytes": 184246
+        },
+        {
+          "path": "textures/Armchair_01_nor_gl_1k.jpg",
+          "sha256": "f5e4a43a12e79537e53e27c2bd4c5296b3e191cd6b301afce9fafd9d38238dde",
+          "bytes": 289916
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-cashregister-01",
+      "kind": "room-furniture",
+      "title": "Cash Register 01",
+      "author": "Joe Seabuhr",
+      "author_url": "https://polyhaven.com/a/CashRegister_01",
+      "source_url": "https://polyhaven.com/a/CashRegister_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "ca492f74de10ba067b7abb53238d69a0bc3279d02d8afa51f636328c5aac439c",
+      "polycount": 9927,
+      "textures": "PBR jpg 1k: CashRegister_01_arm_1k.jpg, CashRegister_01_diff_1k.jpg, CashRegister_01_glass_arm_1k.jpg, CashRegister_01_glass_diff_1k.jpg, CashRegister_01_glass_nor_gl_1k.jpg, CashRegister_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Aquarium shop. Source mesh is the full-detail one shared by every Poly Haven resolution (9927 triangles, 3 draw call(s)); the 1k jpg textures are 676776 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "CashRegister_01.bin",
+          "sha256": "51cfd1329ae1700faaf4d1ce6116f73e795b6a31af7e86fbbb1047b57aa0fe3f",
+          "bytes": 356396
+        },
+        {
+          "path": "CashRegister_01_1k.gltf",
+          "sha256": "323992ca49ac5527e62029ec8e554d2bd74b618784209b5abdf2abf50b941559",
+          "bytes": 6300
+        },
+        {
+          "path": "textures/CashRegister_01_arm_1k.jpg",
+          "sha256": "b2d66b5fcb70ebba6803265936302889fe9d952dca904fb4a8dcd8d884af6d53",
+          "bytes": 207527
+        },
+        {
+          "path": "textures/CashRegister_01_diff_1k.jpg",
+          "sha256": "0f048e68054f480d773a6d997a5a853610fde80ecb5bae1c3994ed434c02ce84",
+          "bytes": 133109
+        },
+        {
+          "path": "textures/CashRegister_01_glass_arm_1k.jpg",
+          "sha256": "bba4ed60cc9cf3df8862fc4ce6ed18d911013545b0928f3f8c20319819c14497",
+          "bytes": 72642
+        },
+        {
+          "path": "textures/CashRegister_01_glass_diff_1k.jpg",
+          "sha256": "25607764f4956a2c59657b0eb4384a1623040ff7fa55acf18d69b2d6facfc1ec",
+          "bytes": 99676
+        },
+        {
+          "path": "textures/CashRegister_01_glass_nor_gl_1k.jpg",
+          "sha256": "312e24f0f5d025a82bfb2fbc989ac239099ff8b4c46d3cd0125f07da18bd228a",
+          "bytes": 17077
+        },
+        {
+          "path": "textures/CashRegister_01_nor_gl_1k.jpg",
+          "sha256": "80e75c35d47e2eb4910932866e66e921d38cd8fc88753eaca4b70f86252c8638",
+          "bytes": 146745
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-rockingchair-01",
+      "kind": "room-furniture",
+      "title": "Rockingchair 01",
+      "author": "Jorge Camacho",
+      "author_url": "https://polyhaven.com/a/Rockingchair_01",
+      "source_url": "https://polyhaven.com/a/Rockingchair_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "ca94bc4a24556c9803c9c666f5d56f4c168d9cf311bb3577dddfeb8b72e65cef",
+      "polycount": 11866,
+      "textures": "PBR jpg 1k: Rockingchair_01_arm_1k.jpg, Rockingchair_01_diff_1k.jpg, Rockingchair_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Mountain cabin. Source mesh is the full-detail one shared by every Poly Haven resolution (11866 triangles, 1 draw call(s)); the 1k jpg textures are 410313 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "Rockingchair_01.bin",
+          "sha256": "6c7c3c32a033a3697d9adf3e8c9d966265cf11b519717d92c1eb5a9cffe736e2",
+          "bytes": 391740
+        },
+        {
+          "path": "Rockingchair_01_1k.gltf",
+          "sha256": "eb8c3a8f9c2c1bd6ca6d76804b8361dd0fd779498249d554536e5683e08f565b",
+          "bytes": 2712
+        },
+        {
+          "path": "textures/Rockingchair_01_arm_1k.jpg",
+          "sha256": "21c6a462d6865a6e839b7dfe966f845df885a6dfe3ad64b3a87438db1598cf5d",
+          "bytes": 125152
+        },
+        {
+          "path": "textures/Rockingchair_01_diff_1k.jpg",
+          "sha256": "d42426fe153296909d45abcbc4e91a3410b90d5a9cd58f01b1fa9af93a712ef0",
+          "bytes": 138197
+        },
+        {
+          "path": "textures/Rockingchair_01_nor_gl_1k.jpg",
+          "sha256": "225008fcb16b3ee3b16372b4085d60e20dd660ab30b6a489b77b7e25a874b391",
+          "bytes": 146964
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-shelf-01",
+      "kind": "room-furniture",
+      "title": "Shelf 01",
+      "author": "Gabriel Radić",
+      "author_url": "https://polyhaven.com/a/Shelf_01",
+      "source_url": "https://polyhaven.com/a/Shelf_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "0452de2090122dd843154e2ceeb47f85b0e0e283bcb1c2a9c69a896c739d537a",
+      "polycount": 182,
+      "textures": "PBR jpg 1k: Shelf_01_arm_1k.jpg, Shelf_01_diff_1k.jpg, Shelf_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Castle library. Source mesh is the full-detail one shared by every Poly Haven resolution (182 triangles, 1 draw call(s)); the 1k jpg textures are 590155 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "Shelf_01.bin",
+          "sha256": "21ee76dda6320ba423e76d192cfd38885e334ae394c03978d092f96b508f175b",
+          "bytes": 12676
+        },
+        {
+          "path": "Shelf_01_1k.gltf",
+          "sha256": "715bce6ff1886eccdd43d558f5cf9242a24396e0eb9e8ae391905186bb339e52",
+          "bytes": 2617
+        },
+        {
+          "path": "textures/Shelf_01_arm_1k.jpg",
+          "sha256": "d5d180b15c48ed6ab7b27a663de8f399f813ed0c32ff2706520d677a1e387cdc",
+          "bytes": 205542
+        },
+        {
+          "path": "textures/Shelf_01_diff_1k.jpg",
+          "sha256": "875bb8110dec4f409d9127cba95f7c0ead02bdfeef6dd47232df939e4de35a5c",
+          "bytes": 153220
+        },
+        {
+          "path": "textures/Shelf_01_nor_gl_1k.jpg",
+          "sha256": "c817d7966974be2da13e4b0a57918e8e142edc50eb41d438229c3bad70df0f91",
+          "bytes": 231393
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-wetfloorsign-01",
+      "kind": "room-furniture",
+      "title": "Wet Floor Sign 01",
+      "author": "Fran Calvente",
+      "author_url": "https://polyhaven.com/a/WetFloorSign_01",
+      "source_url": "https://polyhaven.com/a/WetFloorSign_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "bad2fff9fcd96199c0f9fcd2201169f4eb6c9710cf523597b51f4a99be4a81ce",
+      "polycount": 228,
+      "textures": "PBR jpg 1k: WetFloorSign_01_arm_1k.jpg, WetFloorSign_01_diff_1k.jpg, WetFloorSign_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Public aquarium hall. Source mesh is the full-detail one shared by every Poly Haven resolution (228 triangles, 1 draw call(s)); the 1k jpg textures are 254263 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "WetFloorSign_01.bin",
+          "sha256": "d23cdec8975ac452d64ae97b08f1eecd22e38f052bd5d588d352dbc0f0373af0",
+          "bytes": 9496
+        },
+        {
+          "path": "WetFloorSign_01_1k.gltf",
+          "sha256": "ba5b10d2de7bb60b77dc3e44a96446181a078e35597947a490a4b6de906059e4",
+          "bytes": 2688
+        },
+        {
+          "path": "textures/WetFloorSign_01_arm_1k.jpg",
+          "sha256": "6cd1d7c6648c36d2d66a7ddfc620ea78374ac770a5726f879b6914366e133e1a",
+          "bytes": 126370
+        },
+        {
+          "path": "textures/WetFloorSign_01_diff_1k.jpg",
+          "sha256": "01e18486a858defc0f44a73ec5037c4bee770bae88e7fed5beb6877df120fa90",
+          "bytes": 39755
+        },
+        {
+          "path": "textures/WetFloorSign_01_nor_gl_1k.jpg",
+          "sha256": "62269358f3b30569783c1872613d1d70d5eda36babe5b5f04fcfd5e92de1af62",
+          "bytes": 88138
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-bar-chair-round-01",
+      "kind": "room-furniture",
+      "title": "Bar Chair Round 01",
+      "author": "Dairon Sanchez",
+      "author_url": "https://polyhaven.com/a/bar_chair_round_01",
+      "source_url": "https://polyhaven.com/a/bar_chair_round_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "7308ebad22ebdc69ece64ffe5a76faf2558725487797b57e2b1b6d70e66aaabb",
+      "polycount": 14373,
+      "textures": "PBR jpg 1k: bar_chair_round_01_arm_1k.jpg, bar_chair_round_01_diff_1k.jpg, bar_chair_round_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Sushi restaurant. Source mesh is the full-detail one shared by every Poly Haven resolution (14373 triangles, 1 draw call(s)); the 1k jpg textures are 1792348 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "bar_chair_round_01.bin",
+          "sha256": "2bda85d89beb91097998b25293f10e72686b972aecffd2c14d1b5412cc1da276",
+          "bytes": 1017152
+        },
+        {
+          "path": "bar_chair_round_01_1k.gltf",
+          "sha256": "6a8f92123245268cbb69fc96f305ee710b32a7a06761b143d3049eaabfcbdd32",
+          "bytes": 2833
+        },
+        {
+          "path": "textures/bar_chair_round_01_arm_1k.jpg",
+          "sha256": "9f34b279bdd1527ec19fc3a3bb0ce374f0c0ba2dc05dfbd58f561bc317bd36c7",
+          "bytes": 751149
+        },
+        {
+          "path": "textures/bar_chair_round_01_diff_1k.jpg",
+          "sha256": "1b3912fe1102b4082d7421aeb2e2717d3ebe914d261700f8710c0fdb7d7463bb",
+          "bytes": 599006
+        },
+        {
+          "path": "textures/bar_chair_round_01_nor_gl_1k.jpg",
+          "sha256": "91e4310863002228003d100be83e0524832e532d05f27ef8ed62675b116f0bd1",
+          "bytes": 442193
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-bronze-whale-statue",
+      "kind": "room-furniture",
+      "title": "Bronze Whale Statue",
+      "author": "Tina",
+      "author_url": "https://polyhaven.com/a/bronze_whale_statue",
+      "source_url": "https://polyhaven.com/a/bronze_whale_statue",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "60ae26f34163ab87f97a70f896d0b02f68e1832ab38117697a5900417ecb2044",
+      "polycount": 3816,
+      "textures": "PBR jpg 1k: bronze_whale_statue_arm_1k.jpg, bronze_whale_statue_diff_1k.jpg, bronze_whale_statue_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Public aquarium hall. Source mesh is the full-detail one shared by every Poly Haven resolution (3816 triangles, 1 draw call(s)); the 1k jpg textures are 2084781 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "bronze_whale_statue.bin",
+          "sha256": "675ec5711b4d7653a1bdfd4c25a7ca33652eb173eae1869de8e4759090a1fa21",
+          "bytes": 102352
+        },
+        {
+          "path": "bronze_whale_statue_1k.gltf",
+          "sha256": "97ff882e047f3415601437d6db43a7326a3fa1ac5bddb86ae119b74717888d18",
+          "bytes": 3108
+        },
+        {
+          "path": "textures/bronze_whale_statue_arm_1k.jpg",
+          "sha256": "76ffa3b4f0e81208ddd23a13d0605a225d82b6502f5c847c270490ab96717a81",
+          "bytes": 854626
+        },
+        {
+          "path": "textures/bronze_whale_statue_diff_1k.jpg",
+          "sha256": "b7cc4ec674f2c49d09eb66bca291104a10c79a9b384faacb031b49df74c82655",
+          "bytes": 493169
+        },
+        {
+          "path": "textures/bronze_whale_statue_nor_gl_1k.jpg",
+          "sha256": "2ecf3a3065ff56da0924ebd2f1e712c49d5f8e06823839a898857141e858cc92",
+          "bytes": 736986
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-carved-wooden-plate",
+      "kind": "room-furniture",
+      "title": "Carved Wooden Plate",
+      "author": "Jan Martens",
+      "author_url": "https://polyhaven.com/a/carved_wooden_plate",
+      "source_url": "https://polyhaven.com/a/carved_wooden_plate",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "535442b0a71d1a7ac4d93a4a4ca334826809cd77baa8685584f0a9a0c54af2b5",
+      "polycount": 2112,
+      "textures": "PBR jpg 1k: carved_wooden_plate_arm_1k.jpg, carved_wooden_plate_diff_1k.jpg, carved_wooden_plate_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Sushi restaurant. Source mesh is the full-detail one shared by every Poly Haven resolution (2112 triangles, 1 draw call(s)); the 1k jpg textures are 1509242 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "carved_wooden_plate.bin",
+          "sha256": "4a605b576b1e79968f668c8624733e2e0fff073ae9fc1107b55ad4d976b99787",
+          "bytes": 52160
+        },
+        {
+          "path": "carved_wooden_plate_1k.gltf",
+          "sha256": "90ec83004a3fd256fb846c7b04fbf0b2514f0e99b2bb7aeb586f62b844ed9219",
+          "bytes": 2836
+        },
+        {
+          "path": "textures/carved_wooden_plate_arm_1k.jpg",
+          "sha256": "54f106d208fd68e93d8f0f8da30284189bf0796e9e04425296719a9dc71dd6e8",
+          "bytes": 450417
+        },
+        {
+          "path": "textures/carved_wooden_plate_diff_1k.jpg",
+          "sha256": "ae95d5de9e1dc18e5102d648b589f2043b1c712ac4103f624e1a9c5c5f05a7da",
+          "bytes": 476516
+        },
+        {
+          "path": "textures/carved_wooden_plate_nor_gl_1k.jpg",
+          "sha256": "3a6c6dc2f9a7def9e6a02847743f448bd855d47dbbc36cc0b80a557faf633b61",
+          "bytes": 582309
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-ceramic-vase-01",
+      "kind": "room-furniture",
+      "title": "Ceramic Vase 01",
+      "author": "James Ray Cock",
+      "author_url": "https://polyhaven.com/a/ceramic_vase_01",
+      "source_url": "https://polyhaven.com/a/ceramic_vase_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "ef14f48186c43b001e2c1258e3792505bca69a024ff130446a392222c29141e8",
+      "polycount": 10296,
+      "textures": "PBR jpg 1k: ceramic_vase_01_arm_1k.jpg, ceramic_vase_01_diff_1k.jpg, ceramic_vase_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Japanese zen room. Source mesh is the full-detail one shared by every Poly Haven resolution (10296 triangles, 1 draw call(s)); the 1k jpg textures are 143095 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "ceramic_vase_01.bin",
+          "sha256": "56ffadcafff3f56538d04b0b43c06c9704baeec2ac3ec286ef01c313c82906f0",
+          "bytes": 272656
+        },
+        {
+          "path": "ceramic_vase_01_1k.gltf",
+          "sha256": "4e2c69eb5bbccf86e9fbf92af438464669d804c1f0eae041ee28651a5b57d91e",
+          "bytes": 2706
+        },
+        {
+          "path": "textures/ceramic_vase_01_arm_1k.jpg",
+          "sha256": "121469880a7900513717685e9035dfc1b04613f85c778ab4e9dba98c1675d660",
+          "bytes": 74240
+        },
+        {
+          "path": "textures/ceramic_vase_01_diff_1k.jpg",
+          "sha256": "5f7d22178b74a59fe92aa0ccc958b897e2fb80df514eb28b97000097c0e71beb",
+          "bytes": 32351
+        },
+        {
+          "path": "textures/ceramic_vase_01_nor_gl_1k.jpg",
+          "sha256": "c35b59d15e0f08db44b0bc8a5870bc65ae781819e5abf0447996d0faf05b7722",
+          "bytes": 36504
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-chinese-stool",
+      "kind": "room-furniture",
+      "title": "Chinese Stool",
+      "author": "Kirill Sannikov",
+      "author_url": "https://polyhaven.com/a/chinese_stool",
+      "source_url": "https://polyhaven.com/a/chinese_stool",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "17c55cd02ec2b002a4a053f8387f1b912959d18de0d57e5726b3a1006e1e8f7e",
+      "polycount": 1090,
+      "textures": "PBR jpg 1k: chinese_stool_arm_1k.jpg, chinese_stool_diff_1k.jpg, chinese_stool_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Japanese zen room. Source mesh is the full-detail one shared by every Poly Haven resolution (1090 triangles, 1 draw call(s)); the 1k jpg textures are 1750061 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "chinese_stool.bin",
+          "sha256": "e35c9440fc0751aa9346e6edbfe0bf948f0f7dd1b40be2ef57d0b6debec5b8af",
+          "bytes": 40172
+        },
+        {
+          "path": "chinese_stool_1k.gltf",
+          "sha256": "6db83b16076496830f956780890480d3cb1e34c80359b5ea8cb0e7afd42572c6",
+          "bytes": 2883
+        },
+        {
+          "path": "textures/chinese_stool_arm_1k.jpg",
+          "sha256": "59fb42eb0c3c1684905d94bbf11fd640921325e19dfe8b46cae04ac5b7be36d5",
+          "bytes": 578268
+        },
+        {
+          "path": "textures/chinese_stool_diff_1k.jpg",
+          "sha256": "a7f84ff302df80b079b47a268ecaea6e9f072b51d7e5dcebdeb7ee6278595e85",
+          "bytes": 542758
+        },
+        {
+          "path": "textures/chinese_stool_nor_gl_1k.jpg",
+          "sha256": "a44344f2d8ea289ec7642272de42d449059f2f2b175cf64d5db5d2447c56f7aa",
+          "bytes": 629035
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-chinese-tea-table",
+      "kind": "room-furniture",
+      "title": "Chinese Tea Table",
+      "author": "Kirill Sannikov",
+      "author_url": "https://polyhaven.com/a/chinese_tea_table",
+      "source_url": "https://polyhaven.com/a/chinese_tea_table",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "dc4b353da99c6e24d39662e2c5da3fb9193e624a893c8333e5448138e64dca7e",
+      "polycount": 2508,
+      "textures": "PBR jpg 1k: chinese_tea_table_arm_1k.jpg, chinese_tea_table_diff_1k.jpg, chinese_tea_table_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Japanese zen room. Source mesh is the full-detail one shared by every Poly Haven resolution (2508 triangles, 1 draw call(s)); the 1k jpg textures are 1499705 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "chinese_tea_table.bin",
+          "sha256": "e584dbcf8d654c662ef849ef6111b11dc9f87e9a7ea8dc98c7d32dbfe10b7e52",
+          "bytes": 78792
+        },
+        {
+          "path": "chinese_tea_table_1k.gltf",
+          "sha256": "4c1987aa1978c4fe1dfd0f5f10739df399346fc4c9373315d8d4b0cc798d8b01",
+          "bytes": 2793
+        },
+        {
+          "path": "textures/chinese_tea_table_arm_1k.jpg",
+          "sha256": "5d93474de9d0560d8a9a46a498fc6f64fb030f9cec6e6eb8f95c36dfc8e09e94",
+          "bytes": 504125
+        },
+        {
+          "path": "textures/chinese_tea_table_diff_1k.jpg",
+          "sha256": "beaff8984d8fd498b7cfecc2e5decd4db3ba6c87583acc41d18767326cb3ae3c",
+          "bytes": 447131
+        },
+        {
+          "path": "textures/chinese_tea_table_nor_gl_1k.jpg",
+          "sha256": "4b6eea9bbf344912313a1046fd3e5183970a907b6dbd55d1ef465e27dd2d0859",
+          "bytes": 548449
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-classic-laptop",
+      "kind": "room-furniture",
+      "title": "Classic Laptop",
+      "author": "Arrangemonk",
+      "author_url": "https://polyhaven.com/a/classic_laptop",
+      "source_url": "https://polyhaven.com/a/classic_laptop",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "2a75d75f4e6ee8636c46709ad9bb3b698882659e6f9e17dc7ce27ab8ec2f0ad1",
+      "polycount": 14450,
+      "textures": "PBR jpg 1k: classic_laptop_arm_1k.jpg, classic_laptop_diff_1k.jpg, classic_laptop_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Home office. Source mesh is the full-detail one shared by every Poly Haven resolution (14450 triangles, 4 draw call(s)); the 1k jpg textures are 1668039 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "classic_laptop.bin",
+          "sha256": "0f1602f2fe856fd330e95df44af0fd9986aeac873343307c70e036041e789fb9",
+          "bytes": 508524
+        },
+        {
+          "path": "classic_laptop_1k.gltf",
+          "sha256": "c78867ed92356fe03fd90b56438f3b141b5f8654672da52c6df7868eb820cf78",
+          "bytes": 7496
+        },
+        {
+          "path": "textures/classic_laptop_arm_1k.jpg",
+          "sha256": "e7d74932e0d40bf91fa9ef11f441cc94d9597b5c72721572b49b03109d0fe171",
+          "bytes": 697150
+        },
+        {
+          "path": "textures/classic_laptop_diff_1k.jpg",
+          "sha256": "0b0d4a2a991f8ee45effdb0c038af7348c6c731bc9a251e09095abde6cd34974",
+          "bytes": 524918
+        },
+        {
+          "path": "textures/classic_laptop_nor_gl_1k.jpg",
+          "sha256": "9e47604dc75d7ffe4f1e2265b76f9b5c4cb1c7e98d72e16e4656fecc44e5d1dd",
+          "bytes": 445971
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-hanging-industrial-lamp",
+      "kind": "room-furniture",
+      "title": "Hanging Industrial Lamp",
+      "author": "Kuutti Siitonen",
+      "author_url": "https://polyhaven.com/a/hanging_industrial_lamp",
+      "source_url": "https://polyhaven.com/a/hanging_industrial_lamp",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "a820ca82d47d70a92ad2ab79d1c8ee1bbef1a3a2a13dbd80eacbbf673eda12a0",
+      "polycount": 9530,
+      "textures": "PBR jpg 1k: hanging_industrial_lamp_arm_1k.jpg, hanging_industrial_lamp_diff_1k.jpg, hanging_industrial_lamp_emissive_1k.jpg, hanging_industrial_lamp_glass_nor_gl_1k.jpg, hanging_industrial_lamp_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): City loft. Source mesh is the full-detail one shared by every Poly Haven resolution (9530 triangles, 2 draw call(s)); the 1k jpg textures are 2893966 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "hanging_industrial_lamp.bin",
+          "sha256": "12e8293535e816f1e8bebc94e95da092599909d3c1b9b6cc7384d90307db06ca",
+          "bytes": 344252
+        },
+        {
+          "path": "hanging_industrial_lamp_1k.gltf",
+          "sha256": "97e31aac7c350bc40294e78f39f66d5aa998ac2703be1d09b5dab9ae7027876f",
+          "bytes": 5436
+        },
+        {
+          "path": "textures/hanging_industrial_lamp_arm_1k.jpg",
+          "sha256": "888d78437900b43874af5195694c7b867568c9a96ef528846ad7d001f9e096ae",
+          "bytes": 835394
+        },
+        {
+          "path": "textures/hanging_industrial_lamp_diff_1k.jpg",
+          "sha256": "22cafeccd4421495c860f8c522bb9e45eaa19fda6ec3a2365dcb5b1db66aad96",
+          "bytes": 708934
+        },
+        {
+          "path": "textures/hanging_industrial_lamp_emissive_1k.jpg",
+          "sha256": "ebf7fed3b0c1d6104d91b77195c7eb0e3da6927562ec4a612700b8afd7574099",
+          "bytes": 40173
+        },
+        {
+          "path": "textures/hanging_industrial_lamp_glass_nor_gl_1k.jpg",
+          "sha256": "5393af7d78e85689cba7c7b198fafddcee540d3125ebd133799d56f19945d8bf",
+          "bytes": 555604
+        },
+        {
+          "path": "textures/hanging_industrial_lamp_nor_gl_1k.jpg",
+          "sha256": "ef524876a1a4c5b6d7fb4c652d21e55474ee85b50b8896537fd60e82b288b5f0",
+          "bytes": 753861
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-lifebuoy",
+      "kind": "room-furniture",
+      "title": "Lifebuoy",
+      "author": "Hank Kaamura",
+      "author_url": "https://polyhaven.com/a/lifebuoy",
+      "source_url": "https://polyhaven.com/a/lifebuoy",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "5baff3fb8d199b72fa5ed3a0fbb65b7236007ee39065cc5936d507d13d961930",
+      "polycount": 10728,
+      "textures": "PBR jpg 1k: lifebuoy_arm_1k.jpg, lifebuoy_diff_1k.jpg, lifebuoy_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Beach house. Source mesh is the full-detail one shared by every Poly Haven resolution (10728 triangles, 1 draw call(s)); the 1k jpg textures are 2363494 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "lifebuoy.bin",
+          "sha256": "aa45c8d43ee11e12a4ab9f46bfb06d1baa6c687d61776ad9b06ea6b5664c0bc2",
+          "bytes": 255280
+        },
+        {
+          "path": "lifebuoy_1k.gltf",
+          "sha256": "d9c76a8f2471249f314b3efcffe0d3956ba2d3f0b8ba528cc0f2b861561580f3",
+          "bytes": 2724
+        },
+        {
+          "path": "textures/lifebuoy_arm_1k.jpg",
+          "sha256": "fe33182e45c2b1049195641a8081ab22e90e520b2c0dafa9cce568a53af7a207",
+          "bytes": 614864
+        },
+        {
+          "path": "textures/lifebuoy_diff_1k.jpg",
+          "sha256": "f0095beca9e97996692ffdab3d3ace3fae64a3c3adf5c8eff71172add4e4cb2e",
+          "bytes": 841106
+        },
+        {
+          "path": "textures/lifebuoy_nor_gl_1k.jpg",
+          "sha256": "df02aca2cca3aa87daa0f1d4cd5fa2584d60ecea85672517fa334aea725dbf23",
+          "bytes": 907524
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-marble-bust-01",
+      "kind": "room-furniture",
+      "title": "Marble Bust 01",
+      "author": "Rico Cilliers",
+      "author_url": "https://polyhaven.com/a/marble_bust_01",
+      "source_url": "https://polyhaven.com/a/marble_bust_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "e00d55d4f60d78495471d50dd2959348d873c6332f721f4b0df84b86c7586f05",
+      "polycount": 17456,
+      "textures": "PBR jpg 1k: marble_bust_01_diff_1k.jpg, marble_bust_01_nor_gl_1k.jpg, marble_bust_01_rough_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Castle library. Source mesh is the full-detail one shared by every Poly Haven resolution (17456 triangles, 1 draw call(s)); the 1k jpg textures are 478882 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "marble_bust_01.bin",
+          "sha256": "0bb757c1bd00bfe42005c84e7f76df98ce04a532e595a2ddda8a0335cd959e33",
+          "bytes": 416608
+        },
+        {
+          "path": "marble_bust_01_1k.gltf",
+          "sha256": "b6f192fc01be4349470b66f6f6948bd37620267bdbc86f4568e4d078f97ff09b",
+          "bytes": 2793
+        },
+        {
+          "path": "textures/marble_bust_01_diff_1k.jpg",
+          "sha256": "cbb7dccdc62d7eaa240eef7b4956969bf6e73c7338b64f1378629838ea22383c",
+          "bytes": 160337
+        },
+        {
+          "path": "textures/marble_bust_01_nor_gl_1k.jpg",
+          "sha256": "3d355904cd54c2de90d5d4310b80d43816fa2dd509f0a3445d654eab8e237c5f",
+          "bytes": 124627
+        },
+        {
+          "path": "textures/marble_bust_01_rough_1k.jpg",
+          "sha256": "1c4502352dc936dd1f1c1a81b418706df1ce0445949874215015325f9b8921fb",
+          "bytes": 193918
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-metal-office-desk",
+      "kind": "room-furniture",
+      "title": "Metal Office Desk",
+      "author": "Ulan Cabanilla",
+      "author_url": "https://polyhaven.com/a/metal_office_desk",
+      "source_url": "https://polyhaven.com/a/metal_office_desk",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "46922bffdab2d9a8f04964b643ea6ec0447586b1c1c26829ddf0c1dda36866a8",
+      "polycount": 6898,
+      "textures": "PBR jpg 1k: metal_office_desk_arm_1k.jpg, metal_office_desk_diff_1k.jpg, metal_office_desk_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Home office. Source mesh is the full-detail one shared by every Poly Haven resolution (6898 triangles, 9 draw call(s)); the 1k jpg textures are 1363320 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "metal_office_desk.bin",
+          "sha256": "65b558f41a75ad4822e31cc2a97eb34ed359199279a6bfbd650deb27cef78767",
+          "bytes": 229700
+        },
+        {
+          "path": "metal_office_desk_1k.gltf",
+          "sha256": "f07032a5ee89aacceebf10fd9fa192c22775ae81861cfb0bdb1594497179373c",
+          "bytes": 13510
+        },
+        {
+          "path": "textures/metal_office_desk_arm_1k.jpg",
+          "sha256": "752916dd9bf8a163dc7e0d3673900791ee6d558bbe23894263ac92b42387f51b",
+          "bytes": 721614
+        },
+        {
+          "path": "textures/metal_office_desk_diff_1k.jpg",
+          "sha256": "1f02e3e77e8f82a3600664c991bd45c1c187452d61e9ede4336c6f90f7fa3139",
+          "bytes": 470831
+        },
+        {
+          "path": "textures/metal_office_desk_nor_gl_1k.jpg",
+          "sha256": "f57eb004937e46392151b803e0cb1d88983958d01ad11d93df78a82cfcc6c407",
+          "bytes": 170875
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-metal-stool-01",
+      "kind": "room-furniture",
+      "title": "Metal Stool 01",
+      "author": "Ulan Cabanilla",
+      "author_url": "https://polyhaven.com/a/metal_stool_01",
+      "source_url": "https://polyhaven.com/a/metal_stool_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "44a8bdb60ca0493db146ce473627e562ec460a92db3a531fab19953716d846f4",
+      "polycount": 8334,
+      "textures": "PBR jpg 1k: metal_stool_01_arm_1k.jpg, metal_stool_01_diff_1k.jpg, metal_stool_01_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): City loft, Submarine. Source mesh is the full-detail one shared by every Poly Haven resolution (8334 triangles, 1 draw call(s)); the 1k jpg textures are 2067830 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "metal_stool_01.bin",
+          "sha256": "a57dae498990e7b56cba33b64721d1d0b940ca6352248de149740cd4678d451d",
+          "bytes": 216340
+        },
+        {
+          "path": "metal_stool_01_1k.gltf",
+          "sha256": "e69a99778cacbbf0a2447971d8917a2463b411cdd2a50ff2c53c2230b4c43881",
+          "bytes": 2790
+        },
+        {
+          "path": "textures/metal_stool_01_arm_1k.jpg",
+          "sha256": "eb13e80e9fe232d022b4136e817d4590a7279d8da327d35e525e1aa4cf30e334",
+          "bytes": 783046
+        },
+        {
+          "path": "textures/metal_stool_01_diff_1k.jpg",
+          "sha256": "d11949df1f0c59b5a85145395703a2aa7617e76b80759a5ef80b09e1798acb3d",
+          "bytes": 617390
+        },
+        {
+          "path": "textures/metal_stool_01_nor_gl_1k.jpg",
+          "sha256": "55d71cb01dd9afba245d4513728ce0cde8b112d5a7e1695a68578445c7b02b82",
+          "bytes": 667394
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-mid-century-lounge-chair",
+      "kind": "room-furniture",
+      "title": "Mid Century Lounge Chair",
+      "author": "Kuutti Siitonen",
+      "author_url": "https://polyhaven.com/a/mid_century_lounge_chair",
+      "source_url": "https://polyhaven.com/a/mid_century_lounge_chair",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "9fa77c5726980c1c26cf3dfbd179ab2572f7101e63d53ab1bc7d0cc00ebc46cc",
+      "polycount": 6148,
+      "textures": "PBR jpg 1k: mid_century_lounge_chair_arm_1k.jpg, mid_century_lounge_chair_diff_1k.jpg, mid_century_lounge_chair_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Living room. Source mesh is the full-detail one shared by every Poly Haven resolution (6148 triangles, 1 draw call(s)); the 1k jpg textures are 1912751 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "mid_century_lounge_chair.bin",
+          "sha256": "26346cdc548ad74b1b6db5734c8c231c3c740656b012de2cc3bbc2b3b975200c",
+          "bytes": 171384
+        },
+        {
+          "path": "mid_century_lounge_chair_1k.gltf",
+          "sha256": "47c5769ee4dfa350e2506a6a76d8ef58a1e1060344acda35c503ddff46645d26",
+          "bytes": 2884
+        },
+        {
+          "path": "textures/mid_century_lounge_chair_arm_1k.jpg",
+          "sha256": "9fa5fa4af5306576a3a27886767feec5431f41d94df9119f2ccced8f0b024f1a",
+          "bytes": 636493
+        },
+        {
+          "path": "textures/mid_century_lounge_chair_diff_1k.jpg",
+          "sha256": "ae1f80e964426b49f70b402403c444a655bdaa363d8d43fee5b57fcb3b492c54",
+          "bytes": 627298
+        },
+        {
+          "path": "textures/mid_century_lounge_chair_nor_gl_1k.jpg",
+          "sha256": "4bb4b325e4478f5d9063e4e061cf34bc6ccc3067abda608c1548c4a367f50397",
+          "bytes": 648960
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-modern-arm-chair-01",
+      "kind": "room-furniture",
+      "title": "Modern Arm Chair 01",
+      "author": "Vibrant Nordic",
+      "author_url": "https://polyhaven.com/a/modern_arm_chair_01",
+      "source_url": "https://polyhaven.com/a/modern_arm_chair_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "ddfd4abbe9951f7247a984bd91b170475953e0bdcf0f106c3b6d38953c9f2293",
+      "polycount": 8916,
+      "textures": "PBR jpg 1k: modern_arm_chair_01_legs_arm_1k.jpg, modern_arm_chair_01_legs_diff_1k.jpg, modern_arm_chair_01_legs_nor_gl_1k.jpg, modern_arm_chair_01_pillow_arm_1k.jpg, modern_arm_chair_01_pillow_diff_1k.jpg, modern_arm_chair_01_pillow_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Home office. Source mesh is the full-detail one shared by every Poly Haven resolution (8916 triangles, 2 draw call(s)); the 1k jpg textures are 2452183 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "modern_arm_chair_01.bin",
+          "sha256": "8755f2f498c0bb165660379d1b045465751c16bbeaf553c8dd76bb14c16d1ff6",
+          "bytes": 240728
+        },
+        {
+          "path": "modern_arm_chair_01_1k.gltf",
+          "sha256": "d31be520add2603447b43acedbdacf9516866f7c89e9ea9230c9edbac9cc6e6a",
+          "bytes": 5121
+        },
+        {
+          "path": "textures/modern_arm_chair_01_legs_arm_1k.jpg",
+          "sha256": "c76b65200a52cf649a865baf7f879dc34277b923edaac7ec8164eaf7c51c935d",
+          "bytes": 577931
+        },
+        {
+          "path": "textures/modern_arm_chair_01_legs_diff_1k.jpg",
+          "sha256": "6291421a8db6cd9bbbc8c141aa087465d698427249f813d24c6e5ccdbf0bf536",
+          "bytes": 460937
+        },
+        {
+          "path": "textures/modern_arm_chair_01_legs_nor_gl_1k.jpg",
+          "sha256": "af328e8530884907cf0d38a675338bb4e2b03c56ed2d21eb5abf505bb67c11de",
+          "bytes": 560864
+        },
+        {
+          "path": "textures/modern_arm_chair_01_pillow_arm_1k.jpg",
+          "sha256": "fec333290ddfd70e78428251874d30d5410d6d0a956dd84922b0d3f3596e4b7a",
+          "bytes": 321223
+        },
+        {
+          "path": "textures/modern_arm_chair_01_pillow_diff_1k.jpg",
+          "sha256": "f1935436b460ad5c03ac7ff9d1e1b4aaedcdc9a503d79c257beb8cdac2e9e1f7",
+          "bytes": 228851
+        },
+        {
+          "path": "textures/modern_arm_chair_01_pillow_nor_gl_1k.jpg",
+          "sha256": "2717b9d22e1d3533e3c7436a0230b00b1d25bf396246679825c8db08edaba0a8",
+          "bytes": 302377
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-modern-coffee-table-01",
+      "kind": "room-furniture",
+      "title": "Modern Coffee Table 01",
+      "author": "Amin",
+      "author_url": "https://polyhaven.com/a/modern_coffee_table_01",
+      "source_url": "https://polyhaven.com/a/modern_coffee_table_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "bfa11dbf9a0db8660538d2982062f89f20158eea158363d101c98b420128ba90",
+      "polycount": 4504,
+      "textures": "PBR jpg 1k: modern_coffee_table_01_diff_1k.jpg, modern_coffee_table_01_nor_gl_1k.jpg, modern_coffee_table_01_rough_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Living room. Source mesh is the full-detail one shared by every Poly Haven resolution (4504 triangles, 1 draw call(s)); the 1k jpg textures are 1173662 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "modern_coffee_table_01.bin",
+          "sha256": "b8fe0d49041b879a5d5962685a39e3daf009679f7b6a88ced1347e6dc6c0851e",
+          "bytes": 154864
+        },
+        {
+          "path": "modern_coffee_table_01_1k.gltf",
+          "sha256": "a35d811da4c174d0c888f23353dda21501763dbf5505c66f57fef4b3f613e50c",
+          "bytes": 2771
+        },
+        {
+          "path": "textures/modern_coffee_table_01_diff_1k.jpg",
+          "sha256": "069b89dd3ef03ddcbb7b2e6a124b1903aa7848394509121aa19f87bd0ef0218c",
+          "bytes": 410569
+        },
+        {
+          "path": "textures/modern_coffee_table_01_nor_gl_1k.jpg",
+          "sha256": "43e0d317d0f8418b130c0058c645225ee83b808b1dc0e5e7236bead3bdd77139",
+          "bytes": 359134
+        },
+        {
+          "path": "textures/modern_coffee_table_01_rough_1k.jpg",
+          "sha256": "8013b48b0ebb845907f840afcae9cbc915a5205ac82ed99cbba31771febacb0f",
+          "bytes": 403959
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-outdoor-table-chair-set-01",
+      "kind": "room-furniture",
+      "title": "Outdoor Table Chair Set 01",
+      "author": "James Ray Cock",
+      "author_url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+      "source_url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "07a8303ecd56dae90b271bba9a7c2f5d59a51131434aeb7110786d63e55b06c4",
+      "polycount": 9828,
+      "textures": "PBR jpg 1k: outdoor_table_chair_set_01_chair_arm_1k.jpg, outdoor_table_chair_set_01_chair_diff_1k.jpg, outdoor_table_chair_set_01_chair_nor_gl_1k.jpg, outdoor_table_chair_set_01_table_arm_1k.jpg, outdoor_table_chair_set_01_table_diff_1k.jpg, outdoor_table_chair_set_01_table_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Beach house. Source mesh is the full-detail one shared by every Poly Haven resolution (9828 triangles, 3 draw call(s)); the 1k jpg textures are 778698 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "outdoor_table_chair_set_01.bin",
+          "sha256": "d62458c79c6c902d1195bff875e42bf7579c6b309c6b96f9cd7543af43170220",
+          "bytes": 456856
+        },
+        {
+          "path": "outdoor_table_chair_set_01_1k.gltf",
+          "sha256": "1b718deb56a9f07b260a5f95926fb7caa5fd27918cacca283414c840e46415f2",
+          "bytes": 6826
+        },
+        {
+          "path": "textures/outdoor_table_chair_set_01_chair_arm_1k.jpg",
+          "sha256": "71ac20bb124af45c3ff2fc5eee11d7c9d277ac245ac14ee4ba87291bb768937d",
+          "bytes": 179920
+        },
+        {
+          "path": "textures/outdoor_table_chair_set_01_chair_diff_1k.jpg",
+          "sha256": "60ed02a2c36098069235ad82937b2602e8940346f1d6a75c6386e78e03dbacb3",
+          "bytes": 155372
+        },
+        {
+          "path": "textures/outdoor_table_chair_set_01_chair_nor_gl_1k.jpg",
+          "sha256": "9b57cd67775146b0865f3e5409b54661080625789042846569f7f65ab37258b3",
+          "bytes": 46772
+        },
+        {
+          "path": "textures/outdoor_table_chair_set_01_table_arm_1k.jpg",
+          "sha256": "fecbe0e42db83d6f0ee8186afece1fd5c3a5834ff07926c00ac18468757d4377",
+          "bytes": 201642
+        },
+        {
+          "path": "textures/outdoor_table_chair_set_01_table_diff_1k.jpg",
+          "sha256": "7743a55a3a646ebdd9969e72594cb8b94e318d38956f2172a5e6934609a68bf4",
+          "bytes": 151897
+        },
+        {
+          "path": "textures/outdoor_table_chair_set_01_table_nor_gl_1k.jpg",
+          "sha256": "e30e3f639bea22013149e73bcbaeb95805bf831c7b93b80ab83a33e42672b044",
+          "bytes": 43095
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-painted-wooden-bench",
+      "kind": "room-furniture",
+      "title": "Painted Wooden Bench",
+      "author": "Kirill Sannikov",
+      "author_url": "https://polyhaven.com/a/painted_wooden_bench",
+      "source_url": "https://polyhaven.com/a/painted_wooden_bench",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "effb2e5e4cb2638a9f9f7beb33008f32b36928e2b16e60f07837519f4a00d9b0",
+      "polycount": 630,
+      "textures": "PBR jpg 1k: painted_wooden_bench_arm_1k.jpg, painted_wooden_bench_diff_1k.jpg, painted_wooden_bench_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Beach house, Public aquarium hall. Source mesh is the full-detail one shared by every Poly Haven resolution (630 triangles, 1 draw call(s)); the 1k jpg textures are 1961360 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "painted_wooden_bench.bin",
+          "sha256": "5799bcb20924105cccd6424de8cdb8e67eb57fddc19c395befeac634a7b2e013",
+          "bytes": 25444
+        },
+        {
+          "path": "painted_wooden_bench_1k.gltf",
+          "sha256": "2289ab82f3fe3045bf18f7b9541743d2c65b9f071cb34bbe424d2bc998f3e507",
+          "bytes": 2835
+        },
+        {
+          "path": "textures/painted_wooden_bench_arm_1k.jpg",
+          "sha256": "878785565eeff706b8f1e4db7e3d794a544e9cf0e56cee424d9a271ab4ead47e",
+          "bytes": 586040
+        },
+        {
+          "path": "textures/painted_wooden_bench_diff_1k.jpg",
+          "sha256": "9bc533313091ee71eaca5fa6334b71d27935d9d75311f64df6a53c28a67c435c",
+          "bytes": 545216
+        },
+        {
+          "path": "textures/painted_wooden_bench_nor_gl_1k.jpg",
+          "sha256": "a0f53740d77fc61aac01de0b7e1ae6109445d1756839f739ae31fdf10c9911f2",
+          "bytes": 830104
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-painted-wooden-nightstand",
+      "kind": "room-furniture",
+      "title": "Painted Wooden Nightstand",
+      "author": "Kirill Sannikov",
+      "author_url": "https://polyhaven.com/a/painted_wooden_nightstand",
+      "source_url": "https://polyhaven.com/a/painted_wooden_nightstand",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "f04cea83b330f998998ee8a5fc0ba5a141d876f180e98e5cff8349789d3a6288",
+      "polycount": 470,
+      "textures": "PBR jpg 1k: painted_wooden_nightstand_arm_1k.jpg, painted_wooden_nightstand_diff_1k.jpg, painted_wooden_nightstand_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Bedroom. Source mesh is the full-detail one shared by every Poly Haven resolution (470 triangles, 2 draw call(s)); the 1k jpg textures are 2128164 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "painted_wooden_nightstand.bin",
+          "sha256": "67b0834c6d0337bd144a1f72045bfe4de029618766b344fa9ffc4c3fc3ee8865",
+          "bytes": 18916
+        },
+        {
+          "path": "painted_wooden_nightstand_1k.gltf",
+          "sha256": "fbdc51ee41f2ee2dc7c455cd6f8321ff14e80c7a7d1e7736b194ca0b3e48b304",
+          "bytes": 4427
+        },
+        {
+          "path": "textures/painted_wooden_nightstand_arm_1k.jpg",
+          "sha256": "c3724c444d74f5b0e65904de0633bfe99db76f8c9b9211703aeeab62b02031ef",
+          "bytes": 773123
+        },
+        {
+          "path": "textures/painted_wooden_nightstand_diff_1k.jpg",
+          "sha256": "bf7447441b2f78c847d7c4cda8b80e604853e2b559ffe03b41c0e4b3bff8ed9f",
+          "bytes": 603334
+        },
+        {
+          "path": "textures/painted_wooden_nightstand_nor_gl_1k.jpg",
+          "sha256": "2d7574ce96c1202bc37ad49fd219a2f918028e102a6d1743714bc90032295c15",
+          "bytes": 751707
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-plastic-crate-02",
+      "kind": "room-furniture",
+      "title": "Plastic Crate 02",
+      "author": "Fabi_G",
+      "author_url": "https://polyhaven.com/a/plastic_crate_02",
+      "source_url": "https://polyhaven.com/a/plastic_crate_02",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "a376affe8ea8d8e084bfad30896c17d879dc03da530e6eb8cbd571f9257a29cd",
+      "polycount": 5840,
+      "textures": "PBR jpg 1k: plastic_crate_02_arm_1k.jpg, plastic_crate_02_diff_1k.jpg, plastic_crate_02_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Aquarium shop. Source mesh is the full-detail one shared by every Poly Haven resolution (5840 triangles, 1 draw call(s)); the 1k jpg textures are 1648984 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "plastic_crate_02.bin",
+          "sha256": "f51696aa04643b5c1948da88be8ce1d4e92596ae4908b0132cd690f8fb8e0b63",
+          "bytes": 186848
+        },
+        {
+          "path": "plastic_crate_02_1k.gltf",
+          "sha256": "531f7ba7d4b501759b04fb704db1948bcaab34d8342e71e3f5877d9f0340dba7",
+          "bytes": 2947
+        },
+        {
+          "path": "textures/plastic_crate_02_arm_1k.jpg",
+          "sha256": "f0c667358c7afd46be37b40c30435b63ae3dba8432b45c507f3298fc6f163418",
+          "bytes": 597561
+        },
+        {
+          "path": "textures/plastic_crate_02_diff_1k.jpg",
+          "sha256": "f153478d5f44f39ab27a967850caac27b35ee8f04185d0d4eaf7ad501742fb15",
+          "bytes": 492862
+        },
+        {
+          "path": "textures/plastic_crate_02_nor_gl_1k.jpg",
+          "sha256": "492b4cb03b043fb30a21b5de1cdf91dfbcd9bb7d080957af69a333d622050f30",
+          "bytes": 558561
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-round-wooden-table-02",
+      "kind": "room-furniture",
+      "title": "Round Wooden Table 02",
+      "author": "Ulan Cabanilla",
+      "author_url": "https://polyhaven.com/a/round_wooden_table_02",
+      "source_url": "https://polyhaven.com/a/round_wooden_table_02",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "ccae3031514a5c3456c32a013c6280f435ae690e1676bc1b745a1f83acb0d1eb",
+      "polycount": 4254,
+      "textures": "PBR jpg 1k: round_wooden_table_02_arm_1k.jpg, round_wooden_table_02_diff_1k.jpg, round_wooden_table_02_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Sushi restaurant. Source mesh is the full-detail one shared by every Poly Haven resolution (4254 triangles, 1 draw call(s)); the 1k jpg textures are 1783029 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "round_wooden_table_02.bin",
+          "sha256": "fa9a0ed80be31d9160207913762cedc5de21d1cb37b01a5ae6caa23ce7a741b6",
+          "bytes": 135412
+        },
+        {
+          "path": "round_wooden_table_02_1k.gltf",
+          "sha256": "df65c35148280a06efcc06bfa75432bb13f29318e869597fc94f364ce2b55974",
+          "bytes": 2851
+        },
+        {
+          "path": "textures/round_wooden_table_02_arm_1k.jpg",
+          "sha256": "613d051b4c4e093c5e65eec37d39f6f48ac5476e2cb1b59c4b034f308ef1a7ee",
+          "bytes": 677385
+        },
+        {
+          "path": "textures/round_wooden_table_02_diff_1k.jpg",
+          "sha256": "9872acedc6be92ef232c581c8e9ce435e4aa0d8f5c4b75e4ce445995a3ef8c28",
+          "bytes": 470007
+        },
+        {
+          "path": "textures/round_wooden_table_02_nor_gl_1k.jpg",
+          "sha256": "34989b9a15753b964a4d9d6b2673c048ff2c14feedbe4e6adbeb4bf32be8bc8c",
+          "bytes": 635637
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-scandinavian-masonry-heater",
+      "kind": "room-furniture",
+      "title": "Scandinavian Masonry Heater",
+      "author": "Kuutti Siitonen",
+      "author_url": "https://polyhaven.com/a/scandinavian_masonry_heater",
+      "source_url": "https://polyhaven.com/a/scandinavian_masonry_heater",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "3d00d7eb570a5a36035b57b9c517330c7f1deec73648c6577ad1bce237c51db7",
+      "polycount": 9350,
+      "textures": "PBR jpg 1k: scandinavian_masonry_heater_arm_1k.jpg, scandinavian_masonry_heater_diff_1k.jpg, scandinavian_masonry_heater_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Mountain cabin. Source mesh is the full-detail one shared by every Poly Haven resolution (9350 triangles, 1 draw call(s)); the 1k jpg textures are 2062579 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "scandinavian_masonry_heater.bin",
+          "sha256": "12eecdcc11e4894227bffc7fa8b444204e4cccd92788d86eb4f144909e91a0ec",
+          "bytes": 394416
+        },
+        {
+          "path": "scandinavian_masonry_heater_1k.gltf",
+          "sha256": "9ee8c41258be5a6825462a1cfc0cb4d03c571ddae7ed7d6d173332e8c454ef29",
+          "bytes": 3451
+        },
+        {
+          "path": "textures/scandinavian_masonry_heater_arm_1k.jpg",
+          "sha256": "bc5ee9751331549d9ce8d22f1c58c7b5f932ddddbd8a731d4ee161f22a2316f9",
+          "bytes": 634630
+        },
+        {
+          "path": "textures/scandinavian_masonry_heater_diff_1k.jpg",
+          "sha256": "fa1040bb96fbe105316f6594b524633f3959ba0af76cd0f71bbcdd24a465d383",
+          "bytes": 723330
+        },
+        {
+          "path": "textures/scandinavian_masonry_heater_nor_gl_1k.jpg",
+          "sha256": "2a927547b5afea05445ad9552f39a01376b21e593f6cd40f702ad6e42c1facbc",
+          "bytes": 704619
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-seadogs-compass",
+      "kind": "room-furniture",
+      "title": "Seadogs Compass",
+      "author": "Benny Weimer",
+      "author_url": "https://polyhaven.com/a/seadogs_compass",
+      "source_url": "https://polyhaven.com/a/seadogs_compass",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "40d50a027d20ac801659e06dd37aed66bac1d112b68eeb2815b0e2fe91402e71",
+      "polycount": 11645,
+      "textures": "PBR jpg 1k: seadogs_compass_arm_1k.jpg, seadogs_compass_diff_1k.jpg, seadogs_compass_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Submarine. Source mesh is the full-detail one shared by every Poly Haven resolution (11645 triangles, 3 draw call(s)); the 1k jpg textures are 2304121 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "seadogs_compass.bin",
+          "sha256": "59089793269ffa10d7d180de5611b2bb276288f929fde93b2b705f7e83b246b5",
+          "bytes": 385520
+        },
+        {
+          "path": "seadogs_compass_1k.gltf",
+          "sha256": "eb43affaa88dcf40d47318d096f14b709d8ddc34bad46b67ed038b807e56df07",
+          "bytes": 6060
+        },
+        {
+          "path": "textures/seadogs_compass_arm_1k.jpg",
+          "sha256": "3a4dd86ffb9e3d3d3423fc399011a91f69a2bfb1ab9d181672e735b8aa0a48bb",
+          "bytes": 901867
+        },
+        {
+          "path": "textures/seadogs_compass_diff_1k.jpg",
+          "sha256": "f5bd77e551b00fcc5886cc5d13978a79447ce0be770277a116943e2ed635db27",
+          "bytes": 727504
+        },
+        {
+          "path": "textures/seadogs_compass_nor_gl_1k.jpg",
+          "sha256": "f5bdeb37f58d2967b9b31e9665e234be1b9f9e694ca35a4ca3ced17187de0ed5",
+          "bytes": 674750
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-sofa-02",
+      "kind": "room-furniture",
+      "title": "Sofa 02",
+      "author": "Kirill Sannikov",
+      "author_url": "https://polyhaven.com/a/sofa_02",
+      "source_url": "https://polyhaven.com/a/sofa_02",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "6b3be3aee00b04f02d24f9702d0819ed98820ccdc17a719d80f3f9581b980e34",
+      "polycount": 2728,
+      "textures": "PBR jpg 1k: sofa_02_arm_1k.jpg, sofa_02_diff_1k.jpg, sofa_02_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): City loft. Source mesh is the full-detail one shared by every Poly Haven resolution (2728 triangles, 2 draw call(s)); the 1k jpg textures are 348124 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "sofa_02.bin",
+          "sha256": "cb337e03211be0309afa1ded2b6cbb2d402c0f794aaf8828fba559d27a42d3f5",
+          "bytes": 74864
+        },
+        {
+          "path": "sofa_02_1k.gltf",
+          "sha256": "5df114209f9b956ccd4831eaeef469a81339ab371d0056eb6d5d29eee08eb431",
+          "bytes": 4183
+        },
+        {
+          "path": "textures/sofa_02_arm_1k.jpg",
+          "sha256": "f2813f32cd9ec42a9080590d0953ac9e272d9baa0b22fdb5910bf325157393c6",
+          "bytes": 121752
+        },
+        {
+          "path": "textures/sofa_02_diff_1k.jpg",
+          "sha256": "4ff65c782578b52eee89cb96cc4e258ce1b6848e1a7655019af1f7207c749840",
+          "bytes": 86514
+        },
+        {
+          "path": "textures/sofa_02_nor_gl_1k.jpg",
+          "sha256": "c97a359703a8ce1cee62cbd9dc4013b611d821afb7769810983b464ebc5d0cfe",
+          "bytes": 139858
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-sofa-03",
+      "kind": "room-furniture",
+      "title": "Sofa 03",
+      "author": "Fran Calvente",
+      "author_url": "https://polyhaven.com/a/sofa_03",
+      "source_url": "https://polyhaven.com/a/sofa_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "7dca9bf5ecbfe7fb6ba0ef5c956e58acdb9b5ee57a18a62064e670bc6b9bef58",
+      "polycount": 8004,
+      "textures": "PBR jpg 1k: sofa_03_diff_1k.jpg, sofa_03_nor_gl_1k.jpg, sofa_03_rough_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Living room. Source mesh is the full-detail one shared by every Poly Haven resolution (8004 triangles, 2 draw call(s)); the 1k jpg textures are 434584 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "sofa_03.bin",
+          "sha256": "e524350933d3d2a84c28f13bc042888a4768adeef88d630111015caede1c2e98",
+          "bytes": 228984
+        },
+        {
+          "path": "sofa_03_1k.gltf",
+          "sha256": "123f491bef4e9bda153bda770a5d12810bfc9b87ce56aa5973aed041ea17fd92",
+          "bytes": 4465
+        },
+        {
+          "path": "textures/sofa_03_diff_1k.jpg",
+          "sha256": "c0bc221e4cacc3de75aff7744dab1600d008bcf70b5c67fb10ad6847b695a84e",
+          "bytes": 151815
+        },
+        {
+          "path": "textures/sofa_03_nor_gl_1k.jpg",
+          "sha256": "b961f9e9f38233bd58cdc5275614d3a1b37d5304f5ab86fd19d110657d386025",
+          "bytes": 112563
+        },
+        {
+          "path": "textures/sofa_03_rough_1k.jpg",
+          "sha256": "b03b45c92365cddf787db158d7499915d6ba0d67ec51947453f6598f51361e47",
+          "bytes": 170206
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-steel-frame-shelves-03",
+      "kind": "room-furniture",
+      "title": "Steel Frame Shelves 03",
+      "author": "Ulan Cabanilla",
+      "author_url": "https://polyhaven.com/a/steel_frame_shelves_03",
+      "source_url": "https://polyhaven.com/a/steel_frame_shelves_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "2c4f01c55fca7f6305da8a17614cad95502d3d6770c876fb7923a58da6e20482",
+      "polycount": 8396,
+      "textures": "PBR jpg 1k: steel_frame_shelves_03_arm_1k.jpg, steel_frame_shelves_03_diff_1k.jpg, steel_frame_shelves_03_drawers_arm_1k.jpg, steel_frame_shelves_03_drawers_diff_1k.jpg, steel_frame_shelves_03_drawers_nor_gl_1k.jpg, steel_frame_shelves_03_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Aquarium shop. Source mesh is the full-detail one shared by every Poly Haven resolution (8396 triangles, 5 draw call(s)); the 1k jpg textures are 3294096 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "steel_frame_shelves_03.bin",
+          "sha256": "6e299e00e277642eb1a1ac67776a8c43bd9c9dbad9a12b768bf3df274afde66f",
+          "bytes": 259368
+        },
+        {
+          "path": "steel_frame_shelves_03_1k.gltf",
+          "sha256": "5778bc40d135c7c02a62acdaa4be11fa856fe462c574cbc09033e78a269833d8",
+          "bytes": 9767
+        },
+        {
+          "path": "textures/steel_frame_shelves_03_arm_1k.jpg",
+          "sha256": "9cbeebb818f340837554f59a46cd482e4a7ed6bf3fb7eb0a4707fe775473ad32",
+          "bytes": 719712
+        },
+        {
+          "path": "textures/steel_frame_shelves_03_diff_1k.jpg",
+          "sha256": "1bbaf63d2905ddfa94a83c9aa1fe01ec8d867c0b073308cc02821ae624e31b9a",
+          "bytes": 375274
+        },
+        {
+          "path": "textures/steel_frame_shelves_03_drawers_arm_1k.jpg",
+          "sha256": "cfa78c59c402b8aa26e200a9993ffd260cebbb1b7768cc9a6f8c5c0c0b28ca6e",
+          "bytes": 543122
+        },
+        {
+          "path": "textures/steel_frame_shelves_03_drawers_diff_1k.jpg",
+          "sha256": "5128e44871e33eebe494fe93fba2c572b9a7970d37864ae294c6d25fc59064eb",
+          "bytes": 663476
+        },
+        {
+          "path": "textures/steel_frame_shelves_03_drawers_nor_gl_1k.jpg",
+          "sha256": "e686d0d595eca83cc6ef2186cd199c2d2dde5729788f607e2b1f996d133415af",
+          "bytes": 487786
+        },
+        {
+          "path": "textures/steel_frame_shelves_03_nor_gl_1k.jpg",
+          "sha256": "0e069fedd3573fe09096d766ca950e79903e8f971baaf6078ac7326d3c3dcfc8",
+          "bytes": 504726
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-throw-pillows-01",
+      "kind": "room-furniture",
+      "title": "Throw Pillows 01",
+      "author": "Serhii Khromov",
+      "author_url": "https://polyhaven.com/a/throw_pillows_01",
+      "source_url": "https://polyhaven.com/a/throw_pillows_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "00de756a6e5e9826c75ad080aee2dd7dcae97944be1d951356418b04c835954e",
+      "polycount": 6362,
+      "textures": "PBR jpg 1k: throw_pillows_01_diff_1k.jpg, throw_pillows_01_nor_gl_1k.jpg, throw_pillows_01_rough_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Bedroom. Source mesh is the full-detail one shared by every Poly Haven resolution (6362 triangles, 2 draw call(s)); the 1k jpg textures are 1043848 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "textures/throw_pillows_01_diff_1k.jpg",
+          "sha256": "1d52fb47f06b88b5079f20a99309ae1e94547e778a5f89614d70f842c0696412",
+          "bytes": 299887
+        },
+        {
+          "path": "textures/throw_pillows_01_nor_gl_1k.jpg",
+          "sha256": "074da9df1286aecf0d107bdd0839f0ec382fa99b16313626c7f6690d2765b4d7",
+          "bytes": 404720
+        },
+        {
+          "path": "textures/throw_pillows_01_rough_1k.jpg",
+          "sha256": "05518d80893cd4b0a1390ccf1330e94ecae7f386b60e2b55761a1e9856e29f9b",
+          "bytes": 339241
+        },
+        {
+          "path": "throw_pillows_01.bin",
+          "sha256": "cac134c38612894a301d265a0b2ad4ddbe57d15d7473d57592c397d445366476",
+          "bytes": 146012
+        },
+        {
+          "path": "throw_pillows_01_1k.gltf",
+          "sha256": "dd3f985a4446c82035028392ae905b9d996b8be10316a4572a870561a57f76fa",
+          "bytes": 4548
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-vintage-day-bed",
+      "kind": "room-furniture",
+      "title": "Vintage Day Bed",
+      "author": "Aron Łyczek",
+      "author_url": "https://polyhaven.com/a/vintage_day_bed",
+      "source_url": "https://polyhaven.com/a/vintage_day_bed",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "2d75619d247baaa7242d4467bcd44e8be185bff3a36c3b7954e61bad75de5a17",
+      "polycount": 2715,
+      "textures": "PBR jpg 1k: vintage_day_bed_arm_1k.jpg, vintage_day_bed_diff_1k.jpg, vintage_day_bed_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Bedroom. Source mesh is the full-detail one shared by every Poly Haven resolution (2715 triangles, 1 draw call(s)); the 1k jpg textures are 2342696 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "textures/vintage_day_bed_arm_1k.jpg",
+          "sha256": "b60e71c345fc1d16396a94a133390b4cdde5c05a38ebaadf2f5dc96be2895b11",
+          "bytes": 678880
+        },
+        {
+          "path": "textures/vintage_day_bed_diff_1k.jpg",
+          "sha256": "78b7036a3254c780052b87ac962ac6ba212501821af03c56faa2d7a9ccb955ce",
+          "bytes": 807128
+        },
+        {
+          "path": "textures/vintage_day_bed_nor_gl_1k.jpg",
+          "sha256": "2902f47f4778fce0667c2a1dbff7e2e861a0aed475668ea3fce8a485487598eb",
+          "bytes": 856688
+        },
+        {
+          "path": "vintage_day_bed.bin",
+          "sha256": "08172858c3f9d4225780013e4e9afd01bb9db42e17001fc6c790a183227ecf07",
+          "bytes": 80292
+        },
+        {
+          "path": "vintage_day_bed_1k.gltf",
+          "sha256": "fb255992b6e651de9709b17c083a14b405e99cbc26774b31bf252e38cf9287fb",
+          "bytes": 2791
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-vintage-oil-lamp",
+      "kind": "room-furniture",
+      "title": "Vintage Oil Lamp",
+      "author": "Monsta3D",
+      "author_url": "https://polyhaven.com/a/vintage_oil_lamp",
+      "source_url": "https://polyhaven.com/a/vintage_oil_lamp",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "917d4da79bd945708e797b23be01c1842c7bd5e021ad86c1b873d96037fc4d22",
+      "polycount": 7208,
+      "textures": "PBR jpg 1k: vintage_oil_lamp_arm_1k.jpg, vintage_oil_lamp_diff_1k.jpg, vintage_oil_lamp_flame_diff_1k.jpg, vintage_oil_lamp_glass_arm_1k.jpg, vintage_oil_lamp_glass_diff_1k.jpg, vintage_oil_lamp_glass_nor_gl_1k.jpg, vintage_oil_lamp_nor_gl_1k.jpg",
+      "rigged": false,
+      "notes": "Furniture instanced in the room(s): Mountain cabin. Source mesh is the full-detail one shared by every Poly Haven resolution (7208 triangles, 3 draw call(s)); the 1k jpg textures are 1876120 bytes. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "textures/vintage_oil_lamp_arm_1k.jpg",
+          "sha256": "004b7b6238632e4fc9e2ad7e76529caa292cfd96f5a42d6564531207f25c3e92",
+          "bytes": 655961
+        },
+        {
+          "path": "textures/vintage_oil_lamp_diff_1k.jpg",
+          "sha256": "a96cc1383fb056618eca80a0cf4ae192286c8752f8e83cb52f9fec02ca94a471",
+          "bytes": 536650
+        },
+        {
+          "path": "textures/vintage_oil_lamp_flame_diff_1k.jpg",
+          "sha256": "827c6a4fa9274141636cee9415f416a32937f2f257901bbe8488b22b862509f1",
+          "bytes": 92425
+        },
+        {
+          "path": "textures/vintage_oil_lamp_glass_arm_1k.jpg",
+          "sha256": "0ef2b0eb2087895851be979afc5ccb2c11076f71bc667f9e586b7f8038efc158",
+          "bytes": 282607
+        },
+        {
+          "path": "textures/vintage_oil_lamp_glass_diff_1k.jpg",
+          "sha256": "dbe33017c012a00c74419bb8f05b16a2eeee5e06e2ceab49a80462d25c7a7c0a",
+          "bytes": 39058
+        },
+        {
+          "path": "textures/vintage_oil_lamp_glass_nor_gl_1k.jpg",
+          "sha256": "2752589c8f6c7724bf2aa5d097010bd9257fff8ca0f85add13ec2ac702909df0",
+          "bytes": 42123
+        },
+        {
+          "path": "textures/vintage_oil_lamp_nor_gl_1k.jpg",
+          "sha256": "54db7efff64c4117782e25851544a0eb4881e5e28a13a06917a16d15ce26b1db",
+          "bytes": 227296
+        },
+        {
+          "path": "vintage_oil_lamp.bin",
+          "sha256": "4064065c8e288beaa58639c139c801db337bfc6183e73378a9177157f0587167",
+          "bytes": 186096
+        },
+        {
+          "path": "vintage_oil_lamp_1k.gltf",
+          "sha256": "ae570b98ea30b0337f62d8e7f551c03a05de00b238f3fac8f1ca5a1f1dbd1add",
+          "bytes": 7786
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-lythwood-lounge",
+      "kind": "hdri",
+      "title": "Lythwood Lounge",
+      "author": "Greg Zaal",
+      "author_url": "https://polyhaven.com/a/lythwood_lounge",
+      "source_url": "https://polyhaven.com/a/lythwood_lounge",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "4d7a72427b11eadfd122a55bce0266021d55d8b7d225a7f4c4e6145481fdf499",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Living room. 1k .hdr (1538903 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "lythwood_lounge_1k.hdr",
+          "sha256": "7de73ed75fbd52179152230198b3fb18bf8c36993b5608b724e899c426e53f78",
+          "bytes": 1538903
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-hotel-room",
+      "kind": "hdri",
+      "title": "Hotel Room",
+      "author": "Greg Zaal",
+      "author_url": "https://polyhaven.com/a/hotel_room",
+      "source_url": "https://polyhaven.com/a/hotel_room",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "238f5bdf6200ff0b4c366a11e344e293bd49d0ff8f6dae3b4a0704f1f72aa9f5",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Bedroom. 1k .hdr (1572830 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "hotel_room_1k.hdr",
+          "sha256": "a9cbe87f526df3a70041edcdbef86c95dda1cde961c5c69b1c84633d2f703fa7",
+          "bytes": 1572830
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-decor-shop",
+      "kind": "hdri",
+      "title": "Decor Shop",
+      "author": "Sergej Majboroda",
+      "author_url": "https://polyhaven.com/a/decor_shop",
+      "source_url": "https://polyhaven.com/a/decor_shop",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "2ac87d3208b908407f85ca0c94435ceaf013c6d0164f4ebbdc6d0ac0bcb72fe7",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Aquarium shop. 1k .hdr (1626098 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "decor_shop_1k.hdr",
+          "sha256": "0577ace66c6a973b509b57fe3fbedd9349303c0c5622617691a4fb3fbf0e592e",
+          "bytes": 1626098
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-white-home-studio",
+      "kind": "hdri",
+      "title": "White Home Studio",
+      "author": "Grzegorz Wronkowski",
+      "author_url": "https://polyhaven.com/a/white_home_studio",
+      "source_url": "https://polyhaven.com/a/white_home_studio",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "2074efc18cf448561067f81e29764ceab91856a1ad5c5b12be5670800a4a8eff",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Home office. 1k .hdr (1520776 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "white_home_studio_1k.hdr",
+          "sha256": "62b0ecd8e67a8e02ec040494dc919cb6496f9bb8568b395b159e3a7480beae69",
+          "bytes": 1520776
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-photo-studio-loft-hall",
+      "kind": "hdri",
+      "title": "Photo Studio Loft Hall",
+      "author": "Sergej Majboroda",
+      "author_url": "https://polyhaven.com/a/photo_studio_loft_hall",
+      "source_url": "https://polyhaven.com/a/photo_studio_loft_hall",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "8629add54b89cde21266163a9eabc2676b080861066cfac4c9675e43fec908a0",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for City loft. 1k .hdr (1640243 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "photo_studio_loft_hall_1k.hdr",
+          "sha256": "2243ac7b3418e0f4ade3a39ebf29856e6c581134ce8e557d9e6464ff15459513",
+          "bytes": 1640243
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-studio-kominka-01",
+      "kind": "hdri",
+      "title": "Studio Kominka 01",
+      "author": "Grzegorz Wronkowski",
+      "author_url": "https://polyhaven.com/a/studio_kominka_01",
+      "source_url": "https://polyhaven.com/a/studio_kominka_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "21d5f6e88ce5ae134aa2e7e0ebdc2e64d12a63d04fbcbaf86e704fa94cfc7b40",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Japanese zen room. 1k .hdr (1429581 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "studio_kominka_01_1k.hdr",
+          "sha256": "da46271604ed4fd2f74d63ec79e57ea42c26cd66eea3468e7b08e92d5cbfb166",
+          "bytes": 1429581
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-illovo-beach-balcony",
+      "kind": "hdri",
+      "title": "Illovo Beach Balcony",
+      "author": "Greg Zaal",
+      "author_url": "https://polyhaven.com/a/illovo_beach_balcony",
+      "source_url": "https://polyhaven.com/a/illovo_beach_balcony",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "d2b3666b3e090aab146112715c3b942cb89ef4f595c306fe5332bbc0b35f5ddc",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Beach house. 1k .hdr (1479791 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "illovo_beach_balcony_1k.hdr",
+          "sha256": "4b133d212945df987306212a7a054cc197e9da5147d1aec8fd86d03d88ef339b",
+          "bytes": 1479791
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-cabin",
+      "kind": "hdri",
+      "title": "Cabin",
+      "author": "Greg Zaal",
+      "author_url": "https://polyhaven.com/a/cabin",
+      "source_url": "https://polyhaven.com/a/cabin",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "3969fcd444e97f5efb5bf7e7a3c4b42106928e61a7af56c9150c875366352d1d",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Mountain cabin. 1k .hdr (1660023 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "cabin_1k.hdr",
+          "sha256": "fb1103fc63d695027391ddd13b1b4eaf7e4a4d397222ac76494f87ecf7a91c57",
+          "bytes": 1660023
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-warm-restaurant",
+      "kind": "hdri",
+      "title": "Warm Restaurant",
+      "author": "Greg Zaal, Jarod Guest",
+      "author_url": "https://polyhaven.com/a/warm_restaurant",
+      "source_url": "https://polyhaven.com/a/warm_restaurant",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "b0f653cce2398e8c46e1cf6b3700886e08f538aa46623556b509caaab4d2e230",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Sushi restaurant. 1k .hdr (1662018 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "warm_restaurant_1k.hdr",
+          "sha256": "fb0657b1145fa21107e5e925a9da6c8e84038ea6df585412e42400e8970670d1",
+          "bytes": 1662018
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-reading-room",
+      "kind": "hdri",
+      "title": "Reading Room",
+      "author": "Greg Zaal",
+      "author_url": "https://polyhaven.com/a/reading_room",
+      "source_url": "https://polyhaven.com/a/reading_room",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "45a4d2a6a3ddf73dbc24c4393698ab5ed21671df26c702384abc61cad85788d7",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Castle library. 1k .hdr (1624482 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "reading_room_1k.hdr",
+          "sha256": "a258676673c09f07e26f4a62ff6695d2424b9bd33606feaca21cd4135c62f8d3",
+          "bytes": 1624482
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-ushaka-sea-world-aquarium",
+      "kind": "hdri",
+      "title": "Ushaka Sea World Aquarium",
+      "author": "Dario Barresi, Jarod Guest",
+      "author_url": "https://polyhaven.com/a/ushaka_sea_world_aquarium",
+      "source_url": "https://polyhaven.com/a/ushaka_sea_world_aquarium",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "e960b7c8848f6a94489eaeab20df82c03d415b356759c4c78b90f1bc631e7275",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Public aquarium hall. 1k .hdr (1734824 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "ushaka_sea_world_aquarium_1k.hdr",
+          "sha256": "c58102a583bd0da9c31a0ceb8f2fbeb9609439c2e0c3305f5a5874b863231d9c",
+          "bytes": 1734824
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-industrial-pipe-and-valve-01",
+      "kind": "hdri",
+      "title": "Industrial Pipe & Valve 01",
+      "author": "Philip Modin",
+      "author_url": "https://polyhaven.com/a/industrial_pipe_and_valve_01",
+      "source_url": "https://polyhaven.com/a/industrial_pipe_and_valve_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "c362170bed1d8bfe323f71e7a015174059c09288eb5897635c24b0cfd662a965",
+      "polycount": null,
+      "textures": "equirect HDR",
+      "rigged": false,
+      "notes": "HDRI for Submarine. 1k .hdr (1705340 bytes) for reflections in the glass and the room PMREM. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-23).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "industrial_pipe_and_valve_01_1k.hdr",
+          "sha256": "3cdc7b53ddc93659e4dc0d65eaae780ea115022cc2220dc47e41e9aa930b5a87",
+          "bytes": 1705340
+        }
+      ]
+    },
+    {
+      "id": "freesound-329533",
+      "kind": "audio",
+      "title": "Room Tone In An Apartment Living Room 2",
+      "author": "leonelmail",
+      "author_url": "https://freesound.org/people/leonelmail/",
+      "source_url": "https://freesound.org/s/329533/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "0e13f5a7ed83d89c79bf0d540a03a59f936140747299ed0096ffef9b13343420",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Living room. 17.3 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (329533_4437257-lq.ogg, 133874 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-329533/freesound-329533.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-630612",
+      "kind": "audio",
+      "title": "Summer night rain out window.wav",
+      "author": "xxamoney27xx",
+      "author_url": "https://freesound.org/people/xxamoney27xx/",
+      "source_url": "https://freesound.org/s/630612/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "f38a47011e892c9e95980b6f3c579bc36ef7a1f4f1f83053e6ea50bd8c680c09",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Bedroom. 546.5 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (630612_6580859-lq.ogg, 5236186 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-630612/freesound-630612.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-764641",
+      "kind": "audio",
+      "title": "Shop Tone",
+      "author": "VanessaRiddle",
+      "author_url": "https://freesound.org/people/VanessaRiddle/",
+      "source_url": "https://freesound.org/s/764641/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "d2a04456f7d0bc94b5b1adff2ea1a122acd8693cf2d8512385a84928febfcc68",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Aquarium shop. 180.0 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (764641_15681090-lq.ogg, 1554241 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-764641/freesound-764641.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-327497",
+      "kind": "audio",
+      "title": "Office Ambience 01 OWI.wav",
+      "author": "DavidFrbr",
+      "author_url": "https://freesound.org/people/DavidFrbr/",
+      "source_url": "https://freesound.org/s/327497/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "550677648e6cb80948c2baa337fc8cca87ff4f47ed7413e0aece74eee4c4768c",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Home office. 101.2 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (327497_5654022-lq.ogg, 881337 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-327497/freesound-327497.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-330427",
+      "kind": "audio",
+      "title": "Downtown LA, Little Tokyo, late night semi distant traffic.wav",
+      "author": "janbezouska",
+      "author_url": "https://freesound.org/people/janbezouska/",
+      "source_url": "https://freesound.org/s/330427/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "43bcd59cc11759ff7e396353c8337667acb8e2c955ee702ff4ba831c7d667920",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the City loft. 224.6 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (330427_3287894-lq.ogg, 2115307 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-330427/freesound-330427.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-629951",
+      "kind": "audio",
+      "title": "Village_foutain-2.WAV",
+      "author": "Sindbad13",
+      "author_url": "https://freesound.org/people/Sindbad13/",
+      "source_url": "https://freesound.org/s/629951/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "067b4603f9421afcc2e7bb8119d797d4e1caf455a50d4cb29d199ccbb0d8c891",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Japanese zen room. 48.3 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (629951_8535955-lq.ogg, 639096 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-629951/freesound-629951.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-852826",
+      "kind": "audio",
+      "title": "Gentle Ocean Waves Loop",
+      "author": "kkenny101",
+      "author_url": "https://freesound.org/people/kkenny101/",
+      "source_url": "https://freesound.org/s/852826/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "41e0157d64d2053c3216f7da3c27db17cc1bb907ee70fb12f58d7035d152db6b",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Beach house. 21.8 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (852826_17997500-lq.ogg, 177046 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-852826/freesound-852826.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-346321",
+      "kind": "audio",
+      "title": "Crackling fireplace",
+      "author": "nielstii",
+      "author_url": "https://freesound.org/people/nielstii/",
+      "source_url": "https://freesound.org/s/346321/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "b9b18a6b1f87185ad6473f9b92ac82456c4fe9dd7f0e72b19550b8b0628f4029",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Mountain cabin. 73.4 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (346321_6290213-lq.ogg, 725753 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-346321/freesound-346321.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-723834",
+      "kind": "audio",
+      "title": "Japanese_Restaurant_Atmosphere",
+      "author": "ivoliYT",
+      "author_url": "https://freesound.org/people/ivoliYT/",
+      "source_url": "https://freesound.org/s/723834/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "0c7863275671f231d86529720ededef4406928662b1b9f190d1524e74f153d7e",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Sushi restaurant. 136.5 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (723834_14961185-lq.ogg, 975809 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-723834/freesound-723834.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-620683",
+      "kind": "audio",
+      "title": "Quiet library ambience",
+      "author": "xkeril",
+      "author_url": "https://freesound.org/people/xkeril/",
+      "source_url": "https://freesound.org/s/620683/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "25fc342c3b83f36b213eb3299fca8bbb7ee93fd2d462a46959411f2f19426d6f",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Castle library. 580.6 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (620683_13504080-lq.ogg, 5191561 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-620683/freesound-620683.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-393689",
+      "kind": "audio",
+      "title": "walla nike headquarters large hall dutch english.wav",
+      "author": "hz37",
+      "author_url": "https://freesound.org/people/hz37/",
+      "source_url": "https://freesound.org/s/393689/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "26ccc13a0d1f8921dffd891300decbd84ae43839fd12765dc9c983f085f9fe53",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Public aquarium hall. 70.4 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (393689_123355-lq.ogg, 670574 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-393689/freesound-393689.m4a.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "freesound-438735",
+      "kind": "audio",
+      "title": "G45-33-Interior Forward Torpedo Room.wav",
+      "author": "craigsmith",
+      "author_url": "https://freesound.org/people/craigsmith/",
+      "source_url": "https://freesound.org/s/438735/",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-23",
+      "sha256": "2a01c50af20069118a249dd932627047181f31a6d7970d74239c228569a65d46",
+      "polycount": null,
+      "textures": null,
+      "rigged": false,
+      "notes": "Role: room ambience for the Submarine. 23.8 s. Licence read from the Freesound sound page (Creative Commons 0), 2026-10-23. The raw file is the Freesound lq preview OGG (438735_2524442-lq.ogg, 178786 bytes) because the original needs a login; sha256 is of that file. Not auditioned on the sourcing machine (no audio tools): check the content and find a stationary 12 to 16 s section before looping. Planned processing for the pipeline: mono, 48 kHz, high-pass at 60 Hz, 1 s equal-power crossfade of the loop seam, -23 LUFS, AAC-LC 64 kbit/s in .m4a at audio/freesound-438735/freesound-438735.m4a.",
+      "modifications": [],
+      "status": "downloaded"
     }
   ]
 }
