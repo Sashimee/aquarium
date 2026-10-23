@@ -380,6 +380,27 @@ describe('with a web build', () => {
     }
   });
 
+  it.each([
+    '{"a": null}',
+    '{"a": 5}',
+    '{"a": []}',
+    '{"a": {}}',
+    '{"a": {"file": 3}}',
+    '{"a": {"file": "x.js", "css": "x.css"}}',
+    '{"a": {"file": "x.js", "assets": [1]}}',
+  ])('rejects a manifest with a malformed entry %s', (body) => {
+    const bad = mkdtempSync(join(tmpdir(), 'aquarium-badentry-'));
+    mkdirSync(join(bad, '.vite'));
+    writeFileSync(join(bad, '.vite', 'manifest.json'), body);
+    try {
+      expect(() => loadEmittedAssets(bad)).toThrow(
+        new RegExp(`Cannot read the Vite manifest at .*manifest\\.json.*pnpm --filter web build`),
+      );
+    } finally {
+      rmSync(bad, { recursive: true, force: true });
+    }
+  });
+
   it('caches by how stable the file name is', async () => {
     const app = withDist();
     const cache = async (url: string): Promise<unknown> =>

@@ -341,6 +341,18 @@ describe('build id', () => {
     expect(() => stampWorker("const a = '__BUILD_ID__';", BUILD, [])).toThrow(/__EMITTED_ASSETS__/);
   });
 
+  it('injects file names with quotes and backslashes as a literal array', () => {
+    const names = ["/assets/it's.js", '/assets/a"b.js', '/assets/c\\d$&.js'];
+    const stamped = stampWorker(RAW_SOURCE, BUILD, names);
+    const literal = /const EMITTED = new Set\((.*)\);/.exec(stamped)?.[1] ?? '';
+    const evaluated: unknown = new Function(`return ${literal}`)();
+    expect(evaluated).toEqual([...names].sort());
+  });
+
+  it('leaves an unstamped worker parseable', () => {
+    expect(() => new Function(RAW_SOURCE)).not.toThrow();
+  });
+
   it('lists only emitted files under assets/ as cache-first paths', () => {
     expect(emittedPaths(['assets/a-1.js', 'index.html', 'assets/b-2.css'])).toEqual([
       '/assets/a-1.js',
