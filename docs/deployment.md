@@ -28,7 +28,7 @@ neither. Without them `/api/health` reports `payments: disabled` and the payment
 is `https://<host>/api/payments/webhook`, subscribed to `checkout.session.completed`,
 `checkout.session.async_payment_succeeded`, `invoice.paid`, `invoice_payment.paid`,
 `customer.subscription.created`/`updated`/`deleted`, `refund.created`/`updated`, and
-`charge.dispute.closed`/`updated`/`funds_reinstated`. Test keys go on the devfish app only.
+`charge.dispute.closed`/`updated`/`funds_reinstated`. Test keys go on the devfish app only: a live key (`sk_live_`/`rk_live_`) is refused at boot unless `PAYMENTS_LIVE=1` is set, which belongs on the production app only and only once Alex has approved live payments.
 Before switching payments back on after a period off, look for subscriptions of deleted accounts that Stripe may
 still bill: `select id from club_subscriptions where user_id is null and status in ('active','trialing','past_due','unpaid','incomplete')`.
 Check each in the Stripe dashboard and cancel the ones still running (webhook retries lapse after three days, and an

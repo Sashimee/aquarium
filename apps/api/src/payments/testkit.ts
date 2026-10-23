@@ -80,6 +80,7 @@ export interface PaymentsKit {
   // Provider-side effects the app asked for, as `cancel:<id>` and `refund:<invoice>`.
   effects: string[];
   failEffects: boolean;
+  failRetrieval: boolean;
 }
 
 // The SDK talks to the real stripe-mock container, so request shapes are validated against
@@ -102,12 +103,16 @@ export function paymentsKit(wrap?: (real: PaymentProvider) => PaymentProvider): 
     sessions: new Map<string, ProviderCheckoutSession>(),
     effects: [] as string[],
     failEffects: false,
+    failRetrieval: false,
   };
   const base: PaymentProvider = {
     ...stripe,
     retrieveSubscription: async (id) =>
       kit.subscriptions.get(id) ?? { status: 'active', cancelAtPeriodEnd: false },
-    retrieveCheckoutSession: async (id) => kit.sessions.get(id) ?? null,
+    retrieveCheckoutSession: async (id) => {
+      if (kit.failRetrieval) throw new Error('provider down');
+      return kit.sessions.get(id) ?? null;
+    },
     cancelSubscriptionNow: async (id) => {
       kit.effects.push(`cancel:${id}`);
       if (kit.failEffects) throw new Error('provider down');
@@ -155,12 +160,14 @@ export async function deliver(
   event: object,
 ): Promise<LightMyRequestResponse> {
   const payload = JSON.stringify(event);
-  return h.app.inject({
+  const res = await h.app.inject({
     method: 'POST',
     url: '/api/payments/webhook',
     headers: { 'content-type': 'application/json', 'stripe-signature': sign(kit, payload) },
     payload,
   });
+  await h.app.receiptsIdle();
+  return res;
 }
 
 export async function deliverOk(h: Harness, kit: PaymentsKit, event: object): Promise<void> {

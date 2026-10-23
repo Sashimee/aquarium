@@ -21,6 +21,19 @@
   },
   "plants": [
     {
+      "id": "amazon-sword",
+      "form": "rosette",
+      "growthPerDay": 0.1,
+      "minSize": 0.4,
+      "maxSize": 2.4,
+      "lightDemand": 0.9,
+      "co2Response": 0.4,
+      "nitratePerSize": 1.7,
+      "nitrateHalfSaturation": 4,
+      "coverage": 1,
+      "spread": null
+    },
+    {
       "id": "java-fern",
       "form": "epiphyte",
       "growthPerDay": 0.05,

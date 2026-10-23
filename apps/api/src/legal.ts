@@ -12,6 +12,7 @@ import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { storedFishSchema } from './gifts.ts';
+import { createReauthenticator } from './reauth.ts';
 import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
@@ -26,8 +27,6 @@ export const DEFAULT_LEGAL_LIMITS: LegalLimits = {
   export: { max: 5, windowMs: 60 * 60_000 },
   deleteAttempt: { max: 5, windowMs: 15 * 60_000 },
 };
-
-export const FRESH_SESSION_MS = 5 * 60_000;
 
 interface CurrentSession {
   user: { id: string; email: string };
@@ -49,6 +48,7 @@ export interface LegalDeps {
 export function registerLegalRoutes(deps: LegalDeps): void {
   const { app, database, auth, credits, limiter, limits } = deps;
   const { db } = database;
+  const reauthenticate = createReauthenticator(database, auth);
 
   const unauthenticated = (reply: FastifyReply) =>
     reply.code(401).send(apiError('unauthenticated', 'Sign in required.'));
@@ -212,6 +212,63 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .orderBy(asc(schema.ledger.createdAt), asc(schema.ledger.id)),
     ]);
 
+    // One snapshot for all payment tables, so a refund landing mid-export cannot show up without
+    // its charge.
+    const { adultRow, chargeRows, refundRows, disputeRows, clubRows } = await db.transaction(
+      async (tx) => {
+        const [adultRow] = await tx
+          .select({
+            confirmedAt: schema.adultConfirmations.confirmedAt,
+            withdrawnAt: schema.adultConfirmations.withdrawnAt,
+          })
+          .from(schema.adultConfirmations)
+          .where(eq(schema.adultConfirmations.userId, userId));
+        const chargeRows = await tx
+          .select({
+            id: schema.paymentCharges.id,
+            kind: schema.paymentCharges.kind,
+            amountCents: schema.paymentCharges.amountCents,
+            packId: schema.paymentCharges.packId,
+            packPearls: schema.paymentCharges.packPearls,
+            subscriptionId: schema.paymentCharges.subscriptionId,
+            periodStart: schema.paymentCharges.periodStart,
+            periodEnd: schema.paymentCharges.periodEnd,
+            consentAt: schema.paymentCharges.consentAt,
+            createdAt: schema.paymentCharges.createdAt,
+          })
+          .from(schema.paymentCharges)
+          .where(eq(schema.paymentCharges.userId, userId))
+          .orderBy(asc(schema.paymentCharges.createdAt), asc(schema.paymentCharges.id));
+        const chargeIds = chargeRows.map((c) => c.id);
+        const refundRows =
+          chargeIds.length === 0
+            ? []
+            : await tx
+                .select()
+                .from(schema.paymentRefunds)
+                .where(inArray(schema.paymentRefunds.chargeId, chargeIds))
+                .orderBy(asc(schema.paymentRefunds.createdAt), asc(schema.paymentRefunds.refundId));
+        const disputeRows =
+          chargeIds.length === 0
+            ? []
+            : await tx
+                .select()
+                .from(schema.paymentDisputes)
+                .where(inArray(schema.paymentDisputes.chargeId, chargeIds))
+                .orderBy(
+                  asc(schema.paymentDisputes.updatedAt),
+                  asc(schema.paymentDisputes.disputeId),
+                );
+        const clubRows = await tx
+          .select()
+          .from(schema.clubSubscriptions)
+          .where(eq(schema.clubSubscriptions.userId, userId))
+          .orderBy(asc(schema.clubSubscriptions.createdAt), asc(schema.clubSubscriptions.id));
+        return { adultRow, chargeRows, refundRows, disputeRows, clubRows };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
+
     const perTank = await Promise.all(
       tanks.map(async (tank) => {
         const [fish, events, memorials, visits] = await Promise.all([
@@ -343,6 +400,14 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           communityFeeds: communityFeedRows,
           collection: { entries: collectionRows, achievements: awardRows },
           wallet: { balance: walletRow?.balance ?? 0, ledger: ledgerRows },
+          payments: {
+            adultConfirmedAt: adultRow?.confirmedAt ?? null,
+            adultWithdrawnAt: adultRow?.withdrawnAt ?? null,
+            charges: chargeRows,
+            refunds: refundRows,
+            disputes: disputeRows,
+            clubSubscriptions: clubRows,
+          },
           tanks: perTank,
           giftOffers,
         }),
@@ -361,26 +426,16 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const { password } = deleteAccountRequestSchema.parse(req.body);
     const userId = current.user.id;
 
-    const wait = limiter.consume(`delete:${userId}`, limits.deleteAttempt);
+    const wait = limiter.consume(`reauth:${userId}`, limits.deleteAttempt);
     if (wait > 0) return tooMany(reply, wait);
 
-    const [credential] = await db
-      .select({ password: schema.account.password })
-      .from(schema.account)
-      .where(and(eq(schema.account.userId, userId), eq(schema.account.providerId, 'credential')));
-
-    if (credential?.password) {
-      const ctx = await auth.$context;
-      const valid =
-        password !== undefined &&
-        (await ctx.password.verify({ hash: credential.password, password }));
-      if (!valid) {
-        return reply
-          .code(403)
-          .send(apiError('forbidden', 'Password confirmation is required and must be correct.'));
-      }
-      // Wall clock on purpose: better-auth stamps the session with the real time, not the injected one.
-    } else if (Date.now() - current.session.createdAt.getTime() > FRESH_SESSION_MS) {
+    const proof = await reauthenticate(current, password);
+    if (proof === 'wrong_password') {
+      return reply
+        .code(403)
+        .send(apiError('forbidden', 'Password confirmation is required and must be correct.'));
+    }
+    if (proof === 'stale_session') {
       return reply
         .code(403)
         .send(

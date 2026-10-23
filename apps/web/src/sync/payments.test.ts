@@ -2,6 +2,7 @@ import type { PaymentsState } from '@aquarium/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, type ApiClient } from '../ui/api';
 import {
+  adultConfirmationErrorText,
   awaitCredit,
   canCancel,
   canSubscribe,
@@ -119,6 +120,30 @@ describe('paymentErrorText', () => {
       'Nothing was charged',
     );
     expect(paymentErrorText(new Error('x'))).toContain('Nothing was charged');
+  });
+});
+
+describe('adultConfirmationErrorText', () => {
+  it('shows the server message for a forbidden answer', () => {
+    const message = 'Sign in again with your passkey, then retry within 5 minutes.';
+    expect(adultConfirmationErrorText(new ApiRequestError(403, 'forbidden', message))).toBe(
+      message,
+    );
+  });
+  it('falls back to the payment wording for other failures', () => {
+    expect(
+      adultConfirmationErrorText(new ApiRequestError(429, 'rate_limited', 'x', {}, 9)),
+    ).toContain('9 s');
+  });
+  it('reads the wait from a 429 message when there is no retry-after header', () => {
+    expect(
+      paymentErrorText(
+        new ApiRequestError(429, 'rate_limited', 'Too many requests. Try again in 30 s.'),
+      ),
+    ).toBe('Too many requests. Try again in 30 s.');
+    expect(paymentErrorText(new ApiRequestError(429, 'rate_limited', 'x'))).toContain(
+      'a little while',
+    );
   });
 });
 

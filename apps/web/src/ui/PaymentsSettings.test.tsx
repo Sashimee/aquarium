@@ -64,15 +64,123 @@ describe('purchase settings', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('confirms the adult on a tick and stores what the server answers', async () => {
+  const box = () => container.querySelector<HTMLInputElement>('input[type=checkbox]');
+  const passwordField = () => container.querySelector<HTMLInputElement>('input[type=password]');
+  const type = async (el: HTMLInputElement | null, value: string) => {
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      set?.call(el, value);
+      el?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const submit = async () => {
+    await act(async () => {
+      container
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+  };
+
+  it('asks for the password on a tick and confirms with it', async () => {
     api.paymentsState.mockResolvedValue(state());
     api.setAdultConfirmation.mockResolvedValue(state({ adultConfirmed: true }));
     await show();
-    const box = container.querySelector<HTMLInputElement>('input[type=checkbox]');
-    expect(box?.checked).toBe(false);
-    await click(box);
-    expect(api.setAdultConfirmation).toHaveBeenCalledWith(true);
-    expect(container.querySelector<HTMLInputElement>('input[type=checkbox]')?.checked).toBe(true);
+    expect(passwordField()).toBeNull();
+    await click(box());
+    expect(api.setAdultConfirmation).not.toHaveBeenCalled();
+    await type(passwordField(), 'hunter2hunter2');
+    await submit();
+    expect(api.setAdultConfirmation).toHaveBeenCalledWith(true, 'hunter2hunter2');
+    expect(box()?.checked).toBe(true);
+    expect(passwordField()).toBeNull();
+  });
+
+  it('lets a passkey-only account confirm with the field empty', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockResolvedValue(state({ adultConfirmed: true }));
+    await show();
+    await click(box());
+    await submit();
+    expect(api.setAdultConfirmation).toHaveBeenCalledWith(true, undefined);
+  });
+
+  it('shows the server message on a 403 and clears the password', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockRejectedValue(
+      new ApiRequestError(
+        403,
+        'forbidden',
+        'Password confirmation is required and must be correct.',
+      ),
+    );
+    await show();
+    await click(box());
+    await type(passwordField(), 'nope');
+    await submit();
+    expect(container.querySelector('[role=alert]')?.textContent).toBe(
+      'Password confirmation is required and must be correct.',
+    );
+    expect(passwordField()?.value).toBe('');
+  });
+
+  it('tells a passkey-only account with an old session to sign in again, even if it typed a password', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockRejectedValue(
+      new ApiRequestError(
+        403,
+        'forbidden',
+        'Sign in again with your passkey, then retry within 5 minutes.',
+      ),
+    );
+    await show();
+    await click(box());
+    await type(passwordField(), 'something');
+    await submit();
+    const alert = container.querySelector('[role=alert]')?.textContent;
+    expect(alert).toContain('Sign in again with your passkey');
+    expect(alert).not.toContain('not right');
+  });
+
+  it('shows the wait from the server message on a 429 without a retry-after header', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockRejectedValue(
+      new ApiRequestError(429, 'rate_limited', 'Too many requests. Try again in 30 s.'),
+    );
+    await show();
+    await click(box());
+    await type(passwordField(), 'pw');
+    await submit();
+    expect(container.querySelector('[role=alert]')?.textContent).toContain('Try again in 30 s');
+  });
+
+  it('focuses the password field and links its hint', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    await show();
+    await click(box());
+    const field = passwordField();
+    expect(field?.maxLength).toBe(128);
+    const hint = container.querySelector(
+      `#${CSS.escape(field?.getAttribute('aria-describedby') ?? 'x')}`,
+    );
+    expect(hint?.textContent).toContain('passkey');
+  });
+
+  it('withdraws without a password', async () => {
+    api.paymentsState.mockResolvedValue(state({ adultConfirmed: true }));
+    api.setAdultConfirmation.mockResolvedValue(state());
+    await show();
+    await click(box());
+    expect(api.setAdultConfirmation).toHaveBeenCalledWith(false);
+    expect(passwordField()).toBeNull();
+  });
+
+  it('closes the password field when the tick is withdrawn before confirming', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    await show();
+    await click(box());
+    await click(box());
+    expect(passwordField()).toBeNull();
+    expect(api.setAdultConfirmation).not.toHaveBeenCalled();
   });
 
   it('shows paid-until and cancels in one click', async () => {
