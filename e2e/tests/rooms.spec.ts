@@ -232,3 +232,75 @@ test('the room picker in Decorate switches a free room, buys a paid one after as
   await expect.poll(async () => (await getTank(page, tank.id)).roomId).toBeNull();
   await awaitLoaded(page);
 });
+
+test.describe('the old per-device room (T78 migration)', () => {
+  const DEVICE_KEY = 'aquarium.room';
+
+  async function withDeviceRoom(page: Page, value: string): Promise<void> {
+    await page.goto('/?tier=low&backend=webgl');
+    await page.evaluate(
+      ([key, room]) => localStorage.setItem(key as string, room as string),
+      [DEVICE_KEY, value],
+    );
+  }
+
+  const deviceRoom = (page: Page) => page.evaluate((key) => localStorage.getItem(key), DEVICE_KEY);
+
+  test('a stored "none" moves untouched tanks once and leaves a tank the player set alone', async ({
+    page,
+  }) => {
+    test.setTimeout(420_000);
+    await registerVerifiedUser(page, 'migrate');
+    const untouched = await createTank(page, { name: 'Untouched' });
+    const chosen = await createTank(page, { name: 'Chosen' });
+    expect((await getTank(page, untouched.id)).roomId).toBe('room-living');
+    expect((await patchTank(page, chosen.id, { roomId: 'room-bedroom' })).status()).toBe(200);
+
+    await withDeviceRoom(page, 'none');
+    await openTank(page);
+
+    await expect.poll(async () => (await getTank(page, untouched.id)).roomId).toBeNull();
+    await expect.poll(() => deviceRoom(page), { message: 'the device key is dropped' }).toBeNull();
+    expect((await getTank(page, chosen.id)).roomId, 'a room the player set is kept').toBe(
+      'room-bedroom',
+    );
+
+    expect((await patchTank(page, untouched.id, { roomId: 'room-living' })).status()).toBe(200);
+    await openTank(page);
+    expect((await getTank(page, untouched.id)).roomId, 'it never runs a second time').toBe(
+      'room-living',
+    );
+  });
+
+  test('a stored paid room is applied only when the account owns it', async ({ page }) => {
+    test.setTimeout(420_000);
+    await registerVerifiedUser(page, 'migrateowned');
+    const tank = await createTank(page, { name: 'Pond' });
+
+    await withDeviceRoom(page, 'office');
+    await openTank(page);
+    await expect.poll(() => deviceRoom(page)).toBeNull();
+    expect((await getTank(page, tank.id)).roomId, 'an unowned room is not applied').toBe(
+      'room-living',
+    );
+
+    const bought = await purchase(page, `room:${OTHER_PAID}`);
+    expect(bought.status(), await bought.text()).toBe(200);
+    await withDeviceRoom(page, 'office');
+    await openTank(page);
+    await expect.poll(async () => (await getTank(page, tank.id)).roomId).toBe(OTHER_PAID);
+    await expect.poll(() => deviceRoom(page)).toBeNull();
+  });
+
+  test('a stored value that is not one of the old rooms is dropped and changes nothing', async ({
+    page,
+  }) => {
+    test.setTimeout(420_000);
+    await registerVerifiedUser(page, 'migratejunk');
+    const tank = await createTank(page, { name: 'Pond' });
+    await withDeviceRoom(page, 'a-room-that-never-existed');
+    await openTank(page);
+    await expect.poll(() => deviceRoom(page)).toBeNull();
+    expect((await getTank(page, tank.id)).roomId).toBe('room-living');
+  });
+});

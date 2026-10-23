@@ -198,6 +198,10 @@ jobs:
             args: biomes-sizes.spec fish-cap.spec economy.spec payments.spec
           - name: rooms-social
             args: rooms.spec social.spec
+          - name: social-ui
+            args: social-ui.spec
+          - name: payments-account
+            args: club.spec account.spec
           - name: fish-life
             args: fish-life.spec living-tank.spec
           - name: shop-equipment
