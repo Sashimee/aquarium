@@ -569,6 +569,40 @@ describe('anchored species', { timeout: LONG }, () => {
     expect(w.behaviour.routesPending).toBe(0);
   });
 
+  it('keeps each remaining fish its own entry cells when one leaves mid-list (#1537)', () => {
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, firefish],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS.filter((a) => a.kind !== 'cave'),
+      fish: spawnMany(firefish.id, 4),
+    });
+    w.setLight(0);
+    const cellsOf = (i: number): number[] => [
+      at(w.behaviour.entryCells, 2 * i),
+      at(w.behaviour.entryCells, 2 * i + 1),
+    ];
+    // The leaving fish and every one after it have looked, each at its own cell, so a slot pair
+    // shifted by one would show as another fish's cells.
+    const tail = [1, 2, 3];
+    const looked = (): boolean =>
+      tail.every((i) => cellsOf(i).some((c) => c >= 0)) &&
+      new Set(tail.map((i) => cellsOf(i).join())).size === tail.length;
+    let t = 0;
+    while (!looked()) {
+      w.step();
+      if (++t > 3000) throw new Error('the fish never looked where to join their ways');
+    }
+    const before = new Map(w.fishIds.map((id, i) => [id, cellsOf(i)]));
+    const gone = w.fishIds[1];
+    if (gone === undefined) throw new Error('no fish to remove');
+    w.removeFish(gone);
+    expect(w.behaviour.entryCells.length).toBe(2 * w.count);
+    expect(w.fishIds).not.toContain(gone);
+    for (const [i, id] of w.fishIds.entries()) expect(cellsOf(i), id).toEqual(before.get(id));
+  });
+
   it('keeps where it joins the way for a while when no cell of it is in sight (#1515)', () => {
     const steps = BEHAVIOUR.caveRouteEntrySteps;
     expect(Number.isInteger(steps) && steps > 1).toBe(true);

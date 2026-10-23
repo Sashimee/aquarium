@@ -577,6 +577,11 @@ export class Behaviour {
     return n;
   }
 
+  /** Per fish, the cell where it last looked to join its wide and its narrow way; -1 for none. */
+  get entryCells(): Int32Array {
+    return this.entryCell;
+  }
+
   /** Entry slots that still hold a dropped way. */
   get staleEntries(): number {
     const kept = new Set(
