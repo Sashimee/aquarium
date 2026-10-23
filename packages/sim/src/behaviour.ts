@@ -577,6 +577,14 @@ export class Behaviour {
     return n;
   }
 
+  /** Fish holds on where they join a way that is no longer kept. */
+  get staleEntries(): number {
+    const kept = new Set(
+      [...this.routes.values()].flatMap((byClearance) => [...byClearance.values()]),
+    );
+    return this.entryRoute.filter((r) => r !== null && !kept.has(r)).length;
+  }
+
   /** Seconds each fish has left hiding in shelter after a startle. */
   get shelterTimer(): Float64Array {
     return this._shelterTimer;
@@ -925,8 +933,7 @@ export class Behaviour {
    */
   private deal(): void {
     const given = this.given;
-    this.routes.clear();
-    this.routeQueue = [];
+    this.dropRoutes();
     this.nookLength = given.some((a) => a.kind === 'cave') ? 0 : this.longestCaveDweller();
     const homes =
       this.nookLength > 0 ? [...given, ...this.nooksFor(this.nookLength, given)] : given;
@@ -969,8 +976,7 @@ export class Behaviour {
    */
   private redealNooks(): void {
     const given = this.given;
-    this.routes.clear();
-    this.routeQueue = [];
+    this.dropRoutes();
     this.nookLength = this.longestCaveDweller();
     const nooks = this.nookLength > 0 ? this.nooksFor(this.nookLength, given) : [];
     this.anchors = [...given, ...nooks];
@@ -1266,8 +1272,7 @@ export class Behaviour {
    * covers is chosen again soon. Walker nooks are rechecked every step by `nookHolds`.
    */
   decorMoved(): void {
-    this.routes.clear();
-    this.routeQueue = [];
+    this.dropRoutes();
     const { count, species } = this.host;
     for (let s = 0; s < species.length; s++) {
       const leader = at(this.groupLeader, s);
@@ -2720,6 +2725,13 @@ export class Behaviour {
     this._routeWork = work;
   }
 
+  /** Drops every way, and each fish's hold on where it joined one. */
+  private dropRoutes(): void {
+    this.routes.clear();
+    this.routeQueue = [];
+    this.entryRoute.fill(null);
+  }
+
   /** Drops the ways no fish still in the tank can take: to a cave none holds, or too wide or narrow. */
   private pruneRoutes(): void {
     const wanted = new Map<Anchor, Set<number>>();
@@ -2742,6 +2754,10 @@ export class Behaviour {
       [...this.routes.values()].flatMap((byClearance) => [...byClearance.values()]),
     );
     this.routeQueue = this.routeQueue.filter((r) => kept.has(r));
+    for (let k = 0; k < this.entryRoute.length; k++) {
+      const route = this.entryRoute[k];
+      if (route !== undefined && route !== null && !kept.has(route)) this.entryRoute[k] = null;
+    }
   }
 
   private startExcursion(i: number, a: Anchor, length: number): void {

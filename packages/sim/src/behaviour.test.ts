@@ -564,6 +564,7 @@ describe('anchored species', { timeout: LONG }, () => {
     for (const id of holders.slice(1)) w.removeFish(id);
     expect(w.behaviour.routesKept).toBeLessThan(kept);
     expect(w.behaviour.routesKept).toBeGreaterThan(0);
+    expect(w.behaviour.staleEntries).toBe(0);
     for (const id of [...w.fishIds]) w.removeFish(id);
     expect(w.behaviour.routesKept).toBe(0);
     expect(w.behaviour.routesPending).toBe(0);
@@ -642,6 +643,65 @@ describe('anchored species', { timeout: LONG }, () => {
     expect(kept).toBeGreaterThan(0);
     expect(w.behaviour.routesKept).toBe(0);
     expect(w.behaviour.routesPending).toBe(0);
+    expect(w.behaviour.staleEntries).toBe(0);
+  });
+
+  it('looks again where to join a way rebuilt while it kept a cell of the old one (#1521)', () => {
+    const tank = { width: 0.6, height: 0.25, depth: 0.3 } as const;
+    const [x0, y0, z0, half, thick] = [0.04, 0.08, 0, 0.06, 0.008];
+    const wall = (id: string, dx: number, dz: number, hx: number, hz: number): Collider => ({
+      id,
+      hard: true,
+      kind: 'box',
+      center: [x0 + dx, tank.height / 2, z0 + dz],
+      halfExtents: [hx, tank.height / 2, hz],
+      rotationY: 0,
+      rounding: 0,
+    });
+    const span = half + thick;
+    const open = [
+      wall('n', 0, half, span, thick),
+      wall('s', 0, -half, span, thick),
+      wall('e', half, 0, thick, span),
+    ];
+    const w = new World({
+      seed: 5,
+      tank,
+      species: ARCHETYPES,
+      decor: open,
+      anchors: [
+        { id: 'den', kind: 'cave', position: [x0, y0, z0], radius: 0.02, facing: [-1, 0, 0] },
+      ],
+      fish: [],
+    });
+    w.addFish(
+      { id: 'gramma', species: royalGramma.id },
+      { position: [x0 + half + 0.08, y0, z0], heading: 0 },
+    );
+    w.setLight(0);
+    const outside = (): boolean =>
+      Math.max(Math.abs(at(w.position, 0) - x0), Math.abs(at(w.position, 2) - z0)) > span;
+    let t = 0;
+    while (w.behaviour.routeLookupWork === 0 || !outside()) {
+      w.step();
+      if (++t > 3000) throw new Error('the fish never looked where to join its way in');
+    }
+
+    // Shutting the mouth cuts the fish off: the cell it kept has no way on the rebuilt route, so
+    // joining by it would make `Route.from` throw.
+    w.setDecor([...open, wall('w', -half, 0, thick, span)]);
+    expect(w.behaviour.routesPending).toBe(1);
+    expect(w.behaviour.staleEntries, 'no fish holds on to the dropped way').toBe(0);
+    let rebuilt = 0;
+    do {
+      w.step();
+      rebuilt++;
+    } while (w.behaviour.routesPending > 0 && rebuilt < BEHAVIOUR.caveRouteEntrySteps);
+    expect(rebuilt, 'rebuilt within the hold on the old cell').toBeLessThan(
+      BEHAVIOUR.caveRouteEntrySteps,
+    );
+    expect(w.behaviour.routeLookupWork, 'looked again on the rebuilt way').toBeGreaterThan(0);
+    for (let k = 0; k < 2 * BEHAVIOUR.caveRouteEntrySteps; k++) w.step();
   });
 
   it('keeps only the ways to held caves once the caves are dealt or the rock moves (#1515)', () => {
