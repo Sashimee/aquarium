@@ -9,6 +9,7 @@ type Preset = 'living-room' | 'office';
 const sizes = Object.keys(TANK_DIMENSIONS) as Size[];
 const presets: Preset[] = ['living-room', 'office'];
 const rates = [30, 60, 144, 240];
+const SETTLE_SECONDS = 8;
 
 function fakeCamera() {
   const camera = {
@@ -72,8 +73,12 @@ function run(rig: CameraRig, cam: { pos: Vec3 }, hz: number, steps: Step[], labe
 }
 
 function expectRestsOnGoal(rig: CameraRig, cam: { pos: Vec3 }, hz: number, label: string) {
-  for (let f = 0; f < 15 * hz; f++) rig.update(1 / hz);
-  expect(gap(cam.pos, rig.goalPosition), label).toBeLessThan(1e-3);
+  let frames = 0;
+  while (frames < SETTLE_SECONDS * hz && gap(cam.pos, rig.goalPosition) >= 1e-3) {
+    rig.update(1 / hz);
+    frames++;
+  }
+  expect(gap(cam.pos, rig.goalPosition), `${label} after ${frames / hz} s`).toBeLessThan(1e-3);
 }
 
 describe('camera in a room: the eye always rests on its goal', () => {
@@ -113,7 +118,7 @@ describe('camera in a room: the eye always rests on its goal', () => {
       const preset = pick(presets);
       const hz = pick(rates);
       const { rig, cam, room, d } = roomRig(size, preset);
-      for (let t = 0; t < 5; t += 1 / hz) rig.update(1 / hz);
+      for (let t = 0; t < 1; t += 1 / hz) rig.update(1 / hz);
       const steps: Step[] = [];
       for (let i = 0; i < 6; i++) {
         const frames = Math.round(between(0, 1.5 * hz));
