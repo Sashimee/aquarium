@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TIERS, TIER_SETTINGS, type Tier } from '../engine/quality/tiers';
 import catalog from '../../public/assets/index.json';
 import type { ModelLod } from './assets';
-import { plantCastsShadow, plantLodFor } from './plants';
+import { PLANT_LOD, plantCastsShadow, plantLodFor } from './plants';
 import { loadPreset } from './preset';
-import { PLANT_LOD } from './TankScene';
 
 const triangles = new Map(
   catalog.assets.map((a) => [a.id, a.lods.map((l) => (l as { triangles: number }).triangles)]),
