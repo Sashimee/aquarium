@@ -194,9 +194,8 @@ function prepare(texture: Texture): Texture {
 }
 
 /**
- * three hands overlapping loads of one URL the same texture, so each atlas counts its users and
- * the last one to let go disposes it. Disposing earlier would not break the others, since three
- * re-uploads a disposed texture from its CPU mips, but it would upload the atlas twice.
+ * three hands overlapping loads of one URL the same texture. Disposing it while another atlas
+ * still draws with it would make three upload it again from its CPU mips.
  */
 const textureUsers = new WeakMap<Texture, number>();
 

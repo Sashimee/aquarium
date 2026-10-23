@@ -1476,6 +1476,88 @@ describe('FishSystem toys and display', () => {
     },
   );
 
+  it('keeps an atlas texture another batch shares when a dropped batch finishes its load late', async () => {
+    const atlas: ImpostorAtlasInfo = {
+      grid: 8,
+      frameSize: 64,
+      pivot: [0, 0, 0],
+      radius: 0.04,
+      albedoFile: 'atlas-albedo.ktx2',
+      normalFile: 'atlas-normal.ktx2',
+    };
+    vi.mocked(FishAssetLoader.prototype.load).mockImplementation(() =>
+      Promise.resolve(bettaModel(atlas)),
+    );
+    const shared = new Map<string, CompressedTexture>();
+    const disposals = new Map<string, number>();
+    for (const file of [atlas.albedoFile, atlas.normalFile]) {
+      const texture = new CompressedTexture([], 1, 1);
+      texture.addEventListener('dispose', () =>
+        disposals.set(file, (disposals.get(file) ?? 0) + 1),
+      );
+      shared.set(`/assets/${file}`, texture);
+    }
+    let held: Promise<void> | null = null;
+    const loadAsync = vi
+      .spyOn(KTX2Loader.prototype, 'loadAsync')
+      .mockImplementation(async (url: string) => {
+        if (held !== null) await held;
+        const texture = shared.get(url);
+        if (texture === undefined) throw new Error(`unexpected atlas url ${url}`);
+        return texture;
+      });
+    const impostorWrites = vi.spyOn(ImpostorInstanceData.prototype, 'write');
+    const tier = {
+      fishLod: { midDistance: 0.01, impostorDistance: 0.02 },
+      fishImpostors: { fullMeshes: 0 },
+    };
+    const gramma = fishFixture(FISH_2, { species: 'royal-gramma', size: 0.06 });
+    const { fish, load, nextWorld, snapshot } = await bettaTank(gramma, 'freshwater', tier);
+    const show = (shown: ReturnType<typeof fishFixture>[]): void =>
+      fish.handle({
+        type: 'tank:loaded',
+        payload: {
+          backgroundId: 'bg-fw-planted-stream',
+          tankId: TANK_A,
+          size: 'standard',
+          biome: 'freshwater',
+          decorLayout: [],
+          decorEdited: false,
+          fish: shown,
+        },
+      });
+    load();
+    await nextWorld();
+    await vi.waitFor(() => {
+      snapshot(0, 0);
+      if (impostorWrites.mock.calls.length === 0) throw new Error('no gramma impostor yet');
+    });
+    const grammaLoads = loadAsync.mock.calls.length;
+
+    let finish = (): void => undefined;
+    held = new Promise<void>((resolve) => (finish = resolve));
+    show([BETTA, gramma]);
+    await nextWorld();
+    await vi.waitFor(() => {
+      snapshot(0, 0, 2);
+      if (loadAsync.mock.calls.length === grammaLoads) throw new Error('no betta atlas load yet');
+    });
+    show([gramma]);
+    await nextWorld();
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(disposals.size).toBe(0);
+    impostorWrites.mockClear();
+    snapshot(0, 0);
+    expect(impostorWrites).toHaveBeenCalled();
+    fish.dispose();
+    expect(Object.fromEntries(disposals)).toEqual({
+      [atlas.albedoFile]: 1,
+      [atlas.normalFile]: 1,
+    });
+  });
+
   it.each([
     ['without shadows', 0, 0, 1],
     ['with shadows', 1024, 0, 1],
