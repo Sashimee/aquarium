@@ -1,6 +1,7 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { advanceServerClock, APP_URL, registerVerifiedUser } from '../support/app.ts';
+import { advanceServerClock, registerVerifiedUser } from '../support/app.ts';
 import { COMMUNITY_TANK_FEED_CAP } from '../support/community.ts';
+import { anonymousVisitor, freshPlayer, setHandle, uniqueHandle } from '../support/social.ts';
 import {
   addFish,
   createTank,
@@ -11,25 +12,6 @@ import {
   sameOrigin,
   type ApiTank,
 } from '../support/api.ts';
-
-async function freshPlayer(browser: Browser, label: string): Promise<Page> {
-  const context = await browser.newContext({ baseURL: APP_URL, serviceWorkers: 'block' });
-  const page = await context.newPage();
-  await registerVerifiedUser(page, label);
-  return page;
-}
-
-async function anonymousVisitor(browser: Browser): Promise<Page> {
-  const context = await browser.newContext({ baseURL: APP_URL, serviceWorkers: 'block' });
-  return context.newPage();
-}
-
-const uniqueHandle = (prefix: string): string =>
-  `${prefix}${crypto.randomUUID().replaceAll('-', '').slice(0, 10)}`;
-
-async function setHandle(page: Page, handle: string) {
-  return page.request.put('/api/me/handle', { ...sameOrigin, data: { handle } });
-}
 
 const currentHandle = async (page: Page): Promise<string | null> =>
   ((await (await page.request.get('/api/me/handle')).json()) as { handle: string | null }).handle;

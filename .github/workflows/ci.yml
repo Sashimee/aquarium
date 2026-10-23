@@ -202,6 +202,8 @@ jobs:
             args: fish-life.spec living-tank.spec
           - name: shop-equipment
             args: shop-equipment.spec
+          - name: scene-modes
+            args: scene-modes.spec
     services:
       postgres:
         image: postgres:18
