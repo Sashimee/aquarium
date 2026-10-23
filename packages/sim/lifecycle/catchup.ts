@@ -113,6 +113,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
       speciesChemistry: input.speciesChemistry,
       params: input.params,
       chemistryParams: input.chemistryParams,
+      ...(input.maxFishLengthM !== undefined && { maxFishLengthM: input.maxFishLengthM }),
       heaterSetpointC: setpoint,
     });
     const crewCleaned = cleanStep(result.state, input, startMs + STEP_MS);

@@ -66,6 +66,8 @@ export interface TankEnvironment {
   readonly speciesChemistry: SpeciesChemistryTable;
   readonly params: WaterParameters;
   readonly chemistryParams: ChemistryParameters;
+  /** The longest body the tank's `World` accepts (`maxFishLengthM`); growth stops there and a longer fish is trimmed to it. */
+  readonly maxFishLengthM?: number;
 }
 
 export interface StepContext extends TankEnvironment {

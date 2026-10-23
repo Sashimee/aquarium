@@ -223,7 +223,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           })
           .from(schema.adultConfirmations)
           .where(eq(schema.adultConfirmations.userId, userId))
-          .orderBy(asc(schema.adultConfirmations.confirmedAt));
+          .orderBy(asc(schema.adultConfirmations.confirmedAt), asc(schema.adultConfirmations.id));
         const chargeRows = await tx
           .select({
             id: schema.paymentCharges.id,

@@ -45,6 +45,7 @@ import {
   type StoredPlant,
   type Tank,
 } from '@aquarium/shared';
+import { adultLengthRefusal, tankMaxFishLengthM } from './fishFit.ts';
 import {
   applyCare,
   applyEating,
@@ -370,6 +371,7 @@ export async function tickLocked(
     biome: tank.biome,
     litres: TANK_SIZES[tank.size].litres,
     bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
+    maxFishLengthM: tankMaxFishLengthM(tank.size),
     equipment: equipmentSchema.parse(tank.equipment),
     species: new Map([...deps.species].map(([id, s]) => [id, s.lifecycle])),
     speciesChemistry: new Map([...deps.species].map(([id, s]) => [id, s.chemistry])),
@@ -1385,6 +1387,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         }
         const tooShort = tankLengthRefusal(economy, spec.id, ticked.tank, spec.commonName);
         if (tooShort) throw new HttpError(400, apiError('validation_failed', tooShort));
+        const tooLong = adultLengthRefusal(spec, ticked.tank.size);
+        if (tooLong) throw new HttpError(400, apiError('validation_failed', tooLong));
         const existing = ticked.fishRows.map((f) => ({
           alive: f.status === 'alive',
           maxBioload: species.get(f.species)?.lifecycle.bioload ?? 0,

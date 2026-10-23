@@ -30,6 +30,7 @@ import {
   type GiftOffer,
   type Tank,
 } from '@aquarium/shared';
+import { adultLengthRefusal } from './fishFit.ts';
 import {
   BIOLOAD_CAPACITY_BY_SIZE,
   hasCapacityFor,
@@ -322,6 +323,8 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     }
     const tooShort = tankLengthRefusal(economy, spec.id, dest.tank, spec.commonName);
     if (tooShort) throw refuse(409, tooShort);
+    const tooLong = adultLengthRefusal(spec, dest.tank.size);
+    if (tooLong) throw refuse(409, tooLong);
     const existing = dest.fishRows
       .filter((f) => f.id !== leavingFishId)
       .map((f) => ({
