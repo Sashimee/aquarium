@@ -51,12 +51,11 @@ const MAX_NUDGED_NANO_ITEMS = { freshwater: 2, reef: 7, blackwater: 3 } as const
 /**
  * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
  * `<size>:<patch id>`, with the mean root z band they settle in. A nano holds its plants near life
- * size, so a back patch whose reach nears the half-depth cannot root as deep as authored, and a
- * front one is walled in by hardscape. Height is kept over depth.
+ * size, so a back patch whose reach nears the half-depth cannot root as deep as authored. Height
+ * is kept over depth.
  */
 const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
   'nano30:vallisneria-right': [-0.013, -0.011],
-  'nano30:carpet-right': [0.013, 0.016],
 };
 
 /**
@@ -277,6 +276,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           catalog,
           new ColliderField(colliders),
           dimensions,
+          size,
           (patch, instances) => {
             placed.set(patch.id, instances.length);
             scales.set(
@@ -333,6 +333,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           catalog,
           new ColliderField(colliders),
           dimensions,
+          size,
           (patch, instances) => roots.set(patch.id, instances),
         );
         warn.mockRestore();

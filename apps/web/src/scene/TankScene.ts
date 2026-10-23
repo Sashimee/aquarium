@@ -53,12 +53,15 @@ import {
   PLANT_KIND,
 } from './hardscape';
 import { routeDecor } from './decorRouting';
-import { boundsFromCatalog, fitPresetToTank } from './presetFit';
+import { boundsFromCatalog, fitPresetToTank, glassSqueezes, MIN_KEPT_PATCH } from './presetFit';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
 import {
+  GLASS_SHRINK_FLOOR,
   MAX_TILT_RAD as MAX_PLANT_TILT,
+  openGround,
+  ROOT_DEPTH,
   scatterPatch,
   type ReachFn,
   type Extent,
@@ -331,12 +334,19 @@ export class TankScene {
     };
 
     colliders.push(
-      ...scatterPresetPatches(preset, catalog, hard, dimensions, (patch, instances) => {
-        const list = entriesFor(patch.assetId);
-        instances.forEach((instance, i) =>
-          list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
-        );
-      }),
+      ...scatterPresetPatches(
+        preset,
+        catalog,
+        hard,
+        dimensions,
+        engine.tankSize,
+        (patch, instances) => {
+          const list = entriesFor(patch.assetId);
+          instances.forEach((instance, i) =>
+            list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
+          );
+        },
+      ),
     );
     const anchors: SceneAnchor[] = [];
     anemoneItems.forEach((item, i) => {
@@ -1202,6 +1212,7 @@ export function scatterPresetPatches(
   catalog: Pick<AssetCatalog, 'get'>,
   hard: ColliderField,
   dimensions: TankDimensions,
+  size: TankSize,
   onPatch: (patch: PlantPatch, instances: PlantInstance[]) => void,
 ): CapsuleCollider[] {
   const waterTop = dimensions.height - dimensions.freeboard;
@@ -1219,7 +1230,21 @@ export function scatterPresetPatches(
       reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome),
     );
     const ceiling = surfaceScaleCeiling(waterTop, bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT);
-    const instances = scatterPatch(patch, ground, blocked, extent, reach, ceiling);
+    const smallest = patch.scale[0] * GLASS_SHRINK_FLOOR;
+    const rooted =
+      patch.count > MIN_KEPT_PATCH && glassSqueezes(size, patch.center[1])
+        ? {
+            ...patch,
+            center: openGround(
+              patch.center,
+              patch.radius,
+              Math.max(0, extent.halfLength - reach(smallest, 'x') - patch.radius),
+              Math.max(0, extent.halfDepth - reach(smallest, 'z') - patch.radius),
+              (x, z) => !blocked(x, ground(x, z) - ROOT_DEPTH, z),
+            ),
+          }
+        : patch;
+    const instances = scatterPatch(rooted, ground, blocked, extent, reach, ceiling);
     if (instances.length < patch.count) {
       console.warn(
         `Plant patch "${patch.id}" fitted ${instances.length} of ${patch.count} plants; move it clear of hardscape and glass`,
