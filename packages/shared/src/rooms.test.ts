@@ -71,6 +71,9 @@ describe('content/rooms.json', () => {
         .success,
     ).toBe(false);
     expect(roomEntrySchema.safeParse({ ...first, extra: 1 }).success).toBe(false);
+    expect(
+      roomEntrySchema.safeParse({ ...first, swatch: { key: 'red', ambient: '#000000' } }).success,
+    ).toBe(false);
   });
 });
 
@@ -84,6 +87,10 @@ describe('content/presets/rooms', () => {
       const preset = roomPresetSchema.parse(readJson(file));
       expect(preset.roomId).toBe(room.id);
       expect(preset.light.windowPosition !== null, room.id).toBe(room.hasWindow);
+      expect(room.swatch, room.id).toEqual({
+        key: preset.light.keyColor,
+        ambient: preset.light.ambientColor,
+      });
       if (preset.light.windowPosition !== null) {
         expect(preset.light.windowPosition[0], `${room.id} window side`).toBeGreaterThan(0);
       }
