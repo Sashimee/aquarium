@@ -1,0 +1,11 @@
+{
+  "roomId": "room-public-aquarium",
+  "layout": [],
+  "light": {
+    "keyColor": "#9fd0ff",
+    "keyIntensity": 1.4,
+    "ambientColor": "#4a78a8",
+    "ambientIntensity": 0.3,
+    "windowPosition": null
+  }
+}

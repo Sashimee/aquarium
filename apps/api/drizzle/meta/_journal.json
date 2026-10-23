@@ -253,6 +253,13 @@
       "when": 1792722094897,
       "tag": "0035_clamp_escrowed_fish",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792730010140,
+      "tag": "0036_rooms",
+      "breakpoints": true
     }
   ]
 }

@@ -175,6 +175,8 @@ describe('tank and fish', () => {
       decorLayout: [{ assetId: 'rock-1', position: [0, 0, 0] }],
       decorEdited: true,
       backgroundId: 'bg-reef-coral-wall',
+      roomId: 'room-living',
+      roomSetAt: null,
       water: { ammonia: 0, nitrate: 2, algae: 0.1, uneatenFood: 0 },
       lastTickAt: ts,
       chemistry: newTankChemistry('freshwater'),
@@ -197,6 +199,8 @@ describe('tank and fish', () => {
     expect(tankSchema.safeParse({ ...tank, recentVisitDays: -1 }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, decorEdited: undefined }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, backgroundId: 'nope' }).success).toBe(false);
+    expect(tankSchema.safeParse({ ...tank, roomId: null }).success).toBe(true);
+    expect(tankSchema.safeParse({ ...tank, roomId: 'room-attic' }).success).toBe(false);
     expect(
       tankSchema.parse({ ...tank, futureField: 1, fish: [{ ...fish, futureField: 1 }] }),
     ).toEqual(parsed);

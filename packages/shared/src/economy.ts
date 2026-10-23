@@ -6,6 +6,7 @@ import {
   slugSchema,
   timestampSchema,
 } from './common.js';
+import { roomPricesSchema } from './rooms.js';
 import { diseaseKindSchema } from './fishState.js';
 import { TANK_SIZES, tankSizeSchema, type TankSize } from './tankSize.js';
 
@@ -31,7 +32,8 @@ import { TANK_SIZES, tankSizeSchema, type TankSize } from './tankSize.js';
 // Ledger reasons:
 //   purchase      game spend, delta < 0
 //   earn          game reward, delta > 0
-//   grant         starting and migration grants, source game
+//   grant         starting and migration grants, source game; a grant may be 0 Pearls (the one-off
+//                 home office for accounts that predate rooms, itemRef room:room-office)
 //   pack          a Pearl pack bought, source stripe|apple
 //   subscription  the daily Pearls of the subscription, source stripe|apple, itemRef sub:<id>
 //   refund        a game purchase given back, source game, delta > 0
@@ -90,18 +92,20 @@ export const itemRefSchema = z
     'what was bought or earned, e.g. plant:java-fern or pack:pearls-550; purchase rejects species:* refs',
   );
 
-export const ledgerEntrySchema = z.strictObject({
-  id: idSchema,
-  userId: authIdSchema
-    .nullable()
-    .describe('null once the row is pseudonymised on account deletion'),
-  delta: pearlsSchema.refine((n) => n !== 0, 'a ledger entry moves Pearls'),
-  reason: ledgerReasonSchema,
-  source: ledgerSourceSchema,
-  itemRef: itemRefSchema.nullable(),
-  idempotencyKey: ledgerKeySchema,
-  createdAt: timestampSchema,
-});
+export const ledgerEntrySchema = z
+  .strictObject({
+    id: idSchema,
+    userId: authIdSchema
+      .nullable()
+      .describe('null once the row is pseudonymised on account deletion'),
+    delta: pearlsSchema,
+    reason: ledgerReasonSchema,
+    source: ledgerSourceSchema,
+    itemRef: itemRefSchema.nullable(),
+    idempotencyKey: ledgerKeySchema,
+    createdAt: timestampSchema,
+  })
+  .refine((e) => e.delta !== 0 || e.reason === 'grant', 'only a grant may move 0 Pearls');
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;
 
 export const ONE_TIME_REF = /^(plant|decor|background):/;
@@ -224,6 +228,9 @@ export const economySchema = z
         .partialRecord(tankSizeSchema, priceSchema)
         .describe('paid upgrades; standard is the free default size and is not listed'),
     }),
+    rooms: roomPricesSchema.describe(
+      'price of each room in Pearls, 0 for the free ones, keyed by room id',
+    ),
     earn: z.strictObject({
       dailyCare: z.strictObject({ reward: range, dailyCap }),
       healthyTankStreak: z.strictObject({

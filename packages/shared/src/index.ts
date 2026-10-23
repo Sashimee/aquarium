@@ -18,6 +18,7 @@ export * from './sizeSpace.js';
 export * from './fishFit.js';
 export * from './wordFilter.js';
 export * from './backgrounds.js';
+export * from './rooms.js';
 export * from './reminders.js';
 export * from './social.js';
 export * from './gallery.js';

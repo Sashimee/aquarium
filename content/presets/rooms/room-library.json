@@ -1,0 +1,11 @@
+{
+  "roomId": "room-library",
+  "layout": [],
+  "light": {
+    "keyColor": "#ffd7a1",
+    "keyIntensity": 1.7,
+    "ambientColor": "#e8d9c0",
+    "ambientIntensity": 0.35,
+    "windowPosition": [-1.2, 0.9, -1.5]
+  }
+}

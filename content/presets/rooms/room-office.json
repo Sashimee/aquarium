@@ -1,0 +1,11 @@
+{
+  "roomId": "room-office",
+  "layout": [],
+  "light": {
+    "keyColor": "#fff6e5",
+    "keyIntensity": 2.4,
+    "ambientColor": "#eef2ff",
+    "ambientIntensity": 0.55,
+    "windowPosition": [-1.2, 0.9, -1.5]
+  }
+}

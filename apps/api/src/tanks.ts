@@ -17,6 +17,8 @@ import {
   findDecorProblems,
   idSchema,
   isBackgroundForBiome,
+  isFreeRoom,
+  type RoomId,
   isPlayableBiome,
   legacyTintSeed,
   medicineSchema,
@@ -665,6 +667,8 @@ export async function render(
     decorEdited: tank.decorLayout !== null,
     medicine: tank.medicine === null ? null : medicineSchema.parse(tank.medicine),
     backgroundId: storedBackground(tank),
+    roomId: tank.roomId,
+    roomSetAt: tank.roomSetAt?.toISOString() ?? null,
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
     chemistry: chemistrySchema.parse(tank.chemistry),
@@ -892,6 +896,30 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     if (backgroundId === storedBackground(tank)) return;
     if (isPlayableBiome(tank.biome) && DEFAULT_BACKGROUND_ID[tank.biome] === backgroundId) return;
     if (!(await owns(tx, userId, backgroundRef(backgroundId)))) throw buyFirst('That background');
+  }
+
+  async function requireOwnedRoom(
+    tx: Tx,
+    userId: string,
+    roomId: RoomId | null | undefined,
+  ): Promise<void> {
+    if (roomId === undefined || roomId === null || isFreeRoom(roomId)) return;
+    const [row] = await tx
+      .select({ roomId: schema.ownedRooms.roomId })
+      .from(schema.ownedRooms)
+      .where(and(eq(schema.ownedRooms.userId, userId), eq(schema.ownedRooms.roomId, roomId)))
+      .limit(1);
+    if (row === undefined) {
+      throw new HttpError(
+        409,
+        apiError(
+          'conflict',
+          'That room is not unlocked yet. Buy it first.',
+          undefined,
+          'room_not_owned',
+        ),
+      );
+    }
   }
 
   async function requireOwnedPieces(
@@ -1188,6 +1216,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         }
         const equipment = body.light === undefined && body.co2 === undefined ? undefined : current;
         await requireOwnedBackground(tx, user.id, ticked.tank, body.backgroundId);
+        await requireOwnedRoom(tx, user.id, body.roomId);
         if (body.decorLayout !== undefined) {
           await requireOwnedPieces(tx, user.id, ticked.tank, body.decorLayout);
         }
@@ -1195,6 +1224,9 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .update(schema.tanks)
           .set({
             ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
+            ...(body.roomId !== undefined
+              ? { roomId: body.roomId, roomSetAt: new Date(clock.now()) }
+              : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
             ...(body.acceptsGifts !== undefined ? { acceptsGifts: body.acceptsGifts } : {}),
             ...(equipment !== undefined

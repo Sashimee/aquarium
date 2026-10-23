@@ -1,0 +1,11 @@
+{
+  "roomId": "room-loft",
+  "layout": [],
+  "light": {
+    "keyColor": "#ffe2c2",
+    "keyIntensity": 2.6,
+    "ambientColor": "#d8e4ff",
+    "ambientIntensity": 0.5,
+    "windowPosition": [-1.2, 0.9, -1.5]
+  }
+}

@@ -280,7 +280,7 @@ describe('tanks and fish', () => {
     expect(tankSchema.parse(renamed.json()).backgroundId).toBe('bg-fw-misty-lake');
   });
 
-  it('rejects a background from another biome or an unknown one', async () => {
+  it('rejects a background from another biome or an unknown one, and guards rooms', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
     const wrongBiome = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
@@ -298,6 +298,44 @@ describe('tanks and fish', () => {
     expect(JSON.stringify(wrongBiome.json())).toContain('backgroundId');
     const after = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
     expect(after.backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
+
+    expect(tank.roomId).toBe('room-living');
+    expect(tank.roomSetAt).toBeNull();
+
+    const bedroom = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-bedroom',
+    });
+    expect(bedroom.statusCode).toBe(200);
+    expect(tankSchema.parse(bedroom.json()).roomId).toBe('room-bedroom');
+    expect(tankSchema.parse(bedroom.json()).roomSetAt).not.toBeNull();
+
+    const locked = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-library',
+    });
+    expect(locked.statusCode).toBe(409);
+    const error = apiErrorSchema.parse(locked.json()).error;
+    expect(error.code).toBe('conflict');
+    expect(error.reason).toBe('room_not_owned');
+
+    const [owner] = await h.database.db
+      .select({ ownerId: schema.tanks.ownerId })
+      .from(schema.tanks)
+      .where(eq(schema.tanks.id, tank.id));
+    await h.database.db
+      .insert(schema.ownedRooms)
+      .values({ userId: owner?.ownerId ?? '', roomId: 'room-library' });
+    const unlocked = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-library',
+    });
+    expect(tankSchema.parse(unlocked.json()).roomId).toBe('room-library');
+
+    const studio = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { roomId: null });
+    expect(tankSchema.parse(studio.json()).roomId).toBeNull();
+
+    const unknownRoom = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      roomId: 'room-x',
+    });
+    expect(unknownRoom.statusCode).toBe(400);
   });
 
   it('leaves the name alone when the background in the same PATCH is rejected', async () => {
