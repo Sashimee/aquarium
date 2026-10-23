@@ -81,7 +81,10 @@ describe('payments disabled', () => {
 
   it('keeps the adult confirmation settable while payments are off', async () => {
     const who = await account(h);
-    const on = await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    const on = await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     expect(paymentsStateSchema.parse(on.json()).adultConfirmed).toBe(true);
     const off = await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: false });
     expect(paymentsStateSchema.parse(off.json()).adultConfirmed).toBe(false);
@@ -151,7 +154,10 @@ describe('payments enabled', () => {
 
   it('creates a Checkout Session at the server price once confirmed', async () => {
     const who = await account(h);
-    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     const res = await call(h, who, 'POST', '/api/payments/checkout/pack', {
       packId: 'pearls-1200',
       consent: CONSENT,
@@ -163,7 +169,10 @@ describe('payments enabled', () => {
 
   it('needs both consents and never takes an amount from the client', async () => {
     const who = await account(h);
-    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     for (const consent of [
       { immediateDelivery: true, withdrawalWaiver: false },
       { immediateDelivery: false, withdrawalWaiver: true },
@@ -185,7 +194,10 @@ describe('payments enabled', () => {
 
   it('refuses a pack that is not sold on the web or does not exist', async () => {
     const who = await account(h);
-    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     for (const packId of ['pearls-100', 'pearls-999999']) {
       const res = await call(h, who, 'POST', '/api/payments/checkout/pack', {
         packId,
@@ -197,7 +209,10 @@ describe('payments enabled', () => {
 
   it('starts a subscription checkout, and not a second one while one runs', async () => {
     const who = await account(h);
-    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     const first = await call(h, who, 'POST', '/api/payments/checkout/subscription', {
       consent: CONSENT,
     });
@@ -363,7 +378,10 @@ describe('payments enabled', () => {
       consent: CONSENT,
     });
     expect(again.statusCode).toBe(403);
-    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     const blocked = await call(h, who, 'POST', '/api/payments/checkout/subscription', {
       consent: CONSENT,
     });
@@ -382,7 +400,10 @@ describe('payments enabled', () => {
 
   it('answers 502 when the provider hands back a URL that is not https', async () => {
     const who = await account(h);
-    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     badUrl = true;
     const res = await call(h, who, 'POST', '/api/payments/checkout/pack', {
       packId: 'pearls-1200',
@@ -410,7 +431,7 @@ describe('payments enabled', () => {
   it('refuses a request from another origin on every payment mutation', async () => {
     const who = await account(h);
     for (const [method, url, payload] of [
-      ['PUT', '/api/payments/adult-confirmation', { confirmed: true }],
+      ['PUT', '/api/payments/adult-confirmation', { confirmed: true, password: PASSWORD }],
       ['POST', '/api/payments/checkout/pack', { packId: 'pearls-1200', consent: CONSENT }],
       ['POST', '/api/payments/checkout/subscription', { consent: CONSENT }],
       ['POST', '/api/payments/subscription/cancel', undefined],
@@ -456,7 +477,10 @@ describe('order status', () => {
     const hh = await createHarness({ payments: spy.provider });
     try {
       const who = await account(hh);
-      await call(hh, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+      await call(hh, who, 'PUT', '/api/payments/adult-confirmation', {
+        confirmed: true,
+        password: PASSWORD,
+      });
       await call(hh, who, 'POST', '/api/payments/checkout/pack', {
         packId: 'pearls-550',
         consent: CONSENT,
@@ -564,6 +588,7 @@ describe('order status', () => {
         checkout: { max: 2, windowMs: 60_000 },
         cancel: { max: 2, windowMs: 60_000 },
         settings: { max: 100, windowMs: 60_000 },
+        adultConfirmation: { max: 100, windowMs: 60_000 },
         orders: { max: 2, windowMs: 60_000 },
       },
     });
@@ -589,6 +614,7 @@ describe('payments rate limits', () => {
         checkout: { max: 2, windowMs: 60_000 },
         cancel: { max: 2, windowMs: 60_000 },
         settings: { max: 100, windowMs: 60_000 },
+        adultConfirmation: { max: 100, windowMs: 60_000 },
         orders: { max: 2, windowMs: 60_000 },
       },
     });
@@ -597,7 +623,10 @@ describe('payments rate limits', () => {
 
   it('answers 429 after the checkout allowance is used up', async () => {
     const who = await account(h);
-    await call(h, who, 'PUT', '/api/payments/adult-confirmation', { confirmed: true });
+    await call(h, who, 'PUT', '/api/payments/adult-confirmation', {
+      confirmed: true,
+      password: PASSWORD,
+    });
     const statuses: number[] = [];
     for (let i = 0; i < 3; i++) {
       const res = await call(h, who, 'POST', '/api/payments/checkout/pack', {

@@ -555,6 +555,7 @@ export const adultConfirmations = pgTable('adult_confirmations', {
     .primaryKey()
     .references(() => user.id, { onDelete: 'cascade' }),
   confirmedAt: timestamptz('confirmed_at').notNull().defaultNow(),
+  withdrawnAt: timestamptz('withdrawn_at'),
 });
 
 export const paymentChargeKindEnum = pgEnum('payment_charge_kind', ['pack', 'invoice']);
@@ -576,6 +577,9 @@ export const paymentCharges = pgTable(
     periodStart: timestamptz('period_start'),
     periodEnd: timestamptz('period_end'),
     consentAt: timestamptz('consent_at'),
+    receiptPending: boolean('receipt_pending').notNull().default(false),
+    receiptAttempts: integer('receipt_attempts').notNull().default(0),
+    receiptNextTryAt: timestamptz('receipt_next_try_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
   },
   (t) => [

@@ -72,6 +72,35 @@ describe('loadConfig', () => {
       }
     });
 
+    it('refuses a live key unless PAYMENTS_LIVE=1, naming the variable and not the key', () => {
+      const live = `sk_live_${'c'.repeat(24)}`;
+      for (const flag of [undefined, '', '0', 'true']) {
+        const attempt = () =>
+          loadConfig({
+            ...valid,
+            STRIPE_SECRET_KEY: live,
+            STRIPE_WEBHOOK_SECRET: webhook,
+            ...(flag === undefined ? {} : { PAYMENTS_LIVE: flag }),
+          });
+        expect(attempt).toThrow(/PAYMENTS_LIVE=1/);
+        expect(attempt).not.toThrow(/cccccccc/);
+      }
+      const c = loadConfig({
+        ...valid,
+        STRIPE_SECRET_KEY: live,
+        STRIPE_WEBHOOK_SECRET: webhook,
+        PAYMENTS_LIVE: '1',
+      });
+      expect(c.stripe?.secretKey).toBe(live);
+    });
+
+    it('still takes a restricted live key only with the opt-in', () => {
+      const restricted = `rk_live_${'d'.repeat(24)}`;
+      expect(() =>
+        loadConfig({ ...valid, STRIPE_SECRET_KEY: restricted, STRIPE_WEBHOOK_SECRET: webhook }),
+      ).toThrow(/PAYMENTS_LIVE/);
+    });
+
     it('refuses values that are not Stripe keys', () => {
       expect(() =>
         loadConfig({ ...valid, STRIPE_SECRET_KEY: 'pk_test_abc', STRIPE_WEBHOOK_SECRET: webhook }),

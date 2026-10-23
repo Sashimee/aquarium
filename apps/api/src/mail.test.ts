@@ -395,8 +395,8 @@ describe('receipt mail', () => {
     expect(text).not.toContain('Confirmed on');
   });
 
-  it('is capped per recipient but ignores the verification cooldown and the global cap', async () => {
-    let now = 0;
+  it('is never throttled, whatever the recipient cap, cooldown or global cap', async () => {
+    const now = 0;
     const sent: string[] = [];
     const transport = nodemailer.createTransport({ jsonTransport: true });
     transport.sendMail = (async (data: { to: string }) => {
@@ -415,9 +415,8 @@ describe('receipt mail', () => {
     await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
     await mailer.sendReceipt('a@bas.lu', receipt);
     await mailer.sendReceipt('a@bas.lu', receipt);
-    await expect(mailer.sendReceipt('a@bas.lu', receipt)).rejects.toThrow(MailThrottledError);
-    now += 3_600_001;
     await mailer.sendReceipt('a@bas.lu', receipt);
-    expect(sent).toHaveLength(4);
+    await mailer.sendReceipt('a@bas.lu', receipt);
+    expect(sent).toHaveLength(5);
   });
 });
