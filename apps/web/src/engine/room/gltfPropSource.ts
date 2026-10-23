@@ -1,4 +1,5 @@
 import {
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   MeshStandardNodeMaterial,
   type Material,
@@ -34,6 +35,17 @@ export function propFilesFrom(
   };
 }
 
+/** What the node twin leaves out of `source`, which RoomLight's lighting has no place for. */
+function droppedMaterialFeatures(source: MeshStandardMaterial): string[] {
+  const dropped: string[] = [];
+  if (source instanceof MeshPhysicalMaterial && source.transmission > 0) {
+    dropped.push('transmission (glass)');
+  }
+  if (source.envMapIntensity !== 1) dropped.push('envMapIntensity');
+  if (source.alphaHash) dropped.push('alphaHash');
+  return dropped;
+}
+
 /**
  * The node twin of a glTF material, named `room-prop-…` so `RoomLight` lights it with the room.
  * The source material is freed; its textures move to the twin.
@@ -43,6 +55,10 @@ export function roomPropMaterial(source: Material): MeshStandardNodeMaterial {
     throw new Error(
       `Room prop material "${source.name}" is ${source.type}, expected a glTF PBR material`,
     );
+  }
+  const dropped = droppedMaterialFeatures(source);
+  if (dropped.length > 0) {
+    console.debug(`Room prop material "${source.name}" drops ${dropped.join(', ')}`);
   }
   const material = new MeshStandardNodeMaterial();
   material.name = `room-prop-${source.name || 'material'}`;
@@ -83,8 +99,13 @@ export class GltfPropSource implements PropSource {
     this.loader.setMeshoptDecoder(MeshoptDecoder);
   }
 
-  async load(asset: string, lod: PropLod): Promise<Object3D> {
-    const gltf = await this.loader.loadAsync(`${ASSET_BASE}${this.files(asset, lod)}`);
+  async load(asset: string, lod: PropLod, signal?: AbortSignal): Promise<Object3D> {
+    const url = `${ASSET_BASE}${this.files(asset, lod)}`;
+    const response = await fetch(url, signal ? { signal } : undefined);
+    if (!response.ok) throw new Error(`Room prop ${url} returned HTTP ${response.status}`);
+    const glb = await response.arrayBuffer();
+    signal?.throwIfAborted();
+    const gltf = await this.loader.parseAsync(glb, url.slice(0, url.lastIndexOf('/') + 1));
     const twins = new Map<Material, MeshStandardNodeMaterial>();
     gltf.scene.traverse((object) => {
       const mesh = object as Partial<Mesh>;

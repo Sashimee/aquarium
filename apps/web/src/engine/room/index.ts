@@ -1,5 +1,6 @@
 export {
   RoomLight,
+  ROOM_LAMP_SLOTS,
   ROOM_LIGHT_DETAIL,
   tankGlow,
   type LitRoom,
@@ -7,6 +8,7 @@ export {
   type RoomLightDetail,
   type RoomLightInput,
   type RoomLightOptions,
+  type RoomRig,
 } from './RoomLight';
 export {
   roomDaylightAt,

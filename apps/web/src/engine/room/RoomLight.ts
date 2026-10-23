@@ -51,9 +51,21 @@ export interface LitRoom {
   readonly layout: LitRoomLayout | null;
   /** Changes when meshes join the room after it was shown, such as props that finished loading. */
   readonly revision?: number;
-  /** The room preset's key and ambient light; without one the time of day alone lights the room. */
-  readonly rig?: Pick<RoomLightPlan, 'key' | 'ambient'> | null;
+  /**
+   * The room preset's key, ambient light and lamps; without one the time of day alone lights the
+   * room. Lamps may change with the revision, as when their props finish loading.
+   */
+  readonly rig?: RoomRig | null;
 }
+
+export type RoomRig = Pick<RoomLightPlan, 'key' | 'ambient'> &
+  Partial<Pick<RoomLightPlan, 'practical'>>;
+
+/**
+ * Lamps a room can light at once. Every room material carries this many lamp terms whatever the
+ * room holds, so lamps coming and going change uniforms only.
+ */
+export const ROOM_LAMP_SLOTS = 2;
 
 export interface RoomLightDetail {
   /** Octaves of cloud noise in the window; 0 shows cover as an even overcast. */
@@ -123,6 +135,7 @@ const TANK_GLOW_DAY = new Color(1, 0.97, 0.92).multiplyScalar(1.4);
 const TANK_GLOW_NIGHT = new Color(0.04, 0.14, 0.9).multiplyScalar(0.12);
 /** Sun's apparent diameter in radians, which blurs the window's edge on the floor. */
 const SUN_DIAMETER = 0.0093;
+const BLACK = new Color(0, 0, 0);
 
 /** The lit tank's glow on the room at one metre, for the hood at `hood` (0..1). */
 export function tankGlow(hood: number, target = new Color()): Color {
@@ -278,6 +291,11 @@ export class RoomLight {
   private readonly envGain = uniform(new Color(1, 1, 1));
   private readonly keyAt = uniform(new Vector3());
   private readonly keyGain = uniform(new Color());
+  private readonly lamps = Array.from({ length: ROOM_LAMP_SLOTS }, () => ({
+    at: uniform(new Vector3()),
+    gain: uniform(new Color()),
+    reach: uniform(1),
+  }));
 
   constructor(options: RoomLightOptions) {
     if (!Number.isSafeInteger(options.seed)) {
@@ -299,6 +317,11 @@ export class RoomLight {
 
   get detail(): RoomLightDetail {
     return ROOM_LIGHT_DETAIL[this.tier];
+  }
+
+  /** Lamps lit in the room now, at most `ROOM_LAMP_SLOTS`. */
+  get litLamps(): number {
+    return this.lamps.filter((lamp) => !lamp.gain.value.equals(BLACK)).length;
   }
 
   /** Lights `room`, or nothing with null. Its materials are dressed again whenever it rebuilds. */
@@ -389,7 +412,10 @@ export class RoomLight {
     const pane = layout.window ? room.pane : null;
     const revision = room.revision ?? 0;
     if (layout === this.dressedLayout && pane === this.dressedPane) {
-      if (revision !== this.dressedRevision) this.dressMaterials(room.group, revision);
+      if (revision !== this.dressedRevision) {
+        this.fitLamps(room);
+        this.dressMaterials(room.group, revision);
+      }
       return;
     }
     this.undress();
@@ -445,6 +471,7 @@ export class RoomLight {
     this.dressedPane = null;
     this.dressedLayout = null;
     this.dressedRevision = 0;
+    for (const lamp of this.lamps) lamp.gain.value.setRGB(0, 0, 0);
     for (const material of this.dressed) {
       material.envNode = null;
       material.emissiveNode = null;
@@ -481,10 +508,30 @@ export class RoomLight {
       this.ambientColour.setRGB(1, 1, 1);
     }
     this.applyRig();
+    this.fitLamps(room);
     const { min, max: top } = layout.tank;
     this.glowAt.value.copy(
       group.localToWorld(new Vector3((min[0] + top[0]) / 2, top[1], (min[2] + top[2]) / 2)),
     );
+  }
+
+  private fitLamps(room: LitRoom): void {
+    const practical = room.rig?.practical ?? [];
+    if (practical.length > ROOM_LAMP_SLOTS) {
+      throw new Error(
+        `RoomLight: ${practical.length} lamps exceed ROOM_LAMP_SLOTS (${ROOM_LAMP_SLOTS})`,
+      );
+    }
+    this.lamps.forEach((lamp, i) => {
+      const plan = practical[i];
+      if (!plan) {
+        lamp.gain.value.setRGB(0, 0, 0);
+        return;
+      }
+      lamp.at.value.copy(room.group.localToWorld(new Vector3(...plan.position)));
+      lamp.gain.value.set(plan.color).multiplyScalar(plan.intensity);
+      lamp.reach.value = plan.distance;
+    });
   }
 
   private skyNode(): Node<'vec3'> {
@@ -544,8 +591,9 @@ export class RoomLight {
 
   /**
    * Lambert light from the sun, where the ray from the surface to the sun passes through the
-   * window, from the lit tank and from the preset's key, read as irradiance one metre away. It goes in as emission on the room's materials so the room
-   * needs no light objects, which would reach every lit material in the scene.
+   * window, from the lit tank, from the preset's key, read as irradiance one metre away, and from
+   * the lamps. It goes in as emission on the room's materials so the room needs no light objects,
+   * which would reach every lit material in the scene, the tank's included.
    */
   private roomGlowNode(): Node<'vec3'> {
     const p = positionWorld;
@@ -573,6 +621,21 @@ export class RoomLight {
     const keyFacing = max(dot(n, toKey.normalize()), 0);
     const key = this.keyGain.mul(keyFacing).div(max(dot(toKey, toKey), float(0.3)));
 
-    return diffuseContribution.mul(sun.add(tank).add(key)).mul(1 / Math.PI);
+    let lamps: Node<'vec3'> = vec3(0);
+    for (const lamp of this.lamps) {
+      const toLamp = lamp.at.sub(p);
+      const distance = toLamp.length();
+      // three's punctual falloff with decay 2 and a cut-off, so a lamp reaches as a PointLight did.
+      const falloff = distance
+        .div(lamp.reach)
+        .pow(4)
+        .oneMinus()
+        .clamp()
+        .pow(2)
+        .div(max(dot(toLamp, toLamp), float(0.01)));
+      lamps = lamps.add(lamp.gain.mul(max(dot(n, toLamp.normalize()), 0)).mul(falloff));
+    }
+
+    return diffuseContribution.mul(sun.add(tank).add(key).add(lamps)).mul(1 / Math.PI);
   }
 }
