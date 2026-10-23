@@ -9,15 +9,14 @@ import {
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { Basin } from './basin.ts';
-import { BEHAVIOUR } from './behaviour.ts';
 import { DecorField, UnionSdf } from './decor.ts';
 import { royalGramma, spawnMany } from './fixtures.ts';
-import { findNooks, NOOK, NookSearch } from './nooks.ts';
+import { findNooks, NookSearch } from './nooks.ts';
 import { Rng } from './rng.ts';
 import { FishState } from './snapshot.ts';
 import { TankSdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
-import { STEERING, World, maxFishLengthM, type FishSpawn } from './world.ts';
+import { bodyTurnRoom, World, maxFishLengthM, type FishSpawn } from './world.ts';
 
 const LONG = 120_000;
 
@@ -206,29 +205,34 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
     };
   };
 
-  // What the steering needs to turn the body round level where it is (`bodyCanTurnAt` in
-  // world.ts): the snout's reach, the flank's thickness and the turn margin.
-  const turnRoom =
-    (BEHAVIOUR.bodySampleOffsets[0] ?? NaN) +
-    BEHAVIOUR.bodyThicknessBodyLengths +
-    STEERING.turnRoomMarginBodyLengths;
+  const room = bodyTurnRoom(length);
 
-  it('keeps the room a crevice needs in step with what the steering needs to turn', () => {
-    expect(NOOK.turnRoomBodyLengths).toBeCloseTo(turnRoom, 12);
-  });
-
-  it('finds them deterministically, each with room to turn round and opening sideways', () => {
+  it('finds them deterministically, each with room for the body and opening sideways', () => {
     const f = field();
-    const nooks = findNooks(f, length);
+    const nooks = findNooks(f, length, room);
     expect(nooks.length).toBeGreaterThan(0);
-    expect(findNooks(field(), length)).toEqual(nooks);
+    expect(findNooks(field(), length, room)).toEqual(nooks);
     const n = new Float64Array(3);
     for (const k of nooks) {
       const [x, y, z] = k.position;
       expect(k.kind).toBe('cave');
-      expect(f.water.sample(x, y, z, n)).toBeGreaterThanOrEqual(turnRoom * length);
+      expect(f.water.sample(x, y, z, n)).toBeGreaterThanOrEqual(0.5 * length);
       expect(k.facing?.[1]).toBe(0);
       expect(Math.hypot(...(k.facing ?? [0, 0, 0]))).toBeCloseTo(1, 12);
+    }
+  });
+
+  it('deals those with room to turn round first, and fills up with tighter ones', () => {
+    const f = field();
+    const byCover = findNooks(f, length, 0);
+    expect(findNooks(f, length, Infinity)).toEqual(byCover);
+    expect(byCover.some((k) => k.radius < room)).toBe(true);
+    for (const need of [room, 0.6 * length]) {
+      const nooks = findNooks(f, length, need);
+      expect(nooks).toHaveLength(byCover.length);
+      const roomy = nooks.filter((k) => k.radius >= need).length;
+      expect(roomy, `${need / length} L`).toBeGreaterThan(0);
+      expect(nooks.slice(0, roomy).every((k) => k.radius >= need)).toBe(true);
     }
   });
 
@@ -338,6 +342,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
           water: new UnionSdf([new TankSdf(basin), f]),
         },
         length,
+        room,
       );
     };
     const decor = () => ({ shapes: rock.shapes(), reach: rock.reach });
@@ -347,27 +352,27 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
     it('tests again only near a rock that moved, and finds what a fresh search finds', () => {
       rock.set(ROCKS);
       const search = new NookSearch();
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(ROCKS));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(ROCKS));
       const full = search.tested;
       const nudged = moved('rock-0', (c) =>
         c.kind === 'sphere' ? { ...c, center: [-0.48, 0.02, -0.12] } : c,
       );
       rock.set(nudged);
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(nudged));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(nudged));
       expect(search.tested).toBeGreaterThan(0);
       expect(search.tested).toBeLessThan(0.5 * full);
 
       rock.set(ROCKS);
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(ROCKS));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(ROCKS));
       rock.set(ROCKS);
-      search.find(tank, length, 'nook:', decor());
+      search.find(tank, length, room, 'nook:', decor());
       expect(search.tested).toBe(0);
     });
 
     it('sees a new shape inside the same bounds, a removed rock and a new length', () => {
       rock.set(ROCKS);
       const search = new NookSearch();
-      search.find(tank, length, 'nook:', decor());
+      search.find(tank, length, room, 'nook:', decor());
       const boxed = moved('rock-4', () => ({
         id: 'rock-4',
         hard: true,
@@ -385,16 +390,16 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
       const sphere = bounds();
       rock.set(boxed);
       bounds().forEach((v, k) => expect(v).toBeCloseTo(sphere[k] ?? NaN, 12));
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(boxed));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(boxed));
       expect(search.tested).toBeGreaterThan(0);
 
       const fewer = boxed.filter((c) => c.id !== 'rock-7');
       rock.set(fewer);
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(fewer));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(fewer));
 
-      search.find(tank, 0.9 * length, 'nook:', decor());
+      search.find(tank, 0.9 * length, bodyTurnRoom(0.9 * length), 'nook:', decor());
       const shorter = new NookSearch();
-      shorter.find(tank, 0.9 * length);
+      shorter.find(tank, 0.9 * length, bodyTurnRoom(0.9 * length));
       expect(search.tested).toBe(shorter.tested);
     });
 
@@ -419,7 +424,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
       const search = new NookSearch();
       const before = fresh(hulled);
       expect(before.length).toBeGreaterThan(0);
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(before);
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(before);
       const full = search.tested;
       for (const next of [
         hulled.map((c) => (c.id === 'rock-2' ? stone('rock-2', -0.07, -0.1, 1) : c)),
@@ -427,7 +432,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
         [...hulled, stone('rock-12', 0.45, 0.12, 0.8)],
       ]) {
         rock.set(next);
-        expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(next));
+        expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(next));
         expect(search.tested).toBeGreaterThan(0);
         expect(search.tested).toBeLessThan(0.5 * full);
       }
@@ -438,7 +443,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
       let decorNow: Collider[] = [...ROCKS];
       rock.set(decorNow);
       const search = new NookSearch();
-      search.find(tank, length, 'nook:', decor());
+      search.find(tank, length, room, 'nook:', decor());
       let added = 0;
       let found = 0;
       for (let step = 0; step < 10; step++) {
@@ -485,7 +490,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
         rock.set(decorNow);
         const expected = fresh(decorNow);
         found += expected.length;
-        expect(search.find(tank, length, 'nook:', decor()), `step ${step}`).toEqual(expected);
+        expect(search.find(tank, length, room, 'nook:', decor()), `step ${step}`).toEqual(expected);
       }
       expect(found).toBeGreaterThan(0);
     });

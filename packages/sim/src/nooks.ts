@@ -9,7 +9,6 @@ export const NOOK = {
   gridCells: 40,
   stepBodyLengths: 0.25,
   rockTouchBodyLengths: 0.25,
-  turnRoomBodyLengths: 0.55,
   coverBodyLengths: 1.5,
   minCoverShare: 0.45,
   spacingBodyLengths: 2,
@@ -80,13 +79,19 @@ interface Grid {
 
 /**
  * Up to `NOOK.maxNooks` crevices against the hardscape for a cave-dweller of body length `length`:
- * free water with room to turn its whole body round (`turnRoomBodyLengths`), touching rock, and
- * walled in (rock, sand or glass) on at least `minCoverShare` of the 26 directions within
- * `coverBodyLengths`. Each opens toward its open directions, as a cave mouth does. The best covered come first, `spacingBodyLengths` apart.
- * Deterministic: a fixed grid, no RNG.
+ * free water with room for its whole body, touching rock, and walled in (rock, sand or glass) on
+ * at least `minCoverShare` of the 26 directions within `coverBodyLengths`. Each opens toward its
+ * open directions, as a cave mouth does. They lie `spacingBodyLengths` apart. Those with
+ * `turnRoom` of clearance, where the fish can turn round, come first, then the tighter ones to
+ * fill up; the best covered first within each. Deterministic: a fixed grid, no RNG.
  */
-export function findNooks(field: NookField, length: number, idPrefix = 'nook:'): Anchor[] {
-  return new NookSearch().find(field, length, idPrefix);
+export function findNooks(
+  field: NookField,
+  length: number,
+  turnRoom: number,
+  idPrefix = 'nook:',
+): Anchor[] {
+  return new NookSearch().find(field, length, turnRoom, idPrefix);
 }
 
 /**
@@ -106,7 +111,13 @@ export class NookSearch {
     return this._tested;
   }
 
-  find(field: NookField, length: number, idPrefix = 'nook:', decor?: NookDecor): Anchor[] {
+  find(
+    field: NookField,
+    length: number,
+    turnRoom: number,
+    idPrefix = 'nook:',
+    decor?: NookDecor,
+  ): Anchor[] {
     const before = this.decor;
     const reuse =
       decor !== undefined &&
@@ -124,7 +135,7 @@ export class NookSearch {
     }
     this.field = field;
     this.decor = decor ?? null;
-    return pick(this.verdicts, length, idPrefix);
+    return pick(this.verdicts, length, turnRoom, idPrefix);
   }
 
   /** Tests every grid point again, or with `dirty` only those near one of its boxes. */
@@ -231,7 +242,7 @@ function test(
   // Most points lie away from the rock, and the rock alone is the cheaper field to ask.
   if (rock.sample(x, y, z, n) > touch) return null;
   const clearance = water.sample(x, y, z, n);
-  if (clearance < NOOK.turnRoomBodyLengths * length) return null;
+  if (clearance < r) return null;
   let open = 0;
   for (const k of PROBE_ORDER) {
     const [dx, dy, dz] = DIRECTIONS[k] ?? [0, 0, 0];
@@ -257,14 +268,24 @@ function test(
   return { x, y, z, clearance, cover: covered, facing };
 }
 
-function pick(verdicts: readonly (Candidate | null)[], length: number, idPrefix: string): Anchor[] {
-  const candidates: Candidate[] = [];
-  for (const c of verdicts) if (c !== null) candidates.push(c);
+function pick(
+  verdicts: readonly (Candidate | null)[],
+  length: number,
+  turnRoom: number,
+  idPrefix: string,
+): Anchor[] {
+  const roomy: Candidate[] = [];
+  const tight: Candidate[] = [];
+  for (const c of verdicts) if (c !== null) (c.clearance >= turnRoom ? roomy : tight).push(c);
   // Stable sort: equal cover keeps grid order, so the choice never depends on the engine.
-  candidates.sort((a, b) => b.cover - a.cover || a.y - b.y);
+  const order = (a: Candidate, b: Candidate): number => b.cover - a.cover || a.y - b.y;
+  roomy.sort(order);
+  tight.sort(order);
+  // Roomy first: a firefish that overshoots a tight slot cannot turn back into it (#1429). Most
+  // cave-dwellers still hold a tight one all night, so those fill the places left (#1440).
   const spacing = NOOK.spacingBodyLengths * length;
   const nooks: Anchor[] = [];
-  for (const c of candidates) {
+  for (const c of [...roomy, ...tight]) {
     if (nooks.length >= NOOK.maxNooks) break;
     const apart = nooks.every(
       (k) => Math.hypot(k.position[0] - c.x, k.position[1] - c.y, k.position[2] - c.z) >= spacing,

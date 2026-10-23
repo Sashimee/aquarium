@@ -470,9 +470,8 @@ describe('anchored species', { timeout: LONG }, () => {
       expect(new Set(homes).size, `seed ${seed}`).toBe(2);
       for (const a of homes) {
         const [x, y, z] = a.position;
-        expect(w.sceneSdf.sample(x, y, z, n3), `seed ${seed} ${a.id}`).toBeGreaterThan(
-          (BEHAVIOUR.bodySampleOffsets[0] ?? NaN) * length +
-            BEHAVIOUR.bodyThicknessBodyLengths * length,
+        expect(w.sceneSdf.sample(x, y, z, n3), `seed ${seed} ${a.id}`).toBeGreaterThanOrEqual(
+          w.bodyTurnRoom(length),
         );
       }
       w.setLight(0);
