@@ -1,4 +1,4 @@
-import { SAND_BED, TANK_SIZES, type TankSize } from '@aquarium/shared';
+import { SAND_BED, TANK_SIZES, type TankSize, WATER_INSET } from '@aquarium/shared';
 import { Box3, Vector3 } from 'three/webgpu';
 
 /** All lengths in metres. The tank sits centred on x/z with its bottom glass at y = 0. */
@@ -31,8 +31,7 @@ export const DEFAULT_TANK: Readonly<TankDimensions> = TANK_DIMENSIONS.standard;
 /** The cabinet under the tank; the room's floor is at its foot, y = -STAND_HEIGHT. */
 export const STAND_HEIGHT = 0.75;
 
-/** Keeps the water box off the inner glass faces so they never z-fight or self-attenuate. */
-export const WATER_INSET = 0.001;
+export { WATER_INSET };
 
 export function validateTank(d: TankDimensions): void {
   const positive: (keyof TankDimensions)[] = ['length', 'depth', 'height', 'glass'];
