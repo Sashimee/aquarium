@@ -16,7 +16,8 @@ export const SAND_BED: Readonly<Record<TankSize, SandBed>> = {
   long300: { front: 0.035, back: 0.09 },
 };
 
-const WATER_INSET = 0.001;
+/** Keeps the water box off the inner glass faces so they never z-fight or self-attenuate. */
+export const WATER_INSET = 0.001;
 
 /**
  * Height of the sand top at (x, z): a slope rising towards the back (-z), the usual aquascaping
