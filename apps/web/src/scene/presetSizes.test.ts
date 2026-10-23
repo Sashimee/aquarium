@@ -42,18 +42,21 @@ const NANO_COLLIDER_GLASS_SLACK = 0.003;
 const MIN_NUDGED_SCALE_SHARE = 0.95;
 const MIN_PATCH_SCALE_SHARE = 0.95;
 const MIN_NANO_NUDGED_SCALE_SHARE = 0.7;
-// Equal to the measured maxima (standard sizes: reef 2/4/5/5, freshwater 1; nano: reef 7, freshwater 2, blackwater 3) with no headroom: tripping it
-// means a new item is being pushed off the glass, so move it inwards rather than raising the cap.
+// Equal to the measured maxima (standard sizes: reef 2/4/5/5, freshwater 1; nano: reef 7,
+// freshwater 2, blackwater 3) with no headroom: tripping it means a new item is being pushed off
+// the glass, so move it inwards rather than raising the cap.
 const MAX_NUDGED_ITEMS = { freshwater: 1, reef: 5, blackwater: 0 } as const;
 const MAX_NUDGED_NANO_ITEMS = { freshwater: 2, reef: 7, blackwater: 3 } as const;
 
 /**
  * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
- * `<size>:<patch id>`, with the mean root z band they settle in. A nano holds its plants near life size, so a tall back patch cannot settle as deep as authored.
+ * `<size>:<patch id>`, with the mean root z band they settle in. A nano holds its plants near life
+ * size, so a tall back patch cannot settle as deep as authored.
  */
 const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
-  'nano30:vallisneria-right': [-0.02, 0],
-  'nano30:carpet-right': [0.02, 0.03],
+  'nano30:vallisneria-right': [-0.02, -0.005],
+  'nano30:carpet-left': [0.015, 0.03],
+  'nano30:carpet-right': [0.01, 0.03],
 };
 
 /**

@@ -214,15 +214,16 @@ export function registerLegalRoutes(deps: LegalDeps): void {
 
     // One snapshot for all payment tables, so a refund landing mid-export cannot show up without
     // its charge.
-    const { adultRow, chargeRows, refundRows, disputeRows, clubRows } = await db.transaction(
+    const { adultRows, chargeRows, refundRows, disputeRows, clubRows } = await db.transaction(
       async (tx) => {
-        const [adultRow] = await tx
+        const adultRows = await tx
           .select({
             confirmedAt: schema.adultConfirmations.confirmedAt,
             withdrawnAt: schema.adultConfirmations.withdrawnAt,
           })
           .from(schema.adultConfirmations)
-          .where(eq(schema.adultConfirmations.userId, userId));
+          .where(eq(schema.adultConfirmations.userId, userId))
+          .orderBy(asc(schema.adultConfirmations.confirmedAt));
         const chargeRows = await tx
           .select({
             id: schema.paymentCharges.id,
@@ -264,7 +265,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           .from(schema.clubSubscriptions)
           .where(eq(schema.clubSubscriptions.userId, userId))
           .orderBy(asc(schema.clubSubscriptions.createdAt), asc(schema.clubSubscriptions.id));
-        return { adultRow, chargeRows, refundRows, disputeRows, clubRows };
+        return { adultRows, chargeRows, refundRows, disputeRows, clubRows };
       },
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
     );
@@ -401,8 +402,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           collection: { entries: collectionRows, achievements: awardRows },
           wallet: { balance: walletRow?.balance ?? 0, ledger: ledgerRows },
           payments: {
-            adultConfirmedAt: adultRow?.confirmedAt ?? null,
-            adultWithdrawnAt: adultRow?.withdrawnAt ?? null,
+            adultConfirmations: adultRows,
             charges: chargeRows,
             refunds: refundRows,
             disputes: disputeRows,

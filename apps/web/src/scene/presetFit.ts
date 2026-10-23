@@ -219,8 +219,12 @@ function fitPatch(
     Math.max(MIN_FIT_SCALE, patch.scale[0] * plantScale),
     Math.max(MIN_FIT_SCALE, patch.scale[1] * plantScale),
   ];
-  const count = Math.min(patch.count, Math.max(MIN_KEPT_PATCH, Math.round(patch.count * share)));
-  const fitted = { ...patch, scale, count, radius: patch.radius * Math.sqrt(share) };
+  const count = Math.min(
+    patch.count,
+    Math.max(MIN_KEPT_PATCH, Math.round((patch.count * share) / (plantScale * plantScale))),
+  );
+  const radiusShare = Math.min(share, depthRatio);
+  const fitted = { ...patch, scale, count, radius: patch.radius * Math.sqrt(radiusShare) };
   const smallest = scale[0] * GLASS_SHRINK_FLOOR;
   const smallestPatch = { ...fitted, scale: [smallest, smallest] as [number, number] };
   const limitX = Math.max(0, halfL - reachOf(smallestPatch, 'x'));
