@@ -194,6 +194,10 @@ jobs:
             args: death.spec public-link.spec test-kit.spec
           - name: tanks-care-reset
             args: tanks.spec care.spec shrimp.spec password-reset.spec password-reset-history.spec collection.spec
+          - name: tanks-economy
+            args: biomes-sizes.spec fish-cap.spec economy.spec payments.spec
+          - name: rooms-social
+            args: rooms.spec social.spec
     services:
       postgres:
         image: postgres:18
