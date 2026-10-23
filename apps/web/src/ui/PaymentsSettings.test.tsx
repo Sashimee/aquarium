@@ -153,7 +153,7 @@ describe('purchase settings', () => {
     expect(container.querySelector('[role=alert]')?.textContent).toContain('Try again in 30 s');
   });
 
-  it('focuses the password field and links its hint', async () => {
+  it('limits the password field and links its hint', async () => {
     api.paymentsState.mockResolvedValue(state());
     await show();
     await click(box());

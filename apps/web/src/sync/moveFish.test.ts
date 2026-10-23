@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiRequestError } from '../ui/api';
-import { FISH_1, FISH_2, fishFixture, tankFixture } from './fixtures';
+import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
 import { movableFish, moveRefusalText, moveTargets } from './moveFish';
 
 const display = tankFixture();
@@ -31,6 +31,36 @@ describe('moveTargets', () => {
       quarantine: true,
     });
     expect(moveTargets(display, [display, reef, quarantine], 'neon-tetra')).toEqual([quarantine]);
+  });
+
+  describe('adult length gate', () => {
+    const tang = speciesFixture({
+      id: 'blue-tang',
+      commonName: 'Blue tang',
+      lifecycle: { ...speciesFixture().lifecycle, maxSizeM: 0.267 },
+    });
+
+    it('never offers quarantine to a species that outgrows a nano tank', () => {
+      const nanoQuarantine = tankFixture({
+        id: '00000000-0000-4000-8000-0000000000ca',
+        quarantine: true,
+        size: 'nano30',
+      });
+      expect(moveTargets(display, [display, nanoQuarantine], 'blue-tang', undefined, tang)).toEqual(
+        [],
+      );
+    });
+
+    it('still offers a tank it fits', () => {
+      const standard = tankFixture({
+        id: '00000000-0000-4000-8000-0000000000c9',
+        quarantine: true,
+        size: 'standard',
+      });
+      expect(moveTargets(display, [display, standard], 'blue-tang', undefined, tang)).toEqual([
+        standard,
+      ]);
+    });
   });
 
   describe('tank length gate', () => {
