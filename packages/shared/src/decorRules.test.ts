@@ -37,6 +37,7 @@ describe('decor rules', () => {
     'snail',
     'substrate',
     'hdri',
+    'room-furniture',
     'background',
     'audio',
   ]);

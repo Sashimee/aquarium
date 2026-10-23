@@ -42,6 +42,19 @@ import {
   SUBSTRATE_RECIPES,
 } from './recipes.ts';
 import { buildRockPile } from './rock-pile.ts';
+import {
+  LOD0_MAX_TRIANGLES,
+  buildRoomProp,
+  loadRooms,
+  mobileTriangleTargets,
+  roomAmbienceIds,
+  roomAmbienceRecipe,
+  roomHdriIds,
+  roomHdriRecipe,
+  roomPropIds,
+  roomPropTriangles,
+} from './room.ts';
+import type { RoomEntry } from '@aquarium/shared';
 
 export interface BuildOptions {
   repoRoot: string;
@@ -68,13 +81,42 @@ const KIND_ORDER: OutputAsset['kind'][] = [
   'driftwood',
   'rock',
   'decor',
+  'room-furniture',
   'substrate',
   'hdri',
   'audio',
   'background',
 ];
 
-function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba>): Task[] {
+interface RoomPlan {
+  rooms: readonly RoomEntry[];
+  mobileTriangles(id: string, ctx: FishContext): Promise<number>;
+}
+
+function roomPlan(rooms: readonly RoomEntry[]): RoomPlan {
+  let targets: Promise<Map<string, number>> | undefined;
+  return {
+    rooms,
+    async mobileTriangles(id, ctx) {
+      targets ??= (async () => {
+        const counts = new Map<string, number>();
+        for (const propId of roomPropIds(rooms))
+          counts.set(propId, Math.min(LOD0_MAX_TRIANGLES, await roomPropTriangles(propId, ctx)));
+        return mobileTriangleTargets(rooms, counts);
+      })();
+      const target = (await targets).get(id);
+      if (target === undefined)
+        throw new Error(`${id}: not used by any room in content/rooms.json`);
+      return target;
+    },
+  };
+}
+
+function tasks(
+  backgrounds: readonly ManifestAsset[],
+  previews: Map<string, Rgba>,
+  rooms: RoomPlan,
+): Task[] {
   return [
     ...FISH_RECIPES.map((recipe) => ({
       kind: 'fish' as const,
@@ -150,12 +192,24 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       id: recipe.id,
       run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
     })),
-    ...AUDIO_RECIPES.map((recipe) => ({
-      kind: 'audio' as const,
-      id: recipe.id,
-      run: (ctx: FishContext) =>
-        Promise.resolve(buildAudio(recipe, ctx, RAW_ROOT, ctx.licenceOf(recipe.source))),
+    ...roomPropIds(rooms.rooms).map((id) => ({
+      kind: 'room-furniture' as const,
+      id,
+      run: async (ctx: FishContext) => buildRoomProp(id, await rooms.mobileTriangles(id, ctx), ctx),
     })),
+    ...roomHdriIds(rooms.rooms).map((id) => ({
+      kind: 'hdri' as const,
+      id,
+      run: (ctx: FishContext) => buildHdri(roomHdriRecipe(id), ctx),
+    })),
+    ...[...AUDIO_RECIPES, ...roomAmbienceIds(rooms.rooms).map(roomAmbienceRecipe)].map(
+      (recipe) => ({
+        kind: 'audio' as const,
+        id: recipe.id,
+        run: (ctx: FishContext) =>
+          Promise.resolve(buildAudio(recipe, ctx, RAW_ROOT, ctx.licenceOf(recipe.source))),
+      }),
+    ),
     ...backgrounds.map((entry) => ({
       kind: 'background' as const,
       id: entry.id,
@@ -209,18 +263,19 @@ export async function build(options: BuildOptions): Promise<void> {
   }
 
   const backgrounds = manifest.assets.filter((a) => a.kind === 'background');
-  const buildable = new Set(tasks(backgrounds, previews).map((t) => `${t.kind}/${t.id}`));
+  const rooms = roomPlan(loadRooms(repoRoot));
+  const buildable = new Set(tasks(backgrounds, previews, rooms).map((t) => `${t.kind}/${t.id}`));
   for (const key of [...previous.keys()].filter((k) => !buildable.has(k))) {
     console.log(`index.json: dropping ${key}, it has no build task any more`);
     previous.delete(key);
   }
 
   await readyCodecs();
-  const selected = tasks(backgrounds, previews).filter(
+  const selected = tasks(backgrounds, previews, rooms).filter(
     (t) => only.length === 0 || only.includes(t.id),
   );
   if (only.length > 0 && selected.length !== only.length) {
-    const known = tasks(backgrounds, previews).map((t) => t.id);
+    const known = tasks(backgrounds, previews, rooms).map((t) => t.id);
     throw new Error(`unknown asset id in [${only.join(', ')}]; known: ${known.join(', ')}`);
   }
   for (const task of selected) {
