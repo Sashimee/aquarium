@@ -16,6 +16,7 @@ import { createSharedKtx2 } from '../engine/ktx2';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { ColliderField } from './colliders';
 import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
+import { reachCurrent } from './current';
 import { loadPreset } from './preset';
 import { hullCorners } from '../fish/simColliders';
 import { boundsFromCatalog } from './presetFit';
@@ -217,7 +218,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
 
       it('passes the glass checks the scene runs while loading', () => {
         const preset = fitted();
-        const current = preset.current ?? DEFAULT_CURRENT;
+        const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
         for (const item of preset.decor) {
           const procedural = parseEuphylliaId(item.assetId);
           if (procedural) {
