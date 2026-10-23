@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 135314113,
+  "totalBytes": 135387351,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -7296,15 +7296,16 @@
       "kind": "plant",
       "origin": "model",
       "sources": [
-        "sketchfab-3701243a"
+        "sketchfab-3701243a",
+        "sketchfab-f34fac65"
       ],
       "licence": "CC-BY-4.0",
       "modifications": [
         "merged meshes, dropped unused attributes, skeleton and animation",
         "origin at the centre of the base, scaled so the longest edge is 0.3 m",
         "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
-        "no textures: flat base colours kept as material factors, PBR metallic-roughness",
-        "colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower"
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "the 24 flat-green leaf materials are merged into one primitive: each leaf gets its own cell of a 1024 px atlas holding a crop of a leaf with midrib and veins from the java-fern texture of sketchfab-f34fac65, UVs projected along the leaf, multiplied by that leaf's deterministic shade, lighter or darker and a little yellower; glossier roughness 0.4"
       ],
       "bounds": {
         "min": [
@@ -7321,42 +7322,69 @@
       "lods": [
         {
           "file": "plant/amazon-sword/lod0.glb",
-          "bytes": 108316,
-          "sha256": "20dadb0062b31cc521896fa0194a57d75b1fd6c2005ed19f59739998cccd9da1",
+          "bytes": 121376,
+          "sha256": "247959e6f299785c2eea0c1e7b676e54c7a5d3dc24ca5ccbe142bf8485559c9a",
           "triangles": 3632,
           "vertices": 7120
         },
         {
           "file": "plant/amazon-sword/lod1.glb",
-          "bytes": 54924,
-          "sha256": "e2bfebcbb6bf12237e2da6d480cd9ac5fbfa5eabcdee2bad3e911ec8b8a2e9fe",
-          "triangles": 1194,
-          "vertices": 1940
+          "bytes": 41792,
+          "sha256": "3718bfd528a51d60b8ebd2296706b7798e82d0c0324e51f240406e4cf880a72c",
+          "triangles": 1213,
+          "vertices": 2124
         },
         {
           "file": "plant/amazon-sword/lod2.glb",
-          "bytes": 39372,
-          "sha256": "05c10a2089805627718213ca32f66021370eb4a761a52689a230a025b9d495e6",
-          "triangles": 458,
-          "vertices": 664
+          "bytes": 16188,
+          "sha256": "f5e18fccaaa2a52c02033652c1742d7edf5e65932889cd17e28912bf24237d61",
+          "triangles": 399,
+          "vertices": 722
         }
       ],
-      "textures": [],
+      "textures": [
+        {
+          "name": "amazon-sword_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/amazon-sword/textures/amazon-sword_basecolor_1k.ktx2",
+              "bytes": 96494,
+              "sha256": "482f5cd4978a63edbfe9cf88851140873f70879d19d19a77c2d198b303f4f1dd",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "plant/amazon-sword/textures/amazon-sword_basecolor_1k.ktx2",
+              "bytes": 96494,
+              "sha256": "482f5cd4978a63edbfe9cf88851140873f70879d19d19a77c2d198b303f4f1dd",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
       "files": [
         {
           "file": "plant/amazon-sword/lod0.glb",
-          "bytes": 108316,
-          "sha256": "20dadb0062b31cc521896fa0194a57d75b1fd6c2005ed19f59739998cccd9da1"
+          "bytes": 121376,
+          "sha256": "247959e6f299785c2eea0c1e7b676e54c7a5d3dc24ca5ccbe142bf8485559c9a"
         },
         {
           "file": "plant/amazon-sword/lod1.glb",
-          "bytes": 54924,
-          "sha256": "e2bfebcbb6bf12237e2da6d480cd9ac5fbfa5eabcdee2bad3e911ec8b8a2e9fe"
+          "bytes": 41792,
+          "sha256": "3718bfd528a51d60b8ebd2296706b7798e82d0c0324e51f240406e4cf880a72c"
         },
         {
           "file": "plant/amazon-sword/lod2.glb",
-          "bytes": 39372,
-          "sha256": "05c10a2089805627718213ca32f66021370eb4a761a52689a230a025b9d495e6"
+          "bytes": 16188,
+          "sha256": "f5e18fccaaa2a52c02033652c1742d7edf5e65932889cd17e28912bf24237d61"
+        },
+        {
+          "file": "plant/amazon-sword/textures/amazon-sword_basecolor_1k.ktx2",
+          "bytes": 96494,
+          "sha256": "482f5cd4978a63edbfe9cf88851140873f70879d19d19a77c2d198b303f4f1dd"
         }
       ]
     },

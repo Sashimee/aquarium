@@ -34,7 +34,15 @@ import {
   flipVertical,
   halve,
 } from './rgbe.ts';
-import { decodeImage, encodeHdrKtx2, resizeImage, type Rgba } from './textures.ts';
+import { atlasLayout, packLeafAtlas } from './leaf-atlas.ts';
+import {
+  cropImage,
+  decodeImage,
+  encodeHdrKtx2,
+  fitImage,
+  resizeImage,
+  type Rgba,
+} from './textures.ts';
 
 export interface LeafColourVariation {
   /** Largest relative change of each linear channel, 0.15 is plus or minus 15 %. */
@@ -64,6 +72,16 @@ export function varyLeafColour(
   ];
 }
 
+export interface LeafAtlasRecipe {
+  /** Raw source that carries the leaf photo; it is verified and recorded as a source of the asset. */
+  sourceId: string;
+  file: string;
+  /** Region of the photo holding one whole leaf, midrib centred, base at the bottom. */
+  crop: { left: number; top: number; width: number; height: number };
+  cell: { width: number; height: number };
+  roughness: number;
+}
+
 export interface EnvironmentRecipe {
   id: string;
   kind: Extract<AssetKind, 'plant' | 'coral' | 'driftwood' | 'rock' | 'decor'>;
@@ -90,6 +108,8 @@ export interface EnvironmentRecipe {
   proceduralLeafTexture?: boolean;
   /** Gives every flat-coloured material its own deterministic shade of the source colour, so the leaves of a flat-green model differ. */
   leafColourVariation?: LeafColourVariation;
+  /** Replaces the flat-colour leaf materials with one atlas of a real leaf photo, one cell per leaf, so the plant is one primitive; each cell carries that leaf's `leafColourVariation` shade. */
+  leafAtlas?: LeafAtlasRecipe;
   /** Recolours the base colour map by luminance. */
   tint?: TintSpec;
   /** Adds procedural pores to the normal and colour maps; both are upscaled to 2048 px first. */
@@ -306,6 +326,42 @@ export function sceneBaseColor(
   return material.baseColor;
 }
 
+async function packRecipeAtlas(
+  recipe: EnvironmentRecipe,
+  atlas: LeafAtlasRecipe,
+  parts: Part[],
+  materials: MaterialDef[],
+  shadeOf: ReadonlyMap<string, [number, number, number]>,
+  ctx: Pick<FishContext, 'verifySource'>,
+): Promise<{ parts: Part[]; materials: MaterialDef[] }> {
+  ctx.verifySource(atlas.sourceId);
+  const photo = await decodeImage(readFileSync(join(RAW_ROOT, atlas.sourceId, atlas.file)));
+  const cropped = await cropImage(photo, atlas.crop);
+  const leaf = await fitImage(cropped, atlas.cell.width, atlas.cell.height);
+  const shades = parts.map((part) => {
+    const shade = shadeOf.get(part.material);
+    if (!shade) throw new Error(`${recipe.id}: no shade for material "${part.material}"`);
+    return shade;
+  });
+  const layout = atlasLayout(parts.length, atlas.cell.width, atlas.cell.height);
+  const packed = packLeafAtlas(parts, leaf, shades, layout);
+  const first = materials[0]!;
+  return {
+    parts: [packed.part],
+    materials: [
+      {
+        ...first,
+        name: first.name,
+        baseColorFactor: [1, 1, 1, 1],
+        baseColor: { role: 'baseColor', codec: 'etc1s', image: packed.atlas },
+        roughness: atlas.roughness,
+        alphaMode: 'OPAQUE',
+        doubleSided: true,
+      },
+    ],
+  };
+}
+
 export async function loadEnvironment(
   recipe: EnvironmentRecipe,
   ctx: Pick<FishContext, 'verifySource'>,
@@ -327,11 +383,26 @@ export async function loadEnvironment(
 
   const used = new Set(parts.map((p) => p.material));
   const materials: MaterialDef[] = [];
+  const shadeOf = new Map<string, [number, number, number]>();
   for (const source of doc.getRoot().listMaterials()) {
     if (!used.has(source.getName())) continue;
     assertTexcoordZero(doc, source, recipe.id);
     let def = await materialDefFrom(source, { metallic: 0, ...recipe.material });
     def = await finishMaterial(def, recipe);
+    if (recipe.leafAtlas) {
+      const varied = varyLeafColour(
+        def.baseColorFactor,
+        materials.length,
+        recipe.leafColourVariation ?? { spread: 0, yellowing: 0 },
+      );
+      shadeOf.set(source.getName(), [
+        varied[0] / (def.baseColorFactor[0] || 1),
+        varied[1] / (def.baseColorFactor[1] || 1),
+        varied[2] / (def.baseColorFactor[2] || 1),
+      ]);
+      materials.push(def);
+      continue;
+    }
     if (recipe.leafColourVariation) {
       def = {
         ...def,
@@ -354,6 +425,8 @@ export async function loadEnvironment(
   }
   if (materials.length === 0) throw new Error(`${recipe.id}: no material survived`);
 
+  if (recipe.leafAtlas)
+    return packRecipeAtlas(recipe, recipe.leafAtlas, parts, materials, shadeOf, ctx);
   return { parts, materials };
 }
 
@@ -380,7 +453,7 @@ export async function buildEnvironment(
     plan,
     meta: {
       origin: 'model',
-      sources: [recipe.sourceId],
+      sources: recipe.leafAtlas ? [recipe.sourceId, recipe.leafAtlas.sourceId] : [recipe.sourceId],
       licence: ctx.licenceOf(recipe.sourceId),
       modifications: [
         'merged meshes, dropped unused attributes, skeleton and animation',
