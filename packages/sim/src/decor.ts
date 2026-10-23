@@ -15,6 +15,11 @@ export interface DecorBounds {
   readonly maxZ: number;
 }
 
+/** A hard decor collider's bounds and a key that changes whenever its shape does. */
+export interface DecorShape extends DecorBounds {
+  readonly key: string;
+}
+
 interface Primitive {
   readonly id: string;
   readonly minX: number;
@@ -386,6 +391,15 @@ export class DecorField implements Sdf {
       });
     }
     return out.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  }
+
+  /** `bounds` with each collider's shape key. */
+  shapes(): DecorShape[] {
+    return this.bounds().map((b) => {
+      const key = this.shapeKey.get(b.id);
+      if (key === undefined) throw new Error(`decor collider "${b.id}" has no shape key`);
+      return { ...b, key };
+    });
   }
 
   /** Collider entries summed over the grid cells: the work queries walk, which a wider reach raises. */

@@ -9,6 +9,7 @@ import { FishResize } from './fishArrays.ts';
 import type { Visitor } from './greeting.ts';
 import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
+import type { NookDecor } from './nooks.ts';
 import {
   pairwiseDistanceSq,
   resetNeighbourOrder,
@@ -578,6 +579,11 @@ export class World {
 
   get decorBounds(): DecorBounds[] {
     return this.hardDecor.bounds();
+  }
+
+  /** The hard decor as the crevice search caches it: each collider's shape, and the field's reach. */
+  get decorShapes(): NookDecor {
+    return { shapes: this.hardDecor.shapes(), reach: this.hardDecor.reach };
   }
 
   get plantSdf(): Sdf | null {
