@@ -8,12 +8,6 @@ export type RoomPreset = (typeof ROOM_PRESETS)[number];
 export const ROOM_CHOICES = ['none', ...ROOM_PRESETS] as const;
 export type RoomChoice = (typeof ROOM_CHOICES)[number];
 
-export const DEFAULT_ROOM_CHOICE: RoomChoice = 'none';
-
-export function isRoomChoice(value: unknown): value is RoomChoice {
-  return typeof value === 'string' && (ROOM_CHOICES as readonly string[]).includes(value);
-}
-
 /**
  * `shell` is walls, floor and window, `reduced` adds the furniture, `full` adds the ceiling and
  * the books.

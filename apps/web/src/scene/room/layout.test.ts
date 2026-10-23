@@ -3,7 +3,6 @@ import { TANK_SIZES } from '@aquarium/shared';
 import { defaultView, TANK_DIMENSIONS } from '../../engine/tank/dimensions';
 import {
   boxBounds,
-  isRoomChoice,
   planRoom,
   ROOM_PRESETS,
   roomDetailFor,
@@ -149,15 +148,5 @@ describe('detail by tier', () => {
     expect(reduced.ceiling).toBe(false);
     expect(full.books.length).toBeGreaterThan(50);
     expect(full.ceiling).toBe(true);
-  });
-});
-
-describe('isRoomChoice', () => {
-  it('accepts the choices and nothing else', () => {
-    expect(isRoomChoice('none')).toBe(true);
-    expect(isRoomChoice('office')).toBe(true);
-    expect(isRoomChoice('Office')).toBe(false);
-    expect(isRoomChoice(null)).toBe(false);
-    expect(isRoomChoice(3)).toBe(false);
   });
 });

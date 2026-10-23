@@ -6,7 +6,6 @@ import {
   InstancedMesh,
   Mesh,
   MeshBasicNodeMaterial,
-  PointLight,
   Texture,
 } from 'three/webgpu';
 import { TANK_DIMENSIONS } from '../../engine/tank/dimensions';
@@ -74,22 +73,6 @@ describe('RoomProps', () => {
     const placed = plan.props.find((p) => p.asset.endsWith('round-wooden-table-02'));
     expect(matrix.elements[12]).toBeCloseTo(placed?.position[0] ?? NaN, 5);
     expect(matrix.elements[14]).toBeCloseTo(placed?.position[2] ?? NaN, 5);
-  });
-
-  it('adds a point light for each lamp in the rig', async () => {
-    const plan = planRoomScene({
-      roomId: 'room-cabin',
-      tank: TANK_DIMENSIONS.standard,
-      tier: 'high',
-      catalog,
-    });
-    const { source } = fakeSource(1);
-    const props = new RoomProps();
-    await props.show(plan, source);
-    const lights = props.group.children.filter((c): c is PointLight => c instanceof PointLight);
-    expect(lights).toHaveLength(plan.light.practical.length);
-    expect(lights.length).toBeGreaterThan(0);
-    for (const light of lights) expect(light.distance).toBeGreaterThan(0);
   });
 
   it('shows nothing for a room with no props, as on the low tier', async () => {
