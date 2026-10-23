@@ -223,10 +223,15 @@ export function fitDepth(
   return { radius: fitted, depth: Math.sign(z) * Math.min(Math.abs(z), inner) };
 }
 
+/** Mean ground area one plant of the patch covers once the glass has shrunk it, per drawn scale². */
+function placedScale(scale: readonly [number, number]): number {
+  return ((scale[0] + scale[1]) / 2) * ((1 + GLASS_SHRINK_FLOOR) / 2);
+}
+
 /**
  * Plants a disc of `radius` needs to cover the ground as thickly as the authored patch does: the
- * drawn plant footprints per square metre, `scale` here against `patch.scale` there, both at their
- * mean and before the glass shrinks any of them. Never more than the authored count.
+ * authored plant footprints per square metre, at the size the plants end up after the glass
+ * shrinks them. Never more than the authored count.
  */
 export function coverageCount(
   patch: PlantPatch,
@@ -234,8 +239,7 @@ export function coverageCount(
   radius: number,
 ): number {
   const authored = patch.count * ((patch.scale[0] + patch.scale[1]) / 2) ** 2;
-  const meanScale = (scale[0] + scale[1]) / 2;
-  const wanted = (authored * (radius / patch.radius) ** 2) / meanScale ** 2;
+  const wanted = (authored * (radius / patch.radius) ** 2) / placedScale(scale) ** 2;
   return Math.min(patch.count, Math.max(MIN_KEPT_PATCH, Math.round(wanted)));
 }
 
@@ -244,7 +248,8 @@ export function coverageCount(
  * above its own scale (`MIN_PLANT_FIT`) are what the front glass leaves no room for.
  */
 export function glassSqueezes(size: TankSize, z: number): boolean {
-  return Math.max(presetFit(size).scale, MIN_PLANT_FIT) > presetFit(size).scale && z > 0;
+  const { scale } = presetFit(size);
+  return Math.max(scale, MIN_PLANT_FIT) > scale && z > 0;
 }
 
 function fitPatch(

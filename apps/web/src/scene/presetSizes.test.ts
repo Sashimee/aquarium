@@ -34,6 +34,8 @@ const PUBLIC = join(__dirname, '../../public');
 const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 
 const MIN_DEPTH_SHARE = 0.4;
+// Placed plant footprint per ground area against the authored patch, glass shrink included.
+const MIN_NANO_COVERAGE_SHARE = 0.8;
 const GLASS_NUDGE_TOLERANCE = 0.06;
 // Life-size decor in the 0.25 m deep nano is pushed further off the glass than in the others.
 const NANO_GLASS_NUDGE_TOLERANCE = 0.08;
@@ -327,7 +329,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         // A nano's half-depth is barely wider than one plant's sway, so only half of a patch fits.
         const keptShare = size === 'nano30' ? 0.5 : 0.75;
-        const roots = new Map<string, { x: number; z: number }[]>();
+        const roots = new Map<string, { x: number; z: number; scale: number }[]>();
         scatterPresetPatches(
           preset,
           catalog,
@@ -354,6 +356,16 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           const slack = Math.max(patch.radius, 0.06);
           expect(Math.abs(meanX - patch.center[0]), `${patch.id} x`).toBeLessThanOrEqual(slack * 2);
           if (Math.abs(authoredZ) <= 0.05) continue;
+          const wasPatch = authored.find((a) => a.id === patch.id);
+          if (size === 'nano30' && authoredZ > 0 && wasPatch) {
+            const mean = (wasPatch.scale[0] + wasPatch.scale[1]) / 2;
+            const was = (wasPatch.count * mean ** 2) / (Math.PI * wasPatch.radius ** 2);
+            const now =
+              plants.reduce((sum, p) => sum + p.scale ** 2, 0) / (Math.PI * patch.radius ** 2);
+            expect(now / was, `${patch.id} placed coverage`).toBeGreaterThanOrEqual(
+              MIN_NANO_COVERAGE_SHARE,
+            );
+          }
           const key = `${size}:${patch.id}`;
           const pinned = KNOWN_DEPTH_SHORTFALLS[key];
           if (pinned) {

@@ -163,7 +163,7 @@ export function openGround(
   const [x, z] = center;
   if (openShare(x, z, radius, isOpen) >= SMOTHERED_SHARE) return [x, z];
   const [loX, hiX] = x < 0 ? [-limitX, 0] : [0, limitX];
-  const [loZ, hiZ] = z < 0 ? [-limitZ, z] : [z, limitZ];
+  const [loZ, hiZ] = z < 0 ? [Math.min(-limitZ, z), z] : [z, Math.max(limitZ, z)];
   let best: [number, number] = [x, z];
   let bestShare = -1;
   let bestMove = Infinity;

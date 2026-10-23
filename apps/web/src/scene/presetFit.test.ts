@@ -15,7 +15,7 @@ import { AssetCatalog } from './assets';
 import { offersShelter } from './caves';
 import { loadPreset } from './preset';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
-import { scatterPatch } from './placement';
+import { GLASS_SHRINK_FLOOR } from './placement';
 import { substrateHeight } from '../engine/tank/substrate';
 import { TANK_SIZES } from '@aquarium/shared';
 import {
@@ -257,16 +257,9 @@ describe('plant patches the glass squeezes', () => {
   const fit = (center: [number, number], size: 'nano30' | 'std200') =>
     fitPresetToTank(layout(center), size, size === 'nano30' ? nano : mid, boundsOf, reach)
       .plantPatches[0];
-  const open = { halfLength: 10, halfDepth: 10 };
   const coverage = (p?: PlantPatch) => {
-    if (!p) throw new Error('patch missing');
-    const plants = scatterPatch(
-      p,
-      () => 0,
-      () => false,
-      open,
-    );
-    return plants.reduce((sum, q) => sum + q.scale ** 2, 0) / (Math.PI * p.radius ** 2);
+    const mean = ((p?.scale[0] ?? 0) + (p?.scale[1] ?? 0)) / 2;
+    return ((p?.count ?? 0) * mean ** 2) / (Math.PI * (p?.radius ?? 1) ** 2);
   };
 
   it('shrinks the disc of a front patch that crosses the nano glass, keeping plant height', () => {
@@ -280,7 +273,13 @@ describe('plant patches the glass squeezes', () => {
   it('keeps the ground as covered as the authored patch, not as dense in plants', () => {
     const fitted = fit([0, 0.12], 'nano30');
     const authored = coverage(patch([0, 0.12]));
-    const placed = coverage(fitted);
+    const placed = coverage({
+      ...(fitted as PlantPatch),
+      scale: [
+        (fitted?.scale[0] ?? 0) * ((1 + GLASS_SHRINK_FLOOR) / 2),
+        (fitted?.scale[1] ?? 0) * ((1 + GLASS_SHRINK_FLOOR) / 2),
+      ],
+    });
     expect(placed).toBeGreaterThan(authored * 0.8);
     expect(placed).toBeLessThan(authored * 1.25);
   });
