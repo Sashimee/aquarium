@@ -16,6 +16,43 @@
       "scale": 1.1
     },
     {
+      "assetId": "mud-bank",
+      "position": [0.34, 0.0955, -0.06],
+      "rotationY": 0,
+      "scale": 1.3,
+      "perch": true
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [-0.46, 0.057, 0.08],
+      "rotationY": 1.7,
+      "scale": 0.9
+    },
+    {
+      "assetId": "mangrove-prop-roots",
+      "position": [-0.26, 0.051, 0.12],
+      "rotationY": 3.5,
+      "scale": 0.8
+    },
+    {
+      "assetId": "coast-rocks-05",
+      "position": [0.45, 0.0532, 0.15],
+      "rotationY": 0,
+      "scale": 0.4
+    },
+    {
+      "assetId": "mangrove-propagule",
+      "position": [-0.3, 0.074, 0.02],
+      "rotationY": 1.2,
+      "scale": 1
+    },
+    {
+      "assetId": "mangrove-propagule",
+      "position": [-0.18, 0.0779, 0.04],
+      "rotationY": 2.7,
+      "scale": 1.1
+    },
+    {
       "assetId": "mangrove-stump",
       "position": [0.06, 0.09, -0.09],
       "rotationY": 0.3,
@@ -32,43 +69,25 @@
       "assetId": "mangrove-prop-roots",
       "position": [0.16, 0.06, 0.11],
       "rotationY": 2.6,
-      "scale": 1.0
+      "scale": 1
     },
     {
-      "assetId": "mangrove-prop-roots",
-      "position": [-0.46, 0.057, 0.08],
-      "rotationY": 1.7,
+      "assetId": "driftwood-branch",
+      "position": [-0.06, 0.054, 0.13],
+      "rotationY": 0,
       "scale": 0.9
     },
     {
       "assetId": "mangrove-prop-roots",
       "position": [0.27, 0.0504, 0.12],
       "rotationY": -0.7,
-      "scale": 1.0
-    },
-    {
-      "assetId": "mangrove-prop-roots",
-      "position": [-0.26, 0.051, 0.12],
-      "rotationY": 3.5,
-      "scale": 0.8
+      "scale": 1
     },
     {
       "assetId": "mangrove-prop-roots",
       "position": [-0.2, 0.09, -0.12],
       "rotationY": 4.4,
       "scale": 1.1
-    },
-    {
-      "assetId": "driftwood-branch",
-      "position": [-0.06, 0.054, 0.13],
-      "rotationY": 0.0,
-      "scale": 0.9
-    },
-    {
-      "assetId": "coast-rocks-05",
-      "position": [0.45, 0.0532, 0.15],
-      "rotationY": 0,
-      "scale": 0.4
     },
     {
       "assetId": "coast-rocks-05",
@@ -78,28 +97,9 @@
     },
     {
       "assetId": "mangrove-propagule",
-      "position": [-0.3, 0.074, 0.02],
-      "rotationY": 1.2,
-      "scale": 1.0
-    },
-    {
-      "assetId": "mangrove-propagule",
       "position": [0.2, 0.051, 0.17],
-      "rotationY": 4.0,
-      "scale": 1.0
-    },
-    {
-      "assetId": "mangrove-propagule",
-      "position": [-0.18, 0.0779, 0.04],
-      "rotationY": 2.7,
-      "scale": 1.1
-    },
-    {
-      "assetId": "mud-bank",
-      "position": [0.34, 0.0955, -0.06],
-      "rotationY": 0,
-      "scale": 1.3,
-      "perch": true
+      "rotationY": 4,
+      "scale": 1
     }
   ],
   "plantPatches": [],

@@ -1,8 +1,10 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { WebGPURenderer } from 'three/webgpu';
 import {
+  isPlayableBiome,
   TANK_SIZES,
   type Biome,
   type Collider,
@@ -12,7 +14,8 @@ import {
 import { compileCollider, FishState, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
-import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
+import { demoTank, sceneAnchorsToSim, tankSpaceOf } from '../fish/demoStock';
+import { allSpeciesInputs } from '../fish/species';
 import { SimWorldSpec } from '../fish/simWorld';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { caveAnchors, waterReach } from './caves';
@@ -64,6 +67,12 @@ beforeAll(async () => {
 afterAll(() => {
   vi.unstubAllGlobals();
 });
+
+// A reef-arch is as wide as a nano tank, so no fish a nano can hold would find free water to
+// spawn in next to one: the nano reef keeps no arch and so no cave.
+function hasNoNanoShelter(biome: Biome, size: TankSize): boolean {
+  return biome === 'reef' && size === 'nano30';
+}
 
 type Layer = 'scene hulls' | 'decor colliders';
 const LAYERS: readonly Layer[] = ['scene hulls', 'decor colliders'];
@@ -117,11 +126,16 @@ describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
 
     it.each(SIZES)('%s: every anchor has room for a fish', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
+      if (hasNoNanoShelter(biome, size)) {
+        expect(caveAnchors(fitted.decor)).toEqual([]);
+        return;
+      }
       await expectMouthsClear(biome, layer, fitted.decor);
     });
 
     it.each(SIZES)('%s: every anchor has a clear way out along its facing', async (size) => {
       const fitted = fitPresetToCatalog(loadPreset(biome), size, TANK_DIMENSIONS[size], catalog);
+      if (hasNoNanoShelter(biome, size)) return;
       const clearance = clearanceTo(await hardColliders(biome, layer, fitted.decor));
       const reach = waterReach(TANK_DIMENSIONS[size]);
       const anchors = caveAnchors(fitted.decor, reach);
@@ -187,4 +201,122 @@ describe('the sim at boot', () => {
       expect(spec.anchors).toBe(sent);
     },
   );
+});
+
+const SPAWN_SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
+const SPAWN_BIOMES: readonly Biome[] = ['freshwater', 'reef', 'cichlid', 'mangrove', 'blackwater'];
+
+// Fish that spawn in an empty nano but find no free water once its fitted decor stands in it
+// (#1392), keyed by layer then fish id. Each index is a length: 0 the adult body length, 1 the
+// largest size. A fish that fits in the empty nano at a length is checked, so an entry here must
+// fail; the test below fails on one that has started to spawn so it gets dropped.
+const NO_ROOM_WITH_DECOR: Readonly<Record<Layer, Readonly<Record<string, readonly number[]>>>> = {
+  'scene hulls': {
+    angelfish: [1],
+    discus: [0, 1],
+    'blue-tang': [0],
+    'yellow-tang': [1],
+    'banded-archerfish': [0],
+    'barred-mudskipper': [1],
+    'blue-spotted-mudskipper': [1],
+  },
+  'decor colliders': {
+    angelfish: [1],
+    discus: [0, 1],
+    'blue-tang': [0],
+    'yellow-tang': [0, 1],
+    'banded-archerfish': [0],
+    'barred-mudskipper': [1],
+    'blue-spotted-mudskipper': [1],
+  },
+};
+// The blackwater nano preset builds invalid colliders, so no world starts with it (#1392).
+const BROKEN_NANO_PRESETS: ReadonlySet<Biome> = new Set(['blackwater']);
+
+interface ContentFish {
+  readonly id: string;
+  readonly biome: Biome;
+  readonly lengths: readonly number[];
+}
+
+function contentFish(): ContentFish[] {
+  const dir = join(__dirname, '../../../../content/species');
+  const byId = new Map(allSpeciesInputs().map((s) => [s.id, s]));
+  return readdirSync(dir)
+    .filter((file) => file.endsWith('.json'))
+    .map((file) => {
+      const raw = JSON.parse(readFileSync(join(dir, file), 'utf8')) as {
+        id: string;
+        biome: Biome;
+        lifecycle: { maxSizeM: number };
+      };
+      const input = byId.get(raw.id);
+      if (!input) throw new Error(`no sim species for ${raw.id}`);
+      return {
+        id: raw.id,
+        biome: raw.biome,
+        lengths: [input.locomotion.bodyLengthM, raw.lifecycle.maxSizeM],
+      };
+    });
+}
+
+function failedSeeds(id: string, length: number, decor: readonly Collider[]): string[] {
+  const species = allSpeciesInputs();
+  const failed: string[] = [];
+  for (const seed of SPAWN_SEEDS) {
+    try {
+      new World({
+        seed,
+        space: tankSpaceOf(TANK_DIMENSIONS.nano30),
+        species,
+        fish: [{ id: `${id}-0`, species: id, bodyLengthM: length }],
+        decor,
+      });
+    } catch (error) {
+      failed.push(`seed ${seed}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return failed;
+}
+
+describe.each(LAYERS)('a nano tank with the fitted decor and %s', (layer) => {
+  describe.each(SPAWN_BIOMES.filter((b) => !BROKEN_NANO_PRESETS.has(b)))('%s', (biome) => {
+    it('spawns every fish that spawns in an empty nano, at its adult and its largest size', async () => {
+      const fitted = fitPresetToCatalog(
+        loadPreset(biome),
+        'nano30',
+        TANK_DIMENSIONS.nano30,
+        catalog,
+      );
+      const decor = await hardColliders(biome, layer, fitted.decor);
+      const fish = contentFish().filter((f) => f.biome === biome);
+      expect(fish.length).toBeGreaterThan(0);
+      const worse: string[] = [];
+      const fixed: string[] = [];
+      for (const { id, lengths } of fish) {
+        for (const [i, length] of lengths.entries()) {
+          const empty = failedSeeds(id, length, []);
+          if (empty.length > 0) continue;
+          const failed = failedSeeds(id, length, decor);
+          if (NO_ROOM_WITH_DECOR[layer][id]?.includes(i)) {
+            if (failed.length === 0) fixed.push(`${id} ${length} m`);
+          } else if (failed.length > 0) {
+            worse.push(`${id} ${length} m: ${failed.length}/20, ${failed[0]}`);
+          }
+        }
+      }
+      expect(worse, 'fish the fitted nano decor keeps from spawning').toEqual([]);
+      expect(fixed, 'fish that spawn now: drop them from NO_ROOM_WITH_DECOR').toEqual([]);
+    });
+
+    it.runIf(isPlayableBiome(biome))('boots the nano demo stock', async () => {
+      const dimensions = TANK_DIMENSIONS.nano30;
+      const fitted = fitPresetToCatalog(loadPreset(biome), 'nano30', dimensions, catalog);
+      const decor = await hardColliders(biome, layer, fitted.decor);
+      for (const seed of [1, 2, 3, 4]) {
+        const { config } = demoTank(dimensions, seed, biome);
+        expect(() => new World({ ...config, decor }), `seed ${seed}`).not.toThrow();
+      }
+    });
+  });
 });

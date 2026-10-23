@@ -73,21 +73,20 @@ describe('bank anchors on the fitted mangrove preset', () => {
         .filter((i) => i.assetId === 'mangrove-stump')
         .map((i) => i.position[1] + 0.28 * i.scale)
         .sort((a, b) => a - b);
-      expect(peaks.length, size).toBe(2);
+      expect(peaks.length, size).toBe(size === 'nano30' ? 1 : 2);
       expect(peaks[0], size).toBeLessThan(waterTop(d));
     }
   });
 
-  it('demotes the nano perch to ordinary wood: no flag, shrunk with the tank', () => {
+  it('keeps only the ordinary stump in the nano, at the minimum decor scale and with no perch', () => {
     const { fitted } = fittedBanks('nano30');
-    const authored = loadPreset('mangrove').decor.find((i) => i.perch);
-    const demoted = fitted.decor.filter((i) => i.assetId === 'mangrove-stump' && i.scale < 1);
-    expect(authored).toBeDefined();
-    expect(demoted).toHaveLength(2);
-    for (const item of demoted) expect(item.perch).toBeUndefined();
-    expect(demoted.map((i) => i.scale).sort()).toContainEqual(
-      expect.closeTo((authored?.scale ?? 0) * presetFit('nano30').scale, 3),
+    const stumps = fitted.decor.filter((i) => i.assetId === 'mangrove-stump');
+    const ordinary = loadPreset('mangrove').decor.find(
+      (i) => i.assetId === 'mangrove-stump' && !i.perch,
     );
+    expect(stumps).toHaveLength(1);
+    const { decorScale } = presetFit('nano30');
+    expect(stumps[0]?.scale).toBeCloseTo((ordinary?.scale ?? 0) * decorScale, 3);
     expect(fitted.decor.some((i) => i.perch)).toBe(false);
   });
 
