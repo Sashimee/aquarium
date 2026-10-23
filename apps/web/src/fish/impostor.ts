@@ -161,6 +161,14 @@ function shrinkNormalAtlas(texture: CompressedTexture, info: ImpostorAtlasInfo):
   const shrunkSize = atlasSize >> levels;
   const { width } = texture.image;
   if (width === shrunkSize) return texture;
+  const partial = Array.from({ length: levels - 1 }, (_, i) => i + 1).find(
+    (dropped) => width === atlasSize >> dropped,
+  );
+  if (partial !== undefined) {
+    throw new Error(
+      `${file} is ${width} px wide: ${partial} of the ${levels} mip levels its ${info.frameSize} px frames drop are already gone. Something else shrank this shared texture; load it only through loadImpostorAtlas.`,
+    );
+  }
   if (width !== atlasSize) {
     throw new Error(
       `${file} is ${width} px wide, but grid * frameSize is ${atlasSize}. Re-bake it or fix its index entry.`,
@@ -185,6 +193,32 @@ function prepare(texture: Texture): Texture {
   return texture;
 }
 
+/**
+ * three hands overlapping loads of one URL the same texture, so each atlas counts its users and
+ * the last one to let go disposes it. Disposing earlier would not break the others, since three
+ * re-uploads a disposed texture from its CPU mips, but it would upload the atlas twice.
+ */
+const textureUsers = new WeakMap<Texture, number>();
+
+function retain(texture: Texture): void {
+  textureUsers.set(texture, (textureUsers.get(texture) ?? 0) + 1);
+}
+
+function release(texture: Texture): void {
+  const users = textureUsers.get(texture);
+  if (users === undefined) {
+    throw new Error(
+      `fish impostor texture ${texture.name || texture.uuid} was released more often than it was loaded`,
+    );
+  }
+  if (users > 1) {
+    textureUsers.set(texture, users - 1);
+    return;
+  }
+  textureUsers.delete(texture);
+  texture.dispose();
+}
+
 /** Loads both atlases of a fish; neither is kept when either fails. */
 export async function loadImpostorAtlas(
   ktx2: Ktx2Textures,
@@ -194,17 +228,18 @@ export async function loadImpostorAtlas(
   const files = [info.albedoFile, info.normalFile];
   const settled = await Promise.allSettled(files.map((file) => ktx2.loadAsync(`${root}${file}`)));
   const loaded = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  for (const texture of loaded) retain(texture);
   const [albedo, normal] = loaded;
   if (loaded.length === 2 && albedo !== undefined && normal !== undefined) {
     try {
       const shrunk = shrinkNormalAtlas(normal, info);
       return { info, albedo: prepare(albedo), normal: prepare(shrunk) };
     } catch (error) {
-      for (const texture of loaded) texture.dispose();
+      for (const texture of loaded) release(texture);
       throw error;
     }
   }
-  for (const texture of loaded) texture.dispose();
+  for (const texture of loaded) release(texture);
   const failed = settled.findIndex((r) => r.status === 'rejected');
   const failure = settled[failed];
   throw new Error(`fish impostor atlas ${files[failed] ?? info.albedoFile} failed to load`, {
@@ -212,7 +247,8 @@ export async function loadImpostorAtlas(
   });
 }
 
-export function disposeImpostorAtlas(atlas: ImpostorAtlas): void {
-  atlas.albedo.dispose();
-  atlas.normal.dispose();
+/** Disposes each texture once no other atlas from an overlapping load still uses it. */
+export function releaseImpostorAtlas(atlas: ImpostorAtlas): void {
+  release(atlas.albedo);
+  release(atlas.normal);
 }

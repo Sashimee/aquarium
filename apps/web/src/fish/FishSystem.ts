@@ -73,10 +73,10 @@ import {
 import { writeDiseaseSigns } from './disease';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import {
-  disposeImpostorAtlas,
   ImpostorInstanceData,
   impostorStrip,
   loadImpostorAtlas,
+  releaseImpostorAtlas,
   type ImpostorAtlas,
   type ImpostorValues,
 } from './impostor';
@@ -440,7 +440,7 @@ export class FishSystem {
   private readonly batches = new BatchCache<SpeciesBatch>(
     (batch) => {
       this.disposeLods(batch);
-      if (batch.atlas.kind === 'ready') disposeImpostorAtlas(batch.atlas.atlas);
+      if (batch.atlas.kind === 'ready') releaseImpostorAtlas(batch.atlas.atlas);
       batch.atlas = { kind: 'failed' };
       disposeFishModel(batch.model);
     },
@@ -1197,7 +1197,7 @@ export class FishSystem {
     loadImpostorAtlas(this.engine.ktx2, this.options.assetRoot, info).then(
       (atlas) => {
         if (this.disposed || batch.atlas.kind !== 'loading') {
-          disposeImpostorAtlas(atlas);
+          releaseImpostorAtlas(atlas);
           return;
         }
         batch.atlas = { kind: 'ready', atlas };
