@@ -6997,7 +6997,8 @@
         "downmixed to mono and resampled to 48 kHz",
         "high-pass at 60 Hz",
         "trimmed to a 14 s stationary section; 1 s equal-power crossfade of the loop seam",
-        "gain limited by the -1 dBFS peak ceiling, so the loudness is -34.1 LUFS instead of the -26 LUFS target",
+        "5 ms look-ahead peak limiter at -2.5 dBFS",
+        "normalised to -26 LUFS",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
       "status": "downloaded"

@@ -1,7 +1,13 @@
 import type { RoomEntry } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
-import { ALL_ROOMS_MAX_BYTES, ROOM_MAX_BYTES, roomProblems, roomStats } from './room-budgets.ts';
+import {
+  ALL_ROOMS_MAX_BYTES,
+  ROOM_MAX_BYTES,
+  ambienceLoudnessProblems,
+  roomProblems,
+  roomStats,
+} from './room-budgets.ts';
 
 const sha = 'a'.repeat(64);
 
@@ -157,5 +163,39 @@ describe('roomProblems', () => {
       room({ assets: { shell: null, furniture: ['p0'], hdri: 'h1' } }),
     );
     expect(roomProblems(shared, refs(assets, 1, manifest))).toEqual([]);
+  });
+});
+
+describe('ambienceLoudnessProblems', () => {
+  const loud = (id: string, lufs: number) =>
+    ({ ...audio(id), audio: { loudnessLufs: lufs } }) as unknown as OutputAsset;
+  const rooms = ['a1', 'a2', 'a3'].map((id, n) =>
+    room({
+      id: `room-${n}`,
+      ambience: { sound: null, asset: id },
+    } as unknown as Partial<RoomEntry>),
+  );
+  const index = (levels: number[]) =>
+    ({ version: 1, assets: levels.map((l, n) => loud(`a${n + 1}`, l)) }) as unknown as AssetIndex;
+
+  it('accepts loops within the spread', () => {
+    expect(ambienceLoudnessProblems(rooms, index([-26, -26.1, -25.2]))).toEqual([]);
+  });
+
+  it('names the quiet outlier, as the cabin loop was at -34.1 LUFS', () => {
+    const problems = ambienceLoudnessProblems(rooms, index([-26, -34.1, -26]));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('a2 at -34.1 LUFS');
+    expect(problems[0]).toContain('8.1 LU');
+  });
+
+  it('is part of roomProblems', () => {
+    const assets = [loud('a1', -26), loud('a2', -34), loud('a3', -26)];
+    const problems = roomProblems(rooms, {
+      index: { version: 1, assets } as unknown as AssetIndex,
+      manifestIds: new Set(['a1', 'a2', 'a3']),
+      drawCallsOf: () => 1,
+    });
+    expect(problems.some((p) => p.includes('ambience loudness'))).toBe(true);
   });
 });
