@@ -1,6 +1,6 @@
 import type { Basin } from './basin.ts';
 import type { Anchor } from './behaviour.ts';
-import type { DecorBounds, DecorShape } from './decor.ts';
+import type { DecorBounds, DecorShape, Point3 } from './decor.ts';
 import type { Sdf } from './sdf.ts';
 
 /** Crevice shelters found in the hardscape when the scene offers no cave; sources in BEHAVIOUR.md. */
@@ -9,6 +9,7 @@ export const NOOK = {
   gridCells: 40,
   stepBodyLengths: 0.25,
   rockTouchBodyLengths: 0.25,
+  turnRoomBodyLengths: 0.55,
   coverBodyLengths: 1.5,
   minCoverShare: 0.45,
   spacingBodyLengths: 2,
@@ -66,7 +67,7 @@ interface Candidate {
   readonly z: number;
   readonly clearance: number;
   readonly cover: number;
-  readonly facing: [number, number, number];
+  readonly facing: Point3;
 }
 
 /** The points tested for a fish of `length`, in grid order. */
@@ -79,9 +80,9 @@ interface Grid {
 
 /**
  * Up to `NOOK.maxNooks` crevices against the hardscape for a cave-dweller of body length `length`:
- * free water with room for its whole body, touching rock, and walled in (rock, sand or glass) on
- * at least `minCoverShare` of the 26 directions within `coverBodyLengths`. Each opens toward its
- * open directions, as a cave mouth does. The best covered come first, `spacingBodyLengths` apart.
+ * free water with room to turn its whole body round (`turnRoomBodyLengths`), touching rock, and
+ * walled in (rock, sand or glass) on at least `minCoverShare` of the 26 directions within
+ * `coverBodyLengths`. Each opens toward its open directions, as a cave mouth does. The best covered come first, `spacingBodyLengths` apart.
  * Deterministic: a fixed grid, no RNG.
  */
 export function findNooks(field: NookField, length: number, idPrefix = 'nook:'): Anchor[] {
@@ -98,9 +99,12 @@ export class NookSearch {
   private field: NookField | null = null;
   private decor: NookDecor | null = null;
   private verdicts: (Candidate | null)[] = [];
+  private _tested = 0;
 
   /** Points tested by the last `find`: the whole grid, or those near the decor that changed. */
-  tested = 0;
+  get tested(): number {
+    return this._tested;
+  }
 
   find(field: NookField, length: number, idPrefix = 'nook:', decor?: NookDecor): Anchor[] {
     const before = this.decor;
@@ -130,14 +134,14 @@ export class NookSearch {
     const pad = nookInfluence(grid.length);
     const n = new Float64Array(3);
     const { xs, ys, zs } = grid;
-    this.tested = 0;
+    this._tested = 0;
     for (let k = 0; k < xs.length; k++) {
       const x = xs[k] ?? 0;
       const y = ys[k] ?? 0;
       const z = zs[k] ?? 0;
       if (dirty !== null && !dirty.some((b) => near(b, x, y, z, pad))) continue;
       this.verdicts[k] = test(field, grid.length, x, y, z, n);
-      this.tested++;
+      this._tested++;
     }
   }
 }
@@ -149,7 +153,7 @@ export class NookSearch {
  * `reach` plus the margin. The clearance and rock tests see no further than the touching
  * distance, and the mouth lies a body length past that and needs half a body of room.
  */
-export function nookInfluence(length: number): number {
+function nookInfluence(length: number): number {
   const r = 0.5 * length;
   const reach = NOOK.coverBodyLengths * length;
   const touch = r + NOOK.rockTouchBodyLengths * length;
@@ -227,7 +231,7 @@ function test(
   // Most points lie away from the rock, and the rock alone is the cheaper field to ask.
   if (rock.sample(x, y, z, n) > touch) return null;
   const clearance = water.sample(x, y, z, n);
-  if (clearance < r) return null;
+  if (clearance < NOOK.turnRoomBodyLengths * length) return null;
   let open = 0;
   for (const k of PROBE_ORDER) {
     const [dx, dy, dz] = DIRECTIONS[k] ?? [0, 0, 0];
@@ -247,7 +251,7 @@ function test(
   // Cave mouths open sideways, so a nook does too, toward its open water.
   const fl = Math.hypot(fx, fz);
   if (fl < 1e-6) return null;
-  const facing: [number, number, number] = [fx / fl, 0, fz / fl];
+  const facing: Point3 = [fx / fl, 0, fz / fl];
   const out = clearance + length;
   if (water.sample(x + facing[0] * out, y, z + facing[2] * out, n) < r) return null;
   return { x, y, z, clearance, cover: covered, facing };

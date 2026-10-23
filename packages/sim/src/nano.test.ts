@@ -9,13 +9,15 @@ import {
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { Basin } from './basin.ts';
+import { BEHAVIOUR } from './behaviour.ts';
 import { DecorField, UnionSdf } from './decor.ts';
 import { royalGramma, spawnMany } from './fixtures.ts';
-import { findNooks, NookSearch } from './nooks.ts';
+import { findNooks, NOOK, NookSearch } from './nooks.ts';
+import { Rng } from './rng.ts';
 import { FishState } from './snapshot.ts';
 import { TankSdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
-import { World, maxFishLengthM, type FishSpawn } from './world.ts';
+import { STEERING, World, maxFishLengthM, type FishSpawn } from './world.ts';
 
 const LONG = 120_000;
 
@@ -204,7 +206,18 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
     };
   };
 
-  it('finds them deterministically, each with room for the body and opening sideways', () => {
+  // What the steering needs to turn the body round level where it is (`bodyCanTurnAt` in
+  // world.ts): the snout's reach, the flank's thickness and the turn margin.
+  const turnRoom =
+    (BEHAVIOUR.bodySampleOffsets[0] ?? NaN) +
+    BEHAVIOUR.bodyThicknessBodyLengths +
+    STEERING.turnRoomMarginBodyLengths;
+
+  it('keeps the room a crevice needs in step with what the steering needs to turn', () => {
+    expect(NOOK.turnRoomBodyLengths).toBeCloseTo(turnRoom, 12);
+  });
+
+  it('finds them deterministically, each with room to turn round and opening sideways', () => {
     const f = field();
     const nooks = findNooks(f, length);
     expect(nooks.length).toBeGreaterThan(0);
@@ -213,7 +226,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
     for (const k of nooks) {
       const [x, y, z] = k.position;
       expect(k.kind).toBe('cave');
-      expect(f.water.sample(x, y, z, n)).toBeGreaterThanOrEqual(0.5 * length);
+      expect(f.water.sample(x, y, z, n)).toBeGreaterThanOrEqual(turnRoom * length);
       expect(k.facing?.[1]).toBe(0);
       expect(Math.hypot(...(k.facing ?? [0, 0, 0]))).toBeCloseTo(1, 12);
     }
@@ -383,6 +396,98 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
       const shorter = new NookSearch();
       shorter.find(tank, 0.9 * length);
       expect(search.tested).toBe(shorter.tested);
+    });
+
+    it('tests again only near a hull rock that moved, and finds what a fresh search finds', () => {
+      const stone = (id: string, x: number, z: number, s: number): Collider => ({
+        id,
+        hard: true,
+        kind: 'hull',
+        vertices: [
+          [x - 0.07 * s, 0, z - 0.05 * s],
+          [x + 0.06 * s, 0, z - 0.06 * s],
+          [x + 0.07 * s, 0, z + 0.05 * s],
+          [x - 0.05 * s, 0, z + 0.06 * s],
+          [x - 0.04 * s, 0.09 * s, z - 0.02 * s],
+          [x + 0.03 * s, 0.11 * s, z - 0.03 * s],
+          [x + 0.04 * s, 0.08 * s, z + 0.03 * s],
+          [x - 0.02 * s, 0.1 * s, z + 0.04 * s],
+        ],
+      });
+      const hulled = moved('rock-2', () => stone('rock-2', -0.1, -0.12, 1));
+      rock.set(hulled);
+      const search = new NookSearch();
+      const before = fresh(hulled);
+      expect(before.length).toBeGreaterThan(0);
+      expect(search.find(tank, length, 'nook:', decor())).toEqual(before);
+      const full = search.tested;
+      for (const next of [
+        hulled.map((c) => (c.id === 'rock-2' ? stone('rock-2', -0.07, -0.1, 1) : c)),
+        hulled.map((c) => (c.id === 'rock-2' ? stone('rock-2', -0.07, -0.1, 1.3) : c)),
+        [...hulled, stone('rock-12', 0.45, 0.12, 0.8)],
+      ]) {
+        rock.set(next);
+        expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(next));
+        expect(search.tested).toBeGreaterThan(0);
+        expect(search.tested).toBeLessThan(0.5 * full);
+      }
+    });
+
+    it('matches a fresh search through a seeded run of decor edits', () => {
+      const rng = new Rng(1436);
+      let decorNow: Collider[] = [...ROCKS];
+      rock.set(decorNow);
+      const search = new NookSearch();
+      search.find(tank, length, 'nook:', decor());
+      let added = 0;
+      let found = 0;
+      for (let step = 0; step < 10; step++) {
+        const k = Math.floor(rng.range(0, decorNow.length));
+        const target = decorNow[k];
+        if (target === undefined) throw new Error(`no collider ${k}`);
+        const x = rng.range(-0.5, 0.5);
+        const z = rng.range(-0.15, 0.15);
+        const roll = rng.range(0, 4);
+        if (roll < 1) {
+          decorNow = decorNow.filter((c) => c.id !== target.id);
+        } else if (roll < 2) {
+          decorNow.push({
+            id: `added-${added++}`,
+            hard: true,
+            kind: 'hull',
+            vertices: [
+              [x - 0.05, 0, z - 0.04],
+              [x + 0.05, 0, z - 0.05],
+              [x + 0.04, 0, z + 0.05],
+              [x - 0.04, 0.08, z],
+              [x + 0.02, 0.1, z + 0.02],
+            ],
+          });
+        } else if (roll < 3) {
+          decorNow[k] = {
+            id: target.id,
+            hard: true,
+            kind: 'sphere',
+            center: [x, 0.02, z],
+            radius: rng.range(0.04, 0.08),
+          };
+        } else {
+          decorNow[k] = {
+            id: target.id,
+            hard: true,
+            kind: 'box',
+            center: [x, 0.05, z],
+            halfExtents: [rng.range(0.03, 0.07), 0.05, rng.range(0.03, 0.06)],
+            rotationY: rng.range(-1, 1),
+            rounding: 0.01,
+          };
+        }
+        rock.set(decorNow);
+        const expected = fresh(decorNow);
+        found += expected.length;
+        expect(search.find(tank, length, 'nook:', decor()), `step ${step}`).toEqual(expected);
+      }
+      expect(found).toBeGreaterThan(0);
     });
   });
 
