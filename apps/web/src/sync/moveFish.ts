@@ -13,8 +13,7 @@ import { ApiRequestError } from '../ui/api';
 export function moveTargets(
   from: Tank,
   tanks: readonly Tank[],
-  speciesId: string,
-  species: Pick<SpeciesSummary, 'commonName' | 'lifecycle'>,
+  species: Pick<SpeciesSummary, 'id' | 'commonName' | 'lifecycle'>,
   economy: Economy = BUNDLED_ECONOMY,
 ): Tank[] {
   return tanks.filter(
@@ -22,7 +21,7 @@ export function moveTargets(
       t.id !== from.id &&
       t.quarantine !== from.quarantine &&
       t.biome === from.biome &&
-      tankLengthRefusal(economy, speciesId, t, speciesId) === undefined &&
+      tankLengthRefusal(economy, species.id, t, species.id) === undefined &&
       adultLengthRefusal(species, t.size, t.quarantine) === undefined,
   );
 }

@@ -1,4 +1,4 @@
-import type { SpeciesSummary, TankSize } from '@aquarium/shared';
+import { adultLengthRefusalText, type SpeciesSummary, type TankSize } from '@aquarium/shared';
 
 /**
  * Rounded down from the sim's `maxFishLengthM` for each tank's real sand. A table, not a call, so
@@ -23,5 +23,5 @@ export function adultLengthRefusal(
 ): string | undefined {
   const limitM = tankMaxFishLengthM(size);
   if (species.lifecycle.maxSizeM <= limitM) return undefined;
-  return `${species.commonName} grows to ${Math.round(species.lifecycle.maxSizeM * 100)} cm, but this tank only holds fish up to ${Math.floor(limitM * 100)} cm. ${quarantine ? 'A quarantine tank is too small for it, so it cannot go there.' : 'Choose a bigger tank.'}`;
+  return adultLengthRefusalText(species, limitM, quarantine);
 }

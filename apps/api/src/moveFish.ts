@@ -8,6 +8,7 @@ import {
   type Economy,
   type Tank,
 } from '@aquarium/shared';
+import { adultLengthRefusal } from './fishFit.ts';
 import { BIOLOAD_CAPACITY_BY_SIZE, hasCapacityFor, syncTreatment } from '@aquarium/sim/lifecycle';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -120,6 +121,8 @@ export function registerMoveRoutes(ctx: MoveContext): void {
         }
         const tooShort = tankLengthRefusal(economy, spec.id, destination.tank, spec.commonName);
         if (tooShort) throw refuse(409, tooShort);
+        const tooLong = adultLengthRefusal(spec, destination.tank);
+        if (tooLong) throw refuse(409, tooLong);
         const existing = destination.fishRows.map((f) => ({
           alive: f.status === 'alive',
           maxBioload: species.get(f.species)?.lifecycle.bioload ?? 0,

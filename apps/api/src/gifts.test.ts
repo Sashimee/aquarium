@@ -17,6 +17,7 @@ import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
+import { tankMaxFishLengthM } from './fishFit.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { APP_ORIGIN, createHarness, topUp, type Harness } from './test-harness.ts';
 
@@ -571,6 +572,12 @@ describe('gifting and trading fish', () => {
       expect(errorOf(short).message).toContain('150 cm');
       expect((await offerRow(h, monoOffer)).status).toBe('open');
       expect(await fishRows(h, monoId)).toHaveLength(0);
+      await h.database.db.delete(schema.tanks).where(eq(schema.tanks.id, small));
+      const nanoB = await makeTank(h, b, { biome: 'mangrove', quarantine: true });
+      const tooLong = await accept(h, b, monoOffer, { toTankId: nanoB });
+      expect(tooLong.statusCode).toBe(409);
+      expect(errorOf(tooLong).message).toMatch(/only holds fish up to \d+ cm/);
+      expect((await offerRow(h, monoOffer)).status).toBe('open');
       expect((await accept(h, b, monoOffer, { toTankId: longB })).statusCode).toBe(200);
     });
 
@@ -615,6 +622,15 @@ describe('gifting and trading fish', () => {
       expect(back).toMatchObject({ tankId: tankA, name: 'Goldie', status: 'alive' });
       expect(back?.introducedAt).toEqual(original?.introducedAt);
       expect(back?.bornAt).toEqual(original?.bornAt);
+
+      const longId = await addFish(h, tankA, { name: 'Long' });
+      const longOffer = offerId(await offer(h, a, { fromTankId: tankA, fishId: longId, to: b }));
+      await h.database.db
+        .update(schema.giftOffers)
+        .set({ fish: sql`jsonb_set(fish, '{size}', '0.9')` })
+        .where(eq(schema.giftOffers.id, longOffer));
+      expect((await call(h, b, 'POST', `/api/gifts/${longOffer}/decline`)).statusCode).toBe(200);
+      expect((await fishRows(h, longId))[0]?.size).toBe(tankMaxFishLengthM('standard'));
 
       const again = await call(h, b, 'POST', `/api/gifts/${id}/decline`);
       expect(again.statusCode).toBe(200);

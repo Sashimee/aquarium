@@ -34,6 +34,10 @@ const PUBLIC = join(__dirname, '../../public');
 const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 
 const MIN_DEPTH_SHARE = 0.4;
+// Placed plant footprint per ground area against the authored patch, glass shrink included.
+const MIN_NANO_COVERAGE_SHARE = 0.8;
+// Plants of different patches in a nano; dev's closest pair is 0.004.
+const MIN_CROSS_PATCH_GAP = 0.003;
 const GLASS_NUDGE_TOLERANCE = 0.06;
 // Life-size decor in the 0.25 m deep nano is pushed further off the glass than in the others.
 const NANO_GLASS_NUDGE_TOLERANCE = 0.08;
@@ -51,11 +55,11 @@ const MAX_NUDGED_NANO_ITEMS = { freshwater: 2, reef: 7, blackwater: 3 } as const
 /**
  * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
  * `<size>:<patch id>`, with the mean root z band they settle in. A nano holds its plants near life
- * size, so a tall back patch cannot settle as deep as authored.
+ * size, so a back patch whose reach nears the half-depth cannot root as deep as authored. Height
+ * is kept over depth.
  */
 const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
-  'nano30:vallisneria-right': [-0.016, -0.008],
-  'nano30:carpet-right': [0.012, 0.019],
+  'nano30:vallisneria-right': [-0.013, -0.011],
 };
 
 /**
@@ -276,6 +280,7 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           catalog,
           new ColliderField(colliders),
           dimensions,
+          size,
           (patch, instances) => {
             placed.set(patch.id, instances.length);
             scales.set(
@@ -316,6 +321,34 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
         }
       });
 
+      it.runIf(size === 'nano30')("roots no two patches' plants on top of each other", async () => {
+        const preset = fitted();
+        const hard = preset.decor
+          .filter((item) => !parseEuphylliaId(item.assetId))
+          .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
+          .filter(({ kind }) => kind !== 'anemone');
+        const { colliders } = await movableColliders(library, hard, waterTop);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const roots: { id: string; x: number; z: number }[] = [];
+        scatterPresetPatches(
+          preset,
+          catalog,
+          new ColliderField(colliders),
+          dimensions,
+          size,
+          (patch, instances) =>
+            roots.push(...instances.map(({ x, z }) => ({ id: patch.id, x, z }))),
+        );
+        warn.mockRestore();
+        let closest = Infinity;
+        for (const a of roots) {
+          for (const b of roots) {
+            if (a.id !== b.id) closest = Math.min(closest, Math.hypot(a.x - b.x, a.z - b.z));
+          }
+        }
+        expect(closest).toBeGreaterThanOrEqual(MIN_CROSS_PATCH_GAP);
+      });
+
       it('keeps every patch at its authored depth', async () => {
         const preset = fitted();
         const hard = preset.decor
@@ -326,12 +359,13 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         // A nano's half-depth is barely wider than one plant's sway, so only half of a patch fits.
         const keptShare = size === 'nano30' ? 0.5 : 0.75;
-        const roots = new Map<string, { x: number; z: number }[]>();
+        const roots = new Map<string, { x: number; z: number; scale: number }[]>();
         scatterPresetPatches(
           preset,
           catalog,
           new ColliderField(colliders),
           dimensions,
+          size,
           (patch, instances) => roots.set(patch.id, instances),
         );
         warn.mockRestore();
@@ -352,6 +386,16 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
           const slack = Math.max(patch.radius, 0.06);
           expect(Math.abs(meanX - patch.center[0]), `${patch.id} x`).toBeLessThanOrEqual(slack * 2);
           if (Math.abs(authoredZ) <= 0.05) continue;
+          const wasPatch = authored.find((a) => a.id === patch.id);
+          if (size === 'nano30' && authoredZ > 0 && wasPatch) {
+            const mean = (wasPatch.scale[0] + wasPatch.scale[1]) / 2;
+            const was = (wasPatch.count * mean ** 2) / (Math.PI * wasPatch.radius ** 2);
+            const now =
+              plants.reduce((sum, p) => sum + p.scale ** 2, 0) / (Math.PI * patch.radius ** 2);
+            expect(now / was, `${patch.id} placed coverage`).toBeGreaterThanOrEqual(
+              MIN_NANO_COVERAGE_SHARE,
+            );
+          }
           const key = `${size}:${patch.id}`;
           const pinned = KNOWN_DEPTH_SHORTFALLS[key];
           if (pinned) {

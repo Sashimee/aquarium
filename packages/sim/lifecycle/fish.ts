@@ -33,6 +33,7 @@ export interface FishStepInput {
   readonly chemistryParams: ChemistryParameters;
   readonly vacationFeeder: boolean;
   readonly grace: boolean;
+  readonly maxFishLengthM?: number;
   readonly medicine: ActiveMedicine | null;
   /** Severities of the sick tank-mates by kind, from `contagionFrom`. */
   readonly contagion: KindRates;
@@ -144,10 +145,11 @@ export function stepFish(
   const gain = harmed ? 0 : spec.healthRecoveryPerHour * dtHours * (1 - Math.min(1, stress));
   const health = clamp01(fish.health - loss + gain);
 
-  const size =
+  const grown =
     !harmed && health >= GROWTH_MIN_HEALTH
       ? Math.min(spec.maxSizeM, fish.size + (spec.growthPerDay * dtHours) / 24)
       : fish.size;
+  const size = Math.min(grown, input.maxFishLengthM ?? Infinity);
 
   let cause: CauseOfDeath | null = null;
   if (nowMs - fish.bornAtMs >= spec.lifespanDays * DAY_MS) cause = 'old_age';

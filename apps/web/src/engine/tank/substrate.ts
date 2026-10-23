@@ -1,21 +1,12 @@
 import { BufferGeometry, Float32BufferAttribute, MeshStandardNodeMaterial } from 'three/webgpu';
 import { color, mix, mx_noise_float, positionWorld, smoothstep } from 'three/tsl';
+import { sandHeight } from '@aquarium/shared';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { TankDimensions } from './dimensions';
 
-/**
- * Height of the substrate top at (x, z): a slope rising towards the back (-z), the
- * usual aquascaping layout, with low dunes.
- */
+/** Height of the substrate top at (x, z): the shared sand surface the sim walks on. */
 export function substrateHeight(d: TankDimensions, x: number, z: number): number {
-  const innerDepth = d.depth - 2 * d.glass;
-  const back = Math.min(1, Math.max(0, (innerDepth / 2 - z) / innerDepth));
-  const eased = back * back * (3 - 2 * back);
-  const dunes =
-    0.004 * Math.sin(x * 21 + z * 6) +
-    0.003 * Math.sin(-x * 9.5 + z * 29) +
-    0.0015 * Math.sin(x * 47 - z * 13);
-  return d.glass + d.substrateFront + (d.substrateBack - d.substrateFront) * eased + dunes;
+  return sandHeight(d, d.substrateFront, d.substrateBack, x, z);
 }
 
 /** Mean of `substrateHeight` over the floor: the slope's smoothstep and the dunes average out. */

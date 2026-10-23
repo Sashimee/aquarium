@@ -5,6 +5,7 @@ import {
   speciesSchema,
   tankSizeSchema,
   tankWaterTop,
+  WATER_INSET,
   type Biome,
   type PlayableBiome,
   type TankSize,
@@ -42,7 +43,7 @@ import royalGrammaContent from '../../../../content/species/royal-gramma.json';
 import rummyNoseTetraContent from '../../../../content/species/rummy-nose-tetra.json';
 import yellowTangContent from '../../../../content/species/yellow-tang.json';
 import type { TankDimensions } from '../engine/tank/dimensions';
-import { sameTank, TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
+import { sameTank, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { SceneAnchor } from '../scene/anemone';
 

@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { tankMaxFishLengthM } from './fishFit.ts';
 import { schema } from './db/index.ts';
 import { pruneExpired } from './maintenance.ts';
 import { hashShareToken } from './shareToken.ts';
@@ -120,6 +121,16 @@ describe('public tank links', () => {
     const emptied = await view();
     expect(emptied.decorEdited).toBe(true);
     expect(emptied.decorLayout).toEqual([]);
+  });
+
+  it('serves a fish no longer than its tank holds, even if the row is', async () => {
+    const owner = await account(h);
+    const { id, token } = await sharedTank(h, owner.cookie);
+    await h.database.db.update(schema.fish).set({ size: 0.9 }).where(eq(schema.fish.tankId, id));
+    const view = publicTankSchema.parse(
+      (await call(h, null, 'GET', `/api/public/${token}`)).json(),
+    );
+    expect(view.fish[0]?.size).toBe(tankMaxFishLengthM('standard'));
   });
 
   it('answers 404 for unknown and malformed tokens alike', async () => {

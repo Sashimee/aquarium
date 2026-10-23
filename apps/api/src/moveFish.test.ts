@@ -10,6 +10,7 @@ import { and, eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
+import { tankMaxFishLengthM } from './fishFit.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
@@ -89,6 +90,7 @@ interface FishOptions {
   disease?: { kind: 'ich' | 'fin-rot' | 'velvet'; severity: number } | null;
   introducedAt?: Date | null;
   species?: string;
+  size?: number;
 }
 
 async function addFish(h: Harness, tankId: string, opts: FishOptions = {}): Promise<string> {
@@ -100,7 +102,7 @@ async function addFish(h: Harness, tankId: string, opts: FishOptions = {}): Prom
       species: opts.species ?? 'neon-tetra',
       name: 'Pip',
       sex: 'female',
-      size: 0.03,
+      size: opts.size ?? 0.03,
       personality: { boldness: 0.6, greed: 0.4, sociability: 0.5 },
       health: 0.8,
       status: opts.status ?? 'alive',
@@ -276,12 +278,25 @@ describe('moving a fish between tanks', () => {
       expect(events.filter((e) => e.tankId === long || e.tankId === standard)).toHaveLength(0);
     });
 
-    it('lets a silver mono into the quarantine tank, which is always short', async () => {
+    it('will not move a species that outgrows the destination into the quarantine tank', async () => {
       const who = await account(h);
       const long = await makeTank(h, who, { biome: 'mangrove', size: 'long300' });
       const quarantine = await makeTank(h, who, { biome: 'mangrove', quarantine: true });
       const fishId = await addFish(h, long, { species: 'silver-mono' });
       const res = await move(h, who, long, fishId, { toTankId: quarantine });
+      expect(res.statusCode).toBe(409);
+      expect(error(res).message).toMatch(
+        /Silver mono grows to 27 cm, but this tank only holds fish up to 21 cm. A quarantine tank is too small for it, so it cannot go there\./,
+      );
+      expect((await fishRow(h, fishId)).tankId).toBe(long);
+    });
+
+    it('lets a species that fits a nano tank into the quarantine tank', async () => {
+      const who = await account(h);
+      const standard = await makeTank(h, who);
+      const quarantine = await makeTank(h, who, { quarantine: true });
+      const fishId = await addFish(h, standard);
+      const res = await move(h, who, standard, fishId, { toTankId: quarantine });
       expect(res.statusCode, res.body).toBe(200);
       expect((await fishRow(h, fishId)).tankId).toBe(quarantine);
     });
@@ -554,6 +569,17 @@ describe('moving a fish between tanks', () => {
       expect(results.map((r) => r.statusCode)).toEqual([200, 200]);
       expect((await fishRow(h, inA)).tankId).toBe(b);
       expect((await fishRow(h, inB)).tankId).toBe(a);
+    });
+  });
+
+  describe('fish already longer than their tank', () => {
+    it('trims them to the tank limit when the tank is read', async () => {
+      const who = await account(h);
+      const nano = await makeTank(h, who, { biome: 'reef', quarantine: true });
+      const fishId = await addFish(h, nano, { species: 'blue-tang', size: 0.267 });
+      h.clock.advance(HOUR_MS);
+      await getTank(h, who, nano);
+      expect((await fishRow(h, fishId)).size).toBe(tankMaxFishLengthM('nano30'));
     });
   });
 });

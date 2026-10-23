@@ -30,6 +30,7 @@ import {
   type GiftOffer,
   type Tank,
 } from '@aquarium/shared';
+import { adultLengthRefusal, tankMaxFishLengthM } from './fishFit.ts';
 import {
   BIOLOAD_CAPACITY_BY_SIZE,
   hasCapacityFor,
@@ -287,6 +288,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
       .insert(schema.fish)
       .values({
         ...stored,
+        size: Math.min(stored.size, tankMaxFishLengthM(home.tank.size)),
         tankId: home.tank.id,
         status: 'alive',
         disease: wireDisease(synced?.disease ?? null),
@@ -322,6 +324,8 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     }
     const tooShort = tankLengthRefusal(economy, spec.id, dest.tank, spec.commonName);
     if (tooShort) throw refuse(409, tooShort);
+    const tooLong = adultLengthRefusal(spec, dest.tank);
+    if (tooLong) throw refuse(409, tooLong);
     const existing = dest.fishRows
       .filter((f) => f.id !== leavingFishId)
       .map((f) => ({
@@ -365,7 +369,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     const disease = wireDisease(synced?.disease ?? null);
     const [inserted] = await tx
       .insert(schema.fish)
-      .values({ ...row, disease })
+      .values({ ...row, size: Math.min(row.size, tankMaxFishLengthM(dest.tank.size)), disease })
       .returning();
     if (!inserted) throw new Error('delivering an escrowed fish inserted nothing');
     return {

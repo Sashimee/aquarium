@@ -8,15 +8,24 @@ import {
   presetFit,
   type Biome,
   type DecorItem,
+  type PlantPatch,
   type PresetLayout,
 } from '@aquarium/shared';
 import { AssetCatalog } from './assets';
 import { offersShelter } from './caves';
 import { loadPreset } from './preset';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
+import { GLASS_SHRINK_FLOOR } from './placement';
 import { substrateHeight } from '../engine/tank/substrate';
 import { TANK_SIZES } from '@aquarium/shared';
-import { fitPresetToTank, footprintShare, MIN_PLANT_FIT, type BoundsOf } from './presetFit';
+import {
+  fitDepth,
+  MIN_PATCH_RADIUS_SHARE,
+  fitPresetToTank,
+  footprintShare,
+  MIN_PLANT_FIT,
+  type BoundsOf,
+} from './presetFit';
 
 const boundsOf: BoundsOf = () => ({
   bounds: { min: [-0.2, 0, -0.2], max: [0.2, 0.1, 0.2] },
@@ -189,5 +198,118 @@ describe('the decor a preset keeps on the nano tank', () => {
     });
     const [item] = fitPresetToTank(preset, 'nano30', nano, small, () => 0).decor;
     expect(item?.scale).toBeCloseTo(DECOR_MIN_SCALE, 6);
+  });
+});
+
+describe('fitDepth', () => {
+  it('leaves a patch that stays inside the limit alone', () => {
+    expect(fitDepth(0.03, 0.04, 0.08)).toEqual({ radius: 0.03, depth: 0.04 });
+    expect(fitDepth(0.04, -0.04, 0.08)).toEqual({ radius: 0.04, depth: -0.04 });
+  });
+
+  it('shrinks a patch that crosses to the room it has and keeps it inside', () => {
+    const { radius, depth } = fitDepth(0.05, 0.05, 0.08);
+    expect(radius).toBeCloseTo(0.03, 10);
+    expect(depth + radius).toBeLessThanOrEqual(0.08 + 1e-12);
+    expect(depth).toBeCloseTo(0.05, 10);
+  });
+
+  it('never shrinks below its minimum share, sliding the centre inwards instead', () => {
+    const { radius, depth } = fitDepth(0.05, 0.075, 0.08);
+    expect(radius).toBeCloseTo(0.05 * MIN_PATCH_RADIUS_SHARE, 10);
+    expect(depth).toBeCloseTo(0.08 - radius, 10);
+  });
+
+  it('is symmetric in sign', () => {
+    const front = fitDepth(0.05, 0.075, 0.08);
+    const back = fitDepth(0.05, -0.075, 0.08);
+    expect(back.radius).toBe(front.radius);
+    expect(back.depth).toBe(-front.depth);
+  });
+
+  it('centres a patch on the tank middle when even the minimum disc cannot fit', () => {
+    const { radius, depth } = fitDepth(0.05, 0.05, 0.01);
+    expect(radius).toBeCloseTo(0.05 * MIN_PATCH_RADIUS_SHARE, 10);
+    expect(depth).toBe(0);
+  });
+});
+
+describe('plant patches the glass squeezes', () => {
+  const patch = (center: [number, number]): PlantPatch => ({
+    id: 'p',
+    assetId: 'weed',
+    center,
+    radius: 0.2,
+    count: 40,
+    scale: [0.8, 1],
+    seed: 1,
+  });
+  const layout = (center: [number, number]): PresetLayout => ({
+    id: 'test',
+    name: 'test',
+    biome: 'freshwater',
+    decor: [],
+    plantPatches: [patch(center)],
+  });
+  const reach = (p: PlantPatch) => 0.01 + 0.2 * p.scale[1];
+  const nano = { ...DEFAULT_TANK, ...TANK_SIZES.nano30.dimensions };
+  const mid = { ...DEFAULT_TANK, ...TANK_SIZES.std200.dimensions };
+  const fit = (center: [number, number], size: 'nano30' | 'std200') =>
+    fitPresetToTank(layout(center), size, size === 'nano30' ? nano : mid, boundsOf, reach)
+      .plantPatches[0];
+  const coverage = (p?: PlantPatch) => {
+    const mean = ((p?.scale[0] ?? 0) + (p?.scale[1] ?? 0)) / 2;
+    return ((p?.count ?? 0) * mean ** 2) / (Math.PI * (p?.radius ?? 1) ** 2);
+  };
+
+  it('shrinks the disc of a front patch that crosses the nano glass, keeping plant height', () => {
+    const fitted = fit([0, 0.12], 'nano30');
+    const open = fit([0, 0], 'nano30');
+    expect(fitted?.radius).toBeLessThan(open?.radius ?? 0);
+    expect(fitted?.count).toBeLessThan(open?.count ?? 0);
+    expect(fitted?.scale).toEqual(open?.scale);
+  });
+
+  it('keeps the ground as covered as the authored patch, not as dense in plants', () => {
+    const fitted = fit([0, 0.12], 'nano30');
+    const authored = coverage(patch([0, 0.12]));
+    const placed = coverage({
+      ...(fitted as PlantPatch),
+      scale: [
+        (fitted?.scale[0] ?? 0) * ((1 + GLASS_SHRINK_FLOOR) / 2),
+        (fitted?.scale[1] ?? 0) * ((1 + GLASS_SHRINK_FLOOR) / 2),
+      ],
+    });
+    expect(placed).toBeGreaterThan(authored * 0.8);
+    expect(placed).toBeLessThan(authored * 1.25);
+  });
+
+  it('never lowers a patch below the plant scale the nano holds', () => {
+    const floor = Math.max(presetFit('nano30').scale, MIN_PLANT_FIT);
+    for (const z of [-0.2, -0.12, 0, 0.12, 0.2]) {
+      const fitted = fit([0, z], 'nano30');
+      expect(fitted?.scale[0], `z ${z}`).toBeCloseTo(0.8 * floor, 10);
+      expect(fitted?.scale[1], `z ${z}`).toBeCloseTo(floor, 10);
+    }
+  });
+
+  it('leaves back patches at their authored depth and size', () => {
+    const fitted = fit([0, -0.12], 'nano30');
+    const open = fit([0, 0], 'nano30');
+    expect(fitted?.radius).toBe(open?.radius);
+    expect(fitted?.count).toBe(open?.count);
+  });
+
+  it('leaves a patch alone that does not cross the nano glass', () => {
+    const fitted = fit([0, 0], 'nano30');
+    expect(fitted?.center[1]).toBe(0);
+  });
+
+  it('treats a front patch on a larger tank like any other, whether or not it crosses', () => {
+    const crossing = fit([0, 0.3], 'std200');
+    const inside = fit([0, 0], 'std200');
+    expect(crossing?.radius).toBe(inside?.radius);
+    expect(crossing?.count).toBe(inside?.count);
+    expect(crossing?.scale).toEqual(inside?.scale);
   });
 });
