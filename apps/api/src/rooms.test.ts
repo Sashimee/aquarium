@@ -71,10 +71,10 @@ const call = (
     ...(payload ? { payload } : {}),
   });
 
-const buyRoom = (h: Harness, who: Account, roomId: string, idempotencyKey = randomUUID()) =>
+const buyRoom = (h: Harness, who: Account, roomId: RoomId, idempotencyKey = randomUUID()) =>
   call(h, who, 'POST', '/api/shop/purchase', {
     idempotencyKey,
-    itemRef: roomRef(roomId as RoomId),
+    itemRef: roomRef(roomId),
   });
 
 const errorOf = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).error;
@@ -216,7 +216,10 @@ describe('rooms on the server (T75)', () => {
   it('refuses an unknown room, a free room and a key reused for another room', async () => {
     const who = await account(h);
     await topUp(h, who, 3000);
-    const unknown = await buyRoom(h, who, 'room-igloo');
+    const unknown = await call(h, who, 'POST', '/api/shop/purchase', {
+      idempotencyKey: randomUUID(),
+      itemRef: 'room:room-igloo',
+    });
     expect(unknown.statusCode).toBe(400);
     expect(errorOf(unknown).code).toBe('validation_failed');
     expect((await buyRoom(h, who, 'room-living')).statusCode).toBe(400);
