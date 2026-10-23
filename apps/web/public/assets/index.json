@@ -17581,7 +17581,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-cabin/polyhaven-cabin_1k.ktx2",
+          "file": "hdri/polyhaven-cabin/polyhaven_cabin_1k.ktx2",
           "bytes": 473336,
           "sha256": "d059963ecb6a097bf10599bbef96b422a9dbd4797c135b5afb851d5f7018321c"
         }
@@ -17602,7 +17602,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-decor-shop/polyhaven-decor-shop_1k.ktx2",
+          "file": "hdri/polyhaven-decor-shop/polyhaven_decor_shop_1k.ktx2",
           "bytes": 481448,
           "sha256": "2b94089a55b52ff88309dfd2c44d71acc45e6e1e80ec67d6e0e42414d41a4f65"
         }
@@ -17624,7 +17624,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-hotel-room/polyhaven-hotel-room_1k.ktx2",
+          "file": "hdri/polyhaven-hotel-room/polyhaven_hotel_room_1k.ktx2",
           "bytes": 473806,
           "sha256": "27831b2ad115c88bd96fdd69d03cb2b47af2c835456c8cdbcab2046ae30be5a1"
         }
@@ -17646,7 +17646,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-illovo-beach-balcony/polyhaven-illovo-beach-balcony_1k.ktx2",
+          "file": "hdri/polyhaven-illovo-beach-balcony/polyhaven_illovo_beach_balcony_1k.ktx2",
           "bytes": 453404,
           "sha256": "d600232cb215147ec4615b399a4d65241494d036728b44c26d537b6248f20730"
         }
@@ -17667,7 +17667,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-industrial-pipe-and-valve-01/polyhaven-industrial-pipe-and-valve-01_1k.ktx2",
+          "file": "hdri/polyhaven-industrial-pipe-and-valve-01/polyhaven_industrial_pipe_and_valve_01_1k.ktx2",
           "bytes": 481305,
           "sha256": "06dccbbaa29e0e0f05eac897afc4726c2a04edffbe3b3dfc0e8680fa21766b89"
         }
@@ -17688,7 +17688,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-lythwood-lounge/polyhaven-lythwood-lounge_1k.ktx2",
+          "file": "hdri/polyhaven-lythwood-lounge/polyhaven_lythwood_lounge_1k.ktx2",
           "bytes": 462697,
           "sha256": "3d3968410dc5b83db4a97e383dc8e964ccc5e6ae73b0f1763a0a3847b3813a6e"
         }
@@ -17709,7 +17709,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-photo-studio-loft-hall/polyhaven-photo-studio-loft-hall_1k.ktx2",
+          "file": "hdri/polyhaven-photo-studio-loft-hall/polyhaven_photo_studio_loft_hall_1k.ktx2",
           "bytes": 481760,
           "sha256": "8be4a43f9f8da353d9920300d792e8f5503d986bc07a95d16c4b634b668c5d56"
         }
@@ -17730,7 +17730,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-reading-room/polyhaven-reading-room_1k.ktx2",
+          "file": "hdri/polyhaven-reading-room/polyhaven_reading_room_1k.ktx2",
           "bytes": 478064,
           "sha256": "334288df8e8785101a7442a9a910b2b892f6af7379921bb76bc6e02dee3a5b5a"
         }
@@ -17751,7 +17751,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-studio-kominka-01/polyhaven-studio-kominka-01_1k.ktx2",
+          "file": "hdri/polyhaven-studio-kominka-01/polyhaven_studio_kominka_01_1k.ktx2",
           "bytes": 435939,
           "sha256": "0dc173b4a7920c50e88fffdb5151d583d213eab68add532c002ba618bcb59cc0"
         }
@@ -17772,7 +17772,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-ushaka-sea-world-aquarium/polyhaven-ushaka-sea-world-aquarium_1k.ktx2",
+          "file": "hdri/polyhaven-ushaka-sea-world-aquarium/polyhaven_ushaka_sea_world_aquarium_1k.ktx2",
           "bytes": 489634,
           "sha256": "bf6001d9ee484a3ecdfa44b8ca5920838404a778e28c25db744f8591d0e046b5"
         }
@@ -17793,7 +17793,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-warm-restaurant/polyhaven-warm-restaurant_1k.ktx2",
+          "file": "hdri/polyhaven-warm-restaurant/polyhaven_warm_restaurant_1k.ktx2",
           "bytes": 479783,
           "sha256": "192c24cd405815328b7e2ca5d0c3d30600bb35fddfcc856512c636ff7c47434d"
         }
@@ -17814,7 +17814,7 @@
       "textures": [],
       "files": [
         {
-          "file": "hdri/polyhaven-white-home-studio/polyhaven-white-home-studio_1k.ktx2",
+          "file": "hdri/polyhaven-white-home-studio/polyhaven_white_home_studio_1k.ktx2",
           "bytes": 446340,
           "sha256": "a6d6b9042a7bed3f3684094b1b6fc1db8566651903f311269bd168810cae0f46"
         }

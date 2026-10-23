@@ -55,8 +55,13 @@ function onlyFile(sourceId: string, extension: string): string {
   return file;
 }
 
+// Underscores only: staticCacheControl treats `name-<8 chars>.ext` under assets/ as a content-hashed bundle and marks it immutable.
+export function roomHdriOutput(id: string): string {
+  return `${id.replaceAll('-', '_')}_1k.ktx2`;
+}
+
 export function roomHdriRecipe(id: string): HdriRecipe {
-  return { id, sourceId: id, file: onlyFile(id, '.hdr'), output: `${id}_1k.ktx2` };
+  return { id, sourceId: id, file: onlyFile(id, '.hdr'), output: roomHdriOutput(id) };
 }
 
 /**

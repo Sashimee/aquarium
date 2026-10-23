@@ -9,6 +9,7 @@ import {
   roomAmbienceIds,
   roomAmbienceRecipe,
   roomHdriIds,
+  roomHdriOutput,
   roomPropIds,
 } from './room.ts';
 import { resolve } from 'node:path';
@@ -97,6 +98,16 @@ describe('room recipes', () => {
     const [id, tuning] = Object.entries(AMBIENCE_TUNING)[0] ?? [];
     expect(id).toBeDefined();
     expect(roomAmbienceRecipe(id ?? '').loop?.searchS).toEqual(tuning?.searchS);
+  });
+
+  it('names every room hdri so the api never mistakes it for a hashed bundle', () => {
+    const hashed = /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
+    const rooms = loadRooms(resolve(import.meta.dirname, '../../..'));
+    for (const id of roomHdriIds(rooms)) {
+      const output = roomHdriOutput(id);
+      expect(output).not.toContain('-');
+      expect(hashed.test(`assets/${output}`)).toBe(false);
+    }
   });
 
   it('lists each prop, hdri and ambience once, sorted', () => {
