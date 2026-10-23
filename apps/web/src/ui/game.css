@@ -658,6 +658,7 @@
   flex: 1 1 14rem;
   min-width: 0;
   pointer-events: auto;
+  touch-action: pan-x pan-y;
 }
 
 .public-title h1 {
@@ -698,6 +699,7 @@
   flex: 1 1 100%;
   max-width: 28rem;
   pointer-events: auto;
+  touch-action: pan-x pan-y;
 }
 
 .public-report summary {
@@ -720,6 +722,7 @@
   text-decoration: none;
   font-weight: 600;
   pointer-events: auto;
+  touch-action: pan-x pan-y;
 }
 
 .community-bar .community-connection:not(:empty),
@@ -730,6 +733,7 @@
   border-radius: 0.8rem;
   padding: 0.35rem 0.75rem;
   pointer-events: auto;
+  touch-action: pan-x pan-y;
 }
 
 .community-bar .community-connection {
