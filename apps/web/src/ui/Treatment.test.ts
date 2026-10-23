@@ -149,6 +149,12 @@ describe('moving sick fish', () => {
     expect(html).toContain('Move Pip to Quarantine');
   });
 
+  it('throws when the fish species is missing from the catalogue', () => {
+    expect(() => treatment(sickTank, state({ tanks: [sickTank, q], species: [] }))).toThrow(
+      /Species neon-tetra is missing from the catalogue/,
+    );
+  });
+
   it('offers nothing when there is no quarantine tank', () => {
     expect(treatment(sickTank, state({ tanks: [sickTank] }))).not.toContain('Move Pip');
   });
