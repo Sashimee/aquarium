@@ -5,6 +5,7 @@ import {
   tankSpaceOfSize,
   tankWaterBounds,
   type TankSize,
+  WATER_INSET,
 } from '@aquarium/shared';
 import { Box3, PerspectiveCamera, Vector3 } from 'three/webgpu';
 import {
@@ -15,7 +16,6 @@ import {
   TANK_DIMENSIONS,
   type TankDimensions,
   validateTank,
-  WATER_INSET,
   waterBounds,
   waterLitres,
 } from './dimensions';

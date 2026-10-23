@@ -31,8 +31,6 @@ export const DEFAULT_TANK: Readonly<TankDimensions> = TANK_DIMENSIONS.standard;
 /** The cabinet under the tank; the room's floor is at its foot, y = -STAND_HEIGHT. */
 export const STAND_HEIGHT = 0.75;
 
-export { WATER_INSET };
-
 export function validateTank(d: TankDimensions): void {
   const positive: (keyof TankDimensions)[] = ['length', 'depth', 'height', 'glass'];
   for (const key of positive) {
