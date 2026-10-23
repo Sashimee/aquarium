@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { Plugin } from 'vite';
 
 const PLACEHOLDER = '__BUILD_ID__';
+const EMITTED_PLACEHOLDER = '__EMITTED_ASSETS__';
 
 /** Paths the worker precaches, read from its own SHELL list so the two cannot drift apart. */
 export function shellPaths(source: string): string[] {
@@ -38,13 +39,20 @@ export function buildIdForOutput(
   return buildId(files);
 }
 
-export function stampWorker(source: string, id: string): string {
-  if (!source.includes(PLACEHOLDER)) {
-    throw new Error(
-      `sw.js has no ${PLACEHOLDER} placeholder to stamp, so its caches would never roll over.`,
-    );
+/** Request paths of the content-hashed files Vite emitted, as the worker's cache-first set. */
+export function emittedPaths(bundleNames: readonly string[]): string[] {
+  return bundleNames.filter((name) => name.startsWith('assets/')).map((name) => `/${name}`);
+}
+
+export function stampWorker(source: string, id: string, emitted: readonly string[]): string {
+  for (const placeholder of [PLACEHOLDER, EMITTED_PLACEHOLDER]) {
+    if (!source.includes(placeholder)) {
+      throw new Error(`sw.js has no ${placeholder} placeholder to stamp; fix sw.js.`);
+    }
   }
-  return source.replaceAll(PLACEHOLDER, id);
+  return source
+    .replaceAll(PLACEHOLDER, id)
+    .replaceAll(EMITTED_PLACEHOLDER, JSON.stringify([...emitted].sort()));
 }
 
 export function swBuildIdPlugin(): Plugin {
@@ -58,9 +66,10 @@ export function swBuildIdPlugin(): Plugin {
     writeBundle(_options, bundle) {
       const file = join(outDir, 'sw.js');
       const source = readFileSync(file, 'utf8');
+      const names = Object.keys(bundle);
       writeFileSync(
         file,
-        stampWorker(source, buildIdForOutput(outDir, Object.keys(bundle), source)),
+        stampWorker(source, buildIdForOutput(outDir, names, source), emittedPaths(names)),
       );
     },
   };
