@@ -3,11 +3,12 @@ import { Vector3 } from 'three/webgpu';
 import {
   isDecorAssetForBiome,
   presetFit,
+  WATER_INSET,
   type Biome,
   type DecorItem,
   type TankSize,
 } from '@aquarium/shared';
-import { TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
+import { TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import catalog from '../../public/assets/index.json';
 import { BANK_CLEARANCE, BANK_RIM_MARGIN, bankAnchors, BANK_TOPS, isPerch } from './bank';
 import { decorMatrix } from './hardscape';
