@@ -50,8 +50,12 @@ describe('per-harness auth rate-limit store (#1472)', () => {
   });
 
   it('still refuses a single harness once it passes the limit', async () => {
-    const statuses: number[] = [];
-    for (let i = 0; i < SIGN_UP_MAX; i++) statuses.push((await signUp(first)).statusCode);
-    expect(statuses).toContain(429);
+    const remaining = SIGN_UP_MAX - PER_HARNESS;
+    const responses = [];
+    for (let i = 0; i <= remaining; i++) responses.push(await signUp(first));
+    const statuses = responses.map((r) => r.statusCode);
+    expect(statuses.slice(0, remaining)).not.toContain(429);
+    expect(statuses[remaining]).toBe(429);
+    expect(Number(responses[remaining]?.headers['x-retry-after'])).toBeGreaterThan(0);
   });
 });
