@@ -43,7 +43,7 @@ export interface LitRoomLayout {
   readonly window: WindowSlot | null;
 }
 
-/** What the room needs to expose: `RoomBackdrop` and `RoomStage` satisfy it. */
+/** What the room needs to expose: `RoomStage` satisfies it. */
 export interface LitRoom {
   readonly group: Object3D;
   /** The window's sky plane; null for a room without a window. */
