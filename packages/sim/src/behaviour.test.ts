@@ -8,6 +8,7 @@ import {
   angelfish,
   betta,
   bronzeCorydoras,
+  cherryShrimp,
   clownfish,
   neonTetra,
   otocinclus,
@@ -20,6 +21,7 @@ import {
   spawnMany,
   yellowTang,
 } from './fixtures.ts';
+import { SIGHT_SAMPLES_PER_CELL, SIGHT_TRIES } from './routes.ts';
 import { FishState } from './snapshot.ts';
 import { TankSdf, type Sdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
@@ -71,6 +73,26 @@ function distanceTo(w: World, i: number, p: readonly number[]): number {
     at(w.position, i * 3 + 1) - (p[1] ?? 0),
     at(w.position, i * 3 + 2) - (p[2] ?? 0),
   );
+}
+
+/** Four full-height walls `thick` either side of a square `half` from (x0, z0) to its edges. */
+function walledIn(x0: number, z0: number, half: number, thick: number): Collider[] {
+  const wall = (id: string, dx: number, dz: number, hx: number, hz: number): Collider => ({
+    id,
+    hard: true,
+    kind: 'box',
+    center: [x0 + dx, REEF_TANK.height / 2, z0 + dz],
+    halfExtents: [hx, REEF_TANK.height / 2, hz],
+    rotationY: 0,
+    rounding: 0,
+  });
+  const span = half + thick;
+  return [
+    wall('n', 0, half, span, thick),
+    wall('s', 0, -half, span, thick),
+    wall('e', half, 0, thick, span),
+    wall('w', -half, 0, thick, span),
+  ];
 }
 
 function anchorOf(id: string): (typeof REEF_ANCHORS)[number] {
@@ -545,6 +567,114 @@ describe('anchored species', { timeout: LONG }, () => {
     for (const id of [...w.fishIds]) w.removeFish(id);
     expect(w.behaviour.routesKept).toBe(0);
     expect(w.behaviour.routesPending).toBe(0);
+  });
+
+  it('keeps where it joins the way for a while when no cell of it is in sight (#1515)', () => {
+    const steps = BEHAVIOUR.caveRouteEntrySteps;
+    expect(Number.isInteger(steps) && steps > 1).toBe(true);
+    const length = toSimSpecies(royalGramma).bodyLength;
+    const [x0, y0, z0] = [0.5, 0.15, 0];
+    const w = new World({
+      seed: 4,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor: walledIn(x0, z0, 0.08, 0.005),
+      anchors: [
+        { id: 'shut', kind: 'cave', position: [x0, y0, z0], radius: 0.03, facing: [0, 0, 1] },
+      ],
+      fish: [],
+    });
+    w.addFish(
+      { id: 'gramma', species: royalGramma.id },
+      { position: [x0 - 0.12, y0, z0], heading: 0 },
+    );
+    w.setLight(0);
+    const cell = Math.min(
+      0.5 * at(w.radius, 0),
+      0.5 * BEHAVIOUR.caveRouteClearanceBodyLengths * length,
+    );
+    const line = Math.hypot(
+      BEHAVIOUR.caveRouteReachBodyLengths * length,
+      BEHAVIOUR.caveRouteRiseBodyLengths * length,
+    );
+    const mostPerLookup = SIGHT_TRIES * (Math.ceil((SIGHT_SAMPLES_PER_CELL * line) / cell) + 1);
+    const work: number[] = [];
+    for (let t = 0; t < 900; t++) {
+      w.step();
+      const out = Math.max(Math.abs(at(w.position, 0) - x0), Math.abs(at(w.position, 2) - z0));
+      expect(out, `step ${t}: the fish got past the walls`).toBeGreaterThan(0.085);
+      work.push(w.behaviour.routeLookupWork);
+    }
+    const looked = work.filter((v) => v > 0);
+    expect(looked.length).toBeGreaterThan(10);
+    expect(Math.max(...looked)).toBeGreaterThan(SIGHT_TRIES * 4);
+    for (let t = 0; t + steps <= work.length; t++) {
+      const sum = work.slice(t, t + steps).reduce((a, b) => a + b, 0);
+      expect(sum, `steps ${t} to ${t + steps - 1}`).toBeLessThanOrEqual(2 * mostPerLookup);
+    }
+    expect(looked.length).toBeLessThanOrEqual(2 * Math.ceil(work.length / steps));
+  });
+
+  it('drops the way to a cave once no fish holds it any more (#1515)', () => {
+    const [x0, z0] = [0.5, 0];
+    const w = new World({
+      seed: 9,
+      tank: REEF_TANK,
+      species: [cherryShrimp],
+      decor: walledIn(x0, z0, 0.05, 0.01),
+      anchors: [
+        { id: 'shut', kind: 'cave', position: [x0, 0.03, z0], radius: 0.03, facing: [0, 0, 1] },
+      ],
+      fish: [],
+    });
+    w.addFish(
+      { id: 'shut-out', species: cherryShrimp.id },
+      { position: [0.2, 0.02, 0], heading: 1 },
+    );
+    w.setLight(0);
+    let kept = 0;
+    let t = 0;
+    while (at(w.behaviour.anchor, 0) === 0) {
+      w.step();
+      kept = Math.max(kept, w.behaviour.routesKept);
+      if (++t > (BEHAVIOUR.walkerCaveGiveUpS + 120) / STEP_DT) throw new Error('never gave up');
+    }
+    expect(kept).toBeGreaterThan(0);
+    expect(w.behaviour.routesKept).toBe(0);
+    expect(w.behaviour.routesPending).toBe(0);
+  });
+
+  it('keeps only the ways to held caves once the caves are dealt or the rock moves (#1515)', () => {
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, firefish],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: spawnMany(firefish.id, 3),
+    });
+    const heldWays = (): number =>
+      new Set(
+        Array.from(w.behaviour.anchor, (k, i) => {
+          const a = w.behaviour.homes[k];
+          return a?.kind === 'cave' && a.facing !== undefined ? `${k}:${at(w.radius, i)}` : '';
+        }).filter((key) => key !== ''),
+      ).size;
+    w.setLight(0);
+    for (let t = 0; t < 900; t++) w.step();
+    expect(w.behaviour.routesKept).toBeGreaterThan(0);
+
+    w.setAnchors(REEF_ANCHORS.filter((a) => a.kind !== 'cave'));
+    expect(w.behaviour.routesKept).toBe(heldWays());
+    expect(w.behaviour.routesPending).toBe(heldWays());
+    for (let t = 0; t < 900; t++) w.step();
+    expect(w.behaviour.routesKept).toBeGreaterThan(0);
+
+    w.setAnchors(REEF_ANCHORS);
+    expect(w.behaviour.routesKept).toBe(heldWays());
+    w.setDecor(REEF_DECOR.filter((c) => c.id !== 'rock-left'));
+    expect(w.behaviour.routesKept).toBe(heldWays());
+    expect(w.behaviour.routesPending).toBe(heldWays());
   });
 
   it('yellow tangs graze close to the rock (Montgomery et al. 1989)', () => {

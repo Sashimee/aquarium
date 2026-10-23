@@ -85,6 +85,7 @@ export const BEHAVIOUR = {
   caveRouteAheadBodyLengths: 1,
   caveRouteRiseBodyLengths: 1,
   caveRouteBuildUnitsPerStep: 1024,
+  caveRouteEntrySteps: 6,
   caveLeashBodyLengths: 2.5,
   shelterAfterStartleS: 20,
   shelterComfort: 0.4,
@@ -434,6 +435,15 @@ export class Behaviour {
   private readonly routes = new Map<Anchor, Map<number, Route>>();
   private routeQueue: Route[] = [];
   private _routeWork = 0;
+  private _routeLookupWork = 0;
+  /**
+   * Per fish, for its wide and its narrow way in: the way it last asked, the cell it joins it by,
+   * and the step until which that cell is kept, so a fish with no cell in sight does not follow
+   * up to eight lines of sight every step (#1515).
+   */
+  private entryRoute: (Route | null)[];
+  private entryCell: Int32Array;
+  private entryUntil: Int32Array;
   private readonly stimuli: Stimulus[] = [];
 
   private startlePhase: Uint8Array;
@@ -541,9 +551,18 @@ export class Behaviour {
     return this.anchors;
   }
 
-  /** Units of work spent finding ways to caves in the last step, at most `caveRouteBuildUnitsPerStep`. */
+  /**
+   * Units of work spent finding ways to caves in the last step: at most
+   * `caveRouteBuildUnitsPerStep`, except that a single line of sight longer than the whole budget
+   * is followed in full when it is the first work of the step, and then is all the step's work.
+   */
   get routeWork(): number {
     return this._routeWork;
+  }
+
+  /** Water samples the fish took in the last step looking for where to join their ways in. */
+  get routeLookupWork(): number {
+    return this._routeLookupWork;
   }
 
   /** Ways to caves still being found. */
@@ -591,6 +610,9 @@ export class Behaviour {
     const n = host.count;
     const s = host.species.length;
     this.plans = Array.from({ length: n }, () => new Plan());
+    this.entryRoute = Array.from({ length: 2 * n }, () => null);
+    this.entryCell = new Int32Array(2 * n).fill(-1);
+    this.entryUntil = new Int32Array(2 * n);
     this.personality = new Personalities(n);
     this.feeding = new Feeding(host, this.personality);
     this.curiosity = new Curiosity(host);
@@ -685,6 +707,10 @@ export class Behaviour {
   resize(edit: FishResize): void {
     if (edit.removed >= 0) this.plans.splice(edit.removed, 1);
     else this.plans.push(new Plan());
+    if (edit.removed >= 0) this.entryRoute.splice(2 * edit.removed, 2);
+    else this.entryRoute.push(null, null);
+    this.entryCell = edit.array(this.entryCell, 2, -1);
+    this.entryUntil = edit.array(this.entryUntil, 2);
     this.startlePhase = edit.array(this.startlePhase);
     this.startleTimer = edit.array(this.startleTimer);
     this.startleElapsed = edit.array(this.startleElapsed);
@@ -1062,6 +1088,7 @@ export class Behaviour {
     }
     this.updateGroups();
     this.buildRoutes();
+    this._routeLookupWork = 0;
     if (shock > 0) this.applyLightStartle(shock);
     for (const s of this.stimuli) this.applyStimulus(s);
     this.stimuli.length = 0;
@@ -2043,6 +2070,7 @@ export class Behaviour {
     if (this.stalled(i, d, length, BEHAVIOUR.walkerCaveGiveUpS)) {
       this.restSpotSet[i] = 0;
       this.anchor[i] = -1;
+      this.pruneRoutes();
       return this.planNook(i, plan, px, pz, length);
     }
     const [tx, ty, tz] = this.approach(i, a, py);
@@ -2614,10 +2642,35 @@ export class Behaviour {
     const ahead = BEHAVIOUR.caveRouteAheadBodyLengths * length;
     const wide = this.routeTo(a, at(this.host.radius, i));
     if (wide === null) return null;
-    const way = wide.toward(x, y, z, reach, ahead);
+    const way = this.alongRoute(2 * i, wide, x, y, z, reach, ahead);
     if (way !== null) return way;
     const narrow = this.routeTo(a, BEHAVIOUR.caveRouteClearanceBodyLengths * length);
-    return narrow === null ? null : narrow.toward(x, y, z, reach, ahead);
+    return narrow === null ? null : this.alongRoute(2 * i + 1, narrow, x, y, z, reach, ahead);
+  }
+
+  /**
+   * `route.toward` for the fish whose entry is kept in `slot`, looking for where to join the way
+   * only every `caveRouteEntrySteps` steps.
+   */
+  private alongRoute(
+    slot: number,
+    route: Route,
+    x: number,
+    y: number,
+    z: number,
+    reach: number,
+    ahead: number,
+  ): [number, number] | null {
+    const tick = this.host.tick;
+    if (this.entryRoute[slot] !== route || tick >= at(this.entryUntil, slot)) {
+      const before = route.sightSamplesTaken;
+      this.entryCell[slot] = route.entry(x, y, z, reach);
+      this._routeLookupWork += route.sightSamplesTaken - before;
+      this.entryRoute[slot] = route;
+      this.entryUntil[slot] = tick + BEHAVIOUR.caveRouteEntrySteps;
+    }
+    const c = at(this.entryCell, slot);
+    return c < 0 ? null : route.from(c, ahead);
   }
 
   /** The way to cave `a` for `clearance`, or null while it is still being found. */

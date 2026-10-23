@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { basinOf } from './basin.ts';
-import { Route } from './routes.ts';
+import { Route, SIGHT_SAMPLES_PER_CELL, SIGHT_TRIES } from './routes.ts';
 import { TankSdf, type Sdf } from './sdf.ts';
 
 const tank = { width: 1, height: 0.5, depth: 0.4 };
@@ -164,6 +164,47 @@ describe('Route', () => {
     const r = built(new Route(basin, water, x, y, z, 0.02, 0.02, 0.01));
     expect(r.toward(-0.01, y, -0.1, 0.05, 0.05)).toBeNull();
     expect(r.toward(0.01, y, -0.1, 0.05, 0.05)).not.toBeNull();
+  });
+
+  it('sees no cell through rock thinner than the gap between two sight samples', () => {
+    // A 0.2 mm wall from glass to glass: samples 5 mm apart along a line of sight almost never land
+    // in it, so only the room of the two samples either side, short of the gap, gives it away.
+    const water: Sdf = {
+      sample(x, y, z, normal) {
+        return Math.min(glass.sample(x, y, z, normal), slab(x, z, 0, 0.0001, 0, 0.3));
+      },
+    };
+    const [x, y, z] = hollow;
+    const r = built(new Route(basin, water, x, y, z, 0.02, 0.02, 0.01));
+    for (const fx of [-0.0013, -0.0021, -0.0029, -0.0037, -0.0045]) {
+      for (const fz of [-0.17, -0.13, -0.1, -0.06, 0.02, 0.11]) {
+        expect(r.entry(fx, y, fz, 0.05), `from (${fx}, ${fz})`).toBe(-1);
+        expect(r.entry(-fx, y, fz, 0.05), `from (${-fx}, ${fz})`).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('joins the way by a cell it can follow, and throws for one without a way', () => {
+    const r = route(walled(0.1));
+    const c = r.entry(-0.2, hollow[1], -0.1, 0.05);
+    expect(c).toBeGreaterThanOrEqual(0);
+    expect(r.from(c, 0.05)).toEqual(r.toward(-0.2, hollow[1], -0.1, 0.05, 0.05));
+    expect(r.entry(-0.2, hollow[1], -0.1, 0.001)).toBe(-1);
+    expect(() => r.from(0, 0.05)).toThrow(/no way to the hollow/);
+  });
+
+  it('counts the samples its lines of sight take', () => {
+    const [x, y, z] = hollow;
+    const r = built(new Route(basin, walled(0.2), x, y, z, 0.02, 0.02, 0.01));
+    const before = r.sightSamplesTaken;
+    expect(r.entry(-0.2, y, -0.1, 0.05)).toBe(-1);
+    expect(r.sightSamplesTaken).toBe(before);
+    expect(r.entry(0.1, y, -0.1, 0.05)).toBeGreaterThanOrEqual(0);
+    const one = r.sightSamplesTaken - before;
+    expect(one).toBeGreaterThan(1);
+    expect(one).toBeLessThanOrEqual(
+      SIGHT_TRIES * (Math.ceil((SIGHT_SAMPLES_PER_CELL * 0.05) / 0.01) + 1),
+    );
   });
 
   it('cuts no rock corner where a big tank makes the cells coarser than its clearance', () => {
