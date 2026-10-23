@@ -1,6 +1,6 @@
 import type { Basin } from './basin.ts';
 import type { Anchor } from './behaviour.ts';
-import type { DecorBounds, DecorShape } from './decor.ts';
+import type { DecorBounds, DecorShape, Point3 } from './decor.ts';
 import type { Sdf } from './sdf.ts';
 
 /** Crevice shelters found in the hardscape when the scene offers no cave; sources in BEHAVIOUR.md. */
@@ -66,7 +66,7 @@ interface Candidate {
   readonly z: number;
   readonly clearance: number;
   readonly cover: number;
-  readonly facing: [number, number, number];
+  readonly facing: Point3;
 }
 
 /** The points tested for a fish of `length`, in grid order. */
@@ -81,11 +81,18 @@ interface Grid {
  * Up to `NOOK.maxNooks` crevices against the hardscape for a cave-dweller of body length `length`:
  * free water with room for its whole body, touching rock, and walled in (rock, sand or glass) on
  * at least `minCoverShare` of the 26 directions within `coverBodyLengths`. Each opens toward its
- * open directions, as a cave mouth does. The best covered come first, `spacingBodyLengths` apart.
- * Deterministic: a fixed grid, no RNG.
+ * open directions, as a cave mouth does. They lie `spacingBodyLengths` apart. Those with
+ * `turnRoom` of clearance, where the fish can turn round, come first, then the tighter ones to
+ * fill up; the best covered first within each. Never fewer than the best covered alone would
+ * give. Deterministic: a fixed grid, no RNG.
  */
-export function findNooks(field: NookField, length: number, idPrefix = 'nook:'): Anchor[] {
-  return new NookSearch().find(field, length, idPrefix);
+export function findNooks(
+  field: NookField,
+  length: number,
+  turnRoom: number,
+  idPrefix = 'nook:',
+): Anchor[] {
+  return new NookSearch().find(field, length, turnRoom, idPrefix);
 }
 
 /**
@@ -98,11 +105,20 @@ export class NookSearch {
   private field: NookField | null = null;
   private decor: NookDecor | null = null;
   private verdicts: (Candidate | null)[] = [];
+  private _tested = 0;
 
   /** Points tested by the last `find`: the whole grid, or those near the decor that changed. */
-  tested = 0;
+  get tested(): number {
+    return this._tested;
+  }
 
-  find(field: NookField, length: number, idPrefix = 'nook:', decor?: NookDecor): Anchor[] {
+  find(
+    field: NookField,
+    length: number,
+    turnRoom: number,
+    idPrefix = 'nook:',
+    decor?: NookDecor,
+  ): Anchor[] {
     const before = this.decor;
     const reuse =
       decor !== undefined &&
@@ -120,7 +136,7 @@ export class NookSearch {
     }
     this.field = field;
     this.decor = decor ?? null;
-    return pick(this.verdicts, length, idPrefix);
+    return pick(this.verdicts, length, turnRoom, idPrefix);
   }
 
   /** Tests every grid point again, or with `dirty` only those near one of its boxes. */
@@ -130,14 +146,14 @@ export class NookSearch {
     const pad = nookInfluence(grid.length);
     const n = new Float64Array(3);
     const { xs, ys, zs } = grid;
-    this.tested = 0;
+    this._tested = 0;
     for (let k = 0; k < xs.length; k++) {
       const x = xs[k] ?? 0;
       const y = ys[k] ?? 0;
       const z = zs[k] ?? 0;
       if (dirty !== null && !dirty.some((b) => near(b, x, y, z, pad))) continue;
       this.verdicts[k] = test(field, grid.length, x, y, z, n);
-      this.tested++;
+      this._tested++;
     }
   }
 }
@@ -149,7 +165,7 @@ export class NookSearch {
  * `reach` plus the margin. The clearance and rock tests see no further than the touching
  * distance, and the mouth lies a body length past that and needs half a body of room.
  */
-export function nookInfluence(length: number): number {
+function nookInfluence(length: number): number {
   const r = 0.5 * length;
   const reach = NOOK.coverBodyLengths * length;
   const touch = r + NOOK.rockTouchBodyLengths * length;
@@ -247,20 +263,40 @@ function test(
   // Cave mouths open sideways, so a nook does too, toward its open water.
   const fl = Math.hypot(fx, fz);
   if (fl < 1e-6) return null;
-  const facing: [number, number, number] = [fx / fl, 0, fz / fl];
+  const facing: Point3 = [fx / fl, 0, fz / fl];
   const out = clearance + length;
   if (water.sample(x + facing[0] * out, y, z + facing[2] * out, n) < r) return null;
   return { x, y, z, clearance, cover: covered, facing };
 }
 
-function pick(verdicts: readonly (Candidate | null)[], length: number, idPrefix: string): Anchor[] {
-  const candidates: Candidate[] = [];
-  for (const c of verdicts) if (c !== null) candidates.push(c);
+function pick(
+  verdicts: readonly (Candidate | null)[],
+  length: number,
+  turnRoom: number,
+  idPrefix: string,
+): Anchor[] {
+  const candidates = verdicts.filter((c): c is Candidate => c !== null);
   // Stable sort: equal cover keeps grid order, so the choice never depends on the engine.
   candidates.sort((a, b) => b.cover - a.cover || a.y - b.y);
+  const byCover = spaced(candidates, length, idPrefix);
+  // Roomy first: a firefish that overshoots a tight slot cannot turn back into it (#1429). Most
+  // cave-dwellers still hold a tight one all night, so those fill the places left (#1440), and a
+  // roomy one that crowds out more tight ones than it is worth loses to the cover order.
+  const roomyFirst = spaced(
+    [
+      ...candidates.filter((c) => c.clearance >= turnRoom),
+      ...candidates.filter((c) => c.clearance < turnRoom),
+    ],
+    length,
+    idPrefix,
+  );
+  return roomyFirst.length >= byCover.length ? roomyFirst : byCover;
+}
+
+function spaced(ordered: readonly Candidate[], length: number, idPrefix: string): Anchor[] {
   const spacing = NOOK.spacingBodyLengths * length;
   const nooks: Anchor[] = [];
-  for (const c of candidates) {
+  for (const c of ordered) {
     if (nooks.length >= NOOK.maxNooks) break;
     const apart = nooks.every(
       (k) => Math.hypot(k.position[0] - c.x, k.position[1] - c.y, k.position[2] - c.z) >= spacing,

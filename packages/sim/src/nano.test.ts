@@ -12,10 +12,11 @@ import { Basin } from './basin.ts';
 import { DecorField, UnionSdf } from './decor.ts';
 import { royalGramma, spawnMany } from './fixtures.ts';
 import { findNooks, NookSearch } from './nooks.ts';
+import { Rng } from './rng.ts';
 import { FishState } from './snapshot.ts';
 import { TankSdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
-import { World, maxFishLengthM, type FishSpawn } from './world.ts';
+import { bodyTurnRoom, World, maxFishLengthM, type FishSpawn } from './world.ts';
 
 const LONG = 120_000;
 
@@ -204,11 +205,13 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
     };
   };
 
+  const room = bodyTurnRoom(length);
+
   it('finds them deterministically, each with room for the body and opening sideways', () => {
     const f = field();
-    const nooks = findNooks(f, length);
+    const nooks = findNooks(f, length, room);
     expect(nooks.length).toBeGreaterThan(0);
-    expect(findNooks(field(), length)).toEqual(nooks);
+    expect(findNooks(field(), length, room)).toEqual(nooks);
     const n = new Float64Array(3);
     for (const k of nooks) {
       const [x, y, z] = k.position;
@@ -216,6 +219,20 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
       expect(f.water.sample(x, y, z, n)).toBeGreaterThanOrEqual(0.5 * length);
       expect(k.facing?.[1]).toBe(0);
       expect(Math.hypot(...(k.facing ?? [0, 0, 0]))).toBeCloseTo(1, 12);
+    }
+  });
+
+  it('deals those with room to turn round first, and fills up with tighter ones', () => {
+    const f = field();
+    const byCover = findNooks(f, length, 0);
+    expect(findNooks(f, length, Infinity)).toEqual(byCover);
+    expect(byCover.some((k) => k.radius < room)).toBe(true);
+    for (const need of [room, 0.6 * length]) {
+      const nooks = findNooks(f, length, need);
+      expect(nooks).toHaveLength(byCover.length);
+      const roomy = nooks.filter((k) => k.radius >= need).length;
+      expect(roomy, `${need / length} L`).toBeGreaterThan(0);
+      expect(nooks.slice(0, roomy).every((k) => k.radius >= need)).toBe(true);
     }
   });
 
@@ -325,6 +342,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
           water: new UnionSdf([new TankSdf(basin), f]),
         },
         length,
+        room,
       );
     };
     const decor = () => ({ shapes: rock.shapes(), reach: rock.reach });
@@ -334,27 +352,27 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
     it('tests again only near a rock that moved, and finds what a fresh search finds', () => {
       rock.set(ROCKS);
       const search = new NookSearch();
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(ROCKS));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(ROCKS));
       const full = search.tested;
       const nudged = moved('rock-0', (c) =>
         c.kind === 'sphere' ? { ...c, center: [-0.48, 0.02, -0.12] } : c,
       );
       rock.set(nudged);
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(nudged));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(nudged));
       expect(search.tested).toBeGreaterThan(0);
       expect(search.tested).toBeLessThan(0.5 * full);
 
       rock.set(ROCKS);
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(ROCKS));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(ROCKS));
       rock.set(ROCKS);
-      search.find(tank, length, 'nook:', decor());
+      search.find(tank, length, room, 'nook:', decor());
       expect(search.tested).toBe(0);
     });
 
     it('sees a new shape inside the same bounds, a removed rock and a new length', () => {
       rock.set(ROCKS);
       const search = new NookSearch();
-      search.find(tank, length, 'nook:', decor());
+      search.find(tank, length, room, 'nook:', decor());
       const boxed = moved('rock-4', () => ({
         id: 'rock-4',
         hard: true,
@@ -372,17 +390,109 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
       const sphere = bounds();
       rock.set(boxed);
       bounds().forEach((v, k) => expect(v).toBeCloseTo(sphere[k] ?? NaN, 12));
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(boxed));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(boxed));
       expect(search.tested).toBeGreaterThan(0);
 
       const fewer = boxed.filter((c) => c.id !== 'rock-7');
       rock.set(fewer);
-      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(fewer));
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(fewer));
 
-      search.find(tank, 0.9 * length, 'nook:', decor());
+      search.find(tank, 0.9 * length, bodyTurnRoom(0.9 * length), 'nook:', decor());
       const shorter = new NookSearch();
-      shorter.find(tank, 0.9 * length);
+      shorter.find(tank, 0.9 * length, bodyTurnRoom(0.9 * length));
       expect(search.tested).toBe(shorter.tested);
+    });
+
+    it('tests again only near a hull rock that moved, and finds what a fresh search finds', () => {
+      const stone = (id: string, x: number, z: number, s: number): Collider => ({
+        id,
+        hard: true,
+        kind: 'hull',
+        vertices: [
+          [x - 0.07 * s, 0, z - 0.05 * s],
+          [x + 0.06 * s, 0, z - 0.06 * s],
+          [x + 0.07 * s, 0, z + 0.05 * s],
+          [x - 0.05 * s, 0, z + 0.06 * s],
+          [x - 0.04 * s, 0.09 * s, z - 0.02 * s],
+          [x + 0.03 * s, 0.11 * s, z - 0.03 * s],
+          [x + 0.04 * s, 0.08 * s, z + 0.03 * s],
+          [x - 0.02 * s, 0.1 * s, z + 0.04 * s],
+        ],
+      });
+      const hulled = moved('rock-2', () => stone('rock-2', -0.1, -0.12, 1));
+      rock.set(hulled);
+      const search = new NookSearch();
+      const before = fresh(hulled);
+      expect(before.length).toBeGreaterThan(0);
+      expect(search.find(tank, length, room, 'nook:', decor())).toEqual(before);
+      const full = search.tested;
+      for (const next of [
+        hulled.map((c) => (c.id === 'rock-2' ? stone('rock-2', -0.07, -0.1, 1) : c)),
+        hulled.map((c) => (c.id === 'rock-2' ? stone('rock-2', -0.07, -0.1, 1.3) : c)),
+        [...hulled, stone('rock-12', 0.45, 0.12, 0.8)],
+      ]) {
+        rock.set(next);
+        expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(next));
+        expect(search.tested).toBeGreaterThan(0);
+        expect(search.tested).toBeLessThan(0.5 * full);
+      }
+    });
+
+    it('matches a fresh search through a seeded run of decor edits', () => {
+      const rng = new Rng(1436);
+      let decorNow: Collider[] = [...ROCKS];
+      rock.set(decorNow);
+      const search = new NookSearch();
+      search.find(tank, length, room, 'nook:', decor());
+      let added = 0;
+      let found = 0;
+      for (let step = 0; step < 10; step++) {
+        const k = Math.floor(rng.range(0, decorNow.length));
+        const target = decorNow[k];
+        if (target === undefined) throw new Error(`no collider ${k}`);
+        const x = rng.range(-0.5, 0.5);
+        const z = rng.range(-0.15, 0.15);
+        const roll = rng.range(0, 4);
+        if (roll < 1) {
+          decorNow = decorNow.filter((c) => c.id !== target.id);
+        } else if (roll < 2) {
+          decorNow.push({
+            id: `added-${added++}`,
+            hard: true,
+            kind: 'hull',
+            vertices: [
+              [x - 0.05, 0, z - 0.04],
+              [x + 0.05, 0, z - 0.05],
+              [x + 0.04, 0, z + 0.05],
+              [x - 0.04, 0.08, z],
+              [x + 0.02, 0.1, z + 0.02],
+            ],
+          });
+        } else if (roll < 3) {
+          decorNow[k] = {
+            id: target.id,
+            hard: true,
+            kind: 'sphere',
+            center: [x, 0.02, z],
+            radius: rng.range(0.04, 0.08),
+          };
+        } else {
+          decorNow[k] = {
+            id: target.id,
+            hard: true,
+            kind: 'box',
+            center: [x, 0.05, z],
+            halfExtents: [rng.range(0.03, 0.07), 0.05, rng.range(0.03, 0.06)],
+            rotationY: rng.range(-1, 1),
+            rounding: 0.01,
+          };
+        }
+        rock.set(decorNow);
+        const expected = fresh(decorNow);
+        found += expected.length;
+        expect(search.find(tank, length, room, 'nook:', decor()), `step ${step}`).toEqual(expected);
+      }
+      expect(found).toBeGreaterThan(0);
     });
   });
 

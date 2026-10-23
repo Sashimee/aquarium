@@ -2136,6 +2136,10 @@ export class World {
     return this.bodyCanTurnAt(this.bodyLength[i] ?? 0, this.thickness[i] ?? 0, x, y, z);
   }
 
+  bodyTurnRoom(length: number): number {
+    return bodyTurnRoom(length);
+  }
+
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number {
     return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
@@ -2230,10 +2234,7 @@ export class World {
   ): boolean {
     const sdf = this.steerSdf[0] ?? this.sceneSdf;
     const n = this.turnNormal;
-    const need =
-      (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length +
-      thickness +
-      STEERING.turnRoomMarginBodyLengths * length;
+    const need = turnRoomNeed(length, thickness);
     if (sdf.sample(x, y, z, n) >= need) return true;
     const { minX, maxX, minZ, maxZ } = this.basin;
     // Held off the glass on every pass: near a rock top the nearest surface is the rock, and its
@@ -2736,6 +2737,20 @@ export class World {
       out[o + 16] = this.behaviour.brood.fan[i] ?? 0;
     }
   }
+}
+
+/** The clearance a level fish of `length` and flank `thickness` needs to turn round where it is. */
+function turnRoomNeed(length: number, thickness: number): number {
+  return (
+    (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length +
+    thickness +
+    STEERING.turnRoomMarginBodyLengths * length
+  );
+}
+
+/** `turnRoomNeed` for a fish of `length` with the usual flank. */
+export function bodyTurnRoom(length: number): number {
+  return turnRoomNeed(length, BEHAVIOUR.bodyThicknessBodyLengths * length);
 }
 
 /**
