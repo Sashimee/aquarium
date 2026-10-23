@@ -215,6 +215,20 @@ describe('SwimState', () => {
       expect(state.frequency).toBeCloseTo(tailBeatHz(sample.speed, length, 0.3), 9);
     });
 
+    it('keeps beating while a resting neon swims steadily at 0.01 m/s', () => {
+      const neonLength = 0.022;
+      const neonMax = 0.5;
+      const speed = 0.01;
+      const sample = { speed, yawRate: 0, thrust: (speed / neonMax) ** 2, state: FishState.Rest };
+      expect(sample.thrust).toBeLessThan(1e-3);
+      const state = new SwimState(neonLength, 0.3, SWIM_MODES.subcarangiform, 0, neonMax);
+      settle(state, sample, 17);
+      expect(state.drive).toBeGreaterThan(0.99);
+      expect(state.amplitude).toBeCloseTo(amplitudeScale(speed, neonLength, 1), 6);
+      expect(state.amplitude).toBeGreaterThan(IDLE_AMPLITUDE);
+      expect(state.frequency).toBeCloseTo(tailBeatHz(speed, neonLength, 0.3), 9);
+    });
+
     it('beats wider as the slow powered speed rises', () => {
       const amplitudes = [0.1, 0.3, 0.6, 1].map((bl) => {
         const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, vmax);
