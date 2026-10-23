@@ -23,8 +23,5 @@ export function adultLengthRefusal(
 ): string | undefined {
   const limitM = tankMaxFishLengthM(size);
   if (species.lifecycle.maxSizeM <= limitM) return undefined;
-  const grows = `${species.commonName} grows to ${Math.round(species.lifecycle.maxSizeM * 100)} cm`;
-  return quarantine
-    ? `${grows}, more than a quarantine tank holds (${Math.floor(limitM * 100)} cm).`
-    : `${grows}, but this tank only holds fish up to ${Math.floor(limitM * 100)} cm. Choose a bigger tank.`;
+  return `${species.commonName} grows to ${Math.round(species.lifecycle.maxSizeM * 100)} cm, but this tank only holds fish up to ${Math.floor(limitM * 100)} cm. ${quarantine ? 'A quarantine tank is too small for it, so it cannot go there.' : 'Choose a bigger tank.'}`;
 }
