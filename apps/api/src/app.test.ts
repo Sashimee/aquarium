@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { redactUrl, staticCacheControl, stripTokensFromBody } from './app.ts';
+import { loadEmittedAssets, redactUrl, staticCacheControl, stripTokensFromBody } from './app.ts';
 import { createHarness, type Harness } from './test-harness.ts';
 
+const EMITTED: ReadonlySet<string> = new Set(['assets/index-C7vUOBtl.js']);
 const NOINDEX = 'noindex, nofollow';
 const BUNDLE = 'console.log("hello aquarium");'.repeat(200);
 let dist: string;
@@ -26,6 +27,21 @@ beforeAll(async () => {
   writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.br'), brotliCompressSync(BUNDLE));
   writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.gz'), gzipSync(BUNDLE));
   writeFileSync(join(dist, 'assets', 'index.json'), '{}');
+  for (const name of ['index-C-nEAlfU.js', 'system--58a3A-e.js']) {
+    writeFileSync(join(dist, 'assets', name), 'x');
+  }
+  writeFileSync(join(dist, 'assets', 'polyhaven-cabin_1k.ktx2'), 'ktx');
+  mkdirSync(join(dist, '.vite'));
+  writeFileSync(
+    join(dist, '.vite', 'manifest.json'),
+    JSON.stringify({
+      'index.html': {
+        file: 'assets/index-C7vUOBtl.js',
+        css: ['assets/index-C-nEAlfU.js'],
+        assets: ['assets/system--58a3A-e.js'],
+      },
+    }),
+  );
   writeFileSync(join(dist, 'ktx2-worker.js'), 'self.onmessage=()=>{}');
   mkdirSync(join(dist, 'assets', 'fish'));
   writeFileSync(join(dist, 'assets', 'fish', 'tetra.glb'), 'glb');
@@ -320,8 +336,25 @@ describe('with a web build', () => {
       .map((entry) => relative(publicDir, join(entry.parentPath, entry.name)));
     expect(files.length).toBeGreaterThan(0);
     for (const file of files) {
-      expect(staticCacheControl(file), file).not.toContain('immutable');
-      expect(staticCacheControl(join('assets', basename(file))), file).not.toContain('immutable');
+      expect(staticCacheControl(file, EMITTED), file).not.toContain('immutable');
+      expect(staticCacheControl(join('assets', basename(file)), EMITTED), file).not.toContain(
+        'immutable',
+      );
+    }
+  });
+
+  it('does not serve the Vite manifest', async () => {
+    expect((await withDist().inject('/.vite/manifest.json')).statusCode).toBe(404);
+  });
+
+  it('refuses to start with a web root but no Vite manifest', async () => {
+    const bare = mkdtempSync(join(tmpdir(), 'aquarium-nomanifest-'));
+    writeFileSync(join(bare, 'index.html'), '<!doctype html>');
+    try {
+      expect(() => loadEmittedAssets(bare)).toThrow(/Vite manifest/);
+      await expect(createHarness({ webRoot: bare })).rejects.toThrow(/Vite manifest/);
+    } finally {
+      rmSync(bare, { recursive: true, force: true });
     }
   });
 
@@ -331,9 +364,9 @@ describe('with a web build', () => {
       (await app.inject({ url, headers: { 'accept-encoding': 'br' } })).headers['cache-control'];
     expect(await cache('/assets/index-C7vUOBtl.js')).toBe('public, max-age=31536000, immutable');
     for (const name of ['index-C-nEAlfU.js', 'system--58a3A-e.js']) {
-      writeFileSync(join(dist, 'assets', name), 'x');
       expect(await cache(`/assets/${name}`), name).toBe('public, max-age=31536000, immutable');
     }
+    expect(await cache('/assets/polyhaven-cabin_1k.ktx2')).toBe('no-cache');
     expect(await cache('/assets/fish/tetra.glb')).toBe('public, max-age=3600');
     expect(await cache('/assets/index.json')).toBe('no-cache');
     expect(await cache('/index.html')).toBe('no-cache');
