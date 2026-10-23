@@ -11,9 +11,9 @@ const SHELL = [
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
 ];
-// Vite emits content-hashed bundles flat in /assets/; models and textures sit in subdirectories
-// under stable names and are left to the HTTP cache.
-const HASHED_ASSET = /^\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
+// Files Vite emitted carry a content hash; public/ files that merely look hashed keep stable
+// contents under their name and are left to the HTTP cache.
+const EMITTED = new Set(JSON.parse('__EMITTED_ASSETS__'));
 
 function isApi(pathname) {
   return pathname === '/api' || pathname.startsWith('/api/');
@@ -77,7 +77,7 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(navigate(event));
-  } else if (HASHED_ASSET.test(url.pathname)) {
+  } else if (EMITTED.has(url.pathname)) {
     event.respondWith(cacheFirst(request));
   } else if (SHELL.includes(url.pathname)) {
     event.respondWith(shell(request));

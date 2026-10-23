@@ -3,11 +3,18 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildId, buildIdForOutput, shellPaths, stampWorker } from '../../build/sw-build-id-plugin';
+import {
+  buildId,
+  buildIdForOutput,
+  emittedPaths,
+  shellPaths,
+  stampWorker,
+} from '../../build/sw-build-id-plugin';
 
 const BUILD = 'abc123';
 const RAW_SOURCE = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
-const SOURCE = stampWorker(RAW_SOURCE, BUILD);
+const EMITTED = ['/assets/index-C7vUOBtl.js'];
+const SOURCE = stampWorker(RAW_SOURCE, BUILD, EMITTED);
 const ORIGIN = 'https://fish.test';
 
 type Listener = (event: unknown) => void;
@@ -196,6 +203,14 @@ describe('service worker', () => {
     expect(sw.fetched).toHaveLength(1);
   });
 
+  it('leaves public files with hashed-looking names to the HTTP cache', async () => {
+    const sw = boot(online);
+    for (const path of ['/assets/polyhaven-cabin-1k0abcde.ktx2', '/assets/index-ABCDEFGH.js']) {
+      expect(await sw.request(path), path).toBeUndefined();
+    }
+    expect(sw.fetched).toEqual([]);
+  });
+
   it('does not cache failed responses or models under stable names', async () => {
     const missing = boot(async () => new Response('gone', { status: 404 }));
     await missing.request('/assets/index-C7vUOBtl.js');
@@ -322,6 +337,14 @@ describe('build id', () => {
   });
 
   it('refuses to stamp a worker without the placeholder', () => {
-    expect(() => stampWorker('no placeholder', BUILD)).toThrow(/__BUILD_ID__/);
+    expect(() => stampWorker('no placeholder', BUILD, [])).toThrow(/__BUILD_ID__/);
+    expect(() => stampWorker("const a = '__BUILD_ID__';", BUILD, [])).toThrow(/__EMITTED_ASSETS__/);
+  });
+
+  it('lists only emitted files under assets/ as cache-first paths', () => {
+    expect(emittedPaths(['assets/a-1.js', 'index.html', 'assets/b-2.css'])).toEqual([
+      '/assets/a-1.js',
+      '/assets/b-2.css',
+    ]);
   });
 });
