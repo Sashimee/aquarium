@@ -41,6 +41,13 @@ export interface ProviderSubscription {
   cancelAtPeriodEnd: boolean;
 }
 
+export interface ProviderCheckoutSession {
+  userId: string | null;
+  status: 'open' | 'complete' | 'expired';
+  paymentStatus?: 'paid' | 'unpaid';
+  subscriptionId: string | null;
+}
+
 // Stripe's message for a rejected parameter can echo the customer's email, so logs carry only the
 // error's classification and request id.
 export function describeProviderError(err: unknown): Record<string, string> {
@@ -63,6 +70,7 @@ export interface PaymentProvider {
   cancelSubscriptionNow(providerSubscriptionId: string): Promise<void>;
   retrieveSubscription(providerSubscriptionId: string): Promise<ProviderSubscription>;
   refundInvoice(providerInvoiceId: string): Promise<void>;
+  retrieveCheckoutSession(sessionId: string): Promise<ProviderCheckoutSession | null>;
   verifyWebhook(rawBody: Buffer, signatureHeader: string | undefined): PaymentEvent;
 }
 
@@ -180,6 +188,33 @@ export function createStripeProvider(options: StripeProviderOptions): PaymentPro
         status: subscription.status,
         cancelAtPeriodEnd: subscription.cancel_at_period_end,
       };
+    },
+
+    async retrieveCheckoutSession(sessionId) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        const subscription = session.subscription;
+        return {
+          userId: session.metadata?.['user_id'] || null,
+          status:
+            session.status === 'complete'
+              ? 'complete'
+              : session.status === 'expired'
+                ? 'expired'
+                : 'open',
+          paymentStatus: session.payment_status === 'unpaid' ? 'unpaid' : 'paid',
+          subscriptionId:
+            typeof subscription === 'string' ? subscription : (subscription?.id ?? null),
+        };
+      } catch (err) {
+        if (
+          err instanceof Stripe.errors.StripeInvalidRequestError &&
+          err.code === 'resource_missing'
+        ) {
+          return null;
+        }
+        throw err;
+      }
     },
 
     async refundInvoice(invoiceId) {

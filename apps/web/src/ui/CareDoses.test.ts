@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Biome, Tank } from '@aquarium/shared';
 import { newTankChemistry } from '@aquarium/shared';
 import { BUNDLED_CHEMISTRY } from '../sync/bundledEconomy';
@@ -9,6 +9,12 @@ import { waterReport } from '../sync/life';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE } from '../sync/state';
 import { Care } from './TankPanel';
+import type { ApiClient } from './api';
+
+vi.mock('./context', async (original) => ({
+  ...(await original<typeof import('./context')>()),
+  useApi: () => ({}) as ApiClient,
+}));
 
 function render(tank: Tank): string {
   const state = { ...INITIAL_STATE, tanks: [tank] };

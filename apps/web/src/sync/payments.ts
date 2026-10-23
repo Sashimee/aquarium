@@ -168,19 +168,13 @@ export function parsePending(raw: string | null): PendingCheckout | null {
   };
 }
 
+export const WAITING_NOTICE = 'Thank you. Waiting for the payment to be confirmed.';
+
 export const UNCONFIRMED_NOTICE =
   'Stripe has received your payment. Your Pearls or membership appear once it is confirmed, usually within a minute.';
 
-let returnClaimed = false;
 let notice: string | null = null;
 const noticeListeners = new Set<() => void>();
-
-/** The return from Checkout is handled once per page load, even if the shop is closed and reopened. */
-export function claimPaymentReturn(): boolean {
-  if (returnClaimed) return false;
-  returnClaimed = true;
-  return true;
-}
 
 export const paymentNotice = {
   get: (): string | null => notice,
@@ -193,8 +187,3 @@ export const paymentNotice = {
     return () => noticeListeners.delete(listener);
   },
 };
-
-export function resetPaymentReturn(): void {
-  returnClaimed = false;
-  paymentNotice.set(null);
-}

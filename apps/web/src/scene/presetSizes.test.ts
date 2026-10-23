@@ -59,7 +59,11 @@ const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>
  * Patches a nano's life-size hardscape covers completely, keyed `<size>:<patch id>`. They stay in
  * the preset for the larger tanks; the nano plants the rest.
  */
-const KNOWN_BLOCKED_PATCHES: ReadonlySet<string> = new Set(['nano30:lotus']);
+const KNOWN_BLOCKED_PATCHES: ReadonlySet<string> = new Set([
+  'nano30:lotus',
+  'nano30:sword-left',
+  'nano30:sword-right',
+]);
 
 let library: ModelLibrary;
 let catalog: AssetCatalog;
@@ -241,92 +245,108 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
         }
       }
     });
-
-    it('builds hardscape colliders and places plants in every patch', async () => {
-      const preset = fitted();
-      const hard = preset.decor
-        .filter((item) => !parseEuphylliaId(item.assetId))
-        .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
-        .filter(({ kind }) => kind !== 'anemone');
-      const { colliders } = await movableColliders(library, hard, waterTop);
-      expect(colliders.length).toBeGreaterThan(0);
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const placed = new Map<string, number>();
-      scatterPresetPatches(
-        preset,
-        catalog,
-        new ColliderField(colliders),
-        dimensions,
-        (patch, instances) => {
-          placed.set(patch.id, instances.length);
-          for (const p of instances) {
-            expect(Math.abs(p.x)).toBeLessThanOrEqual(extent.halfLength);
-            expect(Math.abs(p.z)).toBeLessThanOrEqual(extent.halfDepth);
-            expect(p.y).toBeLessThan(waterTop);
-          }
-        },
-      );
-      warn.mockRestore();
-      for (const patch of preset.plantPatches) {
-        if (KNOWN_BLOCKED_PATCHES.has(`${size}:${patch.id}`)) {
-          expect(placed.get(patch.id), `${patch.id} was unblocked: drop it from the list`).toBe(0);
-          continue;
-        }
-        expect(placed.get(patch.id), patch.id).toBeGreaterThanOrEqual(Math.ceil(patch.count / 2));
-      }
-    });
-
-    it('keeps every patch at its authored depth', async () => {
-      const preset = fitted();
-      const hard = preset.decor
-        .filter((item) => !parseEuphylliaId(item.assetId))
-        .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
-        .filter(({ kind }) => kind !== 'anemone');
-      const { colliders } = await movableColliders(library, hard, waterTop);
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-      // A nano's half-depth is barely wider than one plant's sway, so only half of a patch fits.
-      const keptShare = size === 'nano30' ? 0.5 : 0.75;
-      const roots = new Map<string, { x: number; z: number }[]>();
-      scatterPresetPatches(
-        preset,
-        catalog,
-        new ColliderField(colliders),
-        dimensions,
-        (patch, instances) => roots.set(patch.id, instances),
-      );
-      warn.mockRestore();
-      const authored = loadPreset(biome).plantPatches;
-      for (const patch of preset.plantPatches) {
-        const plants = roots.get(patch.id) ?? [];
-        if (KNOWN_BLOCKED_PATCHES.has(`${size}:${patch.id}`)) {
-          expect(plants, patch.id).toHaveLength(0);
-          continue;
-        }
-        expect(plants.length, patch.id).toBeGreaterThanOrEqual(Math.ceil(patch.count * keptShare));
-        const meanX = plants.reduce((sum, p) => sum + p.x, 0) / plants.length;
-        const meanZ = plants.reduce((sum, p) => sum + p.z, 0) / plants.length;
-        const wanted = authored.find((a) => a.id === patch.id)?.center ?? [0, 0];
-        const authoredZ = (wanted[1] * dimensions.depth) / DEFAULT_TANK.depth;
-        const slack = Math.max(patch.radius, 0.06);
-        expect(Math.abs(meanX - patch.center[0]), `${patch.id} x`).toBeLessThanOrEqual(slack * 2);
-        if (Math.abs(authoredZ) <= 0.05) continue;
-        const key = `${size}:${patch.id}`;
-        const pinned = KNOWN_DEPTH_SHORTFALLS[key];
-        if (pinned) {
-          expect(
-            meanZ,
-            `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
-          ).toBeGreaterThanOrEqual(pinned[0]);
-          expect(meanZ, key).toBeLessThanOrEqual(pinned[1]);
-          expect(
-            meanZ / authoredZ,
-            `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
-          ).toBeLessThan(MIN_DEPTH_SHARE);
-        } else {
-          expect(Math.sign(meanZ), `${key} side`).toBe(Math.sign(authoredZ));
-          expect(meanZ / authoredZ, `${key} depth share`).toBeGreaterThanOrEqual(MIN_DEPTH_SHARE);
-        }
-      }
-    });
   });
 });
+
+describe.each(['freshwater', 'reef', 'blackwater'] as const)(
+  '%s plant patches at every tank size',
+  (biome) => {
+    describe.each(SIZES)('%s', (size) => {
+      const dimensions = TANK_DIMENSIONS[size];
+      const waterTop = dimensions.height - dimensions.freeboard;
+      const extent = glassExtent(dimensions);
+      const fitted = () => fitPresetToCatalog(loadPreset(biome), size, dimensions, catalog);
+
+      it('builds hardscape colliders and places plants in every patch', async () => {
+        const preset = fitted();
+        const hard = preset.decor
+          .filter((item) => !parseEuphylliaId(item.assetId))
+          .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
+          .filter(({ kind }) => kind !== 'anemone');
+        const { colliders } = await movableColliders(library, hard, waterTop);
+        expect(colliders.length).toBeGreaterThan(0);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const placed = new Map<string, number>();
+        scatterPresetPatches(
+          preset,
+          catalog,
+          new ColliderField(colliders),
+          dimensions,
+          (patch, instances) => {
+            placed.set(patch.id, instances.length);
+            for (const p of instances) {
+              expect(Math.abs(p.x)).toBeLessThanOrEqual(extent.halfLength);
+              expect(Math.abs(p.z)).toBeLessThanOrEqual(extent.halfDepth);
+              expect(p.y).toBeLessThan(waterTop);
+            }
+          },
+        );
+        warn.mockRestore();
+        for (const patch of preset.plantPatches) {
+          if (KNOWN_BLOCKED_PATCHES.has(`${size}:${patch.id}`)) {
+            expect(placed.get(patch.id), `${patch.id} was unblocked: drop it from the list`).toBe(
+              0,
+            );
+            continue;
+          }
+          expect(placed.get(patch.id), patch.id).toBeGreaterThanOrEqual(Math.ceil(patch.count / 2));
+        }
+      });
+
+      it('keeps every patch at its authored depth', async () => {
+        const preset = fitted();
+        const hard = preset.decor
+          .filter((item) => !parseEuphylliaId(item.assetId))
+          .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
+          .filter(({ kind }) => kind !== 'anemone');
+        const { colliders } = await movableColliders(library, hard, waterTop);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        // A nano's half-depth is barely wider than one plant's sway, so only half of a patch fits.
+        const keptShare = size === 'nano30' ? 0.5 : 0.75;
+        const roots = new Map<string, { x: number; z: number }[]>();
+        scatterPresetPatches(
+          preset,
+          catalog,
+          new ColliderField(colliders),
+          dimensions,
+          (patch, instances) => roots.set(patch.id, instances),
+        );
+        warn.mockRestore();
+        const authored = loadPreset(biome).plantPatches;
+        for (const patch of preset.plantPatches) {
+          const plants = roots.get(patch.id) ?? [];
+          if (KNOWN_BLOCKED_PATCHES.has(`${size}:${patch.id}`)) {
+            expect(plants, patch.id).toHaveLength(0);
+            continue;
+          }
+          expect(plants.length, patch.id).toBeGreaterThanOrEqual(
+            Math.ceil(patch.count * keptShare),
+          );
+          const meanX = plants.reduce((sum, p) => sum + p.x, 0) / plants.length;
+          const meanZ = plants.reduce((sum, p) => sum + p.z, 0) / plants.length;
+          const wanted = authored.find((a) => a.id === patch.id)?.center ?? [0, 0];
+          const authoredZ = (wanted[1] * dimensions.depth) / DEFAULT_TANK.depth;
+          const slack = Math.max(patch.radius, 0.06);
+          expect(Math.abs(meanX - patch.center[0]), `${patch.id} x`).toBeLessThanOrEqual(slack * 2);
+          if (Math.abs(authoredZ) <= 0.05) continue;
+          const key = `${size}:${patch.id}`;
+          const pinned = KNOWN_DEPTH_SHORTFALLS[key];
+          if (pinned) {
+            expect(
+              meanZ,
+              `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
+            ).toBeGreaterThanOrEqual(pinned[0]);
+            expect(meanZ, key).toBeLessThanOrEqual(pinned[1]);
+            expect(
+              meanZ / authoredZ,
+              `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
+            ).toBeLessThan(MIN_DEPTH_SHARE);
+          } else {
+            expect(Math.sign(meanZ), `${key} side`).toBe(Math.sign(authoredZ));
+            expect(meanZ / authoredZ, `${key} depth share`).toBeGreaterThanOrEqual(MIN_DEPTH_SHARE);
+          }
+        }
+      });
+    });
+  },
+);

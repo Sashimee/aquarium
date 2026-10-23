@@ -93,6 +93,7 @@ export class ClockPin {
   private shown: LightLevels = { hood: 1, room: 1 };
   private minuteFrom: number | null = null;
   private shownMinute: number | null = null;
+  private lastArc: number | null = null;
 
   constructor(private pinned: ClockSetting) {}
 
@@ -112,6 +113,7 @@ export class ClockPin {
     this.from = this.shown;
     this.startedAt = nowMs;
     this.minuteFrom = this.shownMinute;
+    this.lastArc = null;
     return true;
   }
 
@@ -125,10 +127,22 @@ export class ClockPin {
     const t = (nowMs - this.startedAt) / CLOCK_EASE_MS;
     if (from === null || !(t < 1)) {
       this.minuteFrom = null;
+      this.lastArc = null;
       this.shownMinute = target;
     } else {
       const forward = wrapMinutes(target - from);
-      const arc = forward <= MINUTES_PER_DAY / 2 ? forward : forward - MINUTES_PER_DAY;
+      // A live target drifts while the fade runs; staying on the side nearest the last arc keeps the
+      // sun from flipping across 12 h away or from spinning a whole day when the target passes `from`.
+      const other = forward - MINUTES_PER_DAY;
+      const arc =
+        this.lastArc === null
+          ? forward <= MINUTES_PER_DAY / 2
+            ? forward
+            : other
+          : Math.abs(forward - this.lastArc) <= Math.abs(other - this.lastArc)
+            ? forward
+            : other;
+      this.lastArc = arc;
       this.shownMinute = wrapMinutes(from + arc * smoothstep(t));
     }
     return this.shownMinute;

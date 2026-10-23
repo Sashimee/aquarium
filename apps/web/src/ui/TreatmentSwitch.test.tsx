@@ -7,6 +7,12 @@ import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from '../syn
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE } from '../sync/state';
 import { Treatment } from './Treatment';
+import type { ApiClient } from './api';
+
+vi.mock('./context', async (original) => ({
+  ...(await original<typeof import('./context')>()),
+  useApi: () => ({}) as ApiClient,
+}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
