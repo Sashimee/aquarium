@@ -487,7 +487,7 @@ describe('fragging a coral', () => {
     });
   });
 
-  describe.each(['long300'] as const)('on a %s tank with the default layout', (size) => {
+  describe.each(['nano30', 'long300'] as const)('on a %s tank with the default layout', (size) => {
     const roots = fitPresetDecor(presets.reef?.decor ?? [], size).filter((item) =>
       coralTable.species.has(coralSpeciesId(item.assetId)),
     );
@@ -690,8 +690,19 @@ describe('preset decor kept per tank size', () => {
     const tankId = await makeTank(h, alice, { layout: null, size: 'nano30' });
     const live = (await wait(h, alice, tankId, 1)).corals ?? [];
     const row = (await rowOf(h, tankId)).corals as object[];
-    const orphan = { ...stored('s999999', 3), position: [0.1, 0.1] };
-    const orphanChild = { ...stored('s999999.1', 1), parentKey: 's999999', position: [0.2, 0.1] };
+    const authored = reefRoots(authoredReef).map((item) => ({
+      ...item,
+      tintSeed: legacyTintSeed(item),
+    }));
+    const dropped = layoutPlantKeys(authored).filter((key) => !live.some((c) => c.key === key));
+    const droppedKey = dropped[0];
+    if (!droppedKey) throw new Error('nano30 reef preset drops no coral');
+    const orphan = { ...stored(droppedKey, 3), position: [0.1, 0.1] };
+    const orphanChild = {
+      ...stored(`${droppedKey}.1`, 1),
+      parentKey: droppedKey,
+      position: [0.2, 0.1],
+    };
     await setCorals(h, tankId, [...row, orphan, orphanChild]);
     const after = await wait(h, alice, tankId, 1);
     expect(after.corals?.map((c) => c.key)).toEqual(live.map((c) => c.key));

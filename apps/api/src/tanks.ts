@@ -273,8 +273,12 @@ export function storedBackground(row: TankRow) {
   return DEFAULT_BACKGROUND_ID[row.biome];
 }
 
-function hasShelter(row: TankRow): boolean {
-  return storedLayout(row).some((item) => BREEDING_SHELTER_ASSET_IDS.includes(item.assetId));
+export function hasShelter(row: TankRow, presets: Presets): boolean {
+  const shown =
+    row.decorLayout === null
+      ? keptPresetDecor(presets[row.biome]?.decor ?? [], row.size)
+      : storedLayout(row);
+  return shown.some((item) => BREEDING_SHELTER_ASSET_IDS.includes(item.assetId));
 }
 
 function hasVacationFeeder(row: TankRow): boolean {
@@ -390,7 +394,7 @@ export async function tickLocked(
     vacationFeeder: hasVacationFeeder(tank),
     breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),
     breedingEnvironment: {
-      hasCave: hasShelter(tank),
+      hasCave: hasShelter(tank, deps.presets),
       maxAnimals: TANK_SIZES[tank.size].maxAnimals,
       bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
       newId: randomUUID,
