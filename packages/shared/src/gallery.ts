@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { backgroundIdSchema } from './backgrounds.js';
+import { roomIdSchema } from './rooms.js';
 import { biomeSchema, timestampSchema } from './common.js';
 import { tankSizeSchema } from './tankSize.js';
 
@@ -36,6 +37,7 @@ export const galleryTankSchema = z.object({
   biome: biomeSchema,
   size: tankSizeSchema,
   backgroundId: backgroundIdSchema,
+  roomId: roomIdSchema.nullable().describe('the owner room, shown read-only'),
   fishCount: z.int().nonnegative().describe('living animals'),
 });
 export type GalleryTank = z.infer<typeof galleryTankSchema>;

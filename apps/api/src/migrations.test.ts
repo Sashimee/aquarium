@@ -269,7 +269,7 @@ describe('the blackwater CO2 migration on tanks that already have CO2', () => {
     expect(await balance('bw1')).toBe(1000 + 700 + 300);
     expect(await ledgerSum('bw1')).toBe(await balance('bw1'));
     const { rows } = await database.pool.query<{ delta: number; reason: string; item_ref: string }>(
-      `select delta, reason, item_ref from ledger where user_id = 'bw1' and delta <> 1000 order by delta`,
+      `select delta, reason, item_ref from ledger where user_id = 'bw1' and delta <> 1000 and item_ref is distinct from 'room:room-office' order by delta`,
     );
     expect(rows).toEqual([
       { delta: 300, reason: 'grant', item_ref: 'grant:co2-removed-from-blackwater' },
@@ -361,7 +361,7 @@ describe('the blackwater CO2 sweep migration', () => {
     );
     expect(wallet.balance).toBe(500 + 700 + 300);
     const { rows } = await database.pool.query<{ delta: number; idempotency_key: string }>(
-      `select delta, idempotency_key from ledger where user_id = 'sw1' order by delta`,
+      `select delta, idempotency_key from ledger where user_id = 'sw1' and item_ref is distinct from 'room:room-office' order by delta`,
     );
     expect(rows).toEqual([
       { delta: 300, idempotency_key: `server:co2-sweep-${tankId(2)}` },
@@ -372,7 +372,9 @@ describe('the blackwater CO2 sweep migration', () => {
   it('creates no wallet row for a user without one, so the starting grant stays possible', async () => {
     const { rows } = await database.pool.query(`select 1 from wallet where user_id = 'sw2'`);
     expect(rows).toHaveLength(0);
-    const ledger = await database.pool.query(`select 1 from ledger where user_id = 'sw2'`);
+    const ledger = await database.pool.query(
+      `select 1 from ledger where user_id = 'sw2' and item_ref is distinct from 'room:room-office'`,
+    );
     expect(ledger.rows).toHaveLength(0);
   });
 
@@ -442,5 +444,52 @@ describe('the migration journal', () => {
 
   it('numbers entries consecutively', () => {
     expect(entries.map((e) => e.idx)).toEqual(entries.map((_, i) => i));
+  });
+});
+
+describe('the home-office grant migration on accounts that already exist', () => {
+  let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
+  let database: Database;
+  let oldDir: string;
+
+  beforeAll(async () => {
+    testDb = await createTestDatabase();
+    database = connect(testDb.url);
+    oldDir = migrationsUpTo(36);
+    await migrate(drizzle(database.pool), { migrationsFolder: oldDir });
+    await database.pool.query(
+      `insert into "user" (id, name, email) values
+        ('r1', 'Old timer', 'r1@bas.lu'), ('r2', 'Older timer', 'r2@bas.lu')`,
+    );
+    await database.pool.query(`insert into wallet (user_id, balance) values ('r1', 250)`);
+    await runMigrations(database);
+    await runMigrations(database);
+  });
+
+  afterAll(async () => {
+    await database.close();
+    await testDb.drop();
+    rmSync(oldDir, { recursive: true, force: true });
+  });
+
+  it('grants the office once per account through a 0-Pearl ledger row, whatever the wallet', async () => {
+    const { rows } = await database.pool.query<{ user_id: string; delta: number; reason: string }>(
+      `select user_id, delta, reason from ledger where item_ref = 'room:room-office' order by user_id`,
+    );
+    expect(rows).toEqual([
+      { user_id: 'r1', delta: 0, reason: 'grant' },
+      { user_id: 'r2', delta: 0, reason: 'grant' },
+    ]);
+    const owned = await database.pool.query<{ user_id: string }>(
+      `select user_id from owned_rooms where room_id = 'room-office' order by user_id`,
+    );
+    expect(owned.rows.map((r) => r.user_id)).toEqual(['r1', 'r2']);
+  });
+
+  it('leaves balances alone and creates no wallet row', async () => {
+    const wallets = await database.pool.query<{ user_id: string; balance: number }>(
+      'select user_id, balance from wallet order by user_id',
+    );
+    expect(wallets.rows).toEqual([{ user_id: 'r1', balance: 250 }]);
   });
 });

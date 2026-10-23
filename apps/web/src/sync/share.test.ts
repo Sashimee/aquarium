@@ -52,6 +52,7 @@ const tank = (overrides: Partial<PublicTank> = {}): PublicTank => ({
   size: 'standard',
   seed: 4096,
   backgroundId: 'bg-fw-planted-stream',
+  roomId: 'room-living',
   decorLayout: [],
   decorEdited: false,
   water: { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 },
