@@ -5,6 +5,7 @@ import {
   DECOR_MIN_SCALE,
   keptPresetDecor,
   presetDecorCount,
+  presetFit,
   type Biome,
   type DecorItem,
   type PresetLayout,
@@ -96,8 +97,22 @@ describe('fitPresetToTank', () => {
       expect(footprintShare('nano30')).toBeCloseTo((0.4 / 1.2) * (0.25 / 0.5), 6);
       expect(patch?.scale[0]).toBeGreaterThanOrEqual(0.7 * MIN_PLANT_FIT - 1e-9);
       expect(patch?.scale[1]).toBeGreaterThanOrEqual(MIN_PLANT_FIT - 1e-9);
-      expect(patch?.count).toBe(Math.round(70 * footprintShare('nano30')));
-      expect(patch?.count).toBeLessThan(20);
+      const plantScale = Math.max(presetFit('nano30').scale, MIN_PLANT_FIT);
+      expect(patch?.count).toBe(Math.round((70 * footprintShare('nano30')) / plantScale ** 2));
+      expect(patch?.count).toBeLessThan(70);
+    });
+
+    it('keeps the authored coverage when plants shrink with the tank', () => {
+      const mid = { ...DEFAULT_TANK, ...TANK_SIZES.std200.dimensions };
+      const [patch] = fitPresetToTank(preset, 'std200', mid, boundsOf, () => 0).plantPatches;
+      expect(patch?.count).toBe(70);
+      expect(patch?.scale[1]).toBeCloseTo(0.8, 6);
+    });
+
+    it('shrinks the patch radius with the depth of a shallower tank', () => {
+      const long = { ...DEFAULT_TANK, ...TANK_SIZES.long300.dimensions };
+      const [patch] = fitPresetToTank(preset, 'long300', long, boundsOf, () => 0).plantPatches;
+      expect(patch?.radius).toBeCloseTo(0.2 * Math.sqrt(0.9), 6);
     });
 
     it('keeps the authored patch on the standard tank and never grows past it', () => {
