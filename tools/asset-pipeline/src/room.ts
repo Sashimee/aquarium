@@ -62,6 +62,7 @@ function onlyFile(sourceId: string, extension: string): string {
 }
 
 // Only files in the Vite manifest are served immutable, so these public ids need no hash-shaped name.
+// Underscores match the snake_case HDRI filenames already shipped (studio_small_09_1k.ktx2); the id keeps its dashes.
 export function roomHdriOutput(id: string): string {
   return `${id.replaceAll('-', '_')}_1k.ktx2`;
 }
