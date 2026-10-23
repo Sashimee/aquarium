@@ -1,6 +1,11 @@
 import { useEffect, useId, useState } from 'react';
 import type { PaymentsState } from '@aquarium/shared';
-import { canCancel, paymentErrorText, subscriptionSummary } from '../sync/payments';
+import {
+  adultConfirmationErrorText,
+  canCancel,
+  paymentErrorText,
+  subscriptionSummary,
+} from '../sync/payments';
 import { useApi } from './context';
 
 type Loaded =
@@ -15,6 +20,8 @@ export function PaymentsSettings() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     const abort = new AbortController();
@@ -42,14 +49,18 @@ export function PaymentsSettings() {
   const { state } = loaded;
   if (state.payments === 'disabled') return null;
 
-  const attempt = async (work: () => Promise<PaymentsState>, done?: string) => {
+  const attempt = async (
+    work: () => Promise<PaymentsState>,
+    done?: string,
+    describe: (error: unknown) => string = paymentErrorText,
+  ) => {
     setBusy(true);
     setProblem(null);
     try {
       setLoaded({ phase: 'done', state: await work() });
       if (done) setNotice(done);
     } catch (error) {
-      setProblem(paymentErrorText(error));
+      setProblem(describe(error));
       try {
         setLoaded({ phase: 'done', state: await api.paymentsState() });
       } catch {
@@ -68,12 +79,58 @@ export function PaymentsSettings() {
       <label className="row">
         <input
           type="checkbox"
-          checked={state.adultConfirmed}
+          checked={state.adultConfirmed || confirming}
           disabled={busy}
-          onChange={(e) => void attempt(() => api.setAdultConfirmation(e.target.checked))}
+          onChange={(e) => {
+            setProblem(null);
+            if (!e.target.checked) {
+              setConfirming(false);
+              setPassword('');
+              if (state.adultConfirmed) void attempt(() => api.setAdultConfirmation(false));
+              return;
+            }
+            setConfirming(true);
+          }}
         />
         <span>I am an adult and I confirm purchases on this account.</span>
       </label>
+      {confirming && !state.adultConfirmed && (
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const sent = password;
+            void attempt(
+              async () => {
+                const next = await api.setAdultConfirmation(true, sent || undefined);
+                setConfirming(false);
+                setPassword('');
+                return next;
+              },
+              undefined,
+              (error) => adultConfirmationErrorText(error, sent !== ''),
+            );
+          }}
+        >
+          <label>
+            Password
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              disabled={busy}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <p className="hint">
+            Leave it empty if you sign in with a passkey only; you must have signed in within the
+            last 5 minutes.
+          </p>
+          <button type="submit" disabled={busy}>
+            Confirm
+          </button>
+        </form>
+      )}
       {summary && <p className="hint">{summary}</p>}
       {canCancel(state.subscription) && (
         <button

@@ -64,15 +64,94 @@ describe('purchase settings', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('confirms the adult on a tick and stores what the server answers', async () => {
+  const box = () => container.querySelector<HTMLInputElement>('input[type=checkbox]');
+  const passwordField = () => container.querySelector<HTMLInputElement>('input[type=password]');
+  const type = async (el: HTMLInputElement | null, value: string) => {
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      set?.call(el, value);
+      el?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const submit = async () => {
+    await act(async () => {
+      container
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+  };
+
+  it('asks for the password on a tick and confirms with it', async () => {
     api.paymentsState.mockResolvedValue(state());
     api.setAdultConfirmation.mockResolvedValue(state({ adultConfirmed: true }));
     await show();
-    const box = container.querySelector<HTMLInputElement>('input[type=checkbox]');
-    expect(box?.checked).toBe(false);
-    await click(box);
-    expect(api.setAdultConfirmation).toHaveBeenCalledWith(true);
-    expect(container.querySelector<HTMLInputElement>('input[type=checkbox]')?.checked).toBe(true);
+    expect(passwordField()).toBeNull();
+    await click(box());
+    expect(api.setAdultConfirmation).not.toHaveBeenCalled();
+    await type(passwordField(), 'hunter2hunter2');
+    await submit();
+    expect(api.setAdultConfirmation).toHaveBeenCalledWith(true, 'hunter2hunter2');
+    expect(box()?.checked).toBe(true);
+    expect(passwordField()).toBeNull();
+  });
+
+  it('lets a passkey-only account confirm with the field empty', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockResolvedValue(state({ adultConfirmed: true }));
+    await show();
+    await click(box());
+    await submit();
+    expect(api.setAdultConfirmation).toHaveBeenCalledWith(true, undefined);
+  });
+
+  it('says the password is wrong on a 403 when one was sent', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockRejectedValue(new ApiRequestError(403, 'forbidden', 'x'));
+    await show();
+    await click(box());
+    await type(passwordField(), 'nope');
+    await submit();
+    expect(container.querySelector('[role=alert]')?.textContent).toContain('password is not right');
+    expect(passwordField()).not.toBeNull();
+  });
+
+  it('tells a passkey-only account to sign in again on a 403', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockRejectedValue(new ApiRequestError(403, 'forbidden', 'x'));
+    await show();
+    await click(box());
+    await submit();
+    expect(container.querySelector('[role=alert]')?.textContent).toContain('Sign in again');
+  });
+
+  it('shows the wait on a 429', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockRejectedValue(
+      new ApiRequestError(429, 'rate_limited', 'x', {}, 30),
+    );
+    await show();
+    await click(box());
+    await type(passwordField(), 'pw');
+    await submit();
+    expect(container.querySelector('[role=alert]')?.textContent).toContain('30 s');
+  });
+
+  it('withdraws without a password', async () => {
+    api.paymentsState.mockResolvedValue(state({ adultConfirmed: true }));
+    api.setAdultConfirmation.mockResolvedValue(state());
+    await show();
+    await click(box());
+    expect(api.setAdultConfirmation).toHaveBeenCalledWith(false);
+    expect(passwordField()).toBeNull();
+  });
+
+  it('closes the password field when the tick is withdrawn before confirming', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    await show();
+    await click(box());
+    await click(box());
+    expect(passwordField()).toBeNull();
+    expect(api.setAdultConfirmation).not.toHaveBeenCalled();
   });
 
   it('shows paid-until and cancels in one click', async () => {

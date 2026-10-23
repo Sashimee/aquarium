@@ -2,6 +2,7 @@ import type { PaymentsState } from '@aquarium/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, type ApiClient } from '../ui/api';
 import {
+  adultConfirmationErrorText,
   awaitCredit,
   canCancel,
   canSubscribe,
@@ -119,6 +120,19 @@ describe('paymentErrorText', () => {
       'Nothing was charged',
     );
     expect(paymentErrorText(new Error('x'))).toContain('Nothing was charged');
+  });
+});
+
+describe('adultConfirmationErrorText', () => {
+  const forbidden = new ApiRequestError(403, 'forbidden', 'x');
+  it('separates a wrong password from a stale passkey session', () => {
+    expect(adultConfirmationErrorText(forbidden, true)).toContain('password is not right');
+    expect(adultConfirmationErrorText(forbidden, false)).toContain('Sign in again');
+  });
+  it('falls back to the payment wording for other failures', () => {
+    expect(
+      adultConfirmationErrorText(new ApiRequestError(429, 'rate_limited', 'x', {}, 9), true),
+    ).toContain('9 s');
   });
 });
 

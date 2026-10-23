@@ -297,7 +297,7 @@ export interface ApiClient {
   checkoutPack(packId: string, consent: CheckoutConsent): Promise<CheckoutResponse>;
   checkoutSubscription(consent: CheckoutConsent): Promise<CheckoutResponse>;
   cancelSubscription(): Promise<PaymentsState>;
-  setAdultConfirmation(confirmed: boolean): Promise<PaymentsState>;
+  setAdultConfirmation(confirmed: boolean, password?: string): Promise<PaymentsState>;
   purchase(request: {
     itemRef: string;
     idempotencyKey: string;
@@ -807,8 +807,11 @@ export function createApiClient(
     async cancelSubscription() {
       return parsed(await post('/api/payments/subscription/cancel', {}), paymentsStateSchema);
     },
-    async setAdultConfirmation(confirmed) {
-      const body = validate(adultConfirmationRequestSchema, { confirmed });
+    async setAdultConfirmation(confirmed, password) {
+      const body = validate(
+        adultConfirmationRequestSchema,
+        confirmed && password ? { confirmed, password } : { confirmed },
+      );
       return parsed(await put('/api/payments/adult-confirmation', body), paymentsStateSchema);
     },
     async purchase(request) {

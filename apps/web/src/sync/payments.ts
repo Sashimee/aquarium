@@ -113,6 +113,15 @@ export function paymentErrorText(error: unknown): string {
   }
 }
 
+export function adultConfirmationErrorText(error: unknown, passwordSent: boolean): string {
+  if (error instanceof ApiRequestError && error.status === 403 && error.code === 'forbidden') {
+    return passwordSent
+      ? 'That password is not right. Check it and try again.'
+      : 'Sign in again with your passkey, then confirm within 5 minutes. If your account has a password, enter it.';
+  }
+  return paymentErrorText(error);
+}
+
 export const WALLET_POLL_ATTEMPTS = 8;
 
 /**
