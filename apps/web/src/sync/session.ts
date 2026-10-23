@@ -210,6 +210,7 @@ export class TankSession {
 
   async load(): Promise<void> {
     const id = ++this.loadId;
+    this.roomsKnown = false;
     this.switchId++;
     this.unloadScene('switch')?.dispose();
     this.patch({
@@ -237,7 +238,7 @@ export class TankSession {
       const activeId = tanks.find((t) => t.id === stored)?.id ?? tanks[0]?.id ?? null;
       this.patch({ phase: 'ready', species, tanks, awayByTank, activeId });
       void this.refreshWallet();
-      void this.refreshRooms().then(() => this.migrateDeviceRoom(id));
+      void this.refreshRooms();
       if (activeId) this.activate(activeId);
       else this.deps.interaction.emit('tank:none', {});
     } catch (error) {
@@ -340,12 +341,22 @@ export class TankSession {
     }
   }
 
+  /**
+   * An empty list means "owns nothing" only once a read has succeeded, so the device-room migration
+   * waits for that and a failed read never loses it.
+   */
+  private roomsKnown = false;
+  private migratingRoom = false;
+
   /** The paid rooms the account owns. A failed read keeps the last list; the server checks every use. */
   async refreshRooms(): Promise<void> {
     const gen = this.loadId;
     try {
       const owned = await this.deps.api.ownedRooms();
-      if (gen === this.loadId) this.patch({ ownedRooms: owned });
+      if (gen !== this.loadId) return;
+      this.roomsKnown = true;
+      this.patch({ ownedRooms: owned });
+      await this.migrateDeviceRoom(gen);
     } catch (error) {
       if (!(error instanceof ApiRequestError)) throw error;
     }
@@ -416,7 +427,20 @@ export class TankSession {
 
   private async migrateDeviceRoom(loadId: number): Promise<void> {
     const storage = this.deps.storage;
-    if (!storage || loadId !== this.loadId || this.state.phase !== 'ready') return;
+    if (!storage || !this.roomsKnown || this.migratingRoom) return;
+    if (loadId !== this.loadId || this.state.phase !== 'ready') return;
+    this.migratingRoom = true;
+    try {
+      await this.runRoomMigration(storage, loadId);
+    } finally {
+      this.migratingRoom = false;
+    }
+  }
+
+  private async runRoomMigration(
+    storage: NonNullable<SessionDeps['storage']>,
+    loadId: number,
+  ): Promise<void> {
     const plan = planRoomMigration(
       storage.getItem(DEVICE_ROOM_KEY),
       this.state.tanks,

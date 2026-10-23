@@ -679,4 +679,34 @@ describe('AudioEngine room ambience', () => {
     expect(t.warn).toHaveBeenCalledWith(expect.stringContaining('room-missing'));
     expect(roomLoops(t)).toHaveLength(0);
   });
+
+  it('warns once about a room with no sound and not again on later changes', async () => {
+    const t = await running();
+    t.engine.setAmbience('room-missing');
+    await settle();
+    t.engine.setAmbience('room-a');
+    await settle();
+    t.engine.setAmbience('room-missing');
+    await settle();
+    t.engine.setMuted(true);
+    t.engine.setMuted(false);
+    await settle();
+    const warned = t.warn.mock.calls.filter((c) => String(c[0]).includes('room-missing'));
+    expect(warned).toHaveLength(1);
+  });
+
+  it('does not decode a room that failed to decode a second time', async () => {
+    const t = await running();
+    const decode = vi.mocked(t.ctx.decodeAudioData);
+    decode.mockRejectedValueOnce(new Error('bad data'));
+    t.engine.setAmbience('room-a');
+    await settle();
+    const calls = decode.mock.calls.length;
+    t.engine.setAmbience('room-b');
+    await settle();
+    t.engine.setAmbience('room-a');
+    await settle();
+    expect(decode.mock.calls.length).toBe(calls + 1);
+    expect(roomLoops(t)).toHaveLength(1);
+  });
 });

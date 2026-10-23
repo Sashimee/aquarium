@@ -205,6 +205,21 @@ describe('the device room from before rooms', () => {
     expect(api.saveRoom).toHaveBeenCalledWith(TANK_A, 'room-office');
   });
 
+  it('keeps the key and does not migrate while the owned rooms cannot be read, then migrates', async () => {
+    const storage = memoryStorage({ 'aquarium.room': 'office' });
+    const { session, api } = setup([tankFixture()], ['room-office'], storage);
+    api.ownedRooms.mockRejectedValueOnce(new ApiRequestError(0, 'network', 'offline'));
+    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-office', roomSetAt: 'now' }));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(api.ownedRooms).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(storage.store.get('aquarium.room')).toBe('office');
+    expect(api.saveRoom).not.toHaveBeenCalled();
+    await session.refreshRooms();
+    expect(api.saveRoom).toHaveBeenCalledWith(TANK_A, 'room-office');
+    expect(storage.store.has('aquarium.room')).toBe(false);
+  });
+
   it('keeps the key when the save fails so the next load retries', async () => {
     const storage = memoryStorage({ 'aquarium.room': 'none' });
     const { session, api } = setup([tankFixture()], [], storage);

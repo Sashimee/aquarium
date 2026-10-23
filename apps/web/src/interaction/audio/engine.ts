@@ -468,7 +468,7 @@ export class AudioEngine {
     if (wanted !== null && this.settingsValue.muted) return;
     const token = ++this.ambienceToken;
     let loaded: { entry: SoundEntry; buffer: BufferLike } | null = null;
-    if (wanted !== null) {
+    if (wanted !== null && !this.failed.has(wanted)) {
       const entry = this.catalog?.get(AMBIENCE_ROLE)?.find((e) => e.id === wanted && e.loop);
       if (!entry) {
         this.failed.add(wanted);
