@@ -63,6 +63,7 @@ import { MaterialRebuild } from './materialRebuild';
 import { deviceTextureLimit } from './photo/capture';
 import { PhotoMode } from './photo/PhotoMode';
 import { FrameCap } from './framePacing';
+import { preventPageZoom } from './pageZoom';
 import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
@@ -422,6 +423,7 @@ export class Engine {
     followVisibility();
     document.addEventListener('visibilitychange', followVisibility);
     cleanup.add(() => document.removeEventListener('visibilitychange', followVisibility));
+    cleanup.add(preventPageZoom(document));
 
     const resizeObserver = new ResizeObserver(() => this.resize());
     cleanup.add(() => resizeObserver.disconnect());
@@ -590,7 +592,7 @@ export class Engine {
       store: browserSessionStore(),
       notify: (message, action) => showDeviceNotice(document.body, message, action),
     });
-    if (removeNotice !== null) this.cleanup.add(removeNotice);
+    this.cleanup.add(removeNotice);
   }
 
   private setupHood(): void {
