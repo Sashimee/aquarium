@@ -378,6 +378,13 @@ describe('the blackwater CO2 sweep migration', () => {
     expect(ledger.rows).toHaveLength(0);
   });
 
+  it('still gives that user the office, through a 0-Pearl grant row', async () => {
+    const { rows } = await database.pool.query(
+      `select delta, reason from ledger where user_id = 'sw2' and item_ref = 'room:room-office'`,
+    );
+    expect(rows).toEqual([{ delta: 0, reason: 'grant' }]);
+  });
+
   it('leaves a user with no CO2 on blackwater untouched', async () => {
     const wallet = await one<{ balance: number }>(
       `select balance from wallet where user_id = 'sw3'`,

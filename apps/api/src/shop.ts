@@ -4,14 +4,14 @@ import {
   equipmentProblems,
   equipmentSchema,
   idSchema,
+  isBackgroundForBiome,
+  isDecorAssetForBiome,
   isFreeRoom,
   ownedRoomsResponseSchema,
   PAID_ROOM_IDS,
-  roomIdSchema,
-  isBackgroundForBiome,
-  isDecorAssetForBiome,
   purchaseRequestSchema,
   purchaseResponseSchema,
+  roomIdSchema,
   sellFryResponseSchema,
   walletResponseSchema,
   type BackgroundId,
@@ -281,6 +281,9 @@ export function registerShopRoutes(ctx: ShopContext): void {
       const body = purchaseRequestSchema.parse(req.body);
       throttle(user.id, 'purchase');
       const item = parseItem(economy, body.itemRef);
+      if (item.kind === 'room' && body.tankId !== undefined) {
+        throw refused('Rooms belong to your account, not to a tank. Leave tankId out.');
+      }
       if (body.tankId === undefined) {
         return database.db.transaction((tx) =>
           buy(tx, null, user, body, item, { userRowLocked: false }),

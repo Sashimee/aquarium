@@ -6,7 +6,13 @@ import pg from 'pg';
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify';
 import { buildApp, DEFAULT_SIGN_IN_THROTTLE } from './app.ts';
 import type { Limit } from './rate-limit.ts';
-import { createAuth, type Auth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from './auth.ts';
+import {
+  createAuth,
+  type Auth,
+  DEFAULT_AUTH_RATE_LIMITS,
+  type AuthRateLimits,
+  type AuthRateLimitStorage,
+} from './auth.ts';
 import { connect, runMigrations, type Database } from './db/index.ts';
 import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type Mailer, type MailLimits } from './mail.ts';
@@ -30,6 +36,27 @@ const cheapKey = (password: string, salt: Buffer) =>
       err ? reject(err) : resolve(key),
     ),
   );
+
+// Better Auth's built-in memory store is a module-level Map shared by every createAuth() in a worker.
+function isolatedRateLimitStorage(): AuthRateLimitStorage {
+  const hits = new Map<string, { count: number; start: number }>();
+  return {
+    async consume(key, rule) {
+      const now = Date.now();
+      const windowMs = rule.window * 1000;
+      const hit = hits.get(key);
+      if (!hit || now - hit.start >= windowMs) {
+        hits.set(key, { count: 1, start: now });
+        return { allowed: true, retryAfter: null };
+      }
+      if (hit.count >= rule.max) {
+        return { allowed: false, retryAfter: Math.ceil((hit.start + windowMs - now) / 1000) };
+      }
+      hit.count += 1;
+      return { allowed: true, retryAfter: null };
+    },
+  };
+}
 
 const TEST_PASSWORD_HASHER = {
   hash: async (password: string) => {
@@ -200,6 +227,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     database,
     mailer,
     password: TEST_PASSWORD_HASHER,
+    rateLimitStorage: isolatedRateLimitStorage(),
     runInBackground: (task) => {
       background.add(task);
       void task.finally(() => background.delete(task));
