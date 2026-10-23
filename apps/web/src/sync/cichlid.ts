@@ -139,7 +139,7 @@ export function territoryWarning(
       holders.length === 0
         ? `this tank has ${shelters}`
         : `this tank has ${shelters} for ${holders.length} fish that already do`;
-    return `${candidate.commonName} claims a hiding place of its own, and ${have}. With too few, the territorial fish fight over them and the losers get chased and stressed. Add rocks, caves or shells in decorate mode first, or add it anyway.`;
+    return `${candidate.commonName} claims a hiding place of its own, and ${have}. With too few, the territorial fish fight over them and the losers get chased and stressed. Add rocks, caves, shells or driftwood in decorate mode first, or add it anyway.`;
   }
   if (
     isTerritorial(candidate.id) &&

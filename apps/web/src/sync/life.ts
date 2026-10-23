@@ -211,7 +211,7 @@ export function canBuy(
   }
   const tooShort = tankLengthRefusal(economy, candidate.id, tank, candidate.commonName);
   if (tooShort !== undefined) return { ok: false, reason: tooShort };
-  const tooBig = adultLengthRefusal(candidate, tank.size);
+  const tooBig = adultLengthRefusal(candidate, tank.size, tank.quarantine);
   if (tooBig !== undefined) return { ok: false, reason: tooBig };
   const bioload = new Map(all.map((s) => [s.id, s.lifecycle.bioload]));
   const existing = tank.fish.map((f) => ({
