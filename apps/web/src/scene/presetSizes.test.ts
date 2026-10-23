@@ -19,7 +19,7 @@ import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
 import { reachCurrent } from './current';
 import { loadPreset } from './preset';
 import { hullCorners } from '../fish/simColliders';
-import { isPerch } from './bank';
+import { BANK_RIM_MARGIN, isPerch, PERCH_GROWTH } from './bank';
 import { isMudBankId, mudBankColliders } from './mudBank';
 import { boundsFromCatalog } from './presetFit';
 import { SURFACE_MARGIN } from './plants';
@@ -46,8 +46,11 @@ const GLASS_NUDGE_TOLERANCE = 0.06;
 const NANO_GLASS_NUDGE_TOLERANCE = 0.08;
 // A nano's hardscape colliders are looser than the model bounds the fit keeps off the glass.
 const NANO_COLLIDER_GLASS_SLACK = 0.003;
-// Mangrove driftwood and prop roots are fitted by their bounds, which sit up to this far inside their capsule chains.
-const MANGROVE_COLLIDER_GLASS_SLACK = 0.005;
+// The mangrove driftwood branch is fitted by its model bounds, which sit inside its capsule chain; the
+// worst overhang is 4.51 mm (long300). No other mangrove item crosses the glass.
+const MANGROVE_BRANCH_GLASS_SLACK = 0.005;
+// A dry perch settles down the sloping bed while it is nudged off the glass, so it drifts further.
+const PERCH_NUDGE_TOLERANCE = 0.08;
 const MIN_NUDGED_SCALE_SHARE = 0.95;
 const MIN_PATCH_SCALE_SHARE = 0.95;
 const MIN_NANO_NUDGED_SCALE_SHARE = 0.7;
@@ -202,9 +205,11 @@ describe.each(['freshwater', 'reef', 'blackwater', 'cichlid', 'mangrove'] as con
           if (drift > 1e-9) {
             nudged.push(item.assetId);
             expect(drift, item.assetId).toBeLessThanOrEqual(
-              size === 'nano30' || isPerch(item)
-                ? NANO_GLASS_NUDGE_TOLERANCE
-                : GLASS_NUDGE_TOLERANCE,
+              isPerch(item)
+                ? PERCH_NUDGE_TOLERANCE
+                : size === 'nano30'
+                  ? NANO_GLASS_NUDGE_TOLERANCE
+                  : GLASS_NUDGE_TOLERANCE,
             );
             expect(Math.abs(mine.position[0]), item.assetId).toBeLessThanOrEqual(
               Math.abs(server.position[0]) + 1e-9,
@@ -213,7 +218,9 @@ describe.each(['freshwater', 'reef', 'blackwater', 'cichlid', 'mangrove'] as con
               Math.abs(server.position[2]) + 1e-9,
             );
           }
-          if (!isPerch(item)) {
+          if (isPerch(item)) {
+            expect(mine.scale, item.assetId).toBeLessThanOrEqual(item.scale * PERCH_GROWTH + 1e-9);
+          } else {
             expect(mine.scale, item.assetId).toBeLessThanOrEqual(server.scale + 1e-9);
             expect(mine.scale, item.assetId).toBeGreaterThanOrEqual(
               server.scale *
@@ -235,9 +242,10 @@ describe.each(['freshwater', 'reef', 'blackwater', 'cichlid', 'mangrove'] as con
           const model = boundsOf(item.assetId);
           if (!model) throw new Error(`${item.assetId} has no bounds`);
           const top = item.position[1] + (model.bounds.max[1] ?? 0) * item.scale;
-          if (!isPerch(item)) {
-            expect(top, item.assetId).toBeLessThanOrEqual(waterTop - SURFACE_MARGIN + 1e-9);
-          }
+          const ceiling = isPerch(item)
+            ? dimensions.height - BANK_RIM_MARGIN
+            : waterTop - SURFACE_MARGIN;
+          expect(top, item.assetId).toBeLessThanOrEqual(ceiling + 1e-9);
           expect(Math.abs(item.position[0]), item.assetId).toBeLessThan(extent.halfLength);
           expect(Math.abs(item.position[2]), item.assetId).toBeLessThan(extent.halfDepth);
         }
@@ -265,22 +273,26 @@ describe.each(['freshwater', 'reef', 'blackwater', 'cichlid', 'mangrove'] as con
           .filter((item) => !isProcedural(item.assetId))
           .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
           .filter(({ kind }) => kind !== 'anemone');
-        const { colliders } = await movableColliders(library, hard, waterTop);
         const innerHalfLength = dimensions.length / 2 - dimensions.glass;
         const innerHalfDepth = dimensions.depth / 2 - dimensions.glass;
-        const slack =
-          size === 'nano30'
-            ? NANO_COLLIDER_GLASS_SLACK
-            : biome === 'mangrove'
-              ? MANGROVE_COLLIDER_GLASS_SLACK
-              : 0;
-        for (const c of colliders) {
-          const ends = c.kind === 'capsule' ? [c.a, c.b] : hullCorners(c.planes);
-          const pad = c.kind === 'capsule' ? c.radius : 0;
-          for (const [x, y, z] of ends) {
-            expect(Math.abs(x) + pad, c.kind).toBeLessThanOrEqual(innerHalfLength + slack);
-            expect(Math.abs(z) + pad, c.kind).toBeLessThanOrEqual(innerHalfDepth + slack);
-            if (biome !== 'mangrove') expect(y + pad, c.kind).toBeLessThanOrEqual(waterTop);
+        for (const piece of hard) {
+          const { colliders } = await movableColliders(library, [piece], waterTop);
+          const slack =
+            size === 'nano30'
+              ? NANO_COLLIDER_GLASS_SLACK
+              : biome === 'mangrove' && piece.item.assetId === 'driftwood-branch'
+                ? MANGROVE_BRANCH_GLASS_SLACK
+                : 0;
+          const ceiling = isPerch(piece.item) ? dimensions.height - BANK_RIM_MARGIN : waterTop;
+          for (const c of colliders) {
+            const ends = c.kind === 'capsule' ? [c.a, c.b] : hullCorners(c.planes);
+            const pad = c.kind === 'capsule' ? c.radius : 0;
+            for (const [x, y, z] of ends) {
+              const label = `${piece.item.assetId} ${c.kind}`;
+              expect(Math.abs(x) + pad, label).toBeLessThanOrEqual(innerHalfLength + slack);
+              expect(Math.abs(z) + pad, label).toBeLessThanOrEqual(innerHalfDepth + slack);
+              expect(y + pad, label).toBeLessThanOrEqual(ceiling + 1e-9);
+            }
           }
         }
       });
