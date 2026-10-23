@@ -23,6 +23,7 @@
   border: 1px solid var(--glass-edge);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
   pointer-events: auto;
+  touch-action: pan-x pan-y;
 }
 
 #ui .photo-bar button {
@@ -54,6 +55,7 @@
   border: 1px solid var(--glass-edge);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
   pointer-events: auto;
+  touch-action: pan-x pan-y;
 }
 
 .photo-filters {
@@ -157,6 +159,7 @@
   background: var(--glass-strong);
   border: 1px solid var(--danger);
   pointer-events: auto;
+  touch-action: pan-x pan-y;
 }
 
 .photo-notice p {
