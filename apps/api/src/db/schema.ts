@@ -177,6 +177,9 @@ export const tanks = pgTable(
     coralFragKeys: jsonb('coral_frag_keys').notNull().default([]),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
+    // null: no room, the plain studio.
+    roomId: text('room_id').default('room-living'),
+    roomSetAt: timestamptz('room_set_at'),
     water: jsonb('water')
       .notNull()
       .default(sql`'{"ammonia":0,"nitrate":0,"algae":0,"uneatenFood":0,"tannin":0}'::jsonb`),
@@ -468,9 +471,23 @@ export const ledger = pgTable(
       .on(t.userId, t.idempotencyKey)
       .where(sql`${t.source} = 'game'`),
     index('ledger_user_id_created_at_idx').on(t.userId, t.createdAt),
-    check('ledger_delta_nonzero', sql`${t.delta} <> 0`),
+    check('ledger_delta_nonzero', sql`${t.delta} <> 0 or ${t.reason} = 'grant'`),
     check('ledger_game_has_user', sql`${t.source} <> 'game' or ${t.userId} is not null`),
   ],
+);
+
+// One row per paid room an account bought; a purchase unlocks the room for all its tanks. The free
+// rooms are never stored.
+export const ownedRooms = pgTable(
+  'owned_rooms',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    roomId: text('room_id').notNull(),
+    purchasedAt: timestamptz('purchased_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.roomId] })],
 );
 
 export const giftStatusEnum = pgEnum('gift_status', [

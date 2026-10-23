@@ -1,0 +1,170 @@
+[
+  {
+    "id": "room-living",
+    "name": "Living room",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-bedroom",
+    "name": "Bedroom",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-shop",
+    "name": "Aquarium shop",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": false
+  },
+  {
+    "id": "room-office",
+    "name": "Home office",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-loft",
+    "name": "City loft",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-zen",
+    "name": "Japanese zen room",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-beach",
+    "name": "Beach house",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-cabin",
+    "name": "Mountain cabin",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-sushi",
+    "name": "Sushi restaurant",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": false
+  },
+  {
+    "id": "room-library",
+    "name": "Castle library",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  },
+  {
+    "id": "room-public-aquarium",
+    "name": "Public aquarium hall",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": false
+  },
+  {
+    "id": "room-submarine",
+    "name": "Submarine",
+    "assets": {
+      "shell": null,
+      "furniture": [],
+      "hdri": null
+    },
+    "ambience": {
+      "sound": null,
+      "asset": null
+    },
+    "hasWindow": true
+  }
+]

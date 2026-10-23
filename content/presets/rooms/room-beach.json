@@ -1,0 +1,11 @@
+{
+  "roomId": "room-beach",
+  "layout": [],
+  "light": {
+    "keyColor": "#fff8e0",
+    "keyIntensity": 3.2,
+    "ambientColor": "#d9f0ff",
+    "ambientIntensity": 0.65,
+    "windowPosition": [1.2, 0.9, -1.5]
+  }
+}

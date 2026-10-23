@@ -206,6 +206,54 @@ describe('wallet, shop and ledger', () => {
     expect((await walletOf(h, who)).ledger).toHaveLength(1);
   });
 
+  describe('ledger_delta_nonzero', () => {
+    const zeroRow = (
+      userId: string,
+      reason: 'grant' | 'purchase' | 'earn' | 'refund' | 'pack',
+    ) => ({
+      userId,
+      delta: 0,
+      reason,
+      source: 'game' as const,
+      itemRef: `check:${reason}`,
+      idempotencyKey: `zero-${reason}-${key()}`,
+    });
+
+    async function insertedUser() {
+      const id = `zero-delta-${key()}`;
+      await h.database.db
+        .insert(schema.user)
+        .values({ id, name: 'Zero', email: `${id}@bas.lu`, emailVerified: true });
+      return id;
+    }
+
+    it('accepts a 0-Pearl grant', async () => {
+      const userId = await insertedUser();
+      await h.database.db.insert(schema.ledger).values(zeroRow(userId, 'grant'));
+      expect(
+        await h.database.db.select().from(schema.ledger).where(eq(schema.ledger.userId, userId)),
+      ).toHaveLength(1);
+    });
+
+    it.each(['purchase', 'earn', 'refund', 'pack'] as const)(
+      'rejects a 0-Pearl %s with a check violation',
+      async (reason) => {
+        const userId = await insertedUser();
+        const failure = await h.database.db
+          .insert(schema.ledger)
+          .values(zeroRow(userId, reason))
+          .then(
+            () => null,
+            (error: unknown) => error as { cause?: { code?: string; constraint?: string } },
+          );
+        expect(failure?.cause).toMatchObject({
+          code: '23514',
+          constraint: 'ledger_delta_nonzero',
+        });
+      },
+    );
+  });
+
   describe('owned refs', () => {
     const insertRows = (
       who: Account,

@@ -1,0 +1,11 @@
+{
+  "roomId": "room-bedroom",
+  "layout": [],
+  "light": {
+    "keyColor": "#ffd9b0",
+    "keyIntensity": 1.6,
+    "ambientColor": "#e9dcff",
+    "ambientIntensity": 0.45,
+    "windowPosition": [1.2, 0.9, -1.5]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "roomId": "room-shop",
+  "layout": [],
+  "light": {
+    "keyColor": "#f2f8ff",
+    "keyIntensity": 3.0,
+    "ambientColor": "#dfeeff",
+    "ambientIntensity": 0.7,
+    "windowPosition": null
+  }
+}

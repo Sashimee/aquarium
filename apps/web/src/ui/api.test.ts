@@ -175,6 +175,8 @@ describe('api client', () => {
       decorLayout: layout,
       decorEdited: true,
       backgroundId: 'bg-fw-planted-stream',
+      roomId: 'room-living',
+      roomSetAt: null,
       water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
       lastTickAt: '2026-02-01T00:00:00.000Z',
       chemistry: newTankChemistry('freshwater'),

@@ -111,6 +111,20 @@
     "tankSlots": [500, 1000, 1500, 2500, 4000],
     "tankSizes": { "nano30": 300, "std200": 1200, "long300": 2500 }
   },
+  "rooms": {
+    "room-living": 0,
+    "room-bedroom": 0,
+    "room-shop": 500,
+    "room-office": 500,
+    "room-loft": 800,
+    "room-zen": 900,
+    "room-beach": 900,
+    "room-cabin": 900,
+    "room-sushi": 1000,
+    "room-library": 1200,
+    "room-public-aquarium": 1500,
+    "room-submarine": 1500
+  },
   "earn": {
     "dailyCare": { "reward": { "min": 30, "max": 50 }, "dailyCap": 50 },
     "healthyTankStreak": { "perDay": 10, "dailyCap": 15 },

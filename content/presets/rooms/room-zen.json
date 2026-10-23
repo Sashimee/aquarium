@@ -1,0 +1,11 @@
+{
+  "roomId": "room-zen",
+  "layout": [],
+  "light": {
+    "keyColor": "#fff3dc",
+    "keyIntensity": 2.0,
+    "ambientColor": "#f1ead6",
+    "ambientIntensity": 0.6,
+    "windowPosition": [1.2, 0.9, -1.5]
+  }
+}

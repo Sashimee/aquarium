@@ -1,0 +1,11 @@
+{
+  "roomId": "room-sushi",
+  "layout": [],
+  "light": {
+    "keyColor": "#ffb877",
+    "keyIntensity": 1.8,
+    "ambientColor": "#ffe0c2",
+    "ambientIntensity": 0.4,
+    "windowPosition": null
+  }
+}

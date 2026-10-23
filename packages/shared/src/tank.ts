@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { backgroundIdSchema } from './backgrounds.js';
+import { roomIdSchema } from './rooms.js';
 import {
   biomeSchema,
   creatableBiomeSchema,
@@ -153,6 +154,12 @@ export const tankSchema = z.object({
   // true: decorLayout is what the player saved, and [] means they emptied the tank.
   decorEdited: z.boolean(),
   backgroundId: backgroundIdSchema,
+  roomId: roomIdSchema
+    .nullable()
+    .describe('the room the tank stands in, room-living by default; null is the plain studio'),
+  roomSetAt: timestampSchema
+    .nullable()
+    .describe('null until the player saves a room; set on every PATCH that carries roomId'),
   water: waterSchema,
   lastTickAt: timestampSchema,
   chemistry: chemistrySchema,
@@ -213,6 +220,12 @@ export const updateTankRequestSchema = z
     name: z.string().trim().min(1).max(60).optional(),
     decorLayout: decorLayoutSchema.optional(),
     backgroundId: backgroundIdSchema.nullable().optional(),
+    roomId: roomIdSchema
+      .nullable()
+      .optional()
+      .describe(
+        'null for no room, a free room, or one the account bought, else 409 room_not_owned',
+      ),
     light: lightScheduleSchema.optional().describe('free: the lamp schedule and intensity'),
     acceptsGifts: z
       .boolean()
@@ -228,6 +241,7 @@ export const updateTankRequestSchema = z
       v.name !== undefined ||
       v.decorLayout !== undefined ||
       v.backgroundId !== undefined ||
+      v.roomId !== undefined ||
       v.light !== undefined ||
       v.acceptsGifts !== undefined ||
       v.co2 !== undefined,

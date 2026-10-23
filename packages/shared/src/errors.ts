@@ -42,6 +42,8 @@ export const conflictReasonSchema = z
     'fish_unavailable',
     'gifts_closed',
     'offer_changed',
+    'room_not_owned',
+    'room_already_owned',
   ])
   .describe(
     'why a 409 was refused, for clients that branch on it: other_medicine and dose_limit both clear with a water change',
