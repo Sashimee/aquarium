@@ -6,6 +6,6 @@
     "keyIntensity": 2.2,
     "ambientColor": "#ffe9cc",
     "ambientIntensity": 0.5,
-    "windowPosition": null
+    "windowPosition": [1.2, 0.9, -1.5]
   }
 }

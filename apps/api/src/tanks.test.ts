@@ -316,14 +316,20 @@ describe('tanks and fish', () => {
     const error = apiErrorSchema.parse(locked.json()).error;
     expect(error.code).toBe('conflict');
     expect(error.reason).toBe('room_not_owned');
+    const afterRefusal = tankSchema.parse(
+      (await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json(),
+    );
+    expect(afterRefusal.roomId).toBe('room-bedroom');
+    expect(afterRefusal.roomSetAt).toBe(tankSchema.parse(bedroom.json()).roomSetAt);
 
     const [owner] = await h.database.db
       .select({ ownerId: schema.tanks.ownerId })
       .from(schema.tanks)
       .where(eq(schema.tanks.id, tank.id));
+    if (!owner?.ownerId) throw new Error('the tank row or its owner is missing');
     await h.database.db
       .insert(schema.ownedRooms)
-      .values({ userId: owner?.ownerId ?? '', roomId: 'room-library' });
+      .values({ userId: owner.ownerId, roomId: 'room-library' });
     const unlocked = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
       roomId: 'room-library',
     });

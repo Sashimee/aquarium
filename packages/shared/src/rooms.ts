@@ -94,8 +94,8 @@ export const roomPropSchema = z.strictObject({
 });
 export type RoomProp = z.infer<typeof roomPropSchema>;
 
-// content/presets/rooms/<roomId>.json belongs to scene-builder; a room without a file renders its
-// procedural shell with the default light until T76 adds it.
+// content/presets/rooms/<roomId>.json belongs to scene-builder. Every room has one; rooms.test.ts
+// fails when a file is missing. T76 fills in the layouts.
 export const roomPresetSchema = z.strictObject({
   roomId: roomIdSchema,
   layout: z.array(roomPropSchema),

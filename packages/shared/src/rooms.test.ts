@@ -50,6 +50,10 @@ describe('room ids', () => {
 describe('content/rooms.json', () => {
   const rooms = roomFileSchema.parse(readJson('rooms.json'));
 
+  it('keeps the window T57 gave the living room', () => {
+    expect(rooms.find((r) => r.id === 'room-living')?.hasWindow).toBe(true);
+  });
+
   it('lists every room id once, in order', () => {
     expect(rooms.map((r) => r.id)).toEqual([...ROOM_IDS]);
   });
@@ -80,6 +84,9 @@ describe('content/presets/rooms', () => {
       const preset = roomPresetSchema.parse(readJson(file));
       expect(preset.roomId).toBe(room.id);
       expect(preset.light.windowPosition !== null, room.id).toBe(room.hasWindow);
+      if (preset.light.windowPosition !== null) {
+        expect(preset.light.windowPosition[0], `${room.id} window side`).toBeGreaterThan(0);
+      }
     }
   });
 
