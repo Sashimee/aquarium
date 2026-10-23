@@ -5,7 +5,7 @@ import {
   deleteAccountRequestSchema,
   type Credits,
 } from '@aquarium/shared';
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
 import type { Clock } from './clock.ts';
@@ -217,14 +217,12 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const { adultRow, chargeRows, refundRows, disputeRows, clubRows } = await db.transaction(
       async (tx) => {
         const [adultRow] = await tx
-          .select({ confirmedAt: schema.adultConfirmations.confirmedAt })
+          .select({
+            confirmedAt: schema.adultConfirmations.confirmedAt,
+            withdrawnAt: schema.adultConfirmations.withdrawnAt,
+          })
           .from(schema.adultConfirmations)
-          .where(
-            and(
-              eq(schema.adultConfirmations.userId, userId),
-              isNull(schema.adultConfirmations.withdrawnAt),
-            ),
-          );
+          .where(eq(schema.adultConfirmations.userId, userId));
         const chargeRows = await tx
           .select({
             id: schema.paymentCharges.id,
@@ -404,6 +402,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           wallet: { balance: walletRow?.balance ?? 0, ledger: ledgerRows },
           payments: {
             adultConfirmedAt: adultRow?.confirmedAt ?? null,
+            adultWithdrawnAt: adultRow?.withdrawnAt ?? null,
             charges: chargeRows,
             refunds: refundRows,
             disputes: disputeRows,

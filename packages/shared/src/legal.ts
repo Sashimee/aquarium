@@ -39,6 +39,7 @@ export const dataExportSchema = z.strictObject({
   }),
   payments: z.strictObject({
     adultConfirmedAt: timestampSchema.nullable(),
+    adultWithdrawnAt: timestampSchema.nullable(),
     charges: z
       .array(exportedRow)
       .describe('pack and subscription payments, with the consent timestamps given at checkout'),

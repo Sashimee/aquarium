@@ -130,8 +130,19 @@ ${items.join('\n')}
   return { text, html };
 }
 
+// Each phase is bounded separately, so a stalled send ends within three of these, which must stay
+// under the receipt claim lease in payments/routes.ts.
+export const SMTP_TIMEOUT_MS = 45_000;
+
 export function createSmtpTransport(host: string, port: number): Transporter {
-  return nodemailer.createTransport({ host, port, secure: false });
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: false,
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
+  });
 }
 
 export interface Mailer {

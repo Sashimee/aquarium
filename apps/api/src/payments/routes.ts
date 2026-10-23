@@ -65,6 +65,7 @@ export interface PaymentsDeps {
   reauthenticate: (req: FastifyRequest, password: string | undefined) => Promise<Reauthentication>;
 }
 
+export const RECEIPT_LEASE_MS = 5 * 60_000;
 const REVIVABLE = ['active', 'past_due', 'unpaid', 'trialing'];
 
 export const paymentsDisabled = () =>
@@ -406,7 +407,6 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
 
   const RETRY_BATCH = 20;
   const MAX_RECEIPT_ATTEMPTS = 8;
-  const RECEIPT_LEASE_MS = 5 * 60_000;
   const RECEIPT_BACKOFF_MS = 5 * 60_000;
   const RECEIPT_BACKOFF_MAX_MS = 6 * 3_600_000;
 

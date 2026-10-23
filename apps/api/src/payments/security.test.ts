@@ -7,8 +7,9 @@ import {
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from '../db/index.ts';
-import { MailThrottledError } from '../mail.ts';
+import { MailThrottledError, SMTP_TIMEOUT_MS } from '../mail.ts';
 import { createHarness, type Harness } from '../test-harness.ts';
+import { RECEIPT_LEASE_MS } from './routes.ts';
 import {
   DAY_MS,
   PASSWORD,
@@ -338,6 +339,31 @@ describe('settlement failure log', () => {
 });
 
 describe('data export', () => {
+  it('keeps both adult confirmation timestamps after a withdrawal', async () => {
+    const who = await account(h);
+    await confirm(who, { confirmed: true, password: PASSWORD });
+    await confirm(who, { confirmed: false });
+    const res = await call(h, who, 'POST', '/api/me/export');
+    expect(res.statusCode, res.body).toBe(200);
+    const { payments } = dataExportSchema.parse(res.json());
+    expect(payments.adultConfirmedAt).toEqual(expect.any(String));
+    expect(payments.adultWithdrawnAt).toEqual(expect.any(String));
+  });
+
+  it('exports no withdrawal time while the confirmation stands', async () => {
+    const who = await account(h);
+    await confirm(who, { confirmed: true, password: PASSWORD });
+    const { payments } = dataExportSchema.parse(
+      (await call(h, who, 'POST', '/api/me/export')).json(),
+    );
+    expect(payments.adultConfirmedAt).not.toBeNull();
+    expect(payments.adultWithdrawnAt).toBeNull();
+  });
+
+  it('bounds a stalled mail send well inside the receipt lease', () => {
+    expect(SMTP_TIMEOUT_MS * 3).toBeLessThan(RECEIPT_LEASE_MS);
+  });
+
   it('lists the charges with consent times, refunds, subscription and adult confirmation', async () => {
     const who = await account(h);
     await confirm(who, { confirmed: true, password: PASSWORD });
