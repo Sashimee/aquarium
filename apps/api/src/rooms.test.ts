@@ -7,6 +7,8 @@ import {
   ownedRoomsResponseSchema,
   publicTankSchema,
   purchaseResponseSchema,
+  roomRef,
+  type RoomId,
   tankSchema,
   walletResponseSchema,
 } from '@aquarium/shared';
@@ -70,7 +72,10 @@ const call = (
   });
 
 const buyRoom = (h: Harness, who: Account, roomId: string, idempotencyKey = randomUUID()) =>
-  call(h, who, 'POST', '/api/shop/purchase', { idempotencyKey, itemRef: `room:${roomId}` });
+  call(h, who, 'POST', '/api/shop/purchase', {
+    idempotencyKey,
+    itemRef: roomRef(roomId as RoomId),
+  });
 
 const errorOf = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).error;
 
@@ -132,7 +137,7 @@ describe('rooms on the server (T75)', () => {
     expect(res.statusCode).toBe(200);
     const bought = purchaseResponseSchema.parse(res.json());
     expect(bought.entry.delta).toBe(-economy.rooms['room-library']);
-    expect(bought.entry.itemRef).toBe('room:room-library');
+    expect(bought.entry.itemRef).toBe(roomRef('room-library'));
     expect(bought.wallet.balance).toBe(before - economy.rooms['room-library']);
     expect(await ownedOf(who)).toEqual(['room-library']);
 
@@ -230,7 +235,7 @@ describe('rooms on the server (T75)', () => {
       (
         await call(h, null, 'POST', '/api/shop/purchase', {
           idempotencyKey: randomUUID(),
-          itemRef: 'room:room-zen',
+          itemRef: roomRef('room-zen'),
         })
       ).statusCode,
     ).toBe(401);
@@ -276,8 +281,13 @@ describe('rooms on the server (T75)', () => {
       const legacy = await account(h);
       const bystander = await account(h);
       await h.database.db
+        .insert(schema.ownedRooms)
+        .values({ userId: legacy.userId, roomId: 'room-office' });
+      expect(await ownedOf(legacy)).toEqual(['room-office']);
+      await h.database.db
         .delete(schema.ownedRooms)
         .where(eq(schema.ownedRooms.userId, legacy.userId));
+      expect(await ownedOf(legacy)).toEqual([]);
       for (let run = 0; run < 2; run += 1) {
         for (const statement of statements) await h.database.pool.query(statement);
       }
@@ -287,7 +297,7 @@ describe('rooms on the server (T75)', () => {
           .select()
           .from(schema.ledger)
           .where(eq(schema.ledger.userId, who.userId));
-        const office = grants.filter((r) => r.itemRef === 'room:room-office');
+        const office = grants.filter((r) => r.itemRef === roomRef('room-office'));
         expect(office).toHaveLength(1);
         expect(office[0]).toMatchObject({ delta: 0, reason: 'grant', source: 'game' });
         expect(await ownedOf(who)).toContain('room-office');
@@ -303,6 +313,22 @@ describe('rooms on the server (T75)', () => {
         economy.grants.starting,
       );
       expect((await buyRoom(h, legacy, 'room-office')).statusCode).toBe(409);
+    });
+  });
+
+  describe('buying a room', () => {
+    it('refuses a tankId, since rooms belong to the account', async () => {
+      const who = await account(h);
+      await topUp(h, who, 1000);
+      const tank = await newTank(h, who);
+      const res = await call(h, who, 'POST', '/api/shop/purchase', {
+        idempotencyKey: randomUUID(),
+        itemRef: roomRef('room-zen'),
+        tankId: tank.id,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(await ownedOf(who)).toEqual([]);
+      expect(await balance(h, who)).toBe(1000 + economy.grants.starting);
     });
   });
 
@@ -327,7 +353,7 @@ describe('rooms on the server (T75)', () => {
       const patch = await call(h, visitor, 'PATCH', `/api/public/${shared.shareToken}`, {
         roomId: 'room-living',
       });
-      expect(patch.statusCode).toBeGreaterThanOrEqual(400);
+      expect(patch.statusCode).toBe(404);
       const foreign = await call(h, visitor, 'PATCH', `/api/tanks/${tank.id}`, {
         roomId: 'room-living',
       });

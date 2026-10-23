@@ -56,7 +56,7 @@ type Account = Awaited<ReturnType<typeof account>>;
 async function call(
   h: Harness,
   cookie: string | null,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   payload?: object,
 ) {
@@ -464,6 +464,10 @@ describe('weekly winner', () => {
     const popular = await newTank(h, owner, 'Popular');
     const quiet = await newTank(h, owner, 'Quiet');
     const lastWeek = galleryWeekStart(h.clock.now());
+    expect(
+      (await call(h, owner.cookie, 'PATCH', `/api/tanks/${popular}`, { roomId: 'room-bedroom' }))
+        .statusCode,
+    ).toBe(200);
     await vote(h, voter, popular);
     await vote(h, other, popular);
     await vote(h, await account(h), quiet);
@@ -479,6 +483,7 @@ describe('weekly winner', () => {
     const [winner] = await winners(h);
     expect(winner).toMatchObject({ id: popular, votes: 2, weekStart: lastWeek });
     expect(winner?.weekEnd).toBe(thisWeek);
+    expect(winner?.roomId).toBe('room-bedroom');
 
     expect((await vote(h, voter, quiet)).statusCode).toBe(200);
     expect((await gallery(h, voter)).myVote).toBe(quiet);
