@@ -81,9 +81,56 @@ describe('TierController', () => {
     expect(c.sample(1000, 0)).toBeNull();
     expect(c.sample(Number.NaN, 1)).toBeNull();
     expect(c.sample(-5, 2)).toBeNull();
-    const { changes } = run(c, 300, 3, 10_000);
-    expect(changes).toEqual([]);
+    let t = 1000;
+    for (let second = 0; second < 20; second++) {
+      t += 300;
+      expect(c.sample(300, t)).toBeNull();
+      ({ end: t } = run(c, 10, t, 700));
+    }
     expect(c.tier).toBe('high');
+  });
+
+  it('steps down when nothing but hitches arrives for the down hold (#1456)', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    const at: number[] = [];
+    let t = 0;
+    for (let frame = 0; frame < 60 && at.length < 2; frame++) {
+      t += 400;
+      if (c.sample(400, t) !== null) at.push(t);
+    }
+    expect(c.tier).toBe('low');
+    expect(at[0]).toBeGreaterThanOrEqual(DEFAULT_CONTROLLER_CONFIG.downHoldMs);
+    expect(at[0]).toBeLessThan(3000);
+    expect((at[1] ?? 0) - (at[0] ?? 0)).toBeGreaterThanOrEqual(3000);
+  });
+
+  it('needs a few hitches in a row, so two long stalls alone do not step down', () => {
+    const c = controller('high');
+    expect(c.sample(2500, 2500)).toBeNull();
+    expect(c.sample(2500, 5000)).toBeNull();
+    expect(c.sample(2500, 7500)).toBeNull();
+    expect(c.tier).toBe('high');
+  });
+
+  it('does not count hitches inside a pause toward a step down', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    let t = 0;
+    for (let frame = 0; frame < 40; frame++) {
+      c.pause(t);
+      t += 400;
+      expect(c.sample(400, t)).toBeNull();
+    }
+    expect(c.tier).toBe('high');
+  });
+
+  it('stays on the lowest tier under sustained hitches', () => {
+    const c = controller('low');
+    let t = 0;
+    for (let frame = 0; frame < 40; frame++) {
+      t += 400;
+      expect(c.sample(400, t)).toBeNull();
+    }
+    expect(c.tier).toBe('low');
   });
 
   it('steps up after sustained headroom, which takes longer than stepping down', () => {
