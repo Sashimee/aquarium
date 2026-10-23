@@ -577,6 +577,22 @@ export class Behaviour {
     return n;
   }
 
+  /**
+   * A copy of fish `i`'s wide and narrow entry slots: the way it last looked along, and the cell
+   * where it looked to join it (-1 for none).
+   */
+  entrySlots(i: number): { routes: (Route | null)[]; cells: number[] } {
+    if (!Number.isInteger(i) || i < 0 || 2 * i >= this.entryCell.length) {
+      throw new RangeError(
+        `entrySlots: no fish ${String(i)} among ${String(this.entryCell.length / 2)}`,
+      );
+    }
+    return {
+      routes: [this.entryRoute[2 * i] ?? null, this.entryRoute[2 * i + 1] ?? null],
+      cells: [at(this.entryCell, 2 * i), at(this.entryCell, 2 * i + 1)],
+    };
+  }
+
   /** Entry slots that still hold a dropped way. */
   get staleEntries(): number {
     const kept = new Set(

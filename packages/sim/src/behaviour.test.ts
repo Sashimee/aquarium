@@ -621,6 +621,47 @@ describe('anchored species', { timeout: LONG }, () => {
     expect(w.behaviour.routesPending).toBe(0);
   });
 
+  it('keeps each remaining fish its own entry slots when one leaves mid-list (#1537)', () => {
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, firefish],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS.filter((a) => a.kind !== 'cave'),
+      fish: spawnMany(firefish.id, 4),
+    });
+    w.setLight(0);
+    // The leaving fish and every one after it have looked along a way of their own, each from its
+    // own cell, so a slot pair shifted by one would show as another fish's way and cells.
+    const tail = [1, 2, 3];
+    const looked = (): boolean => {
+      const seen = tail.map((i) => w.behaviour.entrySlots(i));
+      return (
+        seen.every((s) => s.routes[0] != null && s.cells.some((c) => c >= 0)) &&
+        new Set(seen.map((s) => s.routes[0])).size === tail.length &&
+        new Set(seen.map((s) => s.cells.join())).size === tail.length
+      );
+    };
+    let t = 0;
+    while (!looked()) {
+      w.step();
+      if (++t > 3000) throw new Error('the fish never looked where to join their ways');
+    }
+    const before = new Map(w.fishIds.map((id, i) => [id, w.behaviour.entrySlots(i)]));
+    const gone = w.fishIds[1];
+    if (gone === undefined) throw new Error('no fish to remove');
+    w.removeFish(gone);
+    expect(w.fishIds).not.toContain(gone);
+    expect(() => w.behaviour.entrySlots(w.count)).toThrow(RangeError);
+    for (const [i, id] of w.fishIds.entries()) {
+      const was = before.get(id);
+      if (was === undefined) throw new Error(`fish ${id} was not there before`);
+      const now = w.behaviour.entrySlots(i);
+      expect(now.cells, id).toEqual(was.cells);
+      for (const k of [0, 1]) expect(now.routes[k], `${id} slot ${String(k)}`).toBe(was.routes[k]);
+    }
+  });
+
   it('keeps where it joins the way for a while when no cell of it is in sight (#1515)', () => {
     const steps = BEHAVIOUR.caveRouteEntrySteps;
     expect(Number.isInteger(steps) && steps > 1).toBe(true);
