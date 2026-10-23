@@ -26,9 +26,9 @@ export const BEHAVIOUR = {
   burstSpeedFactor: 1.35,
   burstResponseS: 0.1,
   burstMaxS: 0.2,
-  coastReleaseFactor: 0.75,
+  coastReleaseFactor: 0.7,
   coastMaxS: 1.2,
-  glideDragFactor: 1 / 3,
+  glideTauS: 0.8,
   coastTurnGain: 0.3,
 
   stimulusRangeM: 0.4,
@@ -1683,7 +1683,14 @@ export class Behaviour {
       // with their fins as they do over rock rather than swimming arcs past it.
       const grazed = f.grazes(k);
       plan.pivot = grazed && d < length;
-      const facing = grazed ? NaN : this.facingInsideTurnCircle(i, fx, fz);
+      // Food in open water steeper below or above than the fish can pitch is reached only by
+      // swimming on along a dive or climb; turning on the spot over it would hold the fish there.
+      // Bottom foragers are left to wait for food to settle.
+      const steep =
+        sp.gait !== 'forage' &&
+        fy - floorY >= length &&
+        Math.abs(ty - py) > Math.tan(sp.maxPitch) * Math.hypot(fx - px, fz - pz);
+      const facing = grazed || steep ? NaN : this.facingInsideTurnCircle(i, fx, fz);
       if (!Number.isNaN(facing)) {
         // Swimming on at any speed past food abeam only circles it; the fish holds back until
         // the turn on the spot has brought the food round in front of it.
