@@ -369,10 +369,8 @@
 }
 
 @media (max-width: 480px) {
-  /* Status card 3.4rem, buttons 2.5rem, chip 2.75rem, camera 2.5rem, tank type 3.3rem, four 0.5rem
-     gaps and the HUD padding come to about 18rem; the gauges stay in the tank report on phones. */
   .stage {
-    padding-top: 18rem;
+    padding-top: calc(var(--hud-h, 18rem) + 0.5rem);
   }
 
   #ui .status-card .gauges {
@@ -380,9 +378,9 @@
   }
 
   #ui .round {
-    width: 2.5rem;
-    height: 2.5rem;
-    min-height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    min-height: 2.75rem;
   }
 
   .hud {
@@ -408,6 +406,7 @@
     grid-column: 1;
     grid-row: 2;
     flex-wrap: wrap;
+    gap: 0.4rem;
   }
 
   #ui .chem-chip {
@@ -452,7 +451,6 @@
 
   #ui .segmented button {
     padding: 0.3rem 0.45rem;
-    min-height: 2.5rem;
     font-size: 0.82rem;
   }
 }

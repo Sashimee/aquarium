@@ -57,9 +57,20 @@ async function expectTidyHud(page: Page, width: number, label: string): Promise<
     }
   }
   const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+  const reserve = await page
+    .locator('#ui .stage')
+    .evaluate((el) => parseFloat(getComputedStyle(el).paddingTop));
   expect(bottom, `${label}: HUD bottom stays inside the stage reserve`).toBeLessThanOrEqual(
-    18 * 16,
+    reserve,
   );
+  const tankType = page.locator('#ui .tank-type');
+  expect(
+    await tankType.evaluate((el) => getComputedStyle(el).paddingTop),
+    `${label}: switcher padding wins the cascade`,
+  ).toBe('5.6px');
+  for (const box of boxes.filter((b) => b.name !== 'status card')) {
+    expect(box.height, `${label}: ${box.name} height`).toBeGreaterThanOrEqual(44 - 0.5);
+  }
   const card = boxes.find((b) => b.name === 'status card');
   expect(card?.width ?? 0, `${label}: status card width`).toBeGreaterThanOrEqual(MIN_CARD_PX);
 }

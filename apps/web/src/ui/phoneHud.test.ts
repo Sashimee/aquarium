@@ -57,18 +57,25 @@ describe('phone HUD layout rules', () => {
     expect(tank.getPropertyValue('padding-top')).toBe('0.35rem');
   });
 
-  it('beats the base segmented padding, which sits behind the #ui id', () => {
-    const idCount = (selector: string) => (selector.match(/#/g) ?? []).length;
-    expect(idCount('#ui .tank-type')).toBeGreaterThanOrEqual(idCount('#ui .segmented'));
+  it('has no bare .tank-type rule that #ui .segmented would override', () => {
     expect(rules.has('.tank-type')).toBe(false);
   });
 
-  it('hides the gauges and shrinks the round buttons so the HUD stays short', () => {
+  it('keeps 44 px round buttons and the gauges out of the card', () => {
     expect(rule('#ui .status-card .gauges').getPropertyValue('display')).toBe('none');
-    expect(rule('#ui .round').getPropertyValue('width')).toBe('2.5rem');
+    expect(rule('#ui .round').getPropertyValue('width')).toBe('2.75rem');
+    expect(rule('#ui .round').getPropertyValue('height')).toBe('2.75rem');
+    expect(rules.has('#ui .segmented button')).toBe(true);
+    expect(rule('#ui .segmented button').getPropertyValue('min-height')).toBe('');
   });
 
-  it('reserves room under the HUD', () => {
-    expect(rule('.stage').getPropertyValue('padding-top')).toBe('18rem');
+  it('tightens the button gap so six controls fit one row', () => {
+    expect(rule('.hud-buttons').getPropertyValue('gap')).toBe('0.4rem');
+  });
+
+  it('reserves the measured HUD height instead of a fixed one', () => {
+    expect(rule('.stage').getPropertyValue('padding-top')).toBe(
+      'calc(var(--hud-h, 18rem) + 0.5rem)',
+    );
   });
 });
