@@ -393,15 +393,18 @@
   }
 
   .camera-controls {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 2;
     justify-self: start;
   }
 
   .tank-type {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: end;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
   #ui .segmented button {
