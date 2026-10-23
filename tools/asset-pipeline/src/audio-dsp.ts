@@ -103,6 +103,78 @@ export function normaliseLoudness(
   return { samples: samples.map((s) => s * gain), gainDb, peakLimited };
 }
 
+/**
+ * Look-ahead peak limiter: the gain needed at each sample is the minimum over the next
+ * `lookaheadSamples`, smoothed by a moving average over the same span, so no sample exceeds the
+ * ceiling and the gain ramps instead of clicking.
+ */
+export function limitPeaks(
+  samples: Float32Array,
+  ceilingDb: number,
+  lookaheadSamples: number,
+): Float32Array {
+  const ceiling = dbToLinear(ceilingDb);
+  const n = samples.length;
+  const need = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.abs(samples[i]!);
+    need[i] = a > ceiling ? ceiling / a : 1;
+  }
+  const lead = new Float64Array(n);
+  const window: number[] = [];
+  let head = 0;
+  for (let i = n - 1; i >= 0; i--) {
+    while (window.length > head && need[window[window.length - 1]!]! >= need[i]!) window.pop();
+    window.push(i);
+    while (window[head]! > i + lookaheadSamples) head++;
+    lead[i] = need[window[head]!]!;
+  }
+  const prefix = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) prefix[i + 1] = prefix[i]! + lead[i]!;
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const from = Math.max(0, i - lookaheadSamples + 1);
+    out[i] =
+      samples[i]! *
+      ((prefix[i + 1]! - prefix[from]! + (lookaheadSamples - (i + 1 - from)) * lead[0]!) /
+        lookaheadSamples);
+  }
+  return out;
+}
+
+/**
+ * Gain that brings the limited signal to `targetLufs`. Limiting lowers the loudness, so the gain is
+ * searched rather than computed; the search stops when the target is hit or the clip cannot reach it.
+ */
+export function limitedNormalise(
+  samples: Float32Array,
+  targetLufs: number,
+  peakCeilingDb: number,
+  lookaheadSamples: number,
+): Normalised {
+  const measured = integratedLoudness(samples);
+  if (!Number.isFinite(measured)) throw new Error('the clip is silent; nothing to normalise');
+  const render = (gainDb: number) =>
+    limitPeaks(
+      samples.map((s) => s * dbToLinear(gainDb)),
+      peakCeilingDb,
+      lookaheadSamples,
+    );
+  let low = targetLufs - measured;
+  let high = low + 30;
+  let best = render(low);
+  for (let i = 0; i < 24; i++) {
+    const mid = (low + high) / 2;
+    const candidate = render(mid);
+    if (integratedLoudness(candidate) > targetLufs) high = mid;
+    else {
+      low = mid;
+      best = candidate;
+    }
+  }
+  return { samples: best, gainDb: low, peakLimited: false };
+}
+
 /** Keeps the span from the first to the last sample at or above the threshold, plus a margin. */
 export function trimSilence(
   samples: Float32Array,

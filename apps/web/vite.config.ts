@@ -30,6 +30,7 @@ export default defineConfig({
   build: {
     target: ['es2022', 'safari16'],
     sourcemap: false,
+    manifest: true,
   },
   server: {
     port: 5173,

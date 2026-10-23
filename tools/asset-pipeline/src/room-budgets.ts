@@ -4,6 +4,7 @@ import type { AssetIndex, OutputAsset } from './index-schema.ts';
 /** PLAN section 9.2, Rooms. Shared props count toward every room that uses them. */
 export const ROOM_MAX_BYTES = 1_800_000;
 export const ALL_ROOMS_MAX_BYTES = 22_000_000;
+export const AMBIENCE_MAX_SPREAD_LU = 2;
 
 export const ROOM_GPU_BUDGETS = {
   mobile: { lod: 2, triangles: 15_000, drawCalls: 10 },
@@ -64,6 +65,29 @@ export function roomStats(room: RoomEntry, refs: RoomRefs): RoomStats {
   return { id: room.id, bytes: [...files.values()].reduce((s, b) => s + b, 0), tiers };
 }
 
+export function ambienceLoudnessProblems(
+  rooms: readonly RoomEntry[],
+  index: AssetIndex,
+  maxSpreadLu = AMBIENCE_MAX_SPREAD_LU,
+): string[] {
+  const loudness = new Map<string, number>();
+  for (const room of rooms) {
+    const id = room.ambience.asset;
+    const lufs = id === null ? undefined : builtAsset(index, 'audio', id)?.audio?.loudnessLufs;
+    if (id !== null && lufs !== undefined) loudness.set(id, lufs);
+  }
+  if (loudness.size < 2) return [];
+  const entries = [...loudness].sort((a, b) => a[1] - b[1]);
+  const quietest = entries[0];
+  const loudest = entries[entries.length - 1];
+  if (!quietest || !loudest) return [];
+  const spread = loudest[1] - quietest[1];
+  if (spread <= maxSpreadLu) return [];
+  return [
+    `room ambience loudness spans ${spread.toFixed(1)} LU (${quietest[0]} at ${quietest[1]} LUFS, ${loudest[0]} at ${loudest[1]} LUFS), over the ${maxSpreadLu} LU bound; rebuild the quiet one with a limiter or re-cut its section`,
+  ];
+}
+
 export function roomProblems(rooms: readonly RoomEntry[], refs: RoomRefs): string[] {
   const problems: string[] = [];
   const unique = new Map<string, number>();
@@ -119,6 +143,7 @@ export function roomProblems(rooms: readonly RoomEntry[], refs: RoomRefs): strin
     for (const asset of [shell, ...furniture, hdri, audio])
       for (const file of asset?.files ?? []) unique.set(file.file, file.bytes);
   }
+  problems.push(...ambienceLoudnessProblems(rooms, refs.index));
   const total = [...unique.values()].reduce((s, b) => s + b, 0);
   if (total > ALL_ROOMS_MAX_BYTES)
     problems.push(

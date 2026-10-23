@@ -1,6 +1,6 @@
 import { createReauthenticator } from './reauth.ts';
 import { safeError } from './safe-error.ts';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import {
@@ -753,13 +753,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   const root = resolve(webRoot);
   const hasWeb = existsSync(resolve(root, 'index.html'));
   if (hasWeb) {
+    const emitted = loadEmittedAssets(root);
     void app.register(fastifyStatic, {
       root,
       dotfiles: 'ignore',
       preCompressed: true,
       cacheControl: false,
       setHeaders: (res, path) => {
-        res.header('cache-control', staticCacheControl(relative(root, path)));
+        res.header('cache-control', staticCacheControl(relative(root, path), emitted));
       },
     });
   }
@@ -810,16 +811,42 @@ const SECURITY_HEADERS = {
   'cross-origin-opener-policy': 'same-origin',
 };
 
-// Vite emits content-hashed bundles flat in assets/; models and textures copied from public/ live in
-// subdirectories under stable names, so they must stay revalidatable.
-const HASHED_ASSET = /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
+// Only files Vite emitted carry a content hash; a name-shaped match would also catch public/ files
+// flattened into assets/ under stable names, which must stay revalidatable.
+const VITE_MANIFEST = '.vite/manifest.json';
 
-export function staticCacheControl(relPath: string): string {
+interface ViteManifestEntry {
+  file?: string;
+  css?: string[];
+  assets?: string[];
+}
+
+export function loadEmittedAssets(webRoot: string): ReadonlySet<string> {
+  const path = resolve(webRoot, VITE_MANIFEST);
+  let manifest: Record<string, ViteManifestEntry>;
+  try {
+    manifest = JSON.parse(readFileSync(path, 'utf8')) as Record<string, ViteManifestEntry>;
+  } catch (cause) {
+    throw new Error(
+      `Cannot read the Vite manifest at ${path}; build the web app with build.manifest enabled or unset WEB_DIST.`,
+      { cause },
+    );
+  }
+  const emitted = new Set<string>();
+  for (const entry of Object.values(manifest)) {
+    for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) {
+      if (file) emitted.add(file);
+    }
+  }
+  return emitted;
+}
+
+export function staticCacheControl(relPath: string, emitted: ReadonlySet<string>): string {
   const file = relPath
     .split(sep)
     .join('/')
     .replace(/\.(br|gz)$/, '');
-  if (HASHED_ASSET.test(file)) return 'public, max-age=31536000, immutable';
+  if (emitted.has(file)) return 'public, max-age=31536000, immutable';
   if (file.startsWith('assets/') && file.indexOf('/', 'assets/'.length) !== -1) {
     return 'public, max-age=3600';
   }

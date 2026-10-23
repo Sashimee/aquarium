@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AUDIO_RECIPES, decodeAudio, encodeM4a, processAudio, rawAudioPath } from './audio.ts';
-import { AUDIO_SAMPLE_RATE, integratedLoudness } from './audio-dsp.ts';
+import {
+  AUDIO_SAMPLE_RATE,
+  integratedLoudness,
+  limitPeaks,
+  peakOf,
+  linearToDb,
+} from './audio-dsp.ts';
 import { checkAssets, type CheckInput } from './check.ts';
 import { sha256 } from './glb.ts';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
@@ -41,6 +47,45 @@ describe('encodeM4a', () => {
   it('is byte-identical across runs', () => {
     const samples = tone(0.5, 880);
     expect(sha256(encodeM4a(samples))).toBe(sha256(encodeM4a(samples)));
+  });
+});
+
+function peaky(seconds: number): Float32Array {
+  const samples = tone(seconds, 300, 0.02);
+  for (let i = 0; i < samples.length; i += AUDIO_SAMPLE_RATE) samples[i] = 0.9;
+  return samples;
+}
+
+describe('limitPeaks', () => {
+  it('holds every sample under the ceiling and leaves quiet audio alone', () => {
+    const limited = limitPeaks(peaky(3), -6, 240);
+    expect(peakOf(limited)).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6);
+    const quiet = tone(1, 440, 0.1);
+    expect(limitPeaks(quiet, -6, 240)).toEqual(quiet);
+  });
+
+  it('limits a peak in the first samples', () => {
+    const samples = new Float32Array(2000).fill(0.01);
+    samples[3] = 1;
+    expect(peakOf(limitPeaks(samples, -6, 240))).toBeLessThanOrEqual(10 ** (-6 / 20) + 1e-6);
+  });
+});
+
+describe('processAudio with a limiter', () => {
+  const loop = { crossfadeS: 0.25 };
+  const base = { id: 'l', source: 's', role: 'l', targetLufs: -26, loop };
+
+  it('cannot reach the target by plain gain when one peak caps it', () => {
+    const plain = processAudio(peaky(4), base);
+    expect(plain.peakLimited).toBe(true);
+    expect(plain.loudnessLufs).toBeLessThan(-30);
+  });
+
+  it('reaches the target under the peak ceiling', () => {
+    const limited = processAudio(peaky(4), { ...base, limit: true });
+    expect(limited.loudnessLufs).toBeGreaterThan(-26.5);
+    expect(limited.loudnessLufs).toBeLessThan(-25.5);
+    expect(linearToDb(peakOf(limited.samples))).toBeLessThan(-1);
   });
 });
 
