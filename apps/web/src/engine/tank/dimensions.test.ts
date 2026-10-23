@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { TANK_SIZES, tankSizeSchema, type TankSize } from '@aquarium/shared';
+import {
+  TANK_SIZES,
+  tankSizeSchema,
+  tankSpaceOfSize,
+  tankWaterBounds,
+  type TankSize,
+} from '@aquarium/shared';
 import { Box3, PerspectiveCamera, Vector3 } from 'three/webgpu';
 import {
   DEFAULT_TANK,
@@ -40,6 +46,13 @@ describe('waterBounds', () => {
     expect(b.max.z).toBeCloseTo(depth / 2 - glass - WATER_INSET, 9);
     expect(b.min.y).toBeCloseTo(glass + WATER_INSET, 9);
     expect(b.max.y).toBeCloseTo(height - freeboard, 9);
+  });
+
+  it.each(tankSizeSchema.options)('matches the sim water box of the %s tank', (size) => {
+    const { min, max } = tankWaterBounds(tankSpaceOfSize(size));
+    const b = waterBounds(TANK_DIMENSIONS[size]);
+    expect(b.min.toArray()).toEqual([...min]);
+    expect(b.max.toArray()).toEqual([...max]);
   });
 });
 
