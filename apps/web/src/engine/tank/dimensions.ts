@@ -1,4 +1,4 @@
-import { TANK_SIZES, type TankSize } from '@aquarium/shared';
+import { SAND_BED, TANK_SIZES, type TankSize } from '@aquarium/shared';
 import { Box3, Vector3 } from 'three/webgpu';
 
 /** All lengths in metres. The tank sits centred on x/z with its bottom glass at y = 0. */
@@ -13,19 +13,16 @@ export interface TankDimensions {
   substrateBack: number;
 }
 
-/** Sand bed per size: a shallower bed in the 30 cm nano. The waterline comes from the shared size. */
-const FILL: Readonly<Record<TankSize, Pick<TankDimensions, 'substrateFront' | 'substrateBack'>>> = {
-  nano30: { substrateFront: 0.02, substrateBack: 0.05 },
-  standard: { substrateFront: 0.04, substrateBack: 0.1 },
-  std200: { substrateFront: 0.04, substrateBack: 0.09 },
-  long300: { substrateFront: 0.035, substrateBack: 0.09 },
-};
+function sized(size: TankSize): Readonly<TankDimensions> {
+  const { front, back } = SAND_BED[size];
+  return { ...TANK_SIZES[size].dimensions, substrateFront: front, substrateBack: back };
+}
 
 export const TANK_DIMENSIONS: Readonly<Record<TankSize, Readonly<TankDimensions>>> = {
-  nano30: { ...TANK_SIZES.nano30.dimensions, ...FILL.nano30 },
-  standard: { ...TANK_SIZES.standard.dimensions, ...FILL.standard },
-  std200: { ...TANK_SIZES.std200.dimensions, ...FILL.std200 },
-  long300: { ...TANK_SIZES.long300.dimensions, ...FILL.long300 },
+  nano30: sized('nano30'),
+  standard: sized('standard'),
+  std200: sized('std200'),
+  long300: sized('long300'),
 };
 
 /** A standard 120 x 50 x 50 cm (300 l) rimless tank with 10 mm glass. */

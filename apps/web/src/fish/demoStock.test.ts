@@ -6,6 +6,7 @@ import {
   TANK_SIZES,
   tankLengthRefusal,
   tankSizeSchema,
+  tankSpaceOfSize,
   tankWaterBounds,
   tankWaterTop,
   type PlayableBiome,
@@ -24,6 +25,7 @@ import {
   demoTank,
   NANO_DEMO_STOCKS,
   sceneAnchorsToSim,
+  tankSpaceOf,
 } from './demoStock';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import bettaContent from '../../../../content/species/betta.json';
@@ -446,5 +448,11 @@ describe('sceneAnchorsToSim', () => {
       }
     }
     expect(close / samples).toBeGreaterThan(0.75);
+  });
+});
+
+describe('tankSpaceOf', () => {
+  it.each(tankSizeSchema.options)('builds the shared tank space for %s', (size) => {
+    expect(tankSpaceOf(TANK_DIMENSIONS[size])).toEqual(tankSpaceOfSize(size));
   });
 });
