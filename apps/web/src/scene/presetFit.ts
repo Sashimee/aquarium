@@ -28,9 +28,7 @@ import { SURFACE_MARGIN } from './plants';
 
 const WALL_MARGIN = 0.005;
 /** A nano patch crowded against the front glass shrinks its disc to fit, but never below this share, so it stays a patch. */
-const MIN_PATCH_RADIUS_SHARE = 0.45;
-const MIN_HEIGHT_SHARE = 0.6;
-const EDGE_ROOM_SHARE = 0.5;
+export const MIN_PATCH_RADIUS_SHARE = 0.45;
 const PERCH_SETTLE_PASSES = 4;
 
 interface Footprint {
@@ -225,6 +223,26 @@ export function fitDepth(
   return { radius: fitted, depth: Math.sign(z) * Math.min(Math.abs(z), inner) };
 }
 
+/** Mean ground area one plant of the patch covers once the glass has shrunk it, per drawn scale². */
+function placedScale(scale: readonly [number, number]): number {
+  return ((scale[0] + scale[1]) / 2) * ((1 + GLASS_SHRINK_FLOOR) / 2);
+}
+
+/**
+ * Plants a disc of `radius` needs to cover the ground as thickly as the authored patch does: the
+ * authored plant footprints per square metre, at the size the plants end up after the glass
+ * shrinks them. Never more than the authored count.
+ */
+export function coverageCount(
+  patch: PlantPatch,
+  scale: readonly [number, number],
+  radius: number,
+): number {
+  const authored = patch.count * ((patch.scale[0] + patch.scale[1]) / 2) ** 2;
+  const wanted = (authored * (radius / patch.radius) ** 2) / placedScale(scale) ** 2;
+  return Math.min(patch.count, Math.max(MIN_KEPT_PATCH, Math.round(wanted)));
+}
+
 function fitPatch(
   patch: PlantPatch,
   size: TankSize,
@@ -248,40 +266,25 @@ function fitPatch(
   const nominal = { ...patch, scale, count, radius: patch.radius * Math.sqrt(radiusShare) };
   const x = patch.center[0] * lengthRatio;
   const z = patch.center[1] * depthRatio;
-  // Plants held above the tank's scale by MIN_PLANT_FIT are the ones the glass can squeeze.
-  const held = plantScale > k;
-
-  const limitsAt = (shrink: number) => {
-    const smallest = scale[0] * GLASS_SHRINK_FLOOR * shrink;
-    const probe = { ...nominal, scale: [smallest, smallest] as [number, number] };
-    return {
-      x: Math.max(0, halfL - reachOf(probe, 'x')),
-      z: Math.max(0, halfD - reachOf(probe, 'z')),
-    };
-  };
-
-  // Plants root up to the glass minus their reach, which grows with their height, so a patch whose
-  // authored depth is beyond that gets lower plants before it gets a smaller or shifted disc.
-  let shrink = 1;
-  if (held && Math.abs(z) + nominal.radius > limitsAt(1).z) {
-    const base = reachOf({ ...nominal, scale: [0, 0] }, 'z');
-    const slope = reachOf({ ...nominal, scale: [1, 1] }, 'z') - base;
-    const room = halfD - Math.abs(z) - nominal.radius * EDGE_ROOM_SHARE - base;
-    const wanted = slope > 0 ? room / slope : Infinity;
-    shrink = Math.max(MIN_HEIGHT_SHARE, Math.min(1, wanted / (scale[0] * GLASS_SHRINK_FLOOR)));
-  }
-  const limit = limitsAt(shrink);
-  const fitted =
-    held && z > 0 ? fitDepth(nominal.radius, z, limit.z) : { radius: nominal.radius, depth: z };
+  const smallest = scale[0] * GLASS_SHRINK_FLOOR;
+  const probe = { ...nominal, scale: [smallest, smallest] as [number, number] };
+  const limitX = Math.max(0, halfL - reachOf(probe, 'x'));
+  const limitZ = Math.max(0, halfD - reachOf(probe, 'z'));
+  // Plants held above the tank's scale by MIN_PLANT_FIT are the ones the glass squeezes. Their
+  // height is not given up for depth: a front disc shrinks to the room it has instead, and its
+  // count follows its area so the ground stays as covered as authored.
+  const squeezed = plantScale > k && z > 0;
+  const fitted = squeezed
+    ? fitDepth(nominal.radius, z, limitZ)
+    : { radius: nominal.radius, depth: z };
   const kept = fitted.radius / nominal.radius;
   return {
     ...nominal,
-    scale: [scale[0] * shrink, scale[1] * shrink],
     radius: fitted.radius,
-    count: Math.min(count, Math.max(MIN_KEPT_PATCH, Math.round(count * kept * kept))),
+    count: kept < 1 ? coverageCount(patch, scale, fitted.radius) : count,
     center: [
-      Math.max(-limit.x, Math.min(limit.x, x)),
-      Math.max(-limit.z, Math.min(limit.z, fitted.depth)),
+      Math.max(-limitX, Math.min(limitX, x)),
+      Math.max(-limitZ, Math.min(limitZ, fitted.depth)),
     ],
   };
 }

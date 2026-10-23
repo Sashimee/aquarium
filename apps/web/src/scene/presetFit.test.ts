@@ -15,10 +15,12 @@ import { AssetCatalog } from './assets';
 import { offersShelter } from './caves';
 import { loadPreset } from './preset';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
+import { GLASS_SHRINK_FLOOR } from './placement';
 import { substrateHeight } from '../engine/tank/substrate';
 import { TANK_SIZES } from '@aquarium/shared';
 import {
   fitDepth,
+  MIN_PATCH_RADIUS_SHARE,
   fitPresetToTank,
   footprintShare,
   MIN_PLANT_FIT,
@@ -214,11 +216,11 @@ describe('fitDepth', () => {
 
   it('never shrinks below its minimum share, sliding the centre inwards instead', () => {
     const { radius, depth } = fitDepth(0.05, 0.075, 0.08);
-    expect(radius).toBeCloseTo(0.05 * 0.45, 10);
+    expect(radius).toBeCloseTo(0.05 * MIN_PATCH_RADIUS_SHARE, 10);
     expect(depth).toBeCloseTo(0.08 - radius, 10);
   });
 
-  it('mirrors for the back and is symmetric in sign', () => {
+  it('is symmetric in sign', () => {
     const front = fitDepth(0.05, 0.075, 0.08);
     const back = fitDepth(0.05, -0.075, 0.08);
     expect(back.radius).toBe(front.radius);
@@ -227,7 +229,7 @@ describe('fitDepth', () => {
 
   it('centres a patch on the tank middle when even the minimum disc cannot fit', () => {
     const { radius, depth } = fitDepth(0.05, 0.05, 0.01);
-    expect(radius).toBeCloseTo(0.05 * 0.45, 10);
+    expect(radius).toBeCloseTo(0.05 * MIN_PATCH_RADIUS_SHARE, 10);
     expect(depth).toBe(0);
   });
 });
@@ -252,69 +254,62 @@ describe('plant patches the glass squeezes', () => {
   const reach = (p: PlantPatch) => 0.01 + 0.2 * p.scale[1];
   const nano = { ...DEFAULT_TANK, ...TANK_SIZES.nano30.dimensions };
   const mid = { ...DEFAULT_TANK, ...TANK_SIZES.std200.dimensions };
+  const fit = (center: [number, number], size: 'nano30' | 'std200') =>
+    fitPresetToTank(layout(center), size, size === 'nano30' ? nano : mid, boundsOf, reach)
+      .plantPatches[0];
+  const coverage = (p?: PlantPatch) => {
+    const mean = ((p?.scale[0] ?? 0) + (p?.scale[1] ?? 0)) / 2;
+    return ((p?.count ?? 0) * mean ** 2) / (Math.PI * (p?.radius ?? 1) ** 2);
+  };
 
-  it('shrinks the plants and the disc of a front patch that crosses the nano glass', () => {
-    const authored = layout([0, 0.12]);
-    const [fitted] = fitPresetToTank(authored, 'nano30', nano, boundsOf, reach).plantPatches;
-    const [unfitted] = fitPresetToTank(
-      layout([0, 0.0]),
-      'nano30',
-      nano,
-      boundsOf,
-      reach,
-    ).plantPatches;
-    expect(fitted?.scale[0]).toBeLessThan(unfitted?.scale[0] ?? 0);
-    expect(fitted?.radius).toBeLessThan(unfitted?.radius ?? 0);
-    expect(fitted?.count).toBeLessThan(unfitted?.count ?? 0);
+  it('shrinks the disc of a front patch that crosses the nano glass, keeping plant height', () => {
+    const fitted = fit([0, 0.12], 'nano30');
+    const open = fit([0, 0], 'nano30');
+    expect(fitted?.radius).toBeLessThan(open?.radius ?? 0);
+    expect(fitted?.count).toBeLessThan(open?.count ?? 0);
+    expect(fitted?.scale).toEqual(open?.scale);
   });
 
-  it('keeps the density of a disc that shrank', () => {
-    const [fitted] = fitPresetToTank(
-      layout([0, 0.12]),
-      'nano30',
-      nano,
-      boundsOf,
-      reach,
-    ).plantPatches;
-    const [open] = fitPresetToTank(layout([0, 0]), 'nano30', nano, boundsOf, reach).plantPatches;
-    const density = (p?: PlantPatch) => (p?.count ?? 0) / (Math.PI * (p?.radius ?? 1) ** 2);
-    expect(density(fitted)).toBeGreaterThan(density(open) * 0.6);
-    expect(density(fitted)).toBeLessThan(density(open) * 1.6);
+  it('keeps the ground as covered as the authored patch, not as dense in plants', () => {
+    const fitted = fit([0, 0.12], 'nano30');
+    const authored = coverage(patch([0, 0.12]));
+    const placed = coverage({
+      ...(fitted as PlantPatch),
+      scale: [
+        (fitted?.scale[0] ?? 0) * ((1 + GLASS_SHRINK_FLOOR) / 2),
+        (fitted?.scale[1] ?? 0) * ((1 + GLASS_SHRINK_FLOOR) / 2),
+      ],
+    });
+    expect(placed).toBeGreaterThan(authored * 0.8);
+    expect(placed).toBeLessThan(authored * 1.25);
   });
 
-  it('lowers the plants of a back patch rather than shrinking its disc', () => {
-    const [fitted] = fitPresetToTank(
-      layout([0, -0.12]),
-      'nano30',
-      nano,
-      boundsOf,
-      reach,
-    ).plantPatches;
-    const [open] = fitPresetToTank(layout([0, 0]), 'nano30', nano, boundsOf, reach).plantPatches;
-    expect(fitted?.scale[0]).toBeLessThan(open?.scale[0] ?? 0);
+  it('never lowers a patch below the plant scale the nano holds', () => {
+    const floor = Math.max(presetFit('nano30').scale, MIN_PLANT_FIT);
+    for (const z of [-0.2, -0.12, 0, 0.12, 0.2]) {
+      const fitted = fit([0, z], 'nano30');
+      expect(fitted?.scale[0], `z ${z}`).toBeCloseTo(0.8 * floor, 10);
+      expect(fitted?.scale[1], `z ${z}`).toBeCloseTo(floor, 10);
+    }
+  });
+
+  it('leaves back patches at their authored depth and size', () => {
+    const fitted = fit([0, -0.12], 'nano30');
+    const open = fit([0, 0], 'nano30');
     expect(fitted?.radius).toBe(open?.radius);
     expect(fitted?.count).toBe(open?.count);
   });
 
   it('leaves a patch alone that does not cross the nano glass', () => {
-    const [fitted] = fitPresetToTank(
-      layout([0, 0]),
-      'nano30',
-      nano,
-      boundsOf,
-      () => 0.01,
-    ).plantPatches;
-    const full = Math.max(presetFit('nano30').scale, MIN_PLANT_FIT);
-    expect(fitted?.scale[0]).toBeCloseTo(0.8 * full, 10);
+    const fitted = fit([0, 0], 'nano30');
     expect(fitted?.center[1]).toBe(0);
   });
 
-  it('does not touch a larger tank that holds no plants above its scale', () => {
-    const [fitted] = fitPresetToTank(layout([0, 0.3]), 'std200', mid, boundsOf, reach).plantPatches;
-    expect(fitted?.scale[0]).toBeCloseTo(0.8 * presetFit('std200').scale, 10);
-    expect(fitted?.radius).toBeCloseTo(
-      0.2 * Math.sqrt(Math.min(footprintShare('std200'), presetFit('std200').depthRatio)),
-      10,
-    );
+  it('treats a front patch on a larger tank like any other, whether or not it crosses', () => {
+    const crossing = fit([0, 0.3], 'std200');
+    const inside = fit([0, 0], 'std200');
+    expect(crossing?.radius).toBe(inside?.radius);
+    expect(crossing?.count).toBe(inside?.count);
+    expect(crossing?.scale).toEqual(inside?.scale);
   });
 });
