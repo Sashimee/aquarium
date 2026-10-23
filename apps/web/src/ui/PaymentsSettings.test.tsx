@@ -104,36 +104,65 @@ describe('purchase settings', () => {
     expect(api.setAdultConfirmation).toHaveBeenCalledWith(true, undefined);
   });
 
-  it('says the password is wrong on a 403 when one was sent', async () => {
+  it('shows the server message on a 403 and clears the password', async () => {
     api.paymentsState.mockResolvedValue(state());
-    api.setAdultConfirmation.mockRejectedValue(new ApiRequestError(403, 'forbidden', 'x'));
+    api.setAdultConfirmation.mockRejectedValue(
+      new ApiRequestError(
+        403,
+        'forbidden',
+        'Password confirmation is required and must be correct.',
+      ),
+    );
     await show();
     await click(box());
     await type(passwordField(), 'nope');
     await submit();
-    expect(container.querySelector('[role=alert]')?.textContent).toContain('password is not right');
-    expect(passwordField()).not.toBeNull();
+    expect(container.querySelector('[role=alert]')?.textContent).toBe(
+      'Password confirmation is required and must be correct.',
+    );
+    expect(passwordField()?.value).toBe('');
   });
 
-  it('tells a passkey-only account to sign in again on a 403', async () => {
-    api.paymentsState.mockResolvedValue(state());
-    api.setAdultConfirmation.mockRejectedValue(new ApiRequestError(403, 'forbidden', 'x'));
-    await show();
-    await click(box());
-    await submit();
-    expect(container.querySelector('[role=alert]')?.textContent).toContain('Sign in again');
-  });
-
-  it('shows the wait on a 429', async () => {
+  it('tells a passkey-only account with an old session to sign in again, even if it typed a password', async () => {
     api.paymentsState.mockResolvedValue(state());
     api.setAdultConfirmation.mockRejectedValue(
-      new ApiRequestError(429, 'rate_limited', 'x', {}, 30),
+      new ApiRequestError(
+        403,
+        'forbidden',
+        'Sign in again with your passkey, then retry within 5 minutes.',
+      ),
+    );
+    await show();
+    await click(box());
+    await type(passwordField(), 'something');
+    await submit();
+    const alert = container.querySelector('[role=alert]')?.textContent;
+    expect(alert).toContain('Sign in again with your passkey');
+    expect(alert).not.toContain('not right');
+  });
+
+  it('shows the wait from the server message on a 429 without a retry-after header', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    api.setAdultConfirmation.mockRejectedValue(
+      new ApiRequestError(429, 'rate_limited', 'Too many requests. Try again in 30 s.'),
     );
     await show();
     await click(box());
     await type(passwordField(), 'pw');
     await submit();
-    expect(container.querySelector('[role=alert]')?.textContent).toContain('30 s');
+    expect(container.querySelector('[role=alert]')?.textContent).toContain('Try again in 30 s');
+  });
+
+  it('focuses the password field and links its hint', async () => {
+    api.paymentsState.mockResolvedValue(state());
+    await show();
+    await click(box());
+    const field = passwordField();
+    expect(field?.maxLength).toBe(128);
+    const hint = container.querySelector(
+      `#${CSS.escape(field?.getAttribute('aria-describedby') ?? 'x')}`,
+    );
+    expect(hint?.textContent).toContain('passkey');
   });
 
   it('withdraws without a password', async () => {

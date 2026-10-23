@@ -6,6 +6,7 @@ import {
   paymentErrorText,
   subscriptionSummary,
 } from '../sync/payments';
+import { ApiRequestError } from './api';
 import { useApi } from './context';
 
 type Loaded =
@@ -108,7 +109,10 @@ export function PaymentsSettings() {
                 return next;
               },
               undefined,
-              (error) => adultConfirmationErrorText(error, sent !== ''),
+              (error) => {
+                if (error instanceof ApiRequestError && error.status === 403) setPassword('');
+                return adultConfirmationErrorText(error);
+              },
             );
           }}
         >
@@ -117,12 +121,15 @@ export function PaymentsSettings() {
             <input
               type="password"
               autoComplete="current-password"
+              autoFocus
+              maxLength={128}
+              aria-describedby={`${id}-pw`}
               value={password}
               disabled={busy}
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
-          <p className="hint">
+          <p id={`${id}-pw`} className="hint">
             Leave it empty if you sign in with a passkey only; you must have signed in within the
             last 5 minutes.
           </p>

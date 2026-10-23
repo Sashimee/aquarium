@@ -104,7 +104,9 @@ export function paymentErrorText(error: unknown): string {
     case 'rate_limited':
       return error.retryAfterSeconds
         ? `Too many attempts. Try again in ${error.retryAfterSeconds} s.`
-        : 'Too many attempts. Try again in a little while.';
+        : error.message.includes('Try again in')
+          ? error.message
+          : 'Too many attempts. Try again in a little while.';
     case 'network':
     case 'timeout':
       return 'Could not reach the server. Nothing was charged; try again.';
@@ -113,11 +115,9 @@ export function paymentErrorText(error: unknown): string {
   }
 }
 
-export function adultConfirmationErrorText(error: unknown, passwordSent: boolean): string {
+export function adultConfirmationErrorText(error: unknown): string {
   if (error instanceof ApiRequestError && error.status === 403 && error.code === 'forbidden') {
-    return passwordSent
-      ? 'That password is not right. Check it and try again.'
-      : 'Sign in again with your passkey, then confirm within 5 minutes. If your account has a password, enter it.';
+    return error.message;
   }
   return paymentErrorText(error);
 }

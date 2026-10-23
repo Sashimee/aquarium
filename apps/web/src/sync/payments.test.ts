@@ -124,15 +124,26 @@ describe('paymentErrorText', () => {
 });
 
 describe('adultConfirmationErrorText', () => {
-  const forbidden = new ApiRequestError(403, 'forbidden', 'x');
-  it('separates a wrong password from a stale passkey session', () => {
-    expect(adultConfirmationErrorText(forbidden, true)).toContain('password is not right');
-    expect(adultConfirmationErrorText(forbidden, false)).toContain('Sign in again');
+  it('shows the server message for a forbidden answer', () => {
+    const message = 'Sign in again with your passkey, then retry within 5 minutes.';
+    expect(adultConfirmationErrorText(new ApiRequestError(403, 'forbidden', message))).toBe(
+      message,
+    );
   });
   it('falls back to the payment wording for other failures', () => {
     expect(
-      adultConfirmationErrorText(new ApiRequestError(429, 'rate_limited', 'x', {}, 9), true),
+      adultConfirmationErrorText(new ApiRequestError(429, 'rate_limited', 'x', {}, 9)),
     ).toContain('9 s');
+  });
+  it('reads the wait from a 429 message when there is no retry-after header', () => {
+    expect(
+      paymentErrorText(
+        new ApiRequestError(429, 'rate_limited', 'Too many requests. Try again in 30 s.'),
+      ),
+    ).toBe('Too many requests. Try again in 30 s.');
+    expect(paymentErrorText(new ApiRequestError(429, 'rate_limited', 'x'))).toContain(
+      'a little while',
+    );
   });
 });
 
