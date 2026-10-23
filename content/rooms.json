@@ -15,7 +15,11 @@
       "sound": "audio/freesound-329533/freesound-329533.m4a",
       "asset": "freesound-329533"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#fff1d6",
+      "ambient": "#ffe9cc"
+    }
   },
   {
     "id": "room-bedroom",
@@ -33,7 +37,11 @@
       "sound": "audio/freesound-630612/freesound-630612.m4a",
       "asset": "freesound-630612"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#ffd9b0",
+      "ambient": "#e9dcff"
+    }
   },
   {
     "id": "room-shop",
@@ -51,7 +59,11 @@
       "sound": "audio/freesound-764641/freesound-764641.m4a",
       "asset": "freesound-764641"
     },
-    "hasWindow": false
+    "hasWindow": false,
+    "swatch": {
+      "key": "#f2f8ff",
+      "ambient": "#dfeeff"
+    }
   },
   {
     "id": "room-office",
@@ -69,7 +81,11 @@
       "sound": "audio/freesound-327497/freesound-327497.m4a",
       "asset": "freesound-327497"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#fff6e5",
+      "ambient": "#eef2ff"
+    }
   },
   {
     "id": "room-loft",
@@ -87,7 +103,11 @@
       "sound": "audio/freesound-330427/freesound-330427.m4a",
       "asset": "freesound-330427"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#ffe2c2",
+      "ambient": "#d8e4ff"
+    }
   },
   {
     "id": "room-zen",
@@ -105,7 +125,11 @@
       "sound": "audio/freesound-629951/freesound-629951.m4a",
       "asset": "freesound-629951"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#fff3dc",
+      "ambient": "#f1ead6"
+    }
   },
   {
     "id": "room-beach",
@@ -123,7 +147,11 @@
       "sound": "audio/freesound-852826/freesound-852826.m4a",
       "asset": "freesound-852826"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#fff8e0",
+      "ambient": "#d9f0ff"
+    }
   },
   {
     "id": "room-cabin",
@@ -141,7 +169,11 @@
       "sound": "audio/freesound-346321/freesound-346321.m4a",
       "asset": "freesound-346321"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#ffcf99",
+      "ambient": "#f0dcc2"
+    }
   },
   {
     "id": "room-sushi",
@@ -159,7 +191,11 @@
       "sound": "audio/freesound-723834/freesound-723834.m4a",
       "asset": "freesound-723834"
     },
-    "hasWindow": false
+    "hasWindow": false,
+    "swatch": {
+      "key": "#ffb877",
+      "ambient": "#ffe0c2"
+    }
   },
   {
     "id": "room-library",
@@ -173,7 +209,11 @@
       "sound": "audio/freesound-620683/freesound-620683.m4a",
       "asset": "freesound-620683"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#ffd7a1",
+      "ambient": "#e8d9c0"
+    }
   },
   {
     "id": "room-public-aquarium",
@@ -191,7 +231,11 @@
       "sound": "audio/freesound-393689/freesound-393689.m4a",
       "asset": "freesound-393689"
     },
-    "hasWindow": false
+    "hasWindow": false,
+    "swatch": {
+      "key": "#9fd0ff",
+      "ambient": "#4a78a8"
+    }
   },
   {
     "id": "room-submarine",
@@ -205,6 +249,10 @@
       "sound": "audio/freesound-438735/freesound-438735.m4a",
       "asset": "freesound-438735"
     },
-    "hasWindow": true
+    "hasWindow": true,
+    "swatch": {
+      "key": "#b8e6ff",
+      "ambient": "#3d6a8a"
+    }
   }
 ]
