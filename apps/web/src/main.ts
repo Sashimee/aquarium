@@ -42,7 +42,7 @@ import { CoralFeed } from './sync/coralFeed';
 import { PlantFeed } from './sync/plantFeed';
 import { RoomSeedFeed } from './sync/roomSeed';
 import { bindPump, WaveMakerFeed } from './sync/waveMakerFeed';
-import { awaitTankModules } from './tankLoad';
+import { awaitAppModules } from './tankLoad';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -62,6 +62,7 @@ async function boot(): Promise<void> {
   const container = requireElement('app');
   const uiRoot = requireElement('ui');
   const tank = import('./tank');
+  const roomCode = import('./engine/room');
 
   const events = new EventBus<EngineEvents>(undefined, ['engine:ready']);
   const interaction = new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS);
@@ -127,10 +128,11 @@ async function boot(): Promise<void> {
     liveEngine?.setClock(clock);
   });
   let modules: Awaited<typeof tank>;
+  let roomModule: Awaited<typeof roomCode>;
   let engine: Engine;
   let assetWatch: AssetWatch;
   try {
-    modules = await awaitTankModules(tank, events);
+    [modules, roomModule] = await awaitAppModules(tank, roomCode, events);
     tracker.reach('code');
     const engineOptions = engineOptionsFor(window.location.search);
     if (!clockPressed) pinnedClock = engineOptions.clock;
@@ -184,7 +186,7 @@ async function boot(): Promise<void> {
     },
   });
 
-  const { RoomLight } = await import('./engine/room');
+  const { RoomLight } = roomModule;
   const roomLight = bindRoomLight({
     shown: shownRoom,
     room: () => engine.room,

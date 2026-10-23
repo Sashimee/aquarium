@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventBus, type EngineEvents } from './engine/events';
-import { awaitTankModules, TANK_LOAD_FAILED } from './tankLoad';
+import { awaitAppModules, awaitTankModules, TANK_LOAD_FAILED } from './tankLoad';
 
 function recordErrors() {
   const events = new EventBus<EngineEvents>();
@@ -35,5 +35,26 @@ describe('awaitTankModules', () => {
       cause: 'offline',
     });
     expect(errors).toEqual([{ message: 'The tank code failed to load', cause: 'offline' }]);
+  });
+});
+
+describe('awaitAppModules', () => {
+  it('resolves both modules in order', async () => {
+    const { events, errors } = recordErrors();
+    let releaseTank: (value: string) => void = () => {};
+    const tank = new Promise<string>((resolve) => (releaseTank = resolve));
+    const room = Promise.resolve('room');
+    const both = awaitAppModules(tank, room, events);
+    releaseTank('tank');
+    await expect(both).resolves.toEqual(['tank', 'room']);
+    expect(errors).toEqual([]);
+  });
+
+  it('reports a failed room import like a failed tank import', async () => {
+    const { events, errors } = recordErrors();
+    const cause = new TypeError('Failed to fetch dynamically imported module: room.js');
+    const rejection = awaitAppModules(Promise.resolve('tank'), Promise.reject(cause), events);
+    await expect(rejection).rejects.toThrow(TANK_LOAD_FAILED);
+    expect(errors).toEqual([{ message: 'The tank code failed to load', cause }]);
   });
 });

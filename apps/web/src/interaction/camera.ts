@@ -37,6 +37,8 @@ export interface RoomVolume {
 }
 
 const ROOM_MARGIN = 0.1;
+const ARC_ROOM_SAMPLES = 24;
+const ARC_KEEP_SIDE = 0.3;
 const ROOM_SEARCH_STEPS = 64;
 const ROOM_SAFE_PITCH = 0.1;
 
@@ -142,6 +144,8 @@ export class CameraRig {
   private eye: Vec3;
   private look: Vec3;
   private transitioning = false;
+  private arcSign = 0;
+  private arcYaw = 0;
 
   constructor(
     private readonly camera: CameraLike,
@@ -284,10 +288,16 @@ export class CameraRig {
     if (!Number.isFinite(dtSeconds)) return;
     const dt = clamp(dtSeconds, 0, MAX_DT);
     if (this.modeValue === 'focus') this.refreshFocus();
-    const goal = this.goal();
+    let goal = this.goal();
     const rate = this.transitioning ? TRANSITION_RATE : FOLLOW_RATE;
     const alpha = this.reducedMotion ? 1 : 1 - Math.exp(-rate * dt);
-    this.eye = this.chase(this.eye, goal.eye, alpha);
+    const from = this.eye;
+    this.eye = this.chase(from, goal.eye, alpha);
+    if (this.modeValue === 'orbit' && !this.insideGlass(from)) {
+      this.eye = this.orbitStep(from, goal.eye, alpha) ?? this.eye;
+    }
+    goal = this.goal();
+    if (length(sub(this.eye, goal.eye)) < SETTLED_EPSILON) this.arcSign = 0;
     this.look = this.chase(this.look, goal.look, alpha);
     if (
       this.transitioning &&
@@ -297,6 +307,10 @@ export class CameraRig {
       this.transitioning = false;
     }
     this.apply();
+  }
+
+  get goalPosition(): Readonly<Vec3> {
+    return this.goal().eye;
   }
 
   get position(): Readonly<Vec3> {
@@ -356,6 +370,66 @@ export class CameraRig {
   }
 
   /**
+   * Moves the outside eye in angle space about the tank's middle, so it never crosses the glass.
+   * The turn goes the short way unless the room leaves no space along it, and keeps its side while
+   * the goal heading barely moves.
+   */
+  private orbitStep(from: Vec3, goalEye: Vec3, alpha: number): Vec3 | null {
+    const t = this.orbitTarget;
+    const o = sub(from, t);
+    const r0 = length(o);
+    const g = sub(goalEye, t);
+    const rg = length(g);
+    if (r0 < 1e-6 || rg < 1e-6) return null;
+    const yaw0 = Math.atan2(o.x, o.z);
+    const pitch0 = Math.asin(clamp(o.y / r0, -1, 1));
+    const yawG = Math.atan2(g.x, g.z);
+    const pitchG = Math.asin(clamp(g.y / rg, -1, 1));
+    const turn = Math.PI * 2;
+    const branch = (sign: number): number => {
+      return sign * ((((sign * (yawG - yaw0)) % turn) + turn) % turn);
+    };
+    const fits = (d: number): boolean => {
+      for (let i = 1; i <= ARC_ROOM_SAMPLES; i++) {
+        const f = i / ARC_ROOM_SAMPLES;
+        const l = this.orbitLimits(yaw0 + d * f, pitch0 + (pitchG - pitch0) * f);
+        if (l.max < l.min) return false;
+      }
+      return true;
+    };
+    const wrapped = Math.atan2(Math.sin(yawG - this.arcYaw), Math.cos(yawG - this.arcYaw));
+    const kept =
+      this.arcSign !== 0 && Math.abs(wrapped) < ARC_KEEP_SIDE ? branch(this.arcSign) : NaN;
+    let d = Math.abs(kept) <= Math.PI + ARC_KEEP_SIDE ? kept : NaN;
+    if (Number.isNaN(d) || (this.room && Math.abs(wrapped) > 1e-9 && !fits(d))) {
+      const forward = branch(1);
+      const backward = branch(-1);
+      const [first, second] =
+        Math.abs(forward) <= Math.abs(backward) ? [forward, backward] : [backward, forward];
+      d =
+        !this.room || Math.abs(first) < 1e-6 || fits(first) ? first : fits(second) ? second : first;
+    }
+    this.arcSign = d < 0 ? -1 : 1;
+    this.arcYaw = yawG;
+    const yaw = yaw0 + d * alpha;
+    const pitch = pitch0 + (pitchG - pitch0) * alpha;
+    let r = r0 + (rg - r0) * alpha;
+    const limits = this.orbitLimits(yaw, pitch);
+    if (limits.max >= limits.min) {
+      const { min: glassMin, max: glassMax } = this.glassBox();
+      const clear =
+        distanceToBoxExit(t, sphericalOffset(yaw, pitch, 1), glassMin, glassMax) + GLASS_CLEARANCE;
+      r = clamp(r, Math.min(limits.min, clear), limits.max);
+    }
+    const offset = sphericalOffset(yaw, pitch, r);
+    return this.keepInRoom({
+      x: t.x + offset.x,
+      y: Math.max(EYE_FLOOR, t.y + offset.y),
+      z: t.z + offset.z,
+    });
+  }
+
+  /**
    * Keeps the orbit eye outside the glass and, when a room is set, inside it. A direction the room
    * leaves no space for (behind a tank that stands close to the back wall) swings round toward
    * the front view until there is.
@@ -386,6 +460,13 @@ export class CameraRig {
     };
     if (fits(this.yaw, this.pitch)) return;
     const yaw = Math.atan2(Math.sin(this.yaw), Math.cos(this.yaw));
+    for (let i = 1; i <= ROOM_SEARCH_STEPS; i++) {
+      const y = yaw * (1 - i / ROOM_SEARCH_STEPS);
+      if (fits(y, this.pitch)) {
+        this.yaw = y;
+        return;
+      }
+    }
     for (let i = 1; i <= ROOM_SEARCH_STEPS; i++) {
       const k = 1 - i / ROOM_SEARCH_STEPS;
       const y = yaw * k;

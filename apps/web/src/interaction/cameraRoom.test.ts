@@ -42,6 +42,12 @@ function settle(rig: CameraRig) {
   for (let t = 0; t < 5; t += 1 / 60) rig.update(1 / 60);
 }
 
+const outsideGlass = (p: Vec3, d: { length: number; depth: number; height: number }) =>
+  Math.abs(p.x) >= d.length / 2 - 1e-9 ||
+  Math.abs(p.z) >= d.depth / 2 - 1e-9 ||
+  p.y <= 0 ||
+  p.y >= d.height - 1e-9;
+
 const inRoom = (p: Vec3, room: { min: Vec3; max: Vec3 }) =>
   p.x > room.min.x &&
   p.x < room.max.x &&
@@ -54,15 +60,15 @@ describe('CameraRig room limit', () => {
   it('keeps the eye inside the room at every limit of azimuth, polar angle and distance', () => {
     for (const size of sizes) {
       for (const preset of presets) {
-        const { rig, cam, room } = roomRig(size, preset);
+        const { rig, cam, room, d } = roomRig(size, preset);
         for (let yaw = -Math.PI; yaw <= Math.PI; yaw += Math.PI / 12) {
           for (const pitch of [-0.15, 0.1, 0.7, 1.35]) {
             for (const distance of [0.01, 1.6, 100]) {
               rig.setOrbit(yaw, pitch, distance);
               settle(rig);
-              expect(inRoom(cam.pos, room), `${size} ${preset} ${yaw} ${pitch} ${distance}`).toBe(
-                true,
-              );
+              const label = `${size} ${preset} ${yaw} ${pitch} ${distance}`;
+              expect(inRoom(cam.pos, room), label).toBe(true);
+              expect(outsideGlass(cam.pos, d), label).toBe(true);
             }
           }
         }
@@ -75,13 +81,101 @@ describe('CameraRig room limit', () => {
       const { rig, cam, d } = roomRig(size, 'living-room');
       rig.setOrbit(Math.PI, 0.1, 1);
       settle(rig);
-      const outside =
-        Math.abs(cam.pos.x) >= d.length / 2 ||
-        Math.abs(cam.pos.z) >= d.depth / 2 ||
-        cam.pos.y >= d.height;
-      expect(outside, size).toBe(true);
+      expect(outsideGlass(cam.pos, d), size).toBe(true);
     }
   });
+
+  it('keeps the pitch when turning the yaw alone clears the back wall', () => {
+    const { rig, cam, d } = roomRig('standard', 'living-room');
+    const elevation = () => Math.atan2(cam.pos.y - d.height / 2, Math.hypot(cam.pos.x, cam.pos.z));
+    rig.setOrbit(0.4, 0.7, 1);
+    settle(rig);
+    const before = elevation();
+    rig.setOrbit(Math.PI * 0.95, 0.7, 1);
+    settle(rig);
+    expect(elevation()).toBeCloseTo(before, 3);
+  });
+
+  it.each([30, 60, 144, 240])(
+    'arrives at the back view after a half-turn jump at %i Hz without entering the glass',
+    (hz) => {
+      for (const size of sizes) {
+        for (const zoom of [1, 0.5]) {
+          const d = TANK_DIMENSIONS[size];
+          const cam = fakeCamera();
+          const rig = new CameraRig(cam, tankBounds(d), {
+            orbitDistance: orbitDistanceFor(framingScale(d)),
+          });
+          settle(rig);
+          rig.zoom(zoom);
+          settle(rig);
+          rig.rotateBy(Math.PI, 0);
+          const goalZ = -cam.pos.z;
+          for (let t = 0; t < 10; t += 1 / hz) {
+            rig.update(1 / hz);
+            expect(outsideGlass(cam.pos, d), `${size} ${zoom} ${hz}`).toBe(true);
+          }
+          expect(cam.pos.z, `${size} ${zoom} ${hz}`).toBeLessThan(goalZ / 2);
+        }
+      }
+    },
+  );
+
+  it.each([30, 60, 144, 240])(
+    'keeps the eye inside the room and out of the glass on every frame of a half turn at %i Hz',
+    (hz) => {
+      for (const size of sizes) {
+        for (const preset of presets) {
+          for (const [from, to] of [
+            [1.8, -1.8],
+            [-1.8, 1.8],
+            [0.3, Math.PI],
+            [Math.PI, 0.3],
+          ] as const) {
+            const { rig, cam, room, d } = roomRig(size, preset);
+            rig.setOrbit(from, 0.1, 1);
+            settle(rig);
+            rig.setOrbit(to, 0.1, 1);
+            for (let t = 0; t < 10; t += 1 / hz) {
+              rig.update(1 / hz);
+              const label = `${size} ${preset} ${from}->${to} ${hz} ${t}`;
+              expect(inRoom(cam.pos, room), label).toBe(true);
+              expect(outsideGlass(cam.pos, d), label).toBe(true);
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it.each([30, 60, 144, 240])(
+    'comes to rest in the room after a long sideways drag from the front view at %i Hz',
+    (hz) => {
+      for (const size of sizes) {
+        for (const preset of presets) {
+          for (const dx of [600, -600, 300, -300, 1000]) {
+            const { rig, cam, room, d } = roomRig(size, preset);
+            settle(rig);
+            rig.drag(dx, 0);
+            const frames = Math.round(10 * hz);
+            let last = cam.pos;
+            let moved = 0;
+            for (let i = 0; i < frames; i++) {
+              rig.update(1 / hz);
+              const label = `${size} ${preset} ${dx} ${hz} ${i}`;
+              expect(inRoom(cam.pos, room), label).toBe(true);
+              expect(outsideGlass(cam.pos, d), label).toBe(true);
+              if (i >= frames - hz) {
+                moved += Math.hypot(cam.pos.x - last.x, cam.pos.y - last.y, cam.pos.z - last.z);
+              }
+              last = cam.pos;
+            }
+            expect(moved, `${size} ${preset} ${dx} ${hz}`).toBeLessThan(1e-6);
+          }
+        }
+      }
+    },
+  );
 
   it('leaves the front view untouched and allows a wide zoom out', () => {
     const { rig, cam, d } = roomRig('standard', 'office');
