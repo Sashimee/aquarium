@@ -39,7 +39,7 @@ describe('phone HUD layout rules', () => {
       rule('.hud-buttons'),
       rule('#ui .chem-chip'),
       rule('.camera-controls'),
-      rule('.tank-type'),
+      rule('#ui .tank-type'),
     ].map((r) => Number(r.getPropertyValue('grid-row')));
     expect(rows).toEqual([1, 2, 3, 4, 5]);
   });
@@ -50,13 +50,25 @@ describe('phone HUD layout rules', () => {
   });
 
   it('scrolls the tank type switcher inside its own row, with room for focus rings', () => {
-    const tank = rule('.tank-type');
+    const tank = rule('#ui .tank-type');
     expect(tank.getPropertyValue('overflow-x')).toBe('auto');
     expect(tank.getPropertyValue('max-width')).toBe('100%');
-    expect(tank.getPropertyValue('padding-block')).not.toBe('');
+    expect(tank.getPropertyValue('padding-left')).toBe('0.4rem');
+    expect(tank.getPropertyValue('padding-top')).toBe('0.35rem');
   });
 
-  it('reserves room under the taller HUD', () => {
-    expect(rule('.stage').getPropertyValue('padding-top')).toBe('14rem');
+  it('beats the base segmented padding, which sits behind the #ui id', () => {
+    const idCount = (selector: string) => (selector.match(/#/g) ?? []).length;
+    expect(idCount('#ui .tank-type')).toBeGreaterThanOrEqual(idCount('#ui .segmented'));
+    expect(rules.has('.tank-type')).toBe(false);
+  });
+
+  it('hides the gauges and shrinks the round buttons so the HUD stays short', () => {
+    expect(rule('#ui .status-card .gauges').getPropertyValue('display')).toBe('none');
+    expect(rule('#ui .round').getPropertyValue('width')).toBe('2.5rem');
+  });
+
+  it('reserves room under the HUD', () => {
+    expect(rule('.stage').getPropertyValue('padding-top')).toBe('18rem');
   });
 });

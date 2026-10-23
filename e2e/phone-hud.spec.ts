@@ -19,7 +19,7 @@ async function hudBoxes(page: Page): Promise<Box[]> {
     ['camera controls', page.locator('#ui .camera-controls')],
     ['tank type', page.locator('#ui .tank-type')],
   ];
-  const buttons = page.locator('#ui .hud-buttons > *');
+  const buttons = page.locator('#ui .hud-buttons > :not(.sr-only)');
   for (let i = 0; i < (await buttons.count()); i++) parts.push([`hud button ${i}`, buttons.nth(i)]);
   const boxes: Box[] = [];
   for (const [name, locator] of parts) {
@@ -56,6 +56,10 @@ async function expectTidyHud(page: Page, width: number, label: string): Promise<
       if (a && b) expect(overlaps(a, b), `${label}: ${a.name} overlaps ${b.name}`).toBe(false);
     }
   }
+  const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+  expect(bottom, `${label}: HUD bottom stays inside the stage reserve`).toBeLessThanOrEqual(
+    18 * 16,
+  );
   const card = boxes.find((b) => b.name === 'status card');
   expect(card?.width ?? 0, `${label}: status card width`).toBeGreaterThanOrEqual(MIN_CARD_PX);
 }

@@ -369,8 +369,20 @@
 }
 
 @media (max-width: 480px) {
+  /* Status card 3.4rem, buttons 2.5rem, chip 2.75rem, camera 2.5rem, tank type 3.3rem, four 0.5rem
+     gaps and the HUD padding come to about 18rem; the gauges stay in the tank report on phones. */
   .stage {
-    padding-top: 14rem;
+    padding-top: 18rem;
+  }
+
+  #ui .status-card .gauges {
+    display: none;
+  }
+
+  #ui .round {
+    width: 2.5rem;
+    height: 2.5rem;
+    min-height: 2.5rem;
   }
 
   .hud {
@@ -410,25 +422,25 @@
     justify-self: start;
   }
 
-  .tank-type {
+  #ui .tank-type {
     grid-column: 1;
     grid-row: 5;
     justify-self: start;
     max-width: 100%;
-    padding-block: 0.35rem;
+    padding: 0.35rem 0.4rem;
     overflow-x: auto;
     scrollbar-width: none;
   }
 
-  .tank-type[data-more-end='true'] {
+  #ui .tank-type[data-more-end='true'] {
     mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
   }
 
-  .tank-type[data-more-start='true'] {
+  #ui .tank-type[data-more-start='true'] {
     mask-image: linear-gradient(to right, transparent, #000 1.75rem);
   }
 
-  .tank-type[data-more-start='true'][data-more-end='true'] {
+  #ui .tank-type[data-more-start='true'][data-more-end='true'] {
     mask-image: linear-gradient(
       to right,
       transparent,
@@ -440,6 +452,7 @@
 
   #ui .segmented button {
     padding: 0.3rem 0.45rem;
+    min-height: 2.5rem;
     font-size: 0.82rem;
   }
 }
