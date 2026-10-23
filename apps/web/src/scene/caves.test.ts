@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Biome, DecorItem } from '@aquarium/shared';
 import { World } from '@aquarium/sim';
-import { DEFAULT_TANK, TANK_DIMENSIONS, WATER_INSET } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
 import { substrateHeight } from '../engine/tank/substrate';
-import { caveAnchor, caveAnchors } from './caves';
+import { caveAnchor, caveAnchors, waterReach } from './caves';
 import { loadPreset } from './preset';
 
 const SHELTERED: readonly Biome[] = ['reef', 'cichlid'];
@@ -82,14 +82,22 @@ describe('caveAnchor', () => {
   });
 });
 
+describe('waterReach', () => {
+  it.each(Object.entries(TANK_DIMENSIONS))('%s: matches the water box the sim uses', (_, tank) => {
+    const { min, max } = waterBounds(tank);
+    const reach = waterReach(tank);
+    expect(reach.halfX).toBe(max.x);
+    expect(reach.halfZ).toBe(max.z);
+    expect(-reach.halfX).toBe(min.x);
+    expect(-reach.halfZ).toBe(min.z);
+  });
+});
+
 describe('a shelter close to the glass', () => {
   const sizes = Object.entries(TANK_DIMENSIONS);
 
   it.each(sizes)('%s: a mouth facing the glass is dropped and the sim still builds', (_, tank) => {
-    const reach = {
-      halfX: tank.length / 2 - tank.glass - WATER_INSET,
-      halfZ: tank.depth / 2 - tank.glass - WATER_INSET,
-    };
+    const reach = waterReach(tank);
     const nearFront = reach.halfZ - 0.05;
     const facingGlass: DecorItem = {
       assetId: 'rock-pile-cave',

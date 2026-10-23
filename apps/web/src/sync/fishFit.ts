@@ -19,8 +19,9 @@ export function tankMaxFishLengthM(size: TankSize): number {
 export function adultLengthRefusal(
   species: Pick<SpeciesSummary, 'commonName' | 'lifecycle'>,
   size: TankSize,
+  quarantine: boolean,
 ): string | undefined {
   const limitM = tankMaxFishLengthM(size);
   if (species.lifecycle.maxSizeM <= limitM) return undefined;
-  return `${species.commonName} grows to ${Math.round(species.lifecycle.maxSizeM * 100)} cm, but this tank only holds fish up to ${Math.floor(limitM * 100)} cm. Choose a bigger tank.`;
+  return `${species.commonName} grows to ${Math.round(species.lifecycle.maxSizeM * 100)} cm, but this tank only holds fish up to ${Math.floor(limitM * 100)} cm. ${quarantine ? 'A quarantine tank is too small for it, so it cannot go there.' : 'Choose a bigger tank.'}`;
 }

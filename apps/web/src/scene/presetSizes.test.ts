@@ -54,9 +54,8 @@ const MAX_NUDGED_NANO_ITEMS = { freshwater: 2, reef: 7, blackwater: 3 } as const
  * size, so a tall back patch cannot settle as deep as authored.
  */
 const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
-  'nano30:vallisneria-right': [-0.02, -0.005],
-  'nano30:carpet-left': [0.015, 0.03],
-  'nano30:carpet-right': [0.01, 0.03],
+  'nano30:vallisneria-right': [-0.016, -0.008],
+  'nano30:carpet-right': [0.012, 0.019],
 };
 
 /**

@@ -1,4 +1,6 @@
-import type { Collider } from '@aquarium/shared';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { speciesContentSchema, type Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { BEHAVIOUR, grazeSpotFor, lineClear, type Anchor, type GrazeProbe } from './behaviour.ts';
 import {
@@ -24,6 +26,11 @@ import { toSimSpecies, type SpeciesInput } from './species.ts';
 import { STEP_DT, World, type FishSpawn } from './world.ts';
 
 const LONG = 60_000;
+const firefish = speciesContentSchema.parse(
+  JSON.parse(
+    readFileSync(join(import.meta.dirname, '../../../content/species/firefish.json'), 'utf8'),
+  ),
+);
 const n3 = new Float64Array(3);
 
 function at(a: ArrayLike<number>, i: number): number {
@@ -409,6 +416,38 @@ describe('anchored species', { timeout: LONG }, () => {
         night++;
       }
       expect(inside / night, `seed ${seed}`).toBeGreaterThan(0.6);
+    }
+  });
+
+  it('a firefish leaves its shoal mate for its own cave at night (FishBase, N. magnifica)', () => {
+    const cave = anchorOf('cave');
+    const length = toSimSpecies(firefish).bodyLength;
+    for (let seed = 1; seed <= 3; seed++) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: [...ARCHETYPES, firefish],
+        decor: REEF_DECOR,
+        anchors: REEF_ANCHORS,
+        fish: spawnMany(firefish.id, 2),
+      });
+      // The reef has one cave: the first firefish holds it, the second keeps a station outside.
+      expect(Array.from(w.behaviour.anchor)).toEqual([
+        w.behaviour.homes.findIndex((a) => a.id === 'cave'),
+        -1,
+      ]);
+      w.setLight(0);
+      let inside = 0;
+      let night = 0;
+      for (let t = 0; t < 6000; t++) {
+        w.step();
+        if (t < 3000) continue;
+        const s = at(w.state, 0);
+        const d = distanceTo(w, 0, cave.position);
+        if ((s === FishState.Shelter || s === FishState.Rest) && d < cave.radius + length) inside++;
+        night++;
+      }
+      expect(inside / night, `seed ${seed}`).toBeGreaterThan(0.8);
     }
   });
 

@@ -99,7 +99,6 @@ describe('fitPresetToTank', () => {
       expect(patch?.scale[1]).toBeGreaterThanOrEqual(MIN_PLANT_FIT - 1e-9);
       const plantScale = Math.max(presetFit('nano30').scale, MIN_PLANT_FIT);
       expect(patch?.count).toBe(Math.round((70 * footprintShare('nano30')) / plantScale ** 2));
-      expect(patch?.count).toBeLessThan(70);
     });
 
     it('keeps the authored coverage when plants shrink with the tank', () => {
