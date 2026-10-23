@@ -10,7 +10,7 @@ import { GREETING, Greeting, type Visitor } from './greeting.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
 import { Night } from './night.ts';
-import { findNooks } from './nooks.ts';
+import { NookSearch, type NookDecor } from './nooks.ts';
 import { Personalities } from './personality.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
@@ -222,6 +222,8 @@ export interface BehaviourHost {
   readonly decorSdf: Sdf | null;
   /** The bounds of every hard decor collider, sorted by id. */
   readonly decorBounds: readonly DecorBounds[];
+  /** The hard decor's shapes and reach, which say what a cached crevice search must redo. */
+  readonly decorShapes: NookDecor;
   /** Plants and other soft decor, or null when there are none. */
   readonly plantSdf: Sdf | null;
   /** Per fish `StageCode`. */
@@ -415,6 +417,7 @@ export class Behaviour {
   private given: readonly Anchor[] = [];
   /** The body length the nooks were found for, 0 when the scene's caves are used instead. */
   private nookLength = 0;
+  private readonly nookSearch = new NookSearch();
   private readonly stimuli: Stimulus[] = [];
 
   private startlePhase: Uint8Array;
@@ -742,7 +745,7 @@ export class Behaviour {
 
   /**
    * The anchor a newly added fish takes: the anemone holding the fewest of its species (they
-   * live in pairs, as `setAnchors` deals them out), or a cave none of its species holds; -1 if
+   * live in pairs, as `setAnchors` deals them out), or a cave no other swimmer holds; -1 if
    * there is none. Walkers share caves instead (see `walkerCave`).
    */
   private freeAnchor(i: number): number {
@@ -758,7 +761,13 @@ export class Behaviour {
       if (pool[k]?.kind !== kind) continue;
       let held = 0;
       for (let j = 0; j < this.host.count; j++) {
-        if (j !== i && at(this.anchor, j) === k && at(this.host.speciesIndex, j) === own) held++;
+        if (j === i || at(this.anchor, j) !== k) continue;
+        // Walkers share caves with anyone, but a swimmer's cave is its own.
+        const rival =
+          kind === 'cave'
+            ? this.speciesOf(j).walking === null
+            : at(this.host.speciesIndex, j) === own;
+        if (rival) held++;
       }
       if (held < bestHeld) {
         best = k;
@@ -865,7 +874,8 @@ export class Behaviour {
     for (let i = 0; i < this.host.count; i++) {
       if (this.speciesOf(i).walking !== null) this.restSpotSet[i] = 0;
     }
-    const ordinal = new Map<string, number>();
+    const paired = new Map<string, number>();
+    let caves = 0;
     for (let i = 0; i < this.host.count; i++) {
       const sp = this.speciesOf(i);
       const kind = sp.home === 'anemone' || sp.home === 'cave' ? sp.home : null;
@@ -877,13 +887,16 @@ export class Behaviour {
       const pool = kind === 'cave' && !takesNook(sp) ? given : homes;
       const matching = pool.flatMap((a, k) => (a.kind === kind ? [k] : []));
       if (matching.length === 0) continue;
-      const k = ordinal.get(sp.id) ?? 0;
-      ordinal.set(sp.id, k + 1);
-      // Clownfish live in pairs per anemone; gramma each take a cave of their own.
-      const pick = kind === 'anemone' ? Math.floor(k / 2) : k;
-      // A gramma without a cave of its own holds a mid-water station instead of fighting for one.
-      if (kind === 'cave' && pick >= matching.length) continue;
-      this.anchor[i] = matching[pick % matching.length] ?? -1;
+      if (kind === 'anemone') {
+        // Clownfish live in pairs per anemone.
+        const k = paired.get(sp.id) ?? 0;
+        paired.set(sp.id, k + 1);
+        this.anchor[i] = matching[Math.floor(k / 2) % matching.length] ?? -1;
+        continue;
+      }
+      // Gramma, firefish and the other cave-dwellers each take a cave of their own; one without
+      // holds a mid-water station instead of fighting for one.
+      if (caves < matching.length) this.anchor[i] = matching[caves++] ?? -1;
     }
   }
 
@@ -896,13 +909,11 @@ export class Behaviour {
     this.nookLength = this.longestCaveDweller();
     const nooks = this.nookLength > 0 ? this.nooksFor(this.nookLength, given) : [];
     this.anchors = [...given, ...nooks];
-    const ordinal = new Map<string, number>();
+    let k = 0;
     for (let i = 0; i < this.host.count; i++) {
-      const sp = this.speciesOf(i);
-      if (!takesNook(sp)) continue;
-      const k = ordinal.get(sp.id) ?? 0;
-      ordinal.set(sp.id, k + 1);
+      if (!takesNook(this.speciesOf(i))) continue;
       this.anchor[i] = k < nooks.length ? given.length + k : -1;
+      k++;
     }
   }
 
@@ -922,10 +933,11 @@ export class Behaviour {
     if (decorSdf === null) return [];
     let prefix = 'nook:';
     while (given.some((a) => a.id.startsWith(prefix))) prefix = `_${prefix}`;
-    return findNooks(
+    return this.nookSearch.find(
       { basin, cover: substrateSdf, water: sceneSdf, rock: decorSdf },
       length,
       prefix,
+      this.host.decorShapes,
     );
   }
 
@@ -2455,6 +2467,10 @@ export class Behaviour {
     if (a?.kind !== 'cave') return false;
     const calm = at(this.host.flowShelter, i) === 0;
     if (at(this.rest, i) <= 0.5 && at(this._shelterTimer, i) <= 0 && calm) return false;
+    // A shoaling cave-dweller (firefish) holds its own hole, so the pull toward shoal mates in
+    // other holes would keep it hanging in the water between them.
+    plan.align = 0;
+    plan.cohesion = 0;
     plan.comfort = BEHAVIOUR.shelterComfort;
     const length = at(this.host.bodyLength, i);
     let entryY = a.position[1];

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { Basin } from './basin.ts';
 import { DecorField, UnionSdf } from './decor.ts';
 import { royalGramma, spawnMany } from './fixtures.ts';
-import { findNooks } from './nooks.ts';
+import { findNooks, NookSearch } from './nooks.ts';
 import { FishState } from './snapshot.ts';
 import { TankSdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
@@ -51,6 +51,8 @@ const roster = readdirSync(dir)
   .map((f) => speciesContentSchema.parse(JSON.parse(readFileSync(join(dir, f), 'utf8'))));
 const pleco = roster.find((s) => s.id === 'bristlenose-pleco');
 if (pleco === undefined) throw new Error('no content/species/bristlenose-pleco.json');
+const firefish = roster.find((s) => s.id === 'firefish');
+if (firefish === undefined) throw new Error('no content/species/firefish.json');
 
 function rockField(decor: readonly Collider[]): DecorField {
   const field = new DecorField(NANO, 0.3);
@@ -243,9 +245,145 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
     expect(w.behaviour.homes.map((a) => a.id)).toEqual(['cave']);
   });
 
+  it('deals each cave-dweller a crevice of its own, whatever its species', () => {
+    const fish = [...spawnMany(royalGramma.id, 2), ...spawnMany(firefish.id, 2)];
+    const w = nano(fish, 1, NANO_ROCK, [royalGramma, firefish]);
+    const held = Array.from(w.behaviour.anchor);
+    const free = w.behaviour.homes.length;
+    expect(free).toBeGreaterThanOrEqual(2);
+    const dealt = held.filter((k) => k >= 0);
+    expect(dealt).toHaveLength(Math.min(fish.length, free));
+    expect(new Set(dealt).size).toBe(dealt.length);
+    // The same deal again when the rock moves and the crevices are found anew.
+    w.setDecor(NANO_ROCK.map((c) => (c.kind === 'sphere' ? { ...c, radius: 0.045 } : c)));
+    const again = Array.from(w.behaviour.anchor).filter((k) => k >= 0);
+    expect(new Set(again).size).toBe(again.length);
+  });
+
+  it('gives a cave to one cave-dweller only, and none to a newcomer of another species', () => {
+    const cave = {
+      id: 'cave',
+      kind: 'cave' as const,
+      position: [0, 0.05, 0.05] as const,
+      radius: 0.03,
+      facing: [0, 0, 1] as const,
+    };
+    const w = new World({
+      seed: 1,
+      tank: NANO,
+      species: [royalGramma, firefish],
+      decor: NANO_ROCK,
+      anchors: [cave],
+      fish: [...spawnMany(royalGramma.id, 1), ...spawnMany(firefish.id, 1)],
+    });
+    expect(Array.from(w.behaviour.anchor)).toEqual([0, -1]);
+    const i = w.addFish({ id: 'firefish-new', species: firefish.id });
+    expect(at(w.behaviour.anchor, i)).toBe(-1);
+    w.removeFish('royal-gramma-0');
+    const j = w.addFish({ id: 'firefish-late', species: firefish.id });
+    expect(at(w.behaviour.anchor, j)).toBe(0);
+  });
+
   it('leaves the bottom-foraging pleco on the sand rather than in a crevice', () => {
     const w = nano(spawnMany(pleco.id, 1), 1, NANO_ROCK, [pleco]);
     expect(w.behaviour.homes).toEqual([]);
+  });
+
+  describe('the cached search in a 120 cm tank', () => {
+    const TANK = { width: 1.2, height: 0.5, depth: 0.4 } as const;
+    const ROCKS: readonly Collider[] = Array.from({ length: 12 }, (_, k): Collider => {
+      const x = -0.5 + (k % 6) * 0.2;
+      const z = k < 6 ? -0.12 : 0.06;
+      return k % 2 === 0
+        ? { id: `rock-${k}`, hard: true, kind: 'sphere', center: [x, 0.02, z], radius: 0.07 }
+        : {
+            id: `rock-${k}`,
+            hard: true,
+            kind: 'box',
+            center: [x, 0.06, z],
+            halfExtents: [0.06, 0.06, 0.05],
+            rotationY: 0.2 * k,
+            rounding: 0.01,
+          };
+    });
+    const basin = Basin.fromTank(TANK);
+    const rock = new DecorField(TANK, 0.14);
+    const tank = {
+      basin,
+      rock,
+      cover: new UnionSdf([new TankSdf(basin, { surface: false }), rock]),
+      water: new UnionSdf([new TankSdf(basin), rock]),
+    };
+    const fresh = (decor: readonly Collider[]) => {
+      const f = new DecorField(TANK, 0.14);
+      f.set(decor);
+      return findNooks(
+        {
+          basin,
+          rock: f,
+          cover: new UnionSdf([new TankSdf(basin, { surface: false }), f]),
+          water: new UnionSdf([new TankSdf(basin), f]),
+        },
+        length,
+      );
+    };
+    const decor = () => ({ shapes: rock.shapes(), reach: rock.reach });
+    const moved = (id: string, change: (c: Collider) => Collider) =>
+      ROCKS.map((c) => (c.id === id ? change(c) : c));
+
+    it('tests again only near a rock that moved, and finds what a fresh search finds', () => {
+      rock.set(ROCKS);
+      const search = new NookSearch();
+      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(ROCKS));
+      const full = search.tested;
+      const nudged = moved('rock-0', (c) =>
+        c.kind === 'sphere' ? { ...c, center: [-0.48, 0.02, -0.12] } : c,
+      );
+      rock.set(nudged);
+      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(nudged));
+      expect(search.tested).toBeGreaterThan(0);
+      expect(search.tested).toBeLessThan(0.5 * full);
+
+      rock.set(ROCKS);
+      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(ROCKS));
+      rock.set(ROCKS);
+      search.find(tank, length, 'nook:', decor());
+      expect(search.tested).toBe(0);
+    });
+
+    it('sees a new shape inside the same bounds, a removed rock and a new length', () => {
+      rock.set(ROCKS);
+      const search = new NookSearch();
+      search.find(tank, length, 'nook:', decor());
+      const boxed = moved('rock-4', () => ({
+        id: 'rock-4',
+        hard: true,
+        kind: 'box',
+        center: [0.3, 0.02, -0.12],
+        halfExtents: [0.07, 0.07, 0.07],
+        rotationY: 0,
+        rounding: 0,
+      }));
+      const bounds = () => {
+        const b = rock.shapes().find((s) => s.id === 'rock-4');
+        if (b === undefined) throw new Error('no rock-4');
+        return [b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ];
+      };
+      const sphere = bounds();
+      rock.set(boxed);
+      bounds().forEach((v, k) => expect(v).toBeCloseTo(sphere[k] ?? NaN, 12));
+      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(boxed));
+      expect(search.tested).toBeGreaterThan(0);
+
+      const fewer = boxed.filter((c) => c.id !== 'rock-7');
+      rock.set(fewer);
+      expect(search.find(tank, length, 'nook:', decor())).toEqual(fresh(fewer));
+
+      search.find(tank, 0.9 * length, 'nook:', decor());
+      const shorter = new NookSearch();
+      shorter.find(tank, 0.9 * length);
+      expect(search.tested).toBe(shorter.tested);
+    });
   });
 
   it('finds them again where the rock is moved to', () => {
