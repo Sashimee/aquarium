@@ -112,6 +112,26 @@ describe('TierController', () => {
     expect(c.tier).toBe('high');
   });
 
+  it('restarts the hitch run after one normal frame', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    let t = 0;
+    for (let frame = 0; frame < 4; frame++) {
+      t += 400;
+      expect(c.sample(400, t)).toBeNull();
+    }
+    t += TARGET;
+    expect(c.sample(TARGET, t)).toBeNull();
+    const resumedAt = t;
+
+    let steppedAt: number | null = null;
+    while (steppedAt === null) {
+      t += 400;
+      if (c.sample(400, t) !== null) steppedAt = t;
+    }
+    expect(steppedAt).toBeGreaterThanOrEqual(resumedAt + DEFAULT_CONTROLLER_CONFIG.downHoldMs);
+    expect(c.tier).toBe('medium');
+  });
+
   it('does not count hitches inside a pause toward a step down', () => {
     const c = controller('high', { cooldownMs: 3000 });
     let t = 0;
