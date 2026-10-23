@@ -62,7 +62,7 @@ export interface DayLightingRig {
  * The hood colour and intensity are the daytime setting (a preset may change them); `day` (0..1)
  * fades them into the moonlight channel, and `rig.lampGain` scales the main channel only.
  * `rig.roomDaylight` dims the room around the tank. The room's level is in the environment node,
- * so `scene.environmentIntensity` stays a plain gain.
+ * so `scene.environmentIntensity` stays a plain gain; the glass mirrors it at the daylight alone.
  */
 export function applyDayLighting(rig: DayLightingRig, day: number): void {
   const { hood, caustics, interior, medium, scene } = rig;
@@ -71,6 +71,7 @@ export function applyDayLighting(rig: DayLightingRig, day: number): void {
   const outside = Math.min(1, Math.max(0, rig.roomDaylight));
   const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * outside;
   interior.roomLevel.value = room;
+  interior.reflectionLevel.value = outside;
   scene.backgroundIntensity = rig.roomBackgroundIntensity * room;
   medium.hoodInScatter.value.copy(caustics.lightRadiance.value).multiplyScalar(1 / (4 * Math.PI));
   medium.roomInScatter.value.copy(rig.ambientScatter).multiplyScalar(room);
