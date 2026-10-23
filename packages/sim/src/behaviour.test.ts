@@ -491,6 +491,62 @@ describe('anchored species', { timeout: LONG }, () => {
     }
   });
 
+  it('finds the ways to many caves a bounded piece per step after the rock moves (#1505)', () => {
+    const budget = BEHAVIOUR.caveRouteBuildUnitsPerStep;
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, firefish],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS.filter((a) => a.kind !== 'cave'),
+      fish: spawnMany(firefish.id, 8),
+    });
+    const held = Array.from(w.behaviour.anchor).filter((k) => k >= 0);
+    expect(new Set(held).size).toBeGreaterThanOrEqual(4);
+    expect(w.behaviour.routesPending).toBe(held.length);
+
+    const drain = (): { steps: number; total: number } => {
+      let steps = 0;
+      let total = 0;
+      while (w.behaviour.routesPending > 0) {
+        w.step();
+        expect(w.behaviour.routeWork, `step ${steps}`).toBeLessThanOrEqual(budget);
+        total += w.behaviour.routeWork;
+        steps++;
+        if (steps > 2000) throw new Error('the ways were never all found');
+      }
+      return { steps, total };
+    };
+    const first = drain();
+    expect(first.total).toBeGreaterThan(5 * budget);
+    expect(first.steps).toBeGreaterThan(5);
+    w.setLight(0);
+    for (let t = 0; t < 300; t++) {
+      w.step();
+      expect(w.behaviour.routeWork).toBeLessThanOrEqual(budget);
+    }
+
+    w.setDecor(
+      REEF_DECOR.map((c) =>
+        c.id === 'rock-left' && c.kind === 'sphere' ? { ...c, center: [-0.5, 0, -0.08] } : c,
+      ),
+    );
+    const queued = w.behaviour.routesPending;
+    expect(queued).toBeGreaterThanOrEqual(4);
+    const again = drain();
+    expect(again.total).toBeGreaterThan(5 * budget);
+    expect(w.behaviour.routesKept).toBeGreaterThanOrEqual(queued);
+
+    const kept = w.behaviour.routesKept;
+    const holders = w.fishIds.filter((_, i) => at(w.behaviour.anchor, i) >= 0);
+    for (const id of holders.slice(1)) w.removeFish(id);
+    expect(w.behaviour.routesKept).toBeLessThan(kept);
+    expect(w.behaviour.routesKept).toBeGreaterThan(0);
+    for (const id of [...w.fishIds]) w.removeFish(id);
+    expect(w.behaviour.routesKept).toBe(0);
+    expect(w.behaviour.routesPending).toBe(0);
+  });
+
   it('yellow tangs graze close to the rock (Montgomery et al. 1989)', () => {
     const w = reefTank(spawnMany(yellowTang.id, 2), 9);
     const length = toSimSpecies(yellowTang).bodyLength;
