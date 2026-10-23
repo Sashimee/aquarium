@@ -723,3 +723,76 @@ All CC0 unless marked.
 - **Calm music (not picked):** [Memories of a sweet summer (loop)](https://freesound.org/s/826622/) by xkeril, 20 s; [Calming Piano Loop 60bpm](https://freesound.org/s/679738/) by Seth_Makes_Sounds, 109 s (too long for the budget); [Synth pad deep ambience with beach waves](https://freesound.org/s/222448/) by waveplaySFX, 34 s.
 
 Not verified here (no audio tools on the machine): the loop seams. The pipeline must audition each loop and crossfade as planned in the entry notes.
+
+## Rooms (issue #1459, T74)
+
+Checked 2026-10-23. Twelve rooms (PLAN 9.1 "Rooms", 9.2 T74). Every pick is CC0: Poly Haven for furniture and HDRIs (licence read on https://polyhaven.com/license and the asset page, `sofa_03` spot-checked), Freesound CC0 for ambience (licence link read on each sound page; searches restricted to the CC0 filter, so no CC-BY or CC-BY-SA entry was needed). The shell stays procedural, so `assets.shell` is null in `content/rooms.json`. Raw files are in `~/.cache/aquarium-assets/raw/<asset-id>/` (Poly Haven 1k glTF plus 1k jpg textures, 1k `.hdr`, Freesound lq preview OGG). Poly Haven asset ids use hyphens (`polyhaven-sofa-03`) because `content/rooms.json` refs are slugs (`[a-z][a-z0-9-]*`).
+
+Candidate ranking is thin by design: Poly Haven has one or two plausible props per role, so the table names the pick and the nearest alternates. Alternate HDRIs were chosen from the Poly Haven list by name and category only and were not downloaded or rendered; thumbnails of the picks are linked below.
+
+### Picks
+
+| Room | Furniture (instanced glTF) | HDRI | Ambience (Freesound, CC0) |
+|---|---|---|---|
+| Living room (`room-living`) | [`polyhaven-sofa-03`](https://cdn.polyhaven.com/asset_img/thumbs/sofa_03.png?width=256&height=256), [`polyhaven-modern-coffee-table-01`](https://cdn.polyhaven.com/asset_img/thumbs/modern_coffee_table_01.png?width=256&height=256), [`polyhaven-mid-century-lounge-chair`](https://cdn.polyhaven.com/asset_img/thumbs/mid_century_lounge_chair.png?width=256&height=256) | [`polyhaven-lythwood-lounge`](https://cdn.polyhaven.com/asset_img/thumbs/lythwood_lounge.png?width=256&height=256) | [`freesound-329533`](https://freesound.org/s/329533/) leonelmail, 17 s |
+| Bedroom (`room-bedroom`) | [`polyhaven-vintage-day-bed`](https://cdn.polyhaven.com/asset_img/thumbs/vintage_day_bed.png?width=256&height=256), [`polyhaven-painted-wooden-nightstand`](https://cdn.polyhaven.com/asset_img/thumbs/painted_wooden_nightstand.png?width=256&height=256), [`polyhaven-throw-pillows-01`](https://cdn.polyhaven.com/asset_img/thumbs/throw_pillows_01.png?width=256&height=256) | [`polyhaven-hotel-room`](https://cdn.polyhaven.com/asset_img/thumbs/hotel_room.png?width=256&height=256) | [`freesound-630612`](https://freesound.org/s/630612/) xxamoney27xx, 546 s |
+| Aquarium shop (`room-shop`) | [`polyhaven-steel-frame-shelves-03`](https://cdn.polyhaven.com/asset_img/thumbs/steel_frame_shelves_03.png?width=256&height=256), [`polyhaven-cashregister-01`](https://cdn.polyhaven.com/asset_img/thumbs/CashRegister_01.png?width=256&height=256), [`polyhaven-plastic-crate-02`](https://cdn.polyhaven.com/asset_img/thumbs/plastic_crate_02.png?width=256&height=256) | [`polyhaven-decor-shop`](https://cdn.polyhaven.com/asset_img/thumbs/decor_shop.png?width=256&height=256) | [`freesound-764641`](https://freesound.org/s/764641/) VanessaRiddle, 180 s |
+| Home office (`room-office`) | [`polyhaven-metal-office-desk`](https://cdn.polyhaven.com/asset_img/thumbs/metal_office_desk.png?width=256&height=256), [`polyhaven-modern-arm-chair-01`](https://cdn.polyhaven.com/asset_img/thumbs/modern_arm_chair_01.png?width=256&height=256), [`polyhaven-classic-laptop`](https://cdn.polyhaven.com/asset_img/thumbs/classic_laptop.png?width=256&height=256) | [`polyhaven-white-home-studio`](https://cdn.polyhaven.com/asset_img/thumbs/white_home_studio.png?width=256&height=256) | [`freesound-327497`](https://freesound.org/s/327497/) DavidFrbr, 101 s |
+| City loft (`room-loft`) | [`polyhaven-sofa-02`](https://cdn.polyhaven.com/asset_img/thumbs/sofa_02.png?width=256&height=256), [`polyhaven-hanging-industrial-lamp`](https://cdn.polyhaven.com/asset_img/thumbs/hanging_industrial_lamp.png?width=256&height=256), [`polyhaven-metal-stool-01`](https://cdn.polyhaven.com/asset_img/thumbs/metal_stool_01.png?width=256&height=256) | [`polyhaven-photo-studio-loft-hall`](https://cdn.polyhaven.com/asset_img/thumbs/photo_studio_loft_hall.png?width=256&height=256) | [`freesound-330427`](https://freesound.org/s/330427/) janbezouska, 225 s |
+| Japanese zen room (`room-zen`) | [`polyhaven-chinese-tea-table`](https://cdn.polyhaven.com/asset_img/thumbs/chinese_tea_table.png?width=256&height=256), [`polyhaven-chinese-stool`](https://cdn.polyhaven.com/asset_img/thumbs/chinese_stool.png?width=256&height=256), [`polyhaven-ceramic-vase-01`](https://cdn.polyhaven.com/asset_img/thumbs/ceramic_vase_01.png?width=256&height=256) | [`polyhaven-studio-kominka-01`](https://cdn.polyhaven.com/asset_img/thumbs/studio_kominka_01.png?width=256&height=256) | [`freesound-629951`](https://freesound.org/s/629951/) Sindbad13, 48 s |
+| Beach house (`room-beach`) | [`polyhaven-outdoor-table-chair-set-01`](https://cdn.polyhaven.com/asset_img/thumbs/outdoor_table_chair_set_01.png?width=256&height=256), [`polyhaven-lifebuoy`](https://cdn.polyhaven.com/asset_img/thumbs/lifebuoy.png?width=256&height=256), [`polyhaven-painted-wooden-bench`](https://cdn.polyhaven.com/asset_img/thumbs/painted_wooden_bench.png?width=256&height=256) | [`polyhaven-illovo-beach-balcony`](https://cdn.polyhaven.com/asset_img/thumbs/illovo_beach_balcony.png?width=256&height=256) | [`freesound-852826`](https://freesound.org/s/852826/) kkenny101, 22 s |
+| Mountain cabin (`room-cabin`) | [`polyhaven-scandinavian-masonry-heater`](https://cdn.polyhaven.com/asset_img/thumbs/scandinavian_masonry_heater.png?width=256&height=256), [`polyhaven-rockingchair-01`](https://cdn.polyhaven.com/asset_img/thumbs/Rockingchair_01.png?width=256&height=256), [`polyhaven-vintage-oil-lamp`](https://cdn.polyhaven.com/asset_img/thumbs/vintage_oil_lamp.png?width=256&height=256) | [`polyhaven-cabin`](https://cdn.polyhaven.com/asset_img/thumbs/cabin.png?width=256&height=256) | [`freesound-346321`](https://freesound.org/s/346321/) nielstii, 73 s |
+| Sushi restaurant (`room-sushi`) | [`polyhaven-bar-chair-round-01`](https://cdn.polyhaven.com/asset_img/thumbs/bar_chair_round_01.png?width=256&height=256), [`polyhaven-round-wooden-table-02`](https://cdn.polyhaven.com/asset_img/thumbs/round_wooden_table_02.png?width=256&height=256), [`polyhaven-carved-wooden-plate`](https://cdn.polyhaven.com/asset_img/thumbs/carved_wooden_plate.png?width=256&height=256) | [`polyhaven-warm-restaurant`](https://cdn.polyhaven.com/asset_img/thumbs/warm_restaurant.png?width=256&height=256) | [`freesound-723834`](https://freesound.org/s/723834/) ivoliYT, 137 s |
+| Castle library (`room-library`) | [`polyhaven-shelf-01`](https://cdn.polyhaven.com/asset_img/thumbs/Shelf_01.png?width=256&height=256), [`polyhaven-armchair-01`](https://cdn.polyhaven.com/asset_img/thumbs/ArmChair_01.png?width=256&height=256), [`polyhaven-marble-bust-01`](https://cdn.polyhaven.com/asset_img/thumbs/marble_bust_01.png?width=256&height=256) | [`polyhaven-reading-room`](https://cdn.polyhaven.com/asset_img/thumbs/reading_room.png?width=256&height=256) | [`freesound-620683`](https://freesound.org/s/620683/) xkeril, 581 s |
+| Public aquarium hall (`room-public-aquarium`) | [`polyhaven-painted-wooden-bench`](https://cdn.polyhaven.com/asset_img/thumbs/painted_wooden_bench.png?width=256&height=256), [`polyhaven-wetfloorsign-01`](https://cdn.polyhaven.com/asset_img/thumbs/WetFloorSign_01.png?width=256&height=256), [`polyhaven-bronze-whale-statue`](https://cdn.polyhaven.com/asset_img/thumbs/bronze_whale_statue.png?width=256&height=256) | [`polyhaven-ushaka-sea-world-aquarium`](https://cdn.polyhaven.com/asset_img/thumbs/ushaka_sea_world_aquarium.png?width=256&height=256) | [`freesound-393689`](https://freesound.org/s/393689/) hz37, 70 s |
+| Submarine (`room-submarine`) | [`polyhaven-seadogs-compass`](https://cdn.polyhaven.com/asset_img/thumbs/seadogs_compass.png?width=256&height=256), [`polyhaven-metal-stool-01`](https://cdn.polyhaven.com/asset_img/thumbs/metal_stool_01.png?width=256&height=256) | [`polyhaven-industrial-pipe-and-valve-01`](https://cdn.polyhaven.com/asset_img/thumbs/industrial_pipe_and_valve_01.png?width=256&height=256) | [`freesound-438735`](https://freesound.org/s/438735/) craigsmith, 24 s |
+
+### Alternates considered
+
+- **Living room:** Audio: 646561 cynthia_1968 "Ambient living room background" (70 s); 501008 RavenWolfProds (rain and wind chimes, 207 s). HDRI: `lythwood_room`, `small_empty_house`.
+- **Bedroom:** Audio: 172666 UnderlinedDesigns "Ambient Wind" (621 s). HDRI: `lythwood_room`, `en_suite`.
+- **Aquarium shop:** Audio: 320463 Alcappuccino "Bakery Shop (1) in Vienna" (41 s). HDRI: `phone_shop`, `witsand_woolshop`.
+- **Home office:** Audio: 541117 Chelly01 "Office ambience" (142 s); 579568 leonelmail "Office ambience - call center 3" (180 s, voices). HDRI: `unfinished_office`.
+- **City loft:** Audio: 332785 be_a_hero_not_a_patriot "city ambience ... night, distant traffic" (209 s). HDRI: `photo_studio_01`.
+- **Japanese zen room:** Audio: 75273 markystar "tokyo_park_at_dusk" (124 s, may carry traffic); 193784 jhumbucker "Water fountain" (14 s). HDRI: `studio_kominka_02`, `ninomaru_teien` (outdoor).
+- **Beach house:** Audio: 848039 richwise "Gentle waves at Priory Bay" (199 s). HDRI: `sundowner_deck`.
+- **Mountain cabin:** Audio: 512685 WavJunction.com "Fireplace Crackles" (16 s, loopable length); 382616 Davor (80 s). HDRI: `fireplace`, `pine_attic`.
+- **Sushi restaurant:** Audio: 75249 markystar "loud japanese diner" (127 s, too loud); 616359 rozhkovkirill "Indian Restaurant Dubai" (304 s). HDRI: `warm_bar`, `warm_reception_dinner`.
+- **Castle library:** Audio: 613781 xkeril "Library ambience" (434 s); 400849 mindhealer "A small library in Korea" (243 s). HDRI: `old_hall`, `lythwood_lounge`.
+- **Public aquarium hall:** Audio: 614927 Rimmer "Indoor pool1" (19 s, water echo, no crowd). HDRI: `hall_of_finfish`, `museum_of_history`.
+- **Submarine:** Audio: none close (the search for "submarine interior hum" returned one CC0 hit). HDRI: `moon_lab`, `aft_lounge`.
+
+### Size and GPU figures
+
+These are the **source** figures measured from the downloaded files. Nothing is built yet: `tools/asset-pipeline` has no room path, so shipped bytes, LOD triangle counts and draw calls after merging are not measured. Triangle counts are the full-detail Poly Haven mesh (the glTF at every resolution points at the same `.bin`). Draw calls are glTF primitives, unmerged. Texture figures are the 1k jpg files before KTX2.
+
+| Room | Furniture | Source tris | Draw calls | jpg textures (MB) | geometry bin (MB) | HDRI .hdr (MB) | audio raw (MB) |
+|---|---|---|---|---|---|---|---|
+| Living room | sofa_03, modern_coffee_table_01, mid_century_lounge_chair | 18656 | 4 | 3.52 | 0.56 | 1.54 | 0.13 |
+| Bedroom | vintage_day_bed, painted_wooden_nightstand, throw_pillows_01 | 9547 | 5 | 5.51 | 0.25 | 1.57 | 5.24 |
+| Aquarium shop | steel_frame_shelves_03, CashRegister_01, plastic_crate_02 | 24163 | 9 | 5.62 | 0.80 | 1.63 | 1.55 |
+| Home office | metal_office_desk, modern_arm_chair_01, classic_laptop | 30264 | 15 | 5.48 | 0.98 | 1.52 | 0.88 |
+| City loft | sofa_02, hanging_industrial_lamp, metal_stool_01 | 20592 | 5 | 5.31 | 0.64 | 1.64 | 2.12 |
+| Japanese zen room | chinese_tea_table, chinese_stool, ceramic_vase_01 | 13894 | 3 | 3.39 | 0.39 | 1.43 | 0.64 |
+| Beach house | outdoor_table_chair_set_01, lifebuoy, painted_wooden_bench | 21186 | 5 | 5.10 | 0.74 | 1.48 | 0.18 |
+| Mountain cabin | scandinavian_masonry_heater, Rockingchair_01, vintage_oil_lamp | 28424 | 5 | 4.35 | 0.97 | 1.66 | 0.73 |
+| Sushi restaurant | bar_chair_round_01, round_wooden_table_02, carved_wooden_plate | 20739 | 3 | 5.08 | 1.20 | 1.66 | 0.98 |
+| Castle library | Shelf_01, ArmChair_01, marble_bust_01 | 23264 | 3 | 1.68 | 0.58 | 1.62 | 5.19 |
+| Public aquarium hall | painted_wooden_bench, WetFloorSign_01, bronze_whale_statue | 4674 | 3 | 4.30 | 0.14 | 1.73 | 0.67 |
+| Submarine | seadogs_compass, metal_stool_01 | 19979 | 4 | 4.37 | 0.60 | 1.71 | 0.18 |
+
+Against the PLAN 9.2 limits (mobile: 15 k triangles, 10 draw calls, 8 MB geometry and textures; high: 60 k, 30 draw calls, 24 MB):
+
+- Over the **mobile triangle limit** at source: living room, shop, home office, loft, beach, cabin, sushi, library, submarine. The pipeline has to decimate (the LOD ladder) so each room lands at or under 15 k on mobile; all twelve are under the 60 k high limit at source.
+- Over the **mobile draw-call limit** at source: home office (15 primitives, `metal_office_desk` alone has 9). Merge by material or drop to the low LOD before shipping. Every other room is 9 or fewer.
+- **Repo size:** the 1.8 MB per-room budget includes the HDRI and audio. A 1024x512 HDRI is 0.52 MB as BC6H plus mips, about 0.7 MB; 16 s of 64 kbit/s AAC is about 0.13 MB. That leaves roughly 0.95 MB per room for three props, so the pipeline needs to cut prop textures to 512 px (or lower) in ETC1S/UASTC KTX2 and likely ship the room HDRI below 1k. This is an estimate, not a measurement; the assets are not built.
+- The two long audio sources (Bedroom, Castle library) are 5 MB raw lq previews of 9 to 10 minute recordings; only a 12 to 16 s loop ships.
+
+### Caveats
+
+- No audio tools on the sourcing machine, so no ambience was auditioned. Chosen from title, duration and tags only: `freesound-764641` ("Shop Tone") and `freesound-393689` (a large-hall walla recording with Dutch and English speech, picked as a stand-in for a public aquarium hall) are the least certain. The pipeline step that trims a loop is also where each file gets listened to.
+- Raw audio is the Freesound lq preview OGG (the originals need a login). Same trade-off as the T59 sounds.
+- Poly Haven has no Japanese furniture. The zen room uses `chinese_tea_table`, `chinese_stool` and `ceramic_vase_01`, which read as East Asian but not strictly Japanese. A Sketchfab CC0/CC-BY search for a chabudai, tatami props and a shoji screen is the upgrade path.
+- The castle library has no book prop: the only Poly Haven book set (`book_encyclopedia_set_01`) is 67 k triangles in 40 draw calls and was dropped. Books are better done as a procedural shelf texture.
+- The submarine has two props, not three: the caged lamp candidates were 23 k to 27 k triangles with 1 to 11 draw calls.
+- `polyhaven-painted-wooden-bench` serves the beach house and the public aquarium hall, and `polyhaven-metal-stool-01` the loft and the submarine; they are one manifest entry each, so a room-by-room size check must count them per room while the repo stores them once.
