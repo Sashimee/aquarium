@@ -12,6 +12,7 @@ import { selectNearest } from './neighbours.ts';
 import { Night } from './night.ts';
 import { NookSearch, type NookDecor } from './nooks.ts';
 import { Personalities } from './personality.ts';
+import { Route } from './routes.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
@@ -79,6 +80,10 @@ export const BEHAVIOUR = {
   excursionBodyLengths: 3,
   caveMouthBodyLengths: 1,
   caveInBodyLengths: 0.5,
+  caveRouteClearanceBodyLengths: 0.25,
+  caveRouteReachBodyLengths: 2,
+  caveRouteAheadBodyLengths: 1,
+  caveRouteRiseBodyLengths: 1,
   caveLeashBodyLengths: 2.5,
   shelterAfterStartleS: 20,
   shelterComfort: 0.4,
@@ -421,6 +426,8 @@ export class Behaviour {
   /** The body length the nooks were found for, 0 when the scene's caves are used instead. */
   private nookLength = 0;
   private readonly nookSearch = new NookSearch();
+  /** Each cave's way in, per clearance a fish needs, found when a fish first needs to go round to it. */
+  private readonly routes = new Map<Anchor, Map<number, Route>>();
   private readonly stimuli: Stimulus[] = [];
 
   private startlePhase: Uint8Array;
@@ -868,6 +875,7 @@ export class Behaviour {
    */
   private deal(): void {
     const given = this.given;
+    this.routes.clear();
     this.nookLength = given.some((a) => a.kind === 'cave') ? 0 : this.longestCaveDweller();
     const homes =
       this.nookLength > 0 ? [...given, ...this.nooksFor(this.nookLength, given)] : given;
@@ -909,6 +917,7 @@ export class Behaviour {
    */
   private redealNooks(): void {
     const given = this.given;
+    this.routes.clear();
     this.nookLength = this.longestCaveDweller();
     const nooks = this.nookLength > 0 ? this.nooksFor(this.nookLength, given) : [];
     this.anchors = [...given, ...nooks];
@@ -1201,6 +1210,7 @@ export class Behaviour {
    * covers is chosen again soon. Walker nooks are rechecked every step by `nookHolds`.
    */
   decorMoved(): void {
+    this.routes.clear();
     const { count, species } = this.host;
     for (let s = 0; s < species.length; s++) {
       const leader = at(this.groupLeader, s);
@@ -2507,9 +2517,11 @@ export class Behaviour {
 
   /**
    * Where to swim to reach an anchor: straight to it, except that a cave is entered through its
-   * mouth, so a fish beside or behind the rock first goes round to the front. A fish within half a
-   * body length of the hollow is still in it, and goes straight back to the middle: sent out round
-   * the mouth, it slid along the rock away from its crevice (#1464).
+   * mouth, so a fish beside or behind the rock follows the shortest way through the water round
+   * to it, by whichever side is open (#1499). Only where no way is found does it guess the side
+   * from where the mouth faces. A fish within half a body length of the hollow is still in it, and
+   * goes straight back to the middle: sent out round the mouth, it slid along the rock away from
+   * its crevice (#1464).
    */
   private approach(i: number, a: Anchor, ay = a.position[1]): Point3 {
     const [ax, , az] = a.position;
@@ -2530,7 +2542,10 @@ export class Behaviour {
       (along > 0 && lateral < a.radius)
     )
       return [ax, ay, az];
-    const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * at(this.host.bodyLength, i);
+    const length = at(this.host.bodyLength, i);
+    const way = this.wayRound(i, a, length);
+    if (way !== null) return [way[0], ay, way[1]];
+    const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * length;
     if (along < 0.5 * out && lateral >= a.radius) {
       // Beside the rock, the straight line to the mouth cuts through the cave's own wall: the
       // fish comes out past the face on its own side first, then crosses to the mouth. The point
@@ -2545,6 +2560,46 @@ export class Behaviour {
       ];
     }
     return [ax + ux * out, ay + uy * out, az + uz * out];
+  }
+
+  /**
+   * The next body length of the way through the water to cave `a` for fish `i`, or null. The way
+   * is found in plan at the hollow's height, so a fish well above or below it, over a roof say,
+   * has none. It is as wide as the fish's radius where there is one: a fish steers poorly through
+   * a slot only just thicker than its body, so takes one only when nothing wider leads in.
+   */
+  private wayRound(i: number, a: Anchor, length: number): [number, number] | null {
+    const o = i * 3;
+    if (
+      Math.abs(at(this.host.position, o + 1) - a.position[1]) >
+      BEHAVIOUR.caveRouteRiseBodyLengths * length
+    ) {
+      return null;
+    }
+    const x = at(this.host.position, o);
+    const z = at(this.host.position, o + 2);
+    const reach = BEHAVIOUR.caveRouteReachBodyLengths * length;
+    const ahead = BEHAVIOUR.caveRouteAheadBodyLengths * length;
+    return (
+      this.routeTo(a, at(this.host.radius, i)).toward(x, z, reach, ahead) ??
+      this.routeTo(a, BEHAVIOUR.caveRouteClearanceBodyLengths * length).toward(x, z, reach, ahead)
+    );
+  }
+
+  private routeTo(a: Anchor, clearance: number): Route {
+    let byClearance = this.routes.get(a);
+    if (byClearance === undefined) {
+      byClearance = new Map();
+      this.routes.set(a, byClearance);
+    }
+    let route = byClearance.get(clearance);
+    if (route === undefined) {
+      const [x, y, z] = a.position;
+      const { basin, sceneSdf } = this.host;
+      route = new Route(basin, sceneSdf, x, y, z, a.radius, clearance, 0.5 * clearance);
+      byClearance.set(clearance, route);
+    }
+    return route;
   }
 
   private startExcursion(i: number, a: Anchor, length: number): void {

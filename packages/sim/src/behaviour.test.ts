@@ -451,9 +451,9 @@ describe('anchored species', { timeout: LONG }, () => {
     }
   });
 
-  it('firefish hold crevices found in the rock all night, with room to turn in them (#1429)', () => {
+  it('firefish hold crevices found in the rock all night, with room to turn in them (#1429, #1499)', () => {
     const length = toSimSpecies(firefish).bodyLength;
-    for (let seed = 1; seed <= 4; seed++) {
+    for (let seed = 1; seed <= 16; seed++) {
       const w = new World({
         seed,
         tank: REEF_TANK,
