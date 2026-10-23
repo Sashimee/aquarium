@@ -252,6 +252,29 @@ describe('the device room from before rooms', () => {
     expect(api.saveRoom).not.toHaveBeenCalled();
   });
 
+  it('does not move a new unset tank on a later load when the device key cannot be removed', async () => {
+    const storage = {
+      ...memoryStorage({ 'aquarium.room': 'office' }),
+      removeItem: () => {
+        throw new Error('storage blocked');
+      },
+    };
+    const first = setup([tankFixture()], ['room-office'], storage);
+    first.api.saveRoom.mockResolvedValue(
+      tankFixture({ roomId: 'room-office', roomSetAt: '2026-10-23T12:00:00.000Z' }),
+    );
+    await first.session.setUser(verified);
+    await vi.waitFor(() => expect(first.api.ownedRooms).toHaveBeenCalled());
+    await first.session.refreshRooms();
+    expect(first.api.saveRoom).toHaveBeenCalledTimes(1);
+
+    const reload = setup([tankFixture({ id: TANK_A })], ['room-office'], storage);
+    await reload.session.setUser(verified);
+    await vi.waitFor(() => expect(reload.api.ownedRooms).toHaveBeenCalled());
+    await reload.session.refreshRooms();
+    expect(reload.api.saveRoom).not.toHaveBeenCalled();
+  });
+
   it('survives a storage that throws on removeItem after the migration', async () => {
     const storage = {
       ...memoryStorage({ 'aquarium.room': 'office' }),

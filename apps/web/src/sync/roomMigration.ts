@@ -1,6 +1,7 @@
 import { DEFAULT_ROOM_ID, isFreeRoom, type RoomId, type Tank } from '@aquarium/shared';
 
 export const DEVICE_ROOM_KEY = 'aquarium.room';
+export const DEVICE_ROOM_DONE_KEY = 'aquarium.room.migrated';
 
 const FROM_DEVICE: Readonly<Record<string, RoomId | null>> = {
   'living-room': 'room-living',
