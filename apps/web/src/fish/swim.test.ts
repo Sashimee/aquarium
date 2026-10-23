@@ -22,11 +22,13 @@ import {
   RESTING_VENTILATION_HZ,
   SWIM_MODES,
   SwimState,
+  type SwimSample,
   tailBeatHz,
   turnCurvature,
 } from './swim';
 
 const TAU = Math.PI * 2;
+const VMAX = 0.45;
 
 describe('tailBeatHz', () => {
   it('follows f = St·U/A with A = 0.2 L', () => {
@@ -93,7 +95,7 @@ describe('SWIM_MODES', () => {
 
 describe('SwimState', () => {
   it('integrates the phase at the Strouhal frequency and wraps it', () => {
-    const state = new SwimState(0.032, 0.3, SWIM_MODES.carangiform, 0);
+    const state = new SwimState(0.032, 0.3, SWIM_MODES.carangiform, 0, VMAX);
     state.advance(0.1, { speed: 0.12, yawRate: 0, thrust: 1, state: FishState.Cruise });
     expect(state.frequency).toBeCloseTo(5.625, 6);
     expect(state.phase).toBeCloseTo((TAU * 0.5625) % TAU, 6);
@@ -105,13 +107,13 @@ describe('SwimState', () => {
   });
 
   it('beats the pectorals at their idle rate while hovering', () => {
-    const state = new SwimState(0.12, 0.3, SWIM_MODES.labriform, 0);
+    const state = new SwimState(0.12, 0.3, SWIM_MODES.labriform, 0, VMAX);
     state.advance(0.1, { speed: 0, yawRate: 0, thrust: 1, state: FishState.Cruise });
     expect(state.finPhase).toBeCloseTo(TAU * SWIM_MODES.labriform.pectoralIdleHz * 0.1, 6);
   });
 
   it('eases the bend towards the turn instead of snapping', () => {
-    const state = new SwimState(0.05, 0.3, SWIM_MODES.subcarangiform, 0);
+    const state = new SwimState(0.05, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
     const target = turnCurvature(1, 0.1, 0.05);
     state.advance(0.02, { speed: 0.1, yawRate: 1, thrust: 1, state: FishState.Cruise });
     expect(state.curvature).toBeGreaterThan(0);
@@ -122,7 +124,7 @@ describe('SwimState', () => {
   });
 
   it('leaves the phase alone for a zero step and rejects negative ones', () => {
-    const state = new SwimState(0.05, 0.3, SWIM_MODES.carangiform, 1);
+    const state = new SwimState(0.05, 0.3, SWIM_MODES.carangiform, 1, VMAX);
     state.advance(0, { speed: 0.1, yawRate: 0, thrust: 1, state: FishState.Cruise });
     expect(state.phase).toBe(1);
     expect(() =>
@@ -144,7 +146,7 @@ describe('SwimState', () => {
     };
 
     it('lets the tail fall almost still within one tail period of a coast', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(state, 0.17, 0.6);
       expect(state.amplitude).toBeCloseTo(1, 2);
       const period = 1 / state.frequency;
@@ -155,29 +157,107 @@ describe('SwimState', () => {
     });
 
     it('fades instead of cutting the beat on the first frame of a coast', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(state, 0.17, 0.6);
       state.advance(step, { speed, yawRate: 0, thrust: 0, state: FishState.Cruise });
       expect(state.amplitude).toBeGreaterThan(0.5);
     });
 
     it('beats again within a few frames of the next kick', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(state, 0.5, 0);
       run(state, 0.1, 0.6);
       expect(state.amplitude).toBeGreaterThan(0.9);
     });
 
     it('keeps the station-holding undulation of a fish at rest', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       for (let i = 0; i < 120; i++)
         state.advance(step, { speed: 0, yawRate: 0, thrust: 0, state: FishState.Cruise });
       expect(state.amplitude).toBe(IDLE_AMPLITUDE);
     });
 
+    it('rejects a non-positive or NaN top speed', () => {
+      expect(() => new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, 0)).toThrow(RangeError);
+      expect(() => new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, Number.NaN)).toThrow(
+        RangeError,
+      );
+    });
+
     it('treats a drive outside 0..1 as its nearest bound', () => {
       expect(amplitudeScale(speed, length, 2)).toBe(1);
       expect(amplitudeScale(speed, length, -1)).toBe(0);
+    });
+  });
+
+  describe('slow powered swimming', () => {
+    // Guppy (#1533): 2.7 cm, 0.45 m/s top speed. The sim reports thrust over the drag at top
+    // speed, so holding speed v takes (v/vmax)² of it.
+    const length = 0.027;
+    const vmax = 0.45;
+    const step = 1 / 30;
+    const holding = (bodyLengthsPerS: number) => {
+      const speed = bodyLengthsPerS * length;
+      return { speed, yawRate: 0, thrust: (speed / vmax) ** 2, state: FishState.Rest };
+    };
+    const settle = (state: SwimState, sample: SwimSample, seconds: number): void => {
+      for (let t = 0; t < seconds; t += step) state.advance(step, sample);
+    };
+
+    it('keeps beating while a night guppy holds 0.4 BL/s under its own power', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, vmax);
+      const sample = holding(0.4);
+      expect(sample.thrust).toBeLessThan(1e-3);
+      settle(state, sample, 17);
+      expect(state.drive).toBeGreaterThan(0.99);
+      expect(state.amplitude).toBeCloseTo(amplitudeScale(sample.speed, length, 1), 6);
+      expect(state.amplitude).toBeGreaterThan(IDLE_AMPLITUDE);
+      expect(state.frequency).toBeCloseTo(tailBeatHz(sample.speed, length, 0.3), 9);
+    });
+
+    it('keeps beating while a resting neon swims steadily at 0.01 m/s', () => {
+      const neonLength = 0.022;
+      const neonMax = 0.5;
+      const speed = 0.01;
+      const sample = { speed, yawRate: 0, thrust: (speed / neonMax) ** 2, state: FishState.Rest };
+      expect(sample.thrust).toBeLessThan(1e-3);
+      const state = new SwimState(neonLength, 0.3, SWIM_MODES.subcarangiform, 0, neonMax);
+      settle(state, sample, 17);
+      expect(state.drive).toBeGreaterThan(0.99);
+      expect(state.amplitude).toBeCloseTo(amplitudeScale(speed, neonLength, 1), 6);
+      expect(state.amplitude).toBeGreaterThan(IDLE_AMPLITUDE);
+      expect(state.frequency).toBeCloseTo(tailBeatHz(speed, neonLength, 0.3), 9);
+    });
+
+    it('beats wider as the slow powered speed rises', () => {
+      const amplitudes = [0.1, 0.3, 0.6, 1].map((bl) => {
+        const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, vmax);
+        settle(state, holding(bl), 2);
+        return state.amplitude;
+      });
+      for (let i = 1; i < amplitudes.length; i++) {
+        expect(amplitudes[i]).toBeGreaterThan(amplitudes[i - 1] ?? Infinity);
+      }
+    });
+
+    it('still goes tail-still in a real coast at the same speed', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, vmax);
+      settle(state, { ...holding(0.4), thrust: 0 }, 2);
+      expect(state.drive).toBeLessThan(0.01);
+    });
+
+    it('glides when the thrust falls well short of the drag at its speed', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, vmax);
+      const sample = holding(3);
+      settle(state, { ...sample, thrust: sample.thrust * 0.3 }, 2);
+      expect(state.drive).toBeLessThan(0.01);
+    });
+
+    it('counts the first frame of a burst as powered', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, vmax);
+      settle(state, { ...holding(2), thrust: 0 }, 1);
+      state.advance(step, holding(2));
+      expect(state.drive).toBeGreaterThan(0.6);
     });
   });
 
@@ -196,7 +276,7 @@ describe('SwimState', () => {
     };
 
     it('starts closed and pumps at the resting rate while hovering', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       expect(state.gillOpening).toBe(0);
       const restingRate =
         RESTING_VENTILATION_HZ + (EXERTED_VENTILATION_HZ - RESTING_VENTILATION_HZ) * IDLE_AMPLITUDE;
@@ -204,7 +284,7 @@ describe('SwimState', () => {
     });
 
     it('opens and closes once per beat without leaving 0..1', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       const seen: number[] = [];
       for (let i = 0; i < 600; i++) {
         state.advance(step, cruise);
@@ -218,7 +298,7 @@ describe('SwimState', () => {
     });
 
     it('breathes harder after sustained swimming and settles back over seconds', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(state, 5, hover);
       const resting = rate(state, hover);
       run(state, 15, cruise);
@@ -230,7 +310,7 @@ describe('SwimState', () => {
     });
 
     it('does not follow a single tail kick', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(state, 5, hover);
       const resting = rate(state, hover);
       run(state, 0.17, cruise);
@@ -264,7 +344,7 @@ describe('SwimState', () => {
     const argmax = (xs: readonly number[]): number => xs.indexOf(Math.max(...xs));
 
     it('gapes a breath no wider than a share of a bite and closes fully between breaths', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       const { mouth } = trace(state, 20, cruise);
       expect(Math.min(...mouth)).toBeGreaterThanOrEqual(0);
       expect(Math.min(...mouth)).toBeLessThan(0.002);
@@ -273,7 +353,7 @@ describe('SwimState', () => {
     });
 
     it('opens its widest a fixed share of a cycle ahead of the gill covers', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(state, 10, hover);
       const { mouth, gills, phase } = trace(state, 1 / 1.2, hover);
       const atMouth = phase[argmax(mouth)] ?? Number.NaN;
@@ -283,10 +363,10 @@ describe('SwimState', () => {
     });
 
     it('pumps once per ventilation beat, faster and wider after sustained swimming', () => {
-      const resting = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const resting = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(resting, 15, hover);
       const atRest = trace(resting, 10, hover);
-      const working = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const working = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(working, 15, cruise);
       const atWork = trace(working, 10, cruise);
       expect(peaks(atRest.mouth)).toBe(peaks(atRest.gills));
@@ -296,7 +376,7 @@ describe('SwimState', () => {
     });
 
     it('gapes fully on a bite and is back to breathing once it closes', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       run(state, 2, hover);
       state.bite();
       expect(state.mouthOpening).toBeGreaterThanOrEqual(0);
@@ -309,7 +389,7 @@ describe('SwimState', () => {
 
     it('carries on from the current gape when it bites again mid-bite', () => {
       for (const into of [0.02, 0.08, 0.15, 0.24]) {
-        const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+        const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
         state.bite();
         state.advance(into, hover);
         const before = state.mouthOpening;
@@ -321,14 +401,14 @@ describe('SwimState', () => {
     });
 
     it('is shut on the first frame of a fish that never bit, and only a breath wide', () => {
-      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0, VMAX);
       expect(state.sinceBite).toBe(Infinity);
       expect(state.mouthOpening).toBeLessThanOrEqual(BREATH_GAPE);
     });
   });
 
   it('rejects a non-positive length', () => {
-    expect(() => new SwimState(0, 0.3, SWIM_MODES.carangiform, 0)).toThrow(RangeError);
+    expect(() => new SwimState(0, 0.3, SWIM_MODES.carangiform, 0, VMAX)).toThrow(RangeError);
   });
 });
 
@@ -361,7 +441,8 @@ describe('cleaning station motion', () => {
   const length = 0.085;
   const step = 1 / 60;
   const sample = (state: number, speed: number) => ({ speed, yawRate: 0, thrust: 1, state });
-  const wrasse = (phaseOffset = 0) => new SwimState(length, 0.3, SWIM_MODES.labriform, phaseOffset);
+  const wrasse = (phaseOffset = 0) =>
+    new SwimState(length, 0.3, SWIM_MODES.labriform, phaseOffset, VMAX);
 
   /** Start times of the pecks over `seconds`, sampled once a frame of `frameS`. */
   function peckTimes(
