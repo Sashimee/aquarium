@@ -498,16 +498,44 @@ describe('order status', () => {
   it('is pending while the provider has not completed it or the webhook has not landed', async () => {
     const who = await account(h);
     const ids = newIds();
-    kit.sessions.set(ids.session, { userId: who.userId, status: 'open', subscriptionId: null });
+    kit.sessions.set(ids.session, {
+      userId: who.userId,
+      status: 'open',
+      paymentStatus: 'paid',
+      subscriptionId: null,
+    });
     expect(await status(who, ids.session)).toEqual({ code: 200, body: { status: 'pending' } });
-    kit.sessions.set(ids.session, { userId: who.userId, status: 'complete', subscriptionId: null });
+    kit.sessions.set(ids.session, {
+      userId: who.userId,
+      status: 'complete',
+      paymentStatus: 'paid',
+      subscriptionId: null,
+    });
     expect(await status(who, ids.session)).toEqual({ code: 200, body: { status: 'pending' } });
+  });
+
+  it('answers 502 when the provider cannot be reached', async () => {
+    const who = await account(h);
+    const ids = newIds();
+    kit.failRetrieval = true;
+    try {
+      const res = await status(who, ids.session);
+      expect(res.code).toBe(502);
+      expect(JSON.stringify(res.body)).toContain('did not answer');
+    } finally {
+      kit.failRetrieval = false;
+    }
   });
 
   it('is failed once the provider expired the session', async () => {
     const who = await account(h);
     const ids = newIds();
-    kit.sessions.set(ids.session, { userId: who.userId, status: 'expired', subscriptionId: null });
+    kit.sessions.set(ids.session, {
+      userId: who.userId,
+      status: 'expired',
+      paymentStatus: 'paid',
+      subscriptionId: null,
+    });
     expect((await status(who, ids.session)).body).toEqual({ status: 'failed' });
   });
 
@@ -552,6 +580,7 @@ describe('order status', () => {
     kit.sessions.set(ids.session, {
       userId: who.userId,
       status: 'complete',
+      paymentStatus: 'paid',
       subscriptionId: ids.subscription,
     });
     expect((await status(who, ids.session)).body).toEqual({ status: 'pending' });
@@ -574,7 +603,12 @@ describe('order status', () => {
       buildEvent(h, 'checkout.session.completed', sessionObject(owner, 'pearls-550', paid)),
     );
     const open = newIds();
-    kit.sessions.set(open.session, { userId: owner.userId, status: 'open', subscriptionId: null });
+    kit.sessions.set(open.session, {
+      userId: owner.userId,
+      status: 'open',
+      paymentStatus: 'paid',
+      subscriptionId: null,
+    });
     for (const session of [paid.session, open.session, 'cs_test_unknown']) {
       expect((await status(other, session)).code, session).toBe(404);
     }
