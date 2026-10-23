@@ -454,7 +454,13 @@ export class TankSession {
       });
       if (!moved) return;
     }
-    if (plan.done && loadId === this.loadId) storage.removeItem(DEVICE_ROOM_KEY);
+    if (plan.done && loadId === this.loadId) {
+      try {
+        storage.removeItem(DEVICE_ROOM_KEY);
+      } catch {
+        // Same privacy modes that block reads; the key stays and the next load re-plans harmlessly.
+      }
+    }
   }
 
   dismissEarned(): void {

@@ -144,7 +144,9 @@ describe('buying a room', () => {
 describe('setting the room of a tank', () => {
   it('saves a free room and tells the scene', async () => {
     const { session, api, rec } = await ready();
-    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-bedroom', roomSetAt: 'now' }));
+    api.saveRoom.mockResolvedValue(
+      tankFixture({ roomId: 'room-bedroom', roomSetAt: '2026-10-23T12:00:00.000Z' }),
+    );
     expect(await session.setRoom('room-bedroom')).toBe(true);
     expect(api.saveRoom).toHaveBeenCalledWith(TANK_A, 'room-bedroom');
     expect(rec.of('tank:room')).toEqual([{ tankId: TANK_A, roomId: 'room-bedroom' }]);
@@ -188,7 +190,9 @@ describe('setting the room of a tank', () => {
 
   it('saves the shown room when the tank was never set, so a stored device room cannot move it', async () => {
     const { session, api } = await ready();
-    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-living', roomSetAt: 'now' }));
+    api.saveRoom.mockResolvedValue(
+      tankFixture({ roomId: 'room-living', roomSetAt: '2026-10-23T12:00:00.000Z' }),
+    );
     expect(await session.setRoom('room-living')).toBe(true);
     expect(api.saveRoom).toHaveBeenCalledWith(TANK_A, 'room-living');
   });
@@ -207,7 +211,9 @@ describe('the device room from before rooms', () => {
   it('moves an unset tank into the owned office once, then forgets the key', async () => {
     const storage = memoryStorage({ 'aquarium.room': 'office' });
     const { session, api } = setup([tankFixture()], ['room-office'], storage);
-    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-office', roomSetAt: 'now' }));
+    api.saveRoom.mockResolvedValue(
+      tankFixture({ roomId: 'room-office', roomSetAt: '2026-10-23T12:00:00.000Z' }),
+    );
     await session.setUser(verified);
     await vi.waitFor(() => expect(storage.store.has('aquarium.room')).toBe(false));
     expect(api.saveRoom).toHaveBeenCalledTimes(1);
@@ -218,7 +224,9 @@ describe('the device room from before rooms', () => {
     const storage = memoryStorage({ 'aquarium.room': 'office' });
     const { session, api } = setup([tankFixture()], ['room-office'], storage);
     api.ownedRooms.mockRejectedValueOnce(new ApiRequestError(0, 'network', 'offline'));
-    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-office', roomSetAt: 'now' }));
+    api.saveRoom.mockResolvedValue(
+      tankFixture({ roomId: 'room-office', roomSetAt: '2026-10-23T12:00:00.000Z' }),
+    );
     await session.setUser(verified);
     await vi.waitFor(() => expect(api.ownedRooms).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(session.getState().phase).toBe('ready'));
@@ -244,11 +252,30 @@ describe('the device room from before rooms', () => {
     expect(api.saveRoom).not.toHaveBeenCalled();
   });
 
+  it('survives a storage that throws on removeItem after the migration', async () => {
+    const storage = {
+      ...memoryStorage({ 'aquarium.room': 'office' }),
+      removeItem: () => {
+        throw new Error('storage blocked');
+      },
+    };
+    const { session, api } = setup([tankFixture()], ['room-office'], storage);
+    api.saveRoom.mockResolvedValue(
+      tankFixture({ roomId: 'room-office', roomSetAt: '2026-10-23T12:00:00.000Z' }),
+    );
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(api.ownedRooms).toHaveBeenCalled());
+    await expect(session.refreshRooms()).resolves.toBeUndefined();
+    expect(api.saveRoom).toHaveBeenCalledWith(TANK_A, 'room-office');
+  });
+
   it('keeps the device room from moving a tank once the player picked the shown room', async () => {
     const storage = memoryStorage({ 'aquarium.room': 'office' });
     const { session, api } = setup([tankFixture()], ['room-office'], storage);
     api.ownedRooms.mockRejectedValueOnce(new ApiRequestError(0, 'network', 'offline'));
-    api.saveRoom.mockResolvedValue(tankFixture({ roomId: 'room-living', roomSetAt: 'now' }));
+    api.saveRoom.mockResolvedValue(
+      tankFixture({ roomId: 'room-living', roomSetAt: '2026-10-23T12:00:00.000Z' }),
+    );
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().phase).toBe('ready'));
     await session.setRoom('room-living');
@@ -291,7 +318,7 @@ describe('the device room from before rooms', () => {
     await vi.waitFor(() => expect(api.saveRoom).toHaveBeenCalledTimes(1));
     release([]);
     await vi.waitFor(() => expect(api.ownedRooms).toHaveBeenCalled());
-    finishChoice(tankFixture({ roomId: 'room-bedroom', roomSetAt: 'now' }));
+    finishChoice(tankFixture({ roomId: 'room-bedroom', roomSetAt: '2026-10-23T12:00:00.000Z' }));
     expect(await choice).toBe(true);
     await vi.waitFor(() => expect(storage.store.has('aquarium.room')).toBe(false));
     expect(api.saveRoom).toHaveBeenCalledTimes(1);
@@ -315,13 +342,13 @@ describe('the device room from before rooms', () => {
     });
     api.saveRoom.mockImplementation(async () => {
       if (active > 0) overlap = true;
-      return tankFixture({ roomId: null, roomSetAt: 'now' });
+      return tankFixture({ roomId: null, roomSetAt: '2026-10-23T12:00:00.000Z' });
     });
     await session.setUser(verified);
     await vi.waitFor(() => expect(api.saveRoom).toHaveBeenCalledTimes(1));
     const reload = session.load();
     await reload;
-    finishStale(tankFixture({ roomId: null, roomSetAt: 'now' }));
+    finishStale(tankFixture({ roomId: null, roomSetAt: '2026-10-23T12:00:00.000Z' }));
     await vi.waitFor(() => expect(storage.store.has('aquarium.room')).toBe(false));
     expect(api.saveRoom).toHaveBeenCalledTimes(2);
     expect(overlap).toBe(false);

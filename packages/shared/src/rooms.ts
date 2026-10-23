@@ -67,6 +67,9 @@ export const roomEntrySchema = z.strictObject({
       path: ['asset'],
     }),
   hasWindow: z.boolean(),
+  swatch: z
+    .strictObject({ key: hexColour, ambient: hexColour })
+    .describe('picker swatch gradient; equals the preset light keyColor and ambientColor'),
 });
 export type RoomEntry = z.infer<typeof roomEntrySchema>;
 
