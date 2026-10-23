@@ -150,13 +150,10 @@ test.describe('gifts and trades', () => {
       200,
     );
 
-    const mine = await sender.request.get('/api/me/handle');
-    expect(mine.status()).toBe(200);
-    const self = await offer(sender, {
-      ...request,
-      toHandle: (await currentHandle(sender)) ?? handle,
-    });
-    expect(self.status()).toBeGreaterThanOrEqual(400);
+    const ownHandle = uniqueHandle('own');
+    expect((await setHandle(sender, ownHandle)).status()).toBe(200);
+    const self = await offer(sender, { ...request, toHandle: ownHandle });
+    expect(self.status()).toBe(400);
     expect((await offer(sender, { ...request, toHandle: 'nobody_has_this_handle' })).status()).toBe(
       404,
     );

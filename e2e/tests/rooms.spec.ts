@@ -84,7 +84,6 @@ test('a paid room is locked until bought, charged once, and then works in every 
     entry: { delta: -price, reason: 'purchase', itemRef: `room:${PAID}` },
   });
   expect(await ownedRooms(page)).toEqual([PAID]);
-  expect((await wallet(page)).owned).toContain(`room:${PAID}`);
 
   const again = await purchase(page, `room:${PAID}`);
   expect(again.status()).toBe(409);

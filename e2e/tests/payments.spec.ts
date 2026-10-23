@@ -394,6 +394,9 @@ test('the account settings confirm and withdraw the adult confirmation', async (
     name: 'I am an adult and I confirm purchases on this account.',
   });
   await expect(checkbox).not.toBeChecked();
+  const confirmedOnServer = async () =>
+    ((await (await page.request.get('/api/payments/state')).json()) as { adultConfirmed: boolean })
+      .adultConfirmed;
 
   await checkbox.check();
   await purchases.getByLabel('Password').fill('the wrong passphrase 1');
@@ -402,16 +405,10 @@ test('the account settings confirm and withdraw the adult confirmation', async (
 
   await purchases.getByLabel('Password').fill(PASSWORD);
   await purchases.getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(confirmedOnServer).toBe(true);
   await expect(checkbox).toBeChecked();
-  expect(
-    ((await (await page.request.get('/api/payments/state')).json()) as { adultConfirmed: boolean })
-      .adultConfirmed,
-  ).toBe(true);
 
   await checkbox.uncheck();
+  await expect.poll(confirmedOnServer).toBe(false);
   await expect(checkbox).not.toBeChecked();
-  expect(
-    ((await (await page.request.get('/api/payments/state')).json()) as { adultConfirmed: boolean })
-      .adultConfirmed,
-  ).toBe(false);
 });

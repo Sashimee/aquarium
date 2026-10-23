@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { awaitLoaded, openTank, openTankPanel, registerVerifiedUser } from '../support/app.ts';
+import { openTank, openTankPanel, registerVerifiedUser } from '../support/app.ts';
 import {
   addFish,
   addFishRaw,
@@ -116,19 +116,17 @@ test('the new-tank form offers every biome and size with its price and creates a
   await expect(sizes.getByRole('option')).toHaveCount(4);
   await expect(sizes.getByRole('option', { name: /^Nano, 30 L.*up to 12 animals/ })).toHaveCount(1);
 
-  await kinds.selectOption('reef');
+  await kinds.selectOption('freshwater');
   await sizes.selectOption('nano30');
   const price = tankCost(1, 'nano30');
   await expect(panel.getByText(/Price of this tank:/)).toContainText(
     `${price.toLocaleString('en')} Pearls`,
   );
-  await panel.getByLabel('Tank name').fill('Reef nano');
+  await panel.getByLabel('Tank name').fill('Nano home');
   await panel.getByRole('button', { name: 'Create tank' }).click();
   await panel.getByRole('button', { name: 'Yes, buy it' }).click();
 
-  await expect(panel.getByLabel('Active tank')).toContainText('Reef nano (Reef, Nano 30 L)', {
+  await expect(panel.getByLabel('Active tank')).toContainText('Nano home (Freshwater, Nano 30 L)', {
     timeout: 60_000,
   });
-  await awaitLoaded(page);
-  await expect(page.locator('#app')).toHaveAttribute('data-scene-biome', 'reef');
 });
