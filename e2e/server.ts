@@ -10,6 +10,7 @@ import { createStripeProvider } from '../apps/api/src/payments/provider.ts';
 import { createPushSender, parseVapidKeys } from '../apps/api/src/push.ts';
 import { postgresHitStore } from '../apps/api/src/rate-limit.ts';
 import { loadChemistryParameters } from '../apps/api/src/chemistry.ts';
+import { DEFAULT_CARE_LIMITS } from '../apps/api/src/tanks.ts';
 import { loadEconomy } from '../apps/api/src/economy.ts';
 import { loadCatalog } from '../apps/api/src/species.ts';
 import { createTestDatabase } from '../apps/api/src/test-harness.ts';
@@ -110,6 +111,7 @@ const app = buildApp({
   chemistryParams: loadChemistryParameters(),
   clock: createClock(),
   economy,
+  careLimits: { ...DEFAULT_CARE_LIMITS, addFish: unlimited, feed: unlimited },
   testHooks: true,
   logger: false,
 });

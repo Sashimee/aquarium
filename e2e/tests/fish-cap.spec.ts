@@ -38,8 +38,22 @@ test('a nano tank takes 12 animals, refuses the 13th without charging, and the s
 test('a standard tank is capped at 60 animals', async ({ page }) => {
   test.setTimeout(420_000);
   await registerVerifiedUser(page, 'capstd');
-  await createTank(page, { name: 'Big' });
+  const big = await createTank(page, { name: 'Big' });
+
+  for (let n = 1; n <= 60; n += 1)
+    await addFish(page, big.id, 'neon-tetra', { name: `Tetra ${n}` });
+  expect((await getTank(page, big.id)).fish).toHaveLength(60);
+  const charged = (await wallet(page)).ledger.filter((r) => r.itemRef?.startsWith('species:'));
+
+  const refused = await addFishRaw(page, big.id, 'neon-tetra', { name: 'Sixty-first' });
+  expect(refused.status()).toBe(409);
+  expect((await errorOf(refused)).message).toContain('at capacity');
+  expect((await getTank(page, big.id)).fish).toHaveLength(60);
+  expect((await wallet(page)).ledger.filter((r) => r.itemRef?.startsWith('species:'))).toHaveLength(
+    charged.length,
+  );
+
   await openTank(page);
   const shop = await openDock(page, 'Shop', 'Fish shop');
-  await expect(shop).toContainText('0 of 60 animals');
+  await expect(shop).toContainText('60 of 60 animals');
 });
