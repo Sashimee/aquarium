@@ -1240,7 +1240,13 @@ export function scatterPresetPatches(
               patch.radius,
               Math.max(0, extent.halfLength - reach(smallest, 'x') - patch.radius),
               Math.max(0, extent.halfDepth - reach(smallest, 'z') - patch.radius),
-              (x, z) => !blocked(x, ground(x, z) - ROOT_DEPTH, z),
+              (x, z) =>
+                !blocked(x, ground(x, z) - ROOT_DEPTH, z) &&
+                !preset.plantPatches.some(
+                  (other) =>
+                    other !== patch &&
+                    Math.hypot(x - other.center[0], z - other.center[1]) < other.radius,
+                ),
             ),
           }
         : patch;

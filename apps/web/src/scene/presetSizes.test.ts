@@ -36,6 +36,8 @@ const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 const MIN_DEPTH_SHARE = 0.4;
 // Placed plant footprint per ground area against the authored patch, glass shrink included.
 const MIN_NANO_COVERAGE_SHARE = 0.8;
+// Plants of different patches in a nano; dev's closest pair is 0.004.
+const MIN_CROSS_PATCH_GAP = 0.003;
 const GLASS_NUDGE_TOLERANCE = 0.06;
 // Life-size decor in the 0.25 m deep nano is pushed further off the glass than in the others.
 const NANO_GLASS_NUDGE_TOLERANCE = 0.08;
@@ -317,6 +319,34 @@ describe.each(['freshwater', 'reef', 'blackwater'] as const)(
             }
           }
         }
+      });
+
+      it.runIf(size === 'nano30')("roots no two patches' plants on top of each other", async () => {
+        const preset = fitted();
+        const hard = preset.decor
+          .filter((item) => !parseEuphylliaId(item.assetId))
+          .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
+          .filter(({ kind }) => kind !== 'anemone');
+        const { colliders } = await movableColliders(library, hard, waterTop);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const roots: { id: string; x: number; z: number }[] = [];
+        scatterPresetPatches(
+          preset,
+          catalog,
+          new ColliderField(colliders),
+          dimensions,
+          size,
+          (patch, instances) =>
+            roots.push(...instances.map(({ x, z }) => ({ id: patch.id, x, z }))),
+        );
+        warn.mockRestore();
+        let closest = Infinity;
+        for (const a of roots) {
+          for (const b of roots) {
+            if (a.id !== b.id) closest = Math.min(closest, Math.hypot(a.x - b.x, a.z - b.z));
+          }
+        }
+        expect(closest).toBeGreaterThanOrEqual(MIN_CROSS_PATCH_GAP);
       });
 
       it('keeps every patch at its authored depth', async () => {
