@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   creditsSchema,
-  manifestAssetCreditFieldsSchema as manifestAssetSchema,
+  manifestAssetCreditFieldsSchema,
   type Credits,
   type CreditEntry,
 } from '@aquarium/shared';
@@ -13,7 +13,7 @@ const BUNDLED = import.meta.url.endsWith('/src/credits.ts')
   : fileURLToPath(new URL('./manifest.json', import.meta.url));
 const SOURCE = fileURLToPath(new URL('../../../assets/manifest.json', import.meta.url));
 
-const manifestSchema = z.looseObject({ assets: z.array(manifestAssetSchema).min(1) });
+const manifestSchema = z.looseObject({ assets: z.array(manifestAssetCreditFieldsSchema).min(1) });
 
 export const UNRECORDED_MODIFICATION = 'modified (processed for web)';
 
@@ -39,7 +39,7 @@ export const SHARE_ALIKE_NOTICE =
 const licenceRank = (licence: string): number =>
   licence.startsWith('CC-BY-SA') ? 0 : licence.startsWith('CC-BY') ? 1 : 2;
 
-type ManifestAsset = z.infer<typeof manifestAssetSchema>;
+type ManifestAsset = z.infer<typeof manifestAssetCreditFieldsSchema>;
 
 function assertLicenceAllowed(a: ManifestAsset): void {
   if (FREE_LICENCES.has(a.licence)) return;
