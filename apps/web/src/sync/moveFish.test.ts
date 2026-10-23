@@ -14,15 +14,16 @@ const quarantine = tankFixture({
 
 describe('moveTargets', () => {
   it('sends a display tank fish to the quarantine tank only', () => {
-    expect(
-      moveTargets(display, [display, other, quarantine], 'neon-tetra', speciesFixture()),
-    ).toEqual([quarantine]);
+    expect(moveTargets(display, [display, other, quarantine], speciesFixture())).toEqual([
+      quarantine,
+    ]);
   });
 
   it('sends a quarantine fish back to the display tanks', () => {
-    expect(
-      moveTargets(quarantine, [display, other, quarantine], 'neon-tetra', speciesFixture()),
-    ).toEqual([display, other]);
+    expect(moveTargets(quarantine, [display, other, quarantine], speciesFixture())).toEqual([
+      display,
+      other,
+    ]);
   });
 
   it('skips tanks of the other kind of water', () => {
@@ -32,9 +33,9 @@ describe('moveTargets', () => {
       biome: 'reef',
       quarantine: true,
     });
-    expect(
-      moveTargets(display, [display, reef, quarantine], 'neon-tetra', speciesFixture()),
-    ).toEqual([quarantine]);
+    expect(moveTargets(display, [display, reef, quarantine], speciesFixture())).toEqual([
+      quarantine,
+    ]);
   });
 
   describe('adult length gate', () => {
@@ -50,7 +51,7 @@ describe('moveTargets', () => {
         quarantine: true,
         size: 'nano30',
       });
-      expect(moveTargets(display, [display, nanoQuarantine], 'blue-tang', tang)).toEqual([]);
+      expect(moveTargets(display, [display, nanoQuarantine], tang)).toEqual([]);
     });
 
     it('says why quarantine is out of reach', () => {
@@ -64,7 +65,7 @@ describe('moveTargets', () => {
         quarantine: true,
         size: 'standard',
       });
-      expect(moveTargets(display, [display, standard], 'blue-tang', tang)).toEqual([standard]);
+      expect(moveTargets(display, [display, standard], tang)).toEqual([standard]);
     });
   });
 
@@ -74,19 +75,19 @@ describe('moveTargets', () => {
     const long = tankFixture({ id: '00000000-0000-4000-8000-0000000000c5', size: 'long300' });
 
     it('drops tanks shorter than the species minimum', () => {
-      expect(moveTargets(home, [home, standard, long], 'silver-mono', speciesFixture())).toEqual([
+      expect(
+        moveTargets(home, [home, standard, long], speciesFixture({ id: 'silver-mono' })),
+      ).toEqual([long]);
+    });
+
+    it('keeps a tank exactly at the minimum length', () => {
+      expect(moveTargets(home, [home, long], speciesFixture({ id: 'silver-mono' }))).toEqual([
         long,
       ]);
     });
 
-    it('keeps a tank exactly at the minimum length', () => {
-      expect(moveTargets(home, [home, long], 'silver-mono', speciesFixture())).toEqual([long]);
-    });
-
     it('does not gate species without a minimum', () => {
-      expect(moveTargets(home, [home, standard], 'neon-tetra', speciesFixture())).toEqual([
-        standard,
-      ]);
+      expect(moveTargets(home, [home, standard], speciesFixture())).toEqual([standard]);
     });
 
     it('lets a gated fish into a short quarantine tank', () => {
@@ -97,13 +98,13 @@ describe('moveTargets', () => {
         quarantine: true,
       });
       expect(
-        moveTargets(longHome, [longHome, shortQuarantine], 'silver-mono', speciesFixture()),
+        moveTargets(longHome, [longHome, shortQuarantine], speciesFixture({ id: 'silver-mono' })),
       ).toEqual([shortQuarantine]);
     });
   });
 
   it('has no target without a quarantine tank', () => {
-    expect(moveTargets(display, [display, other], 'neon-tetra', speciesFixture())).toEqual([]);
+    expect(moveTargets(display, [display, other], speciesFixture())).toEqual([]);
   });
 });
 

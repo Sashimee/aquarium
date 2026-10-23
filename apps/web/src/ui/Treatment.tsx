@@ -290,7 +290,7 @@ function FishMover({ session, state, tank, fish }: FishMoverProps) {
       `Species ${fish.species} is missing from the catalogue, so its move targets cannot be checked.`,
     );
   }
-  const targets = moveTargets(tank, state.tanks, fish.species, species);
+  const targets = moveTargets(tank, state.tanks, species);
   if (targets.length === 0) return null;
   return (
     <span className="fish-mover">
