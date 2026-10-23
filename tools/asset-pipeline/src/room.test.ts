@@ -122,14 +122,12 @@ describe('room recipes', () => {
     expect(roomAmbienceRecipe(id ?? '').loop?.searchS).toEqual(tuning?.searchS);
   });
 
-  it('names every room hdri so the api never mistakes it for a hashed bundle', () => {
-    const hashed = /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
+  it('names every room hdri in snake_case like the tank hdris, keeping dashes only in the id', () => {
     const rooms = loadRooms(resolve(import.meta.dirname, '../../..'));
     for (const id of roomHdriIds(rooms)) {
-      const output = roomHdriOutput(id);
-      expect(output).not.toContain('-');
-      expect(hashed.test(`assets/${output}`)).toBe(false);
+      expect(roomHdriOutput(id)).toMatch(/^[a-z0-9_]+_1k\.ktx2$/);
     }
+    expect(roomHdriOutput('polyhaven-cabin')).toBe('polyhaven_cabin_1k.ktx2');
   });
 
   it('lists each prop, hdri and ambience once, sorted', () => {
