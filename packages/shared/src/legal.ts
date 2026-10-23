@@ -38,8 +38,11 @@ export const dataExportSchema = z.strictObject({
     ledger: z.array(exportedRow),
   }),
   payments: z.strictObject({
-    adultConfirmedAt: timestampSchema.nullable(),
-    adultWithdrawnAt: timestampSchema.nullable(),
+    adultConfirmations: z
+      .array(
+        z.strictObject({ confirmedAt: timestampSchema, withdrawnAt: timestampSchema.nullable() }),
+      )
+      .describe('every confirm and withdraw cycle, oldest first'),
     charges: z
       .array(exportedRow)
       .describe('pack and subscription payments, with the consent timestamps given at checkout'),

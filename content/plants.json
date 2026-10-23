@@ -9,7 +9,8 @@
     "sources": {
       "growth": [
         "Barko & Smart 1981, Aquatic Botany 10: sediment and light effects on submerged macrophyte growth",
-        "Tropica plant database (growth speed, light and CO2 demand per species)"
+        "Tropica plant database (growth speed, light and CO2 demand per species)",
+        "Tropica, Echinodorus bleheri (Amazon sword): medium light, medium growth, heavy root feeder that takes much of its nutrients from the substrate"
       ],
       "uptake": [
         "Madsen & Cedergreen 2002, Freshwater Biology 47: nitrate and ammonium uptake of submersed macrophytes follows Michaelis-Menten kinetics"
@@ -26,9 +27,9 @@
       "growthPerDay": 0.1,
       "minSize": 0.4,
       "maxSize": 2.4,
-      "lightDemand": 0.9,
+      "lightDemand": 0.75,
       "co2Response": 0.4,
-      "nitratePerSize": 1.7,
+      "nitratePerSize": 1.45,
       "nitrateHalfSaturation": 4,
       "coverage": 1,
       "spread": null

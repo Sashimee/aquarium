@@ -220,6 +220,7 @@ describe('tanks and fish', () => {
     expect(unedited.decorLayout).toBeNull();
     expect(hasShelter(unedited, presets)).toBe(true);
     expect(hasShelter({ ...unedited, biome: 'cichlid' }, presets)).toBe(true);
+    expect(hasShelter({ ...unedited, biome: 'cichlid', size: 'nano30' }, presets)).toBe(true);
 
     await h.database.db
       .update(schema.tanks)
