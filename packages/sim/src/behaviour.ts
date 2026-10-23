@@ -78,6 +78,7 @@ export const BEHAVIOUR = {
   excursionMaxS: 6,
   excursionBodyLengths: 3,
   caveMouthBodyLengths: 1,
+  caveInBodyLengths: 0.5,
   caveLeashBodyLengths: 2.5,
   shelterAfterStartleS: 20,
   shelterComfort: 0.4,
@@ -2506,7 +2507,9 @@ export class Behaviour {
 
   /**
    * Where to swim to reach an anchor: straight to it, except that a cave is entered through its
-   * mouth, so a fish beside or behind the rock first goes round to the front.
+   * mouth, so a fish beside or behind the rock first goes round to the front. A fish within half a
+   * body length of the hollow is still in it, and goes straight back to the middle: sent out round
+   * the mouth, it slid along the rock away from its crevice (#1464).
    */
   private approach(i: number, a: Anchor, ay = a.position[1]): Point3 {
     const [ax, , az] = a.position;
@@ -2521,15 +2524,20 @@ export class Behaviour {
     const rz = at(this.host.position, i * 3 + 2) - az;
     const along = rx * ux + ry * uy + rz * uz;
     const lateral = Math.hypot(rx - along * ux, ry - along * uy, rz - along * uz);
-    if (Math.hypot(rx, ry, rz) <= a.radius || (along > 0 && lateral < a.radius))
+    if (
+      Math.hypot(rx, ry, rz) <=
+        a.radius + BEHAVIOUR.caveInBodyLengths * at(this.host.bodyLength, i) ||
+      (along > 0 && lateral < a.radius)
+    )
       return [ax, ay, az];
     const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * at(this.host.bodyLength, i);
     if (along < 0.5 * out && lateral >= a.radius) {
       // Beside the rock, the straight line to the mouth cuts through the cave's own wall: the
       // fish comes out past the face on its own side first, then crosses to the mouth. The point
       // stays within a stand-off of the face, or it would slide along with a fish drifting
-      // sideways and lead it away from the cave (#1464).
-      const side = Math.min(1, out / lateral);
+      // sideways and lead it away from the cave (#1464); not for a fish far behind the face,
+      // whose line to such a point would cut the rock's corner.
+      const side = along >= -out ? Math.min(1, out / lateral) : 1;
       return [
         ax + ux * out + (rx - along * ux) * side,
         ay + uy * out,

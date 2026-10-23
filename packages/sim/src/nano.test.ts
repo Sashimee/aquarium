@@ -360,7 +360,7 @@ describe('crevices for cave-dwellers when the scene has no cave', { timeout: LON
       rock.set(nudged);
       expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(nudged));
       expect(search.tested).toBeGreaterThan(0);
-      expect(search.tested).toBeLessThan(5 * full);
+      expect(search.tested).toBeLessThan(0.5 * full);
 
       rock.set(ROCKS);
       expect(search.find(tank, length, room, 'nook:', decor())).toEqual(fresh(ROCKS));

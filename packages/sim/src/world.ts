@@ -2182,6 +2182,7 @@ export class World {
       this.targetSpeed[i] = speed;
       this.reverseLeft[i] = 0;
       this.detourTimer[i] = 0;
+      this.backHomeBlocked[i] = 0;
       this.wedged[i] = 0;
       this.coasting[i] = 0;
       this.scrapeAnchor.set(this.position.subarray(o, o + 3), o);
@@ -2304,6 +2305,7 @@ export class World {
 
     const yaw = this.yaw[i] ?? 0;
     const pitch = this.pitch[i] ?? 0;
+    this.backHomeBlocked[i] = Math.max(0, (this.backHomeBlocked[i] ?? 0) - dt);
     if (!reflex && (this.reverseLeft[i] ?? 0) <= 0) this.backHome(i, plan, yaw);
     if (!reflex && (this.reverseLeft[i] ?? 0) > 0) {
       this.behaviour.feeding.backedOut(i);
@@ -2513,9 +2515,13 @@ export class World {
    * remembered as a dead end.
    */
   private backHome(i: number, plan: Plan, yaw: number): void {
-    const blocked = (this.backHomeBlocked[i] ?? 0) - STEP_DT;
-    this.backHomeBlocked[i] = Math.max(0, blocked);
-    if (blocked > 0 || !plan.homing || plan.seekWeight <= 0 || this.cramped[i] !== 1) return;
+    if (
+      (this.backHomeBlocked[i] ?? 0) > 0 ||
+      !plan.homing ||
+      plan.seekWeight <= 0 ||
+      this.cramped[i] !== 1
+    )
+      return;
     const o = i * 3;
     const ex = plan.seekX - (this.position[o] ?? 0);
     const ez = plan.seekZ - (this.position[o + 2] ?? 0);

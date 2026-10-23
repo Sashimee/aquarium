@@ -135,17 +135,19 @@ export class NookSearch {
     decor?: NookDecor,
   ): Anchor[] {
     const before = this.decor;
+    // Outside a collider's box grown by `touch` on each axis no shape samples within `touch`, so
+    // only the points inside one can touch rock. A field that saturates within `touch` reads
+    // every point as touching, so without boxes, or with such a field, every point is tested.
+    const touch = touchOf(length);
+    const pruned = decor !== undefined && decor.reach > touch;
     const reuse =
-      decor !== undefined &&
+      pruned &&
       before !== null &&
       this.grid?.length === length &&
       before.reach === decor.reach &&
       this.field !== null &&
       sameField(this.field, field);
     this._tested = 0;
-    // Outside a collider's box grown by `touch` on each axis no shape samples within `touch`, so
-    // only the points inside one can touch rock; without the boxes every point is tested.
-    const touch = touchOf(length);
     if (reuse) {
       const dirty = dirtyBounds(before.shapes, decor.shapes).map((b) =>
         grown(b, nookInfluence(length)),
@@ -160,7 +162,7 @@ export class NookSearch {
       const grid = gridFor(field.basin, length);
       this.grid = grid;
       this.verdicts.clear();
-      if (decor !== undefined && decor.reach > touch) {
+      if (pruned) {
         this.retest(
           field,
           decor.shapes.map((b) => grown(b, touch)),
