@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   creditsSchema,
-  httpUrlSchema,
-  slugSchema,
+  manifestAssetCreditFieldsSchema as manifestAssetSchema,
   type Credits,
   type CreditEntry,
 } from '@aquarium/shared';
@@ -13,20 +12,6 @@ const BUNDLED = import.meta.url.endsWith('/src/credits.ts')
   ? null
   : fileURLToPath(new URL('./manifest.json', import.meta.url));
 const SOURCE = fileURLToPath(new URL('../../../assets/manifest.json', import.meta.url));
-
-const manifestAssetSchema = z.looseObject({
-  id: z.string().min(1),
-  kind: z.string().min(1),
-  title: z.string().min(1),
-  author: z.string().min(1),
-  author_url: httpUrlSchema,
-  source_url: httpUrlSchema,
-  licence: z.string().min(1),
-  licence_url: httpUrlSchema,
-  species: slugSchema.optional(),
-  modifications: z.array(z.string()),
-  status: z.string(),
-});
 
 const manifestSchema = z.looseObject({ assets: z.array(manifestAssetSchema).min(1) });
 
