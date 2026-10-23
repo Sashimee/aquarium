@@ -73,7 +73,12 @@ const app = buildApp({
   payments,
 });
 
-const stopMaintenance = startMaintenance(database, clock, () => app.settleDueGifts());
+const stopMaintenance = startMaintenance(
+  database,
+  clock,
+  () => app.settleDueGifts(),
+  () => app.retryPendingReceipts(),
+);
 const reminders = startReminders(
   {
     database,

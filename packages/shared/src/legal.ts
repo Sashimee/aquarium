@@ -37,6 +37,16 @@ export const dataExportSchema = z.strictObject({
     balance: z.int(),
     ledger: z.array(exportedRow),
   }),
+  payments: z.strictObject({
+    adultConfirmedAt: timestampSchema.nullable(),
+    adultWithdrawnAt: timestampSchema.nullable(),
+    charges: z
+      .array(exportedRow)
+      .describe('pack and subscription payments, with the consent timestamps given at checkout'),
+    refunds: z.array(exportedRow),
+    disputes: z.array(exportedRow),
+    clubSubscriptions: z.array(exportedRow),
+  }),
   tanks: z.array(
     z.strictObject({
       tank: exportedRow,
@@ -124,8 +134,8 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-21.1',
-  updatedAt: '2026-10-21',
+  version: '2026-10-23.2',
+  updatedAt: '2026-10-23',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
   analytics: false,
@@ -172,7 +182,8 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions. Session records are kept until they expire (30 days after your last activity) and are then deleted by an hourly cleanup, or immediately when you sign out, revoke them or delete your account.',
         'Game data: your tanks, fish, their care history and memorials of fish that have died.',
         'Collection book and achievements: which species you have kept, bred and raised, with the date each was first reached, and the achievements you have earned with their dates. They are kept until you delete your account, even if you delete the tank or fish they came from, and are included in your JSON export.',
-        'Pearls wallet and ledger: your Pearl balance and an append-only ledger of every change to it: the amount, what it was for (a purchase, a reward for care or an achievement, a grant, a refund), the item, the time and a request key that stops a retried request from charging twice. It is kept until you delete your account and is included in your JSON export. Entries for payments with real money, once Pearl packs are on sale, are kept longer than the rest; the retention section explains how.',
+        'Pearls wallet and ledger: your Pearl balance and an append-only ledger of every change to it: the amount, what it was for (a purchase, a reward for care or an achievement, a grant, a refund), the item, the time and a request key that stops a retried request from charging twice. It is kept until you delete your account and is included in your JSON export. Entries for payments with real money are kept longer than the rest; the retention section explains how.',
+        'Payments: when you buy Pearls or the Aquarist Club subscription on the web, the payment is handled by Stripe and we never see or store your card details. We store, per payment: the Stripe payment or invoice reference, the amount in euro cents, the pack or subscription it was for, the time, and the time at which you agreed to the two things shown at checkout (that delivery starts at once, and that this ends your 14-day right of withdrawal; the wording is the one fixed in the checkout for the version of these terms in force then). We also store each refund and dispute against the payment (amount and Pearls taken back), your Aquarist Club subscription (its Stripe reference, status, the period paid and whether it ends at the period end), and the time at which an adult confirmed purchases on your account (a confirmation you can withdraw, which keeps the time you withdrew it). A receipt for each payment is emailed to you. All of this is included in your JSON export.',
         'Tank visits: for each tank you open we store the date (no time of day, IP address or device) on which you opened it, used only so your fish can recognise you when you come back often. It is included in your JSON export and deleted with the tank or your account.',
         'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once. A link does not list the tank anywhere: the tank of the week gallery is a second, separate choice, off by default, that you make per tank and can undo at any time. Listing needs the link to be on, and turning the link off also takes the tank out of the gallery. In the gallery, anyone, signed in or not, sees the same read-only view and the tank name (after a word filter), never your account.',
         'Reactions: when you react to a shared tank (heart, star or wow) we store which tank, your account and the kind, one reaction per tank. Reaction counts are public; who reacted is not. A shared tank also shows when it was last updated, rounded down to the hour.',
@@ -189,7 +200,16 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       title: 'Why and on what legal basis',
       paragraphs: [
         'We process this data to run your account and your aquarium, which is performing the service you asked for (GDPR Art. 6(1)(b)), and to keep the service secure and prevent abuse such as mail flooding (Art. 6(1)(f)).',
-        'There is no advertising, profiling, analytics, or sale or sharing of data with third parties.',
+        'Payments are processed to carry out your purchase (Art. 6(1)(b)), and the payment records are kept to meet our accounting and consumer-law obligations (Art. 6(1)(c)).',
+        'There is no advertising, profiling or analytics, and no sale of data. Your data is shared with no third party except the processors named in the next section.',
+      ],
+    },
+    {
+      id: 'processors',
+      title: 'Who else handles your data',
+      paragraphs: [
+        "Stripe Payments Europe, Ltd. processes web payments for us. When you start a checkout we send Stripe your account email address (to prefill the checkout and send its own receipt), an internal user ID, what you are buying, and the times you gave the checkout consents. You enter your card or other payment details only on Stripe's page, never on this site. Stripe is also an independent controller for its own legal duties such as fraud prevention and financial regulation; its privacy policy is at https://stripe.com/privacy. Payments are only available to accounts on which an adult has confirmed purchases.",
+        "Our hosting and the mail relay are operated by the operator of this site and are described in the section on what we store. Browser vendors' push services receive web push messages if you turn them on.",
       ],
     },
     {
@@ -204,8 +224,8 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       title: 'How long we keep it',
       paragraphs: [
         'Account and game data are kept until you delete your account. Your collection book and achievements are kept until you delete your account, even after the tanks and fish behind them are gone. Care events older than 90 days are pruned, community feed entries older than 7 days, audit log entries older than 180 days, and tank visit dates older than 14 days.',
-        'Pearl ledger entries for in-game activity (purchases, rewards and grants) are deleted with your account. Ledger entries for payments made with real money are kept for 10 years, because Luxembourg accounting law requires it (GDPR Art. 17(3)(b) allows keeping data to meet a legal obligation); on deletion the link to your account is removed from them, so they no longer identify you. Unspent Pearls, bought ones included, are lost when you delete your account.',
-        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, reminder settings and push subscriptions, tanks, fish, care history, tank visit dates, reactions, memorials, collection book, achievements, wallet and in-game Pearl ledger from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
+        'Pearl ledger entries for in-game activity (purchases, rewards and grants) are deleted with your account. Ledger entries and the payment, refund and dispute records for payments made with real money are kept for 10 years, because Luxembourg accounting law requires it (GDPR Art. 17(3)(b) allows keeping data to meet a legal obligation); on deletion the link to your account is removed from them, so they no longer identify you. Your Aquarist Club subscription is cancelled with the provider on deletion, and its record is kept the same way. Stripe keeps its own records under its own retention rules. Unspent Pearls, bought ones included, are lost when you delete your account.',
+        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, reminder settings and push subscriptions, tanks, fish, care history, tank visit dates, reactions, memorials, collection book, achievements, adult confirmation, wallet and in-game Pearl ledger from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
       ],
     },
     {

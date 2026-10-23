@@ -120,22 +120,21 @@ function fadeAt(x: number, y: number, z: number): number {
   return w ?? Number.NaN;
 }
 
-/** The in-tank fade where the ray from `origin` along `dir` leaves the water. */
-function fadeAlong(origin: Vector3, dir: Vector3): number {
-  const o = v3(origin.x, origin.y, origin.z);
-  const d = dir.clone().normalize();
-  const along = v3(d.x, d.y, d.z);
-  const end = o.add(along.mul(medium.exit(o, along).distance));
-  const [w] = evaluate(inTankFade(end, medium.boxMin, medium.boxMax));
-  return w ?? Number.NaN;
-}
-
-/** The fade along a sweep of rays, and the largest change between neighbouring ones. */
+/**
+ * The fade along a sweep of rays from `origin`, and the largest change between neighbouring ones.
+ * The graph is built once and each ray only moves its uniforms, as building it per ray dominated.
+ */
 function sweep(origin: Vector3, dirAt: (s: number) => Vector3, from: number, to: number) {
+  const o = v3(origin.x, origin.y, origin.z);
+  const along = v3(0, 0, 0);
+  const end = o.add(along.mul(medium.exit(o, along).distance));
+  const fade = inTankFade(end, medium.boxMin, medium.boxMax);
   const steps = 10_000;
-  const values = Array.from({ length: steps + 1 }, (_, i) =>
-    fadeAlong(origin, dirAt(from + ((to - from) * i) / steps)),
-  );
+  const values = Array.from({ length: steps + 1 }, (_, i) => {
+    along.value.copy(dirAt(from + ((to - from) * i) / steps)).normalize();
+    const [w] = evaluate(fade);
+    return w ?? Number.NaN;
+  });
   const jump = Math.max(...values.slice(1).map((v, i) => Math.abs(v - (values[i] ?? v))));
   return { first: values[0], last: values[steps], jump };
 }
@@ -270,6 +269,27 @@ describe('PaneMirror', () => {
     targets[0]?.dispose();
     expect(freed).toHaveBeenCalledTimes(3);
   });
+
+  const gc = (globalThis as { gc?: () => void }).gc;
+
+  it.skipIf(gc === undefined)(
+    'frees the copy for a target dropped without dispose once it is collected (needs node --expose-gc)',
+    async () => {
+      const mirror = new PaneMirror();
+      const freed = vi.fn();
+      (() => {
+        const copy = mirror.frame.sample(vec2(0.5)).getTextureForReference(new RenderTarget(4, 4));
+        copy.addEventListener('dispose', freed);
+      })();
+      // The registry's callbacks run as their own tasks some time after the collection.
+      for (let attempt = 0; attempt < 50 && freed.mock.calls.length === 0; attempt++) {
+        gc?.();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(freed).toHaveBeenCalledOnce();
+      expect(mirror.frame.copyCount).toBe(0);
+    },
+  );
 
   it('copies the frame when drawing, but not while pipelines are compiled', () => {
     const mirror = new PaneMirror();

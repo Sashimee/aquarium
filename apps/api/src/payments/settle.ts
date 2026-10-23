@@ -10,6 +10,7 @@ type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
 type ChargeRow = typeof schema.paymentCharges.$inferSelect;
 
 export interface Receipt {
+  chargeId: string;
   userId: string;
   description: string;
   amountCents: number;
@@ -52,6 +53,23 @@ const promiseOf = (
     ? { priceCents, pearls }
     : null;
 };
+
+export function receiptOf(economy: Economy, charge: ChargeRow): Receipt | null {
+  if (!charge.userId) return null;
+  const base = {
+    chargeId: charge.id,
+    userId: charge.userId,
+    amountCents: charge.amountCents,
+    consentAt: charge.consentAt,
+  };
+  return charge.kind === 'pack'
+    ? { ...base, description: `${charge.packPearls ?? 0} Pearls`, pearls: charge.packPearls }
+    : {
+        ...base,
+        description: `${economy.subscription.id} subscription, first month`,
+        pearls: null,
+      };
+}
 
 const BILLABLE = ['active', 'trialing', 'past_due', 'unpaid'] as const;
 const NOT_YET_PAID = ['incomplete'] as const;
@@ -140,10 +158,12 @@ async function creditPack(
       packId: pack.id,
       packPearls: pack.pearls,
       consentAt: consent,
+      receiptPending: owner !== null,
       createdAt: new Date(nowMs),
     });
     if (!owner) return null;
     return {
+      chargeId: session.id,
       userId: owner,
       description: `${pack.pearls} Pearls`,
       amountCents: pack.priceCents,
@@ -281,6 +301,7 @@ async function recordInvoicePaid(
     const receipt: Receipt | null =
       owner && invoice.billing_reason === 'subscription_create'
         ? {
+            chargeId: invoiceId,
             userId: owner,
             description: `${deps.economy.subscription.id} subscription, first month`,
             amountCents: invoice.amount_paid,
@@ -288,6 +309,12 @@ async function recordInvoicePaid(
             consentAt: consent ?? null,
           }
         : null;
+    if (receipt) {
+      await tx
+        .update(schema.paymentCharges)
+        .set({ receiptPending: true })
+        .where(eq(schema.paymentCharges.id, invoiceId));
+    }
     return { receipt, unclaimed: owner === null };
   });
 
