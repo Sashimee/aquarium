@@ -93,6 +93,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       communityFeedRows,
       [walletRow],
       ledgerRows,
+      ownedRoomRows,
     ] = await Promise.all([
       db
         .select({
@@ -210,6 +211,11 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .from(schema.ledger)
         .where(eq(schema.ledger.userId, userId))
         .orderBy(asc(schema.ledger.createdAt), asc(schema.ledger.id)),
+      db
+        .select({ roomId: schema.ownedRooms.roomId, purchasedAt: schema.ownedRooms.purchasedAt })
+        .from(schema.ownedRooms)
+        .where(eq(schema.ownedRooms.userId, userId))
+        .orderBy(asc(schema.ownedRooms.purchasedAt), asc(schema.ownedRooms.roomId)),
     ]);
 
     // One snapshot for all payment tables, so a refund landing mid-export cannot show up without
@@ -408,6 +414,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             disputes: disputeRows,
             clubSubscriptions: clubRows,
           },
+          ownedRooms: ownedRoomRows,
           tanks: perTank,
           giftOffers,
         }),

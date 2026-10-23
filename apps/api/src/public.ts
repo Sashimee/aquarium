@@ -160,6 +160,7 @@ export function registerPublicRoutes({
       size: tank.size,
       seed: seedOf('tank', tank.id),
       backgroundId: storedBackground(tank),
+      roomId: tank.roomId,
       decorLayout: (tank.decorLayout === null ? [] : decorLayoutSchema.parse(tank.decorLayout)).map(
         (item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) }),
       ),

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { authIdSchema, slugSchema, timestampSchema } from './common.js';
 import { exportedReminderSchema } from './reminders.js';
+import { roomIdSchema } from './rooms.js';
 
 export const deleteAccountRequestSchema = z.strictObject({
   password: z.string().min(1).max(128).optional(),
@@ -50,6 +51,9 @@ export const dataExportSchema = z.strictObject({
     disputes: z.array(exportedRow),
     clubSubscriptions: z.array(exportedRow),
   }),
+  ownedRooms: z
+    .array(z.strictObject({ roomId: roomIdSchema, purchasedAt: timestampSchema }))
+    .describe('paid rooms the account bought; each tank row carries its own roomId and roomSetAt'),
   tanks: z.array(
     z.strictObject({
       tank: exportedRow,
