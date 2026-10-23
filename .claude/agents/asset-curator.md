@@ -23,7 +23,7 @@ Model: sonnet — scoped research and bookkeeping, where the judgement calls are
 
 ## Owns
 
-`assets/manifest.json`, `CREDITS.md`, `docs/assets/catalog.md`, `content/backgrounds/*.json`. Raw files in `~/.cache/aquarium-assets/raw/<asset-id>/`.
+`assets/manifest.json`, `CREDITS.md`, `docs/assets/catalog.md`, `content/backgrounds/*.json`, `content/rooms.json`. Raw files in `~/.cache/aquarium-assets/raw/<asset-id>/`.
 
 ## Rules
 
