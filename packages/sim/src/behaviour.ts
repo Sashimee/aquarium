@@ -2526,8 +2526,15 @@ export class Behaviour {
     const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * at(this.host.bodyLength, i);
     if (along < 0.5 * out && lateral >= a.radius) {
       // Beside the rock, the straight line to the mouth cuts through the cave's own wall: the
-      // fish comes out past the face on its own side first, then crosses to the mouth.
-      return [ax + ux * out + rx - along * ux, ay + uy * out, az + uz * out + rz - along * uz];
+      // fish comes out past the face on its own side first, then crosses to the mouth. The point
+      // stays within a stand-off of the face, or it would slide along with a fish drifting
+      // sideways and lead it away from the cave (#1464).
+      const side = Math.min(1, out / lateral);
+      return [
+        ax + ux * out + (rx - along * ux) * side,
+        ay + uy * out,
+        az + uz * out + (rz - along * uz) * side,
+      ];
     }
     return [ax + ux * out, ay + uy * out, az + uz * out];
   }
