@@ -148,8 +148,24 @@ export function droppedNormalLevels(frameSize: number): number {
   return dropped;
 }
 
-function dropTopLevels(texture: CompressedTexture, levels: number, file: string): Texture {
+/**
+ * Shrinks the normal atlas to the size `droppedNormalLevels` leaves it at. three hands overlapping
+ * loads of one URL the same texture, so this reads how far it is already shrunk from its width
+ * instead of dropping levels again.
+ */
+function shrinkNormalAtlas(texture: CompressedTexture, info: ImpostorAtlasInfo): Texture {
+  const levels = droppedNormalLevels(info.frameSize);
   if (levels === 0) return texture;
+  const file = info.normalFile;
+  const atlasSize = info.grid * info.frameSize;
+  const shrunkSize = atlasSize >> levels;
+  const { width } = texture.image;
+  if (width === shrunkSize) return texture;
+  if (width !== atlasSize) {
+    throw new Error(
+      `${file} is ${width} px wide, but grid * frameSize is ${atlasSize}. Re-bake it or fix its index entry.`,
+    );
+  }
   const kept = texture.mipmaps.slice(levels);
   const top = kept[0];
   if (top === undefined) {
@@ -181,7 +197,7 @@ export async function loadImpostorAtlas(
   const [albedo, normal] = loaded;
   if (loaded.length === 2 && albedo !== undefined && normal !== undefined) {
     try {
-      const shrunk = dropTopLevels(normal, droppedNormalLevels(info.frameSize), info.normalFile);
+      const shrunk = shrinkNormalAtlas(normal, info);
       return { info, albedo: prepare(albedo), normal: prepare(shrunk) };
     } catch (error) {
       for (const texture of loaded) texture.dispose();
