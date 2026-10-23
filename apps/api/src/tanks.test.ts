@@ -280,7 +280,7 @@ describe('tanks and fish', () => {
     expect(tankSchema.parse(renamed.json()).backgroundId).toBe('bg-fw-misty-lake');
   });
 
-  it('rejects a background from another biome or an unknown one, and guards rooms', async () => {
+  it('rejects a background from another biome or an unknown one', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
     const wrongBiome = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
@@ -298,7 +298,11 @@ describe('tanks and fish', () => {
     expect(JSON.stringify(wrongBiome.json())).toContain('backgroundId');
     const after = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
     expect(after.backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
+  });
 
+  it('moves a tank only into rooms the owner holds', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
     expect(tank.roomId).toBe('room-living');
     expect(tank.roomSetAt).toBeNull();
 

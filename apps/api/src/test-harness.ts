@@ -39,20 +39,20 @@ const cheapKey = (password: string, salt: Buffer) =>
 
 // Better Auth's built-in memory store is a module-level Map shared by every createAuth() in a worker.
 function isolatedRateLimitStorage(): AuthRateLimitStorage {
-  const hits = new Map<string, { count: number; start: number }>();
+  const hits = new Map<string, { count: number; lastRequest: number }>();
   return {
     async consume(key, rule) {
       const now = Date.now();
       const windowMs = rule.window * 1000;
       const hit = hits.get(key);
-      if (!hit || now - hit.start >= windowMs) {
-        hits.set(key, { count: 1, start: now });
+      if (!hit || now - hit.lastRequest >= windowMs) {
+        hits.set(key, { count: 1, lastRequest: now });
         return { allowed: true, retryAfter: null };
       }
       if (hit.count >= rule.max) {
-        return { allowed: false, retryAfter: Math.ceil((hit.start + windowMs - now) / 1000) };
+        return { allowed: false, retryAfter: Math.ceil((hit.lastRequest + windowMs - now) / 1000) };
       }
-      hit.count += 1;
+      hits.set(key, { count: hit.count + 1, lastRequest: now });
       return { allowed: true, retryAfter: null };
     },
   };
