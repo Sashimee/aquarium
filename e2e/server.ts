@@ -121,10 +121,18 @@ interface SetBalanceBody {
   balance: number;
 }
 
-// Moves a wallet to an exact balance through a ledger row, as a chargeback would, so the balance
-// still equals the sum of the ledger. Open /api/wallet first: that creates the wallet.
+// Moves a wallet to an exact balance through a game-sourced 'grant' row labelled e2e:set-balance, so
+// the balance still equals the sum of the ledger and no fake payment rows appear. Open /api/wallet first: that creates the wallet.
 app.post('/__e2e/set-balance', async (req, reply) => {
-  const { email, balance } = req.body as SetBalanceBody;
+  const body = req.body as Partial<SetBalanceBody> | null;
+  if (
+    typeof body?.email !== 'string' ||
+    typeof body.balance !== 'number' ||
+    !Number.isInteger(body.balance)
+  ) {
+    return reply.code(400).send({ error: 'body must be {email: string, balance: integer}' });
+  }
+  const { email, balance } = body as SetBalanceBody;
   const client = await database.pool.connect();
   try {
     await client.query('begin');
@@ -141,8 +149,8 @@ app.post('/__e2e/set-balance', async (req, reply) => {
     if (delta !== 0) {
       await client.query(
         `insert into ledger (user_id, delta, reason, source, item_ref, idempotency_key)
-         select u.id, $2, $3::ledger_reason, 'stripe', 'e2e:set-balance', $4 from "user" u where u.email = $1`,
-        [email.toLowerCase(), delta, delta < 0 ? 'clawback' : 'restore', `e2e-${randomUUID()}`],
+         select u.id, $2, 'grant'::ledger_reason, 'game', 'e2e:set-balance', $3 from "user" u where u.email = $1`,
+        [email.toLowerCase(), delta, `e2e-${randomUUID()}`],
       );
       await client.query(
         'update wallet set balance = $2 where user_id = (select id from "user" where email = $1)',

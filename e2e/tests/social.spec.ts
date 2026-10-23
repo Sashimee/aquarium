@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { APP_URL, registerVerifiedUser } from '../support/app.ts';
+import { advanceServerClock, APP_URL, registerVerifiedUser } from '../support/app.ts';
+import { COMMUNITY_TANK_FEED_CAP } from '../support/community.ts';
 import {
   addFish,
   createTank,
@@ -351,11 +352,11 @@ test.describe('gallery', () => {
     ).toBe(true);
 
     const other = await createTank(page, { name: `Other ${crypto.randomUUID().slice(0, 8)}` });
-    const quarantine = await page.request.put(`/api/tanks/${other.id}/gallery`, {
+    const unsharedListing = await page.request.put(`/api/tanks/${other.id}/gallery`, {
       ...sameOrigin,
       data: { listed: true },
     });
-    expect(quarantine.status(), 'a tank with no public link is not listed').toBe(409);
+    expect(unsharedListing.status(), 'a tank with no public link is not listed').toBe(409);
 
     const ownVote = await page.request.put('/api/gallery/vote', {
       ...sameOrigin,
@@ -463,6 +464,10 @@ test.describe('gallery', () => {
 });
 
 test.describe('community tank', () => {
+  test.beforeEach(async ({ page }) => {
+    await advanceServerClock(page, COMMUNITY_TANK_FEED_CAP.windowMs / 60_000 + 1);
+  });
+
   test('anyone can look, a signed-in player feeds a limited share, and the whole tank has a cap', async ({
     page,
     browser,
@@ -531,7 +536,8 @@ test.describe('community tank', () => {
   test('the tank-wide cap stops a crowd from overfeeding', async ({ browser }) => {
     const feeders: Page[] = [];
     let refused = 0;
-    for (let n = 0; n < 4; n += 1) feeders.push(await freshPlayer(browser, `crowd${n}`));
+    for (let n = 0; n < COMMUNITY_TANK_FEED_CAP.portions + 1; n += 1)
+      feeders.push(await freshPlayer(browser, `crowd${n}`));
     for (const feeder of feeders) {
       const res = await feeder.request.post('/api/community/feed', {
         ...sameOrigin,
@@ -540,10 +546,7 @@ test.describe('community tank', () => {
       if (res.status() === 429) refused += 1;
       else expect(res.status()).toBe(201);
     }
-    expect(
-      refused,
-      'four whole portions exceed what the tank takes in three hours',
-    ).toBeGreaterThanOrEqual(1);
+    expect(refused, 'one portion more than the cap is refused').toBeGreaterThanOrEqual(1);
     for (const feeder of feeders) await feeder.context().close();
   });
 });

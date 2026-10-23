@@ -251,6 +251,12 @@ test.describe('Pearl packs in test mode', () => {
       status: 'refunded',
     });
 
+    const extra = event('refund.created', refund(ids.paymentIntent, pack.priceCents));
+    expect((await deliver(stripe, extra)).status()).toBe(200);
+    expect(await balance(page), 'a refund past the full amount takes nothing more').toBe(
+      credited - pack.pearls,
+    );
+
     const rows = packRows((await wallet(page)).ledger, `pack:${pack.id}`);
     expect(rows.filter((r) => r.reason === 'clawback').reduce((sum, r) => sum - r.delta, 0)).toBe(
       pack.pearls,
