@@ -202,6 +202,26 @@ describe('RoomStage', () => {
     expect(bakes).toHaveLength(1);
   });
 
+  it('rejects a room it cannot plan and keeps the one on show', async () => {
+    const { stage, show, bakes, ledger } = harness();
+    await show('room-zen');
+    const plan = stage.plan;
+    const layout = stage.layout;
+    const shown = meshes(stage.group);
+    const resources = ledger.count;
+    const flat = { ...tank, height: 0 };
+    await expect(stage.show('room-office', flat, 'high')).rejects.toThrow(/tank height/);
+    expect(stage.plan).toBe(plan);
+    expect(stage.layout).toBe(layout);
+    expect(meshes(stage.group)).toEqual(shown);
+    expect(ledger.count).toBe(resources);
+    expect(bakes).toHaveLength(1);
+    await stage.setTier('medium');
+    expect(stage.plan?.roomId).toBe('room-zen');
+    expect(stage.plan?.props.every((p) => p.lod === 2)).toBe(true);
+    expect(bakes).toHaveLength(1);
+  });
+
   it('changes nothing when shown the room it already shows or is loading', async () => {
     let finish: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => (finish = resolve));
