@@ -1,9 +1,34 @@
 {
   "roomId": "room-shop",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-steel-frame-shelves-03",
+      "position": [-2, -0.75, 0],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-steel-frame-shelves-03",
+      "position": [2, -0.75, 0],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-plastic-crate-02",
+      "position": [2.3, -0.75, 1],
+      "rotationY": 0.349,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-cashregister-01",
+      "position": [2.3, -0.496, 1],
+      "rotationY": 0.349,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#f2f8ff",
-    "keyIntensity": 3.0,
+    "keyIntensity": 3,
     "ambientColor": "#dfeeff",
     "ambientIntensity": 0.7,
     "windowPosition": null

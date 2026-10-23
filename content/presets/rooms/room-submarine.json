@@ -1,11 +1,30 @@
 {
   "roomId": "room-submarine",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-metal-stool-01",
+      "position": [-1.6, -0.75, 0.8],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-seadogs-compass",
+      "position": [-1.6, 0.133, 0.8],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-metal-stool-01",
+      "position": [-2.4, -0.75, 1.6],
+      "rotationY": 0,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#b8e6ff",
     "keyIntensity": 1.5,
     "ambientColor": "#3d6a8a",
     "ambientIntensity": 0.3,
-    "windowPosition": [1.2, 0.9, -1.5]
+    "windowPosition": [1.2, 0.7, -0.37]
   }
 }

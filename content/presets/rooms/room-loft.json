@@ -1,11 +1,30 @@
 {
   "roomId": "room-loft",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-sofa-02",
+      "position": [-2.69, -0.75, 1],
+      "rotationY": 1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-metal-stool-01",
+      "position": [2.3, -0.75, 0.8],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-hanging-industrial-lamp",
+      "position": [-1.4, 0.394, 0.9],
+      "rotationY": 0,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#ffe2c2",
     "keyIntensity": 2.6,
     "ambientColor": "#d8e4ff",
     "ambientIntensity": 0.5,
-    "windowPosition": [1.2, 0.9, -1.5]
+    "windowPosition": [1.2, 1, -0.37]
   }
 }

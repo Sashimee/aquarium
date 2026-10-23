@@ -1,6 +1,31 @@
 {
   "roomId": "room-public-aquarium",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-bronze-whale-statue",
+      "position": [-2.5, -0.75, 0.4],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-painted-wooden-bench",
+      "position": [-1.8, -0.75, 2],
+      "rotationY": 3.142,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-painted-wooden-bench",
+      "position": [1.8, -0.75, 2],
+      "rotationY": 3.142,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-wetfloorsign-01",
+      "position": [1.6, -0.75, 1],
+      "rotationY": 0.524,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#9fd0ff",
     "keyIntensity": 1.4,
