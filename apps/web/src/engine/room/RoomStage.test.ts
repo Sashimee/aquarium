@@ -5,10 +5,10 @@ import {
   Mesh,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
-  PointLight,
   RenderTarget,
   Texture,
   type BufferGeometry,
+  type Light,
   type Material,
   type Object3D,
 } from 'three/webgpu';
@@ -25,7 +25,7 @@ import {
 import { TIERS, type Tier } from '../quality/tiers';
 import { buildShaders } from '../shaderFixtures';
 import { TANK_DIMENSIONS } from '../tank/dimensions';
-import { RoomLight } from './RoomLight';
+import { ROOM_LAMP_SLOTS, RoomLight } from './RoomLight';
 import { roomAssetsFrom, RoomStage, roomTierFor, type RoomStageOptions } from './RoomStage';
 
 const tank = TANK_DIMENSIONS.standard;
@@ -117,10 +117,10 @@ function meshes(root: Object3D): Mesh[] {
   return found;
 }
 
-function lights(root: Object3D): PointLight[] {
-  const found: PointLight[] = [];
+function lights(root: Object3D): Light[] {
+  const found: Light[] = [];
   root.traverse((o) => {
-    if (o instanceof PointLight) found.push(o);
+    if ((o as Partial<Light>).isLight) found.push(o as Light);
   });
   return found;
 }
@@ -284,6 +284,68 @@ describe('RoomStage', () => {
     ledger.trackTree(stage.group);
   });
 
+  it('falls back to the studio HDRI when the first room HDRI after startup fails', async () => {
+    const calls: (string | null)[] = [];
+    const { stage } = harness({
+      bake: async (url) => {
+        calls.push(url);
+        if (url?.includes('cabin')) throw new Error('HTTP 500 for the cabin HDRI');
+      },
+    });
+    await expect(stage.show('room-cabin', tank, 'high')).rejects.toThrow('HTTP 500');
+    expect(calls).toEqual([assets.hdriUrl('room-cabin'), null]);
+  });
+
+  it('draws the studio again for no room after its fallback failed', async () => {
+    const bakes: Bake[] = [];
+    let studioFails = false;
+    const { stage } = harness({
+      bake: async (url, yaw, signal) => {
+        bakes.push({ url, yaw, signal });
+        if (url?.includes('cabin')) throw new Error('HTTP 500 for the cabin HDRI');
+        if (url === null && studioFails) throw new Error('HTTP 503 for the studio HDRI');
+      },
+    });
+    await stage.show('room-office', tank, 'high');
+    studioFails = true;
+    await expect(stage.show('room-cabin', tank, 'high')).rejects.toThrow('HTTP 500');
+    await settle();
+    expect(bakes.at(-1)?.url).toBeNull();
+    studioFails = false;
+    const before = bakes.length;
+    await stage.show(null, tank, 'high');
+    expect(bakes.slice(before)).toMatchObject([{ url: null, yaw: 0 }]);
+    await stage.show(null, tank, 'high');
+    expect(bakes).toHaveLength(before + 1);
+  });
+
+  it('does not draw the studio again after a fallback that worked', async () => {
+    const calls: (string | null)[] = [];
+    const { stage } = harness({
+      bake: async (url) => {
+        calls.push(url);
+        if (url?.includes('cabin')) throw new Error('HTTP 500 for the cabin HDRI');
+      },
+    });
+    await stage.show('room-office', tank, 'high');
+    await expect(stage.show('room-cabin', tank, 'high')).rejects.toThrow('HTTP 500');
+    await settle();
+    await stage.show(null, tank, 'high');
+    expect(calls).toEqual([assets.hdriUrl('room-office'), assets.hdriUrl('room-cabin'), null]);
+  });
+
+  it('loads no furniture until the HDRI is drawn, so the two never share memory', async () => {
+    let finish: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (finish = resolve));
+    const { stage, loads } = harness({ bake: () => gate });
+    const shown = stage.show('room-cabin', tank, 'high');
+    await settle();
+    expect(loads).toHaveLength(0);
+    finish();
+    await shown;
+    expect(loads.length).toBeGreaterThan(0);
+  });
+
   it('falls back to the default studio when the HDRI fails after another room was drawn', async () => {
     const calls: (string | null)[] = [];
     const { stage } = harness({
@@ -326,17 +388,30 @@ describe('RoomStage', () => {
     await expect(stage.show('room-loft', tank, 'ultra')).rejects.toThrow('after dispose');
   });
 
-  it('lights the lamps on high and ultra only', async () => {
+  it('lights the lamps on high and ultra only, once their props are on show', async () => {
     for (const tier of TIERS) {
       const { stage, show } = harness();
-      await show('room-cabin', tier);
-      const lamps = lights(stage.group);
+      const shown = show('room-cabin', tier);
+      expect(stage.rig?.practical).toHaveLength(0);
+      await shown;
+      const lamps = stage.rig?.practical ?? [];
       if (tier === 'high' || tier === 'ultra') expect(lamps.length, tier).toBeGreaterThan(0);
       else expect(lamps, tier).toHaveLength(0);
     }
     const phone = harness({ mobile: true });
     await phone.show('room-cabin', 'high');
-    expect(lights(phone.stage.group)).toHaveLength(0);
+    expect(phone.stage.rig?.practical).toHaveLength(0);
+  });
+
+  it('adds no scene lights in any room, so the tank never recompiles for a room change', async () => {
+    const { stage, show } = harness();
+    for (const tier of ['high', 'ultra'] as const) {
+      for (const roomId of [...ROOM_IDS, null]) {
+        await show(roomId, tier);
+        expect(lights(stage.group), `${roomId} ${tier}`).toHaveLength(0);
+        expect(stage.rig?.practical?.length ?? 0, `${roomId}`).toBeLessThanOrEqual(ROOM_LAMP_SLOTS);
+      }
+    }
   });
 
   it('keeps a phone within 15 k triangles and 10 draws in every room, at any tier', async () => {
@@ -431,6 +506,41 @@ describe('RoomStage with RoomLight', () => {
     const pane = stage.pane?.material;
     expect(pane).toBeInstanceOf(MeshBasicNodeMaterial);
     expect((pane as MeshBasicNodeMaterial).colorNode).not.toBeNull();
+  });
+
+  it('lights the lamps through uniforms, keeping the shaders it built', async () => {
+    let finish: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (finish = resolve));
+    const { stage, show } = harness({
+      source: {
+        load: async (asset) => {
+          if (asset.includes('lamp')) await gate;
+          return new Group();
+        },
+      },
+    });
+    const light = new RoomLight({ environment: environment(), tier: 'high', seed: 3 });
+    light.attach(stage);
+    await show('room-living', 'high');
+    light.update(NOON);
+    expect(light.litLamps).toBe(0);
+    const shown = stage.show('room-cabin', tank, 'high');
+    light.update(NOON);
+    const floor = meshes(stage.group).find((m) => m.name === 'room-floor');
+    const material = floor?.material as MeshStandardNodeMaterial;
+    const node = material.emissiveNode;
+    const version = material.version;
+    expect(light.litLamps).toBe(0);
+    finish();
+    await shown;
+    light.update(NOON);
+    expect(light.litLamps).toBe(stage.rig?.practical?.length);
+    expect(light.litLamps).toBeGreaterThan(0);
+    expect(material.emissiveNode).toBe(node);
+    expect(material.version).toBe(version);
+    await show('room-living', 'high');
+    light.update(NOON);
+    expect(light.litLamps).toBe(0);
   });
 
   it('builds WGSL and GLSL for the lit shell, contact shadow included, on every tier', async () => {

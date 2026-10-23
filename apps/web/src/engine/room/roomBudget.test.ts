@@ -18,8 +18,11 @@ const assets = roomAssetsFrom(indexJson);
 
 /** A 1k equirectangular HDRI, 1024x512, as BC6H on desktop or rewrapped RGBA16F where BC6H is missing. */
 const HDRI_BYTES = { bc6h: 1024 * 512, rgba16f: 1024 * 512 * 8 } as const;
-/** The room PMREM and the ping-pong target PMREMGenerator holds while drawing into it. */
+/** The room PMREM, a 3x4-face RGBA16F target. */
 const PMREM_BYTES = 3 * ROOM_CUBE_SIZE * 4 * ROOM_CUBE_SIZE * 8;
+/** PMREMGenerator's ping-pong target, the PMREM's size, which lives only while an HDRI is drawn. */
+const PING_PONG_BYTES = PMREM_BYTES;
+const MOBILE_ROOM_BYTES = 8_000_000;
 
 type DecodeTarget = 'etc' | 'bc';
 
@@ -94,6 +97,11 @@ interface RoomCost {
   readonly hdri: number;
   /** Shell, furniture and the HDRI download held together, the most the room ever holds. */
   readonly total: number;
+  /**
+   * What drawing the HDRI briefly adds: the HDRI and the ping-pong target. RoomStage frees the last
+   * room before and loads the furniture only after, so the furniture is never resident with it.
+   */
+  readonly drawing: number;
 }
 
 function roomCost(roomId: RoomId, tier: Tier, mobile: boolean): RoomCost {
@@ -121,6 +129,7 @@ function roomCost(roomId: RoomId, tier: Tier, mobile: boolean): RoomCost {
     textures,
     hdri,
     total: geometry + textures + hdri,
+    drawing: hdri === 0 ? 0 : hdri + PING_PONG_BYTES,
   };
 }
 
@@ -135,8 +144,16 @@ describe('room GPU budget', () => {
     for (const tier of TIERS) {
       for (const roomId of ROOM_IDS) {
         const cost = roomCost(roomId, tier, true);
-        expect(cost.total, `${roomId} ${tier}`).toBeLessThanOrEqual(8_000_000);
+        expect(cost.total, `${roomId} ${tier}`).toBeLessThanOrEqual(MOBILE_ROOM_BYTES);
       }
+    }
+  });
+
+  it('peaks at about 10 MiB on a phone only while an HDRI is drawn, with no furniture loaded', () => {
+    for (const roomId of ROOM_IDS) {
+      const cost = roomCost(roomId, 'ultra', true);
+      expect(cost.drawing / MIB, roomId).toBeCloseTo(10, 5);
+      expect(cost.drawing, roomId).toBeLessThanOrEqual(MOBILE_ROOM_BYTES + cost.hdri);
     }
   });
 
@@ -161,7 +178,8 @@ describe('room GPU budget', () => {
         rows.push(
           `${label} ${tier}: draws ≤${worst((c) => c.draws)}, tris ≤${worst((c) => c.triangles)}, ` +
             `geometry ≤${mib(worst((c) => c.geometry))} MiB, textures ≤${mib(worst((c) => c.textures))} MiB, ` +
-            `total ≤${mib(worst((c) => c.total))} MiB`,
+            `total ≤${mib(worst((c) => c.total))} MiB, ` +
+            `drawing an HDRI ≤${mib(worst((c) => c.drawing))} MiB`,
         );
       }
     }
