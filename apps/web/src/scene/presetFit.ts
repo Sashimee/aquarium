@@ -27,6 +27,8 @@ import { GLASS_SHRINK_FLOOR } from './placement';
 import { SURFACE_MARGIN } from './plants';
 
 const WALL_MARGIN = 0.005;
+/** A nano patch crowded against the front glass shrinks its disc to fit, but never below this share, so it stays a patch. */
+const MIN_PATCH_RADIUS_SHARE = 0.45;
 const PERCH_SETTLE_PASSES = 4;
 
 interface Footprint {
@@ -231,9 +233,15 @@ function fitPatch(
   const limitZ = Math.max(0, halfD - reachOf(smallestPatch, 'z'));
   const x = patch.center[0] * lengthRatio;
   const z = patch.center[1] * depthRatio;
+  const nanoFront = size === 'nano30' && z > 0;
+  const radius = nanoFront
+    ? Math.max(fitted.radius * MIN_PATCH_RADIUS_SHARE, Math.min(fitted.radius, limitZ - z))
+    : fitted.radius;
+  const frontLimit = nanoFront ? Math.max(0, limitZ - radius) : limitZ;
   return {
     ...fitted,
-    center: [Math.max(-limitX, Math.min(limitX, x)), Math.max(-limitZ, Math.min(limitZ, z))],
+    radius,
+    center: [Math.max(-limitX, Math.min(limitX, x)), Math.max(-limitZ, Math.min(frontLimit, z))],
   };
 }
 
