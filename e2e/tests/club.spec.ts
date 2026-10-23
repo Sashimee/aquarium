@@ -272,13 +272,15 @@ test.describe('Aquarist Club in test mode', () => {
 test.describe('the Checkout redirect', () => {
   async function captureCheckoutUrl(page: Page, endpoint: string): Promise<Promise<string>> {
     let resolve: (url: string) => void = () => undefined;
-    const seen = new Promise<string>((done) => {
+    const seen = new Promise<string>((done, fail) => {
       resolve = done;
+      setTimeout(() => fail(new Error(`no ${endpoint} Checkout response within 90 s`)), 90_000);
     });
     await page.route(`**/api/payments/checkout/${endpoint}`, async (route) => {
       const upstream = await route.fetch();
-      resolve(((await upstream.json()) as { url: string }).url);
-      await route.fulfill({ response: upstream });
+      const body = await upstream.body();
+      resolve((JSON.parse(body.toString('utf8')) as { url: string }).url);
+      await route.fulfill({ response: upstream, body });
     });
     return seen;
   }

@@ -47,6 +47,7 @@ test.describe('the gift and trade screens', () => {
       })
       .toBe(true);
 
+    await recipient.goto('about:blank');
     await openTank(page);
     const care = await openDock(page, 'Care', 'Care');
     await care.getByRole('button', { name: 'Gift or trade Sparky' }).click();
