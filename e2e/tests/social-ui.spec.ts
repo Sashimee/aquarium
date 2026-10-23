@@ -60,6 +60,7 @@ test.describe('the gift and trade screens', () => {
     await care.getByRole('button', { name: 'Send Sparky' }).click();
     await expect.poll(async () => (await livingIds(page, senderTank.id)).length).toBe(0);
 
+    await page.goto('about:blank');
     await openTank(recipient);
     const offers = await openTankPanel(recipient);
     await offers.getByRole('button', { name: 'Refresh offers' }).click();

@@ -270,6 +270,8 @@ test.describe('Aquarist Club in test mode', () => {
 });
 
 test.describe('the Checkout redirect', () => {
+  test.use({ serviceWorkers: 'block' });
+
   async function captureCheckoutUrl(page: Page, endpoint: string): Promise<Promise<string>> {
     let resolve: (url: string) => void = () => undefined;
     const seen = new Promise<string>((done, fail) => {
