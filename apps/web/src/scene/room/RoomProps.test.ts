@@ -222,6 +222,26 @@ describe('RoomProps', () => {
     expect(props.group.children).toHaveLength(0);
   });
 
+  it('logs a prop that fails after the show was aborted, but not the abort itself', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+    const controller = new AbortController();
+    const rejects: ((cause: Error) => void)[] = [];
+    const failing: PropSource = {
+      load: () => new Promise<Group>((_resolve, reject) => rejects.push(reject)),
+    };
+    const pending = new RoomProps().show(sushi(), failing, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toThrow();
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    rejects[0]?.(abort);
+    rejects[1]?.(new Error('chair 404'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(debug).toHaveBeenCalledTimes(1);
+    expect(debug.mock.calls[0]?.[1]).toEqual(new Error('chair 404'));
+    debug.mockRestore();
+  });
+
   it('keeps quiet about a failure in a show that a newer one replaced', async () => {
     let fail: (cause: Error) => void = () => undefined;
     const failing: PropSource = {

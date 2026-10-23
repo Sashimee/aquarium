@@ -27,8 +27,10 @@ const rooms = roomFileSchema.parse(
 );
 const sizes = Object.keys(TANK_SIZES) as (keyof typeof TANK_SIZES)[];
 const EPS = 1e-6;
-const shellDraws = (hasWindow: boolean, tier: Tier) =>
-  4 + (hasWindow ? 2 : 0) + (tier === 'high' || tier === 'ultra' ? 1 : 0);
+const shellDraws = (hasWindow: boolean, tier: Tier) => {
+  const { ceiling, windowFrame } = ROOM_TIER_POLICY[tier];
+  return 4 + (hasWindow ? 1 + (windowFrame ? 1 : 0) : 0) + (ceiling ? 1 : 0);
+};
 
 function primitives(file: string): number {
   const bytes = readFileSync(join(ASSETS, file));
