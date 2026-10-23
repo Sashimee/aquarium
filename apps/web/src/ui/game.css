@@ -369,9 +369,13 @@
 }
 
 @media (max-width: 480px) {
+  .stage {
+    padding-top: 14rem;
+  }
+
   .hud {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 0.5rem;
   }
@@ -385,26 +389,53 @@
     grid-column: 1;
     grid-row: 1;
     width: auto;
+    min-width: 9rem;
   }
 
   .hud-buttons {
-    grid-column: 2;
-    grid-row: 1;
+    grid-column: 1;
+    grid-row: 2;
+    flex-wrap: wrap;
+  }
+
+  #ui .chem-chip {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
   }
 
   .camera-controls {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    grid-column: 1;
+    grid-row: 4;
     justify-self: start;
   }
 
   .tank-type {
-    grid-column: 1 / -1;
-    grid-row: 3;
+    grid-column: 1;
+    grid-row: 5;
     justify-self: start;
     max-width: 100%;
+    padding-block: 0.35rem;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .tank-type[data-more-end='true'] {
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+  }
+
+  .tank-type[data-more-start='true'] {
+    mask-image: linear-gradient(to right, transparent, #000 1.75rem);
+  }
+
+  .tank-type[data-more-start='true'][data-more-end='true'] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 1.75rem,
+      #000 calc(100% - 1.75rem),
+      transparent
+    );
   }
 
   #ui .segmented button {

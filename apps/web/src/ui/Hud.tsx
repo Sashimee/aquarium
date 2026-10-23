@@ -1,5 +1,5 @@
 import type { Biome, CreatableBiome } from '@aquarium/shared';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { earnedText, euroText, pearlText } from '../sync/economy';
 import type { CameraMode } from '../interaction/camera';
@@ -244,8 +244,38 @@ export function TankTypeSwitch({ onCreate }: { onCreate(biome: CreatableBiome): 
         return;
     }
   };
+  const scroller = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ start: false, end: false });
+  const measure = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const start = el.scrollLeft > 1;
+    const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setMore((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
+  }, []);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    el.querySelector<HTMLElement>('[aria-pressed="true"]')?.scrollIntoView?.({
+      block: 'nearest',
+      inline: 'nearest',
+    });
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const watcher = new ResizeObserver(measure);
+    watcher.observe(el);
+    return () => watcher.disconnect();
+  }, [shown, measure]);
   return (
-    <div role="group" aria-label="Tank type" className="segmented tank-type">
+    <div
+      ref={scroller}
+      role="group"
+      aria-label="Tank type"
+      className="segmented tank-type"
+      data-more-start={more.start}
+      data-more-end={more.end}
+      onScroll={measure}
+    >
       {TANK_TYPES.map(({ biome, label }) => (
         <button
           key={biome}

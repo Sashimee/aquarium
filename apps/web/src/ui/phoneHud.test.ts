@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+// happy-dom has no layout, so this only guards the structure; e2e/phone-hud.spec.ts measures the boxes.
 const PHONE = '(max-width: 480px)';
 
 let rules: Map<string, CSSStyleDeclaration>;
@@ -27,25 +28,35 @@ const rule = (selector: string): CSSStyleDeclaration => {
   return found;
 };
 
-describe('phone HUD layout', () => {
-  it('gives the five-biome switcher its own full-width row so it cannot squeeze the status card', () => {
+describe('phone HUD layout rules', () => {
+  it('uses a single column, so no control can take width from the status card', () => {
+    expect(rule('.hud').getPropertyValue('grid-template-columns')).toBe('minmax(0, 1fr)');
+  });
+
+  it('puts the status card, buttons, chip, camera and tank type on five distinct rows', () => {
+    const rows = [
+      rule('#ui .status-card'),
+      rule('.hud-buttons'),
+      rule('#ui .chem-chip'),
+      rule('.camera-controls'),
+      rule('.tank-type'),
+    ].map((r) => Number(r.getPropertyValue('grid-row')));
+    expect(rows).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('lets the buttons wrap and keeps a readable minimum card width', () => {
+    expect(rule('.hud-buttons').getPropertyValue('flex-wrap')).toBe('wrap');
+    expect(rule('#ui .status-card').getPropertyValue('min-width')).toBe('9rem');
+  });
+
+  it('scrolls the tank type switcher inside its own row, with room for focus rings', () => {
     const tank = rule('.tank-type');
-    expect(tank.getPropertyValue('grid-column')).toBe('1 / -1');
     expect(tank.getPropertyValue('overflow-x')).toBe('auto');
     expect(tank.getPropertyValue('max-width')).toBe('100%');
+    expect(tank.getPropertyValue('padding-block')).not.toBe('');
   });
 
-  it('keeps the status card, camera controls and tank type on distinct grid rows', () => {
-    const rows = [rule('#ui .status-card'), rule('.camera-controls'), rule('.tank-type')].map((r) =>
-      Number(r.getPropertyValue('grid-row')),
-    );
-    expect(new Set(rows).size).toBe(3);
-    expect(rule('.hud-buttons').getPropertyValue('grid-row')).toBe(
-      rule('#ui .status-card').getPropertyValue('grid-row'),
-    );
-  });
-
-  it('lets the camera controls span the row so Dive and Follow stay reachable', () => {
-    expect(rule('.camera-controls').getPropertyValue('grid-column')).toBe('1 / -1');
+  it('reserves room under the taller HUD', () => {
+    expect(rule('.stage').getPropertyValue('padding-top')).toBe('14rem');
   });
 });
