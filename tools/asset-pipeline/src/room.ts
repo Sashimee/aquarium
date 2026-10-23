@@ -70,11 +70,13 @@ export function roomHdriRecipe(id: string): HdriRecipe {
  */
 export interface RoomAmbienceTuning {
   searchS?: [number, number];
+  limit?: boolean;
 }
 
 export const AMBIENCE_TUNING: Readonly<Record<string, RoomAmbienceTuning>> = {
   'freesound-393689': { searchS: [10, 55] },
   'freesound-620683': { searchS: [100, 540] },
+  'freesound-346321': { limit: true },
 };
 
 export function roomAmbienceRecipe(id: string): AudioRecipe {
@@ -86,6 +88,7 @@ export function roomAmbienceRecipe(id: string): AudioRecipe {
     targetLufs: -26,
     highpassHz: 60,
     loop: { loopS: 14, crossfadeS: 1, ...(tuning?.searchS ? { searchS: tuning.searchS } : {}) },
+    ...(tuning?.limit ? { limit: true } : {}),
   };
 }
 

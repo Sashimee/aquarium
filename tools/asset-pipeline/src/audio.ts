@@ -8,6 +8,7 @@ import {
   fadeIn,
   fadeOut,
   integratedLoudness,
+  limitedNormalise,
   loopCrossfade,
   normaliseLoudness,
   stationaryStart,
@@ -19,6 +20,9 @@ import type { OutputAsset } from './index-schema.ts';
 
 export const AUDIO_BITRATE_KBPS = 64;
 export const PEAK_CEILING_DB = -1;
+/** AAC reconstruction overshoots the sample peak by about 0.5 dB, so limited clips stop short of the plain ceiling. */
+const LIMITER_CEILING_DB = PEAK_CEILING_DB - 1.5;
+const LIMITER_LOOKAHEAD_S = 0.005;
 const SILENCE_THRESHOLD_DB = -50;
 const SILENCE_MARGIN_S = 0.005;
 const ONE_SHOT_FADE_IN_S = 0.002;
@@ -33,6 +37,8 @@ export interface AudioRecipe {
   /** Loops are cut from a stationary window of `loopS` and joined with a `crossfadeS` crossfade. */
   loop?: { crossfadeS: number; loopS?: number; searchS?: [number, number] };
   fadeOutS?: number;
+  /** Look-ahead peak limiting before the loudness target; for sources whose peaks cap the plain gain. */
+  limit?: boolean;
 }
 
 export const AUDIO_RECIPES: readonly AudioRecipe[] = [
@@ -178,7 +184,14 @@ export function processAudio(source: Float32Array, recipe: AudioRecipe): Process
     samples = fadeIn(samples, Math.round(ONE_SHOT_FADE_IN_S * rate));
     if (recipe.fadeOutS) samples = fadeOut(samples, Math.round(recipe.fadeOutS * rate));
   }
-  const normalised = normaliseLoudness(samples, recipe.targetLufs, PEAK_CEILING_DB);
+  const normalised = recipe.limit
+    ? limitedNormalise(
+        samples,
+        recipe.targetLufs,
+        LIMITER_CEILING_DB,
+        Math.round(LIMITER_LOOKAHEAD_S * rate),
+      )
+    : normaliseLoudness(samples, recipe.targetLufs, PEAK_CEILING_DB);
   return {
     samples: normalised.samples,
     gainDb: normalised.gainDb,
@@ -200,6 +213,10 @@ function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): stri
     notes.push(`trimmed leading and trailing silence, ${ONE_SHOT_FADE_IN_S * 1000} ms fade-in`);
     if (recipe.fadeOutS) notes.push(`${Math.round(recipe.fadeOutS * 1000)} ms fade-out`);
   }
+  if (recipe.limit)
+    notes.push(
+      `${LIMITER_LOOKAHEAD_S * 1000} ms look-ahead peak limiter at ${LIMITER_CEILING_DB} dBFS`,
+    );
   notes.push(
     processed.peakLimited
       ? `gain limited by the ${PEAK_CEILING_DB} dBFS peak ceiling, so the loudness is ${processed.loudnessLufs.toFixed(1)} LUFS instead of the ${recipe.targetLufs} LUFS target`
