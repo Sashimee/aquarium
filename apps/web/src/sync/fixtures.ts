@@ -118,6 +118,7 @@ export function recordBus() {
     'tank:care',
     'tank:decor',
     'tank:background',
+    'tank:room',
     'decor:save-state',
     'camera:focus-fish',
   ];

@@ -1,4 +1,4 @@
-import type { AwaySummary, SpeciesSummary, Tank } from '@aquarium/shared';
+import type { AwaySummary, RoomId, SpeciesSummary, Tank } from '@aquarium/shared';
 
 export type SessionPhase = 'anonymous' | 'unverified' | 'loading' | 'ready' | 'offline';
 
@@ -28,6 +28,8 @@ export interface SessionState {
   balance: number | null;
   /** Item refs already bought, as far as the recent ledger shows. */
   owned: readonly string[];
+  /** The paid rooms the account bought; the free rooms are always usable and never listed. */
+  ownedRooms: readonly RoomId[];
   /** Pearls that arrived since the player last looked; shown once, then dismissed. */
   earned: number | null;
   /** The last paid request was refused for too few Pearls. */
@@ -49,6 +51,7 @@ export const INITIAL_STATE: SessionState = {
   pendingNet: null,
   balance: null,
   owned: [],
+  ownedRooms: [],
   earned: null,
   pearlsRefused: false,
   busy: false,

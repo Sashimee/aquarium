@@ -68,6 +68,7 @@ import {
   packsResponseSchema,
   paymentsStateSchema,
   subscriptionCheckoutRequestSchema,
+  ownedRoomsResponseSchema,
   purchaseRequestSchema,
   purchaseResponseSchema,
   treatRequestSchema,
@@ -77,6 +78,7 @@ import {
   type AchievementList,
   type AteReport,
   type BackgroundId,
+  type RoomId,
   type CareAction,
   type FragCoralRequest,
   type Collection,
@@ -290,6 +292,8 @@ export interface ApiClient {
   setAcceptsGifts(tankId: string, acceptsGifts: boolean): Promise<Tank>;
   saveDecorLayout(tankId: string, layout: DecorLayout): Promise<Tank>;
   saveBackground(tankId: string, backgroundId: BackgroundId): Promise<Tank>;
+  saveRoom(tankId: string, roomId: RoomId | null): Promise<Tank>;
+  ownedRooms(): Promise<RoomId[]>;
   addFish(tankId: string, input: AddFishInput): Promise<Tank>;
   wallet(): Promise<WalletView>;
   paymentsState(): Promise<PaymentsState>;
@@ -773,6 +777,15 @@ export function createApiClient(
     async saveBackground(tankId, backgroundId) {
       const body = validate(updateTankRequestSchema, { backgroundId });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async saveRoom(tankId, roomId) {
+      const body = validate(updateTankRequestSchema, { roomId });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async ownedRooms() {
+      const res = await send('/api/rooms');
+      if (!res.ok) throw await toError(res);
+      return (await parsed(res, ownedRoomsResponseSchema)).owned;
     },
     async wallet() {
       const res = await send('/api/wallet');

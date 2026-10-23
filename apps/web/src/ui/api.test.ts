@@ -215,6 +215,29 @@ describe('api client', () => {
     ).rejects.toBeInstanceOf(ClientValidationError);
   });
 
+  it('patches only the room id, null for no room, and refuses an id the contract does not know', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({}));
+    const api = createApiClient(fetcher);
+    await api.saveRoom('t', 'room-zen').catch(() => undefined);
+    await api.saveRoom('t', null).catch(() => undefined);
+    const bodies = fetcher.mock.calls.map(([, init]) =>
+      JSON.parse((init as RequestInit).body as string),
+    );
+    expect(bodies).toEqual([{ roomId: 'room-zen' }, { roomId: null }]);
+    expect((fetcher.mock.calls[0] as [string, RequestInit])[1].method).toBe('PATCH');
+    const unknown = vi.fn();
+    await expect(
+      createApiClient(unknown).saveRoom('t', 'room-nope' as never),
+    ).rejects.toBeInstanceOf(ClientValidationError);
+    expect(unknown).not.toHaveBeenCalled();
+  });
+
+  it('reads the paid rooms the account owns', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ owned: ['room-zen'] }));
+    await expect(createApiClient(fetcher).ownedRooms()).resolves.toEqual(['room-zen']);
+    expect((fetcher.mock.calls[0] as [string])[0]).toBe('/api/rooms');
+  });
+
   it('refuses to send a layout the server would reject', async () => {
     const fetcher = vi.fn();
     const outside = [

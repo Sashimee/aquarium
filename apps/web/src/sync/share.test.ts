@@ -219,6 +219,7 @@ describe('public tank to scene', () => {
     expect(lines[0]).toContain('Reef of Ann, a shared freshwater tank');
     expect(lines[1]).toBe('1 fish alive: Zip the Neon tetra.');
     expect(lines[2]).toBe('Old has died.');
+    expect(lines[3]).toMatch(/^Room: /);
     expect(publicReportLines(tank({ fish: [] }))[1]).toBe('No fish are alive in this tank.');
   });
 });

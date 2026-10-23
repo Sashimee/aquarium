@@ -34,6 +34,8 @@ function apiMocks() {
     renameTank: vi.fn(),
     saveDecorLayout: vi.fn(),
     saveBackground: vi.fn(),
+    saveRoom: vi.fn(),
+    ownedRooms: vi.fn().mockResolvedValue([]),
     addFish: vi.fn(),
     wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
     purchase: vi.fn(),
@@ -638,6 +640,7 @@ describe('sign-out safety', () => {
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
       wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+      ownedRooms: vi.fn().mockResolvedValue([]),
       reportAte: vi.fn().mockReturnValue(hang),
     };
     const rec = recordBus();
@@ -718,6 +721,7 @@ describe('tank switcher and naming', () => {
         tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
         tank: vi.fn().mockResolvedValue(second),
         wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+        ownedRooms: vi.fn().mockResolvedValue([]),
         reportAte: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
       };
       const rec = recordBus();
@@ -839,6 +843,7 @@ describe('tank switcher and naming', () => {
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
       wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+      ownedRooms: vi.fn().mockResolvedValue([]),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();
@@ -910,6 +915,7 @@ describe('tank switcher and naming', () => {
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
       wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
+      ownedRooms: vi.fn().mockResolvedValue([]),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();

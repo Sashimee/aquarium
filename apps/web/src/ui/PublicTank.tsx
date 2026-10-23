@@ -20,6 +20,7 @@ import { CameraControls } from './Hud';
 import type { GalleryEntry } from '@aquarium/shared';
 import { entryWithVote, findGalleryEntry, galleryLoadMessage, voteLabel } from '../sync/gallery';
 import { PageLink, VoteProblemNote, useVoting } from './Gallery';
+import { RoomReadout } from './RoomPicker';
 import { leaveToViewerSignIn } from './router';
 
 const GLYPH: Record<ReactionKind, string> = { heart: '♥', star: '★', wow: '!' };
@@ -256,6 +257,7 @@ export function PublicTankView({ token }: { token: string }) {
           <div className="public-title">
             <h1>{phase.tank.name}</h1>
             <p className="hint">A shared tank. You can look, not change.</p>
+            <RoomReadout roomId={phase.tank.roomId} />
           </div>
           <Reactions token={token} tank={phase.tank} onChange={setTank} />
           <CameraControls />
@@ -352,6 +354,7 @@ export function GalleryTankView({ id }: { id: string }) {
           <div className="public-title">
             <h1>{phase.tank.name}</h1>
             <p className="hint">A gallery tank. You can look, not change.</p>
+            <RoomReadout roomId={phase.tank.roomId} />
           </div>
           <GalleryVote id={id} />
           <CameraControls />

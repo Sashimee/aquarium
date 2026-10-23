@@ -228,6 +228,11 @@ export function useRedirect(): void {
   }, [href, status, user]);
 }
 
+export function useRoomState(): InteractionEvents['room:state'] | null {
+  const { interaction } = useBridge();
+  return useLatest(interaction, 'room:state') ?? null;
+}
+
 export function useBackgroundState(): InteractionEvents['background:state'] | null {
   const { interaction } = useBridge();
   return useLatest(interaction, 'background:state') ?? null;

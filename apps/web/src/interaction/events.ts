@@ -8,6 +8,7 @@ import type {
   FoodType,
   Coral,
   Plant,
+  RoomId,
   TankSize,
   Water,
 } from '@aquarium/shared';
@@ -145,6 +146,11 @@ export interface InteractionEvents {
     decorEdited: boolean;
     backgroundId: BackgroundId;
     /**
+     * The room around the tank, null for the plain studio. Left out, the tank keeps the room it
+     * already had, or the default living room if it was not on show.
+     */
+    roomId?: RoomId | null;
+    /**
      * Distinct days of the last `VISIT_WINDOW_DAYS` the owner opened the tank. The fish know the
      * owner from it and come to the glass. Left out for tanks the viewer does not own.
      */
@@ -158,6 +164,10 @@ export interface InteractionEvents {
   'background:state': { tankId: string | null; biome: Biome; backgroundId: BackgroundId | null };
   /** The player chose a background for a saved tank; the persistence layer saves it. */
   'background:save': { tankId: string; backgroundId: BackgroundId };
+  /** The server's room for the tank changed: this tab's own save, or another device. */
+  'tank:room': { tankId: string; roomId: RoomId | null };
+  /** The room on show, or null for the plain studio; `tankId` is null for the demo tank. */
+  'room:state': { tankId: string | null; roomId: RoomId | null };
   /** The server's layout changed outside this tab's own edits (another device). */
   'tank:decor': { tankId: string; layout: DecorLayout; edited: boolean };
   /**
@@ -263,6 +273,7 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'demo:biome-changed',
   'decor:state',
   'background:state',
+  'room:state',
   'decor:save-state',
   'decor:load-failed',
   'load:state',

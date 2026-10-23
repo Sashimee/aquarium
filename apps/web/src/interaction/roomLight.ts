@@ -1,13 +1,14 @@
 import type { RoomLight, LitRoom } from '../engine/room';
 import type { Tier } from '../engine/quality/tiers';
-import type { RoomChoice } from '../scene/room/layout';
+import type { RoomId } from '@aquarium/shared';
 
 export interface RoomLightBinding {
-  readonly preference: {
-    snapshot(): RoomChoice;
+  readonly shown: {
+    snapshot(): RoomId | null;
     subscribe(listener: () => void): () => void;
   };
-  readonly backdrop: LitRoom;
+  /** The engine's room; null until its index arrived, and `sync` picks it up then. */
+  room(): LitRoom | null;
   /** Makes a light for the tank whose seed `seed` is. */
   create(seed: number): RoomLight;
   readonly seed: {
@@ -24,6 +25,8 @@ export interface RoomLightBinding {
 
 export interface RoomLightHandle {
   readonly light: RoomLight | null;
+  /** Re-reads what is shown and what the engine has; call it when the engine room appears. */
+  sync(): void;
   setTier(tier: Tier): void;
   dispose(): void;
 }
@@ -38,11 +41,12 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
   const mount = (): void => {
     light = binding.create(binding.seed.current());
     light.setTier(binding.tier());
-    light.attach(binding.backdrop);
+    const room = binding.room();
+    if (room) light.attach(room);
   };
 
   const sync = (): void => {
-    const shown = binding.preference.snapshot() !== 'none';
+    const shown = binding.shown.snapshot() !== null && binding.room() !== null;
     if (shown && !light) {
       mount();
     } else if (!shown && light) {
@@ -58,7 +62,7 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
     mount();
   };
 
-  const stopPreference = binding.preference.subscribe(sync);
+  const stopPreference = binding.shown.subscribe(sync);
   const stopSeed = binding.seed.subscribe(rebuild);
   const stopFrames = binding.onFrame(() => {
     if (!light) {
@@ -78,6 +82,7 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
     get light() {
       return light;
     },
+    sync,
     setTier(tier) {
       light?.setTier(tier);
     },
