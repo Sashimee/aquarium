@@ -54,23 +54,23 @@ describe('packLeafAtlas', () => {
     expect(layout.rows).toBe(2);
   });
 
-  it('merges leaves into one part and keeps every index in range', () => {
-    const { part } = packLeafAtlas(
+  it('keeps one part per leaf, all on the same material', () => {
+    const { parts } = packLeafAtlas(
       [card(0), card(1), card(2)],
       leaf,
       [white, white, white],
       layout,
     );
-    expect(part.positions.length / 3).toBe(12);
-    expect(part.indices.length).toBe(18);
-    expect(Math.max(...part.indices)).toBe(11);
+    expect(parts).toHaveLength(3);
+    expect(new Set(parts.map((p) => p.material)).size).toBe(1);
+    for (const p of parts) expect(Math.max(...p.indices)).toBe(3);
   });
 
   it('keeps each leaf inside its own cell and tints it by its shade', () => {
-    const { part, atlas } = packLeafAtlas([card(0), card(1)], leaf, [white, [0.5, 1, 2]], layout);
+    const { parts, atlas } = packLeafAtlas([card(0), card(1)], leaf, [white, [0.5, 1, 2]], layout);
     for (let v = 0; v < 4; v++) {
-      expect(part.uvs[v * 2]!).toBeLessThanOrEqual(0.5);
-      expect(part.uvs[(4 + v) * 2]!).toBeGreaterThanOrEqual(0.5);
+      expect(parts[0]!.uvs[v * 2]!).toBeLessThanOrEqual(0.5);
+      expect(parts[1]!.uvs[v * 2]!).toBeGreaterThanOrEqual(0.5);
     }
     expect(atlas.data[0]).toBe(100);
     expect(atlas.data[4 * 4]).toBe(50);

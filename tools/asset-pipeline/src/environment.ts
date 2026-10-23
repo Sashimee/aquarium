@@ -79,7 +79,6 @@ export interface LeafAtlasRecipe {
   /** Region of the photo holding one whole leaf, midrib centred, base at the bottom. */
   crop: { left: number; top: number; width: number; height: number };
   cell: { width: number; height: number };
-  roughness: number;
 }
 
 export interface EnvironmentRecipe {
@@ -347,14 +346,13 @@ async function packRecipeAtlas(
   const packed = packLeafAtlas(parts, leaf, shades, layout);
   const first = materials[0]!;
   return {
-    parts: [packed.part],
+    parts: packed.parts,
     materials: [
       {
         ...first,
         name: first.name,
         baseColorFactor: [1, 1, 1, 1],
         baseColor: { role: 'baseColor', codec: 'etc1s', image: packed.atlas },
-        roughness: atlas.roughness,
         alphaMode: 'OPAQUE',
         doubleSided: true,
       },
@@ -442,6 +440,7 @@ export async function buildEnvironment(
   const plan: LodPlan = {
     ratios: [lod0, lod0 * lod1, lod0 * lod2],
     minTriangles: recipe.minTriangles ?? 200,
+    ...(recipe.leafAtlas ? { joinPrimitives: true } : {}),
   };
 
   const built = buildDocument(recipe.id, parts, materials);
@@ -461,11 +460,13 @@ export async function buildEnvironment(
         `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
         ...(materials.some((m) => m.baseColor)
           ? [
-              recipe.maxTexturePx
-                ? `textures capped at ${recipe.maxTexturePx} px (normal ${recipe.maxTexturePx / 2} px) and re-encoded to KTX2`
-                : recipe.pores
-                  ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
-                  : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+              recipe.leafAtlas
+                ? 'texture: one 1024 px leaf atlas re-encoded to KTX2 and used for both tiers, PBR metallic-roughness with constant roughness'
+                : recipe.maxTexturePx
+                  ? `textures capped at ${recipe.maxTexturePx} px (normal ${recipe.maxTexturePx / 2} px) and re-encoded to KTX2`
+                  : recipe.pores
+                    ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
+                    : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
             ]
           : ['no textures: flat base colours kept as material factors, PBR metallic-roughness']),
         ...recipe.modifications,

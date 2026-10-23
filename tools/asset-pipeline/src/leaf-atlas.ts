@@ -78,13 +78,13 @@ export function leafLocalUvs(positions: Float32Array): Float32Array {
   return uvs;
 }
 
-/** Gives every leaf its own cell of one atlas, cell `i` holding the leaf texture times `shades[i]`. */
+/** Gives every leaf its own cell of one atlas, cell `i` holding the leaf texture times `shades[i]`; the leaves stay separate parts so each is simplified on its own. */
 export function packLeafAtlas(
   parts: Part[],
   leaf: Rgba,
   shades: readonly (readonly [number, number, number])[],
   layout: LeafAtlasLayout,
-): { part: Part; atlas: Rgba } {
+): { parts: Part[]; atlas: Rgba } {
   if (parts.length !== shades.length)
     throw new Error(`${parts.length} leaves but ${shades.length} shades`);
   if (parts.length > layout.columns * layout.rows)
@@ -96,12 +96,7 @@ export function packLeafAtlas(
   const width = layout.columns * layout.cellWidth;
   const height = layout.rows * layout.cellHeight;
   const atlas = new Uint8Array(width * height * 4).fill(255);
-  const vertices = parts.reduce((s, p) => s + p.positions.length / 3, 0);
-  const positions = new Float32Array(vertices * 3);
-  const normals = new Float32Array(vertices * 3);
-  const uvs = new Float32Array(vertices * 2);
-  const indices: number[] = [];
-  let base = 0;
+  const packed: Part[] = [];
   parts.forEach((part, leafIndex) => {
     const col = leafIndex % layout.columns;
     const row = Math.floor(leafIndex / layout.columns);
@@ -117,26 +112,14 @@ export function packLeafAtlas(
     const inset = 0.5 / layout.cellWidth;
     const insetV = 0.5 / layout.cellHeight;
     const count = part.positions.length / 3;
-    positions.set(part.positions, base * 3);
-    normals.set(part.normals, base * 3);
+    const uvs = new Float32Array(count * 2);
     for (let i = 0; i < count; i++) {
       const u = inset + local[i * 2]! * (1 - 2 * inset);
       const v = insetV + local[i * 2 + 1]! * (1 - 2 * insetV);
-      uvs[(base + i) * 2] = (col + u) / layout.columns;
-      uvs[(base + i) * 2 + 1] = (row + 1 - v) / layout.rows;
+      uvs[i * 2] = (col + u) / layout.columns;
+      uvs[i * 2 + 1] = (row + 1 - v) / layout.rows;
     }
-    for (const index of part.indices) indices.push(base + index);
-    base += count;
+    packed.push({ ...part, uvs, material: parts[0]!.material, extra: {} });
   });
-  return {
-    part: {
-      positions,
-      normals,
-      uvs,
-      indices: Uint32Array.from(indices),
-      material: parts[0]!.material,
-      extra: {},
-    },
-    atlas: { width, height, data: atlas },
-  };
+  return { parts: packed, atlas: { width, height, data: atlas } };
 }
