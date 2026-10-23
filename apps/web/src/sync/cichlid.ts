@@ -1,4 +1,4 @@
-import type { DecorItem, SpeciesSummary, Tank } from '@aquarium/shared';
+import { keptPresetDecor, type DecorItem, type SpeciesSummary, type Tank } from '@aquarium/shared';
 import { loadPreset } from '../scene/preset';
 import { BUNDLED_CHEMISTRY } from './bundledEconomy';
 import { isBundledTerritorial } from './bundledSpecies';
@@ -113,10 +113,12 @@ export const SHELTER_ASSET_IDS: ReadonlySet<string> = new Set([
 
 export const isShelterAsset = (assetId: string): boolean => SHELTER_ASSET_IDS.has(assetId);
 
-export function shelterCount(tank: Pick<Tank, 'biome' | 'decorEdited' | 'decorLayout'>): number {
+export function shelterCount(
+  tank: Pick<Tank, 'biome' | 'decorEdited' | 'decorLayout' | 'size'>,
+): number {
   const items: readonly DecorItem[] = tank.decorEdited
     ? tank.decorLayout
-    : loadPreset(tank.biome).decor;
+    : keptPresetDecor(loadPreset(tank.biome).decor, tank.size);
   return items.filter((i) => isShelterAsset(i.assetId)).length;
 }
 
