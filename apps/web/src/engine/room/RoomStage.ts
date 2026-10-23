@@ -15,7 +15,7 @@ import { propFilesFrom, type PropFiles } from './gltfPropSource';
 import type { RoomLighting } from '../environment';
 import { lowerTier, type Tier } from '../quality/tiers';
 import type { TankDimensions } from '../tank/dimensions';
-import type { LitRoom, LitRoomLayout } from './RoomLight';
+import type { LitRoom, LitRoomLayout, RoomRig } from './RoomLight';
 import { buildRoomShell, type RoomShell } from './roomShell';
 
 type TankExtent = Pick<TankDimensions, 'length' | 'depth' | 'height'>;
@@ -163,13 +163,18 @@ export class RoomStage implements LitRoom {
   private shell: RoomShell | null = null;
   private planNow: RoomScenePlan | null = null;
   private layoutNow: LitRoomLayout | null = null;
+  private rigNow: RoomRig | null = null;
   private revisionNow = 0;
   private key = 'none';
   private shown: { readonly roomId: string | null; readonly tank: TankExtent } | null = null;
   private controller: AbortController | null = null;
   private pending: Promise<void> | null = null;
-  /** The room whose HDRI the PMREM holds; null for the default studio. */
-  private baked: RoomId | null = null;
+  /**
+   * The room whose HDRI the PMREM holds, null for the default studio, or undefined while that is
+   * not known: before the first bake, which may still find the procedural studio, and after a
+   * failed fallback.
+   */
+  private baked: RoomId | null | undefined = undefined;
   private disposed = false;
 
   constructor(private readonly options: RoomStageOptions) {
@@ -193,8 +198,9 @@ export class RoomStage implements LitRoom {
     return this.revisionNow;
   }
 
-  get rig(): RoomScenePlan['light'] | null {
-    return this.planNow?.light ?? null;
+  /** The preset's light, with its lamps once their props are on show. */
+  get rig(): RoomRig | null {
+    return this.rigNow;
   }
 
   /** Draws of the shell and the furniture on show. */
@@ -264,6 +270,7 @@ export class RoomStage implements LitRoom {
     this.group.add(shell.group);
     this.shell = shell;
     this.planNow = plan;
+    this.rigNow = { key: plan.light.key, ambient: plan.light.ambient, practical: [] };
     this.layoutNow = {
       shell: plan.shell,
       window: plan.window,
@@ -287,31 +294,43 @@ export class RoomStage implements LitRoom {
         this.baked = roomId;
       }
       if (plan && plan.props.length > 0) {
-        await this.props.show(plan, this.options.props, signal);
+        // RoomLight lights the lamps on the room's materials alone; RoomProps' PointLights would
+        // reach the tank too and recompile every lit material whenever their count changed.
+        const unlit = { ...plan, light: { ...plan.light, practical: [] } };
+        await this.props.show(unlit, this.options.props, signal);
         if (controller !== this.controller) return;
+        this.rigNow = plan.light;
         this.revisionNow++;
       }
     } catch (cause) {
       if (controller !== this.controller) return;
       this.key = '';
-      if (roomId !== null && this.baked !== roomId && this.baked !== null) this.fallBack();
+      if (roomId !== null && this.baked !== roomId && this.baked !== null) {
+        this.fallBack(controller);
+      }
       if (isAbort(cause)) return;
       throw cause;
     }
   }
 
-  private fallBack(): void {
-    this.baked = null;
-    this.options.lighting.bake(null, 0).catch((cause: unknown) => {
-      if (!isAbort(cause))
-        console.debug('The room fell back to the default studio, which failed', cause);
-    });
+  private fallBack(controller: AbortController): void {
+    this.baked = undefined;
+    this.options.lighting.bake(null, 0, controller.signal).then(
+      () => {
+        if (controller === this.controller) this.baked = null;
+      },
+      (cause: unknown) => {
+        if (!isAbort(cause))
+          console.debug('The room fell back to the default studio, which failed', cause);
+      },
+    );
   }
 
   private clear(): void {
     this.shell?.dispose();
     this.shell = null;
     this.planNow = null;
+    this.rigNow = null;
     this.layoutNow = null;
     this.props.dispose();
     this.group.add(this.props.group);

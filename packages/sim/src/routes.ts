@@ -19,9 +19,9 @@ const STEPS: readonly (readonly [number, number, number])[] = [
   [1, 1, DIAGONAL],
 ];
 /** Water samples per cell length along a line of sight. */
-const SIGHT_SAMPLES_PER_CELL = 2;
+export const SIGHT_SAMPLES_PER_CELL = 2;
 /** The cells nearest a fish that are tried for a clear line to it before it is given none. */
-const SIGHT_TRIES = 8;
+export const SIGHT_TRIES = 8;
 
 const SAMPLE_ROOM = 0;
 const SEED = 1;
@@ -66,6 +66,7 @@ export class Route {
   private readonly seedCount: number;
   private phase = SAMPLE_ROOM;
   private cursor = 0;
+  private sampled = 0;
 
   constructor(
     basin: Basin,
@@ -177,13 +178,31 @@ export class Route {
   /**
    * The point `ahead` along the way from the fish at (x, y, z), or null when no cell within
    * `reach` of it, in its sight, has a way to the hollow (it is over rock, behind it, or in water
-   * cut off from the hollow). Of cells equally near the fish the first in the grid is taken: least
-   * z, then least x.
+   * cut off from the hollow): `from` the cell `entry` gives.
    */
   toward(x: number, y: number, z: number, reach: number, ahead: number): [number, number] | null {
-    if (this.phase !== DONE) throw new Error('Route.toward: the way is not built yet; build() it');
-    let c = this.nearest(x, y, z, reach);
-    if (c < 0) return null;
+    const c = this.entry(x, y, z, reach);
+    return c < 0 ? null : this.from(c, ahead);
+  }
+
+  /**
+   * The cell the fish at (x, y, z) joins the way by: the one with a way to the hollow nearest it
+   * in plan, within `reach` of it and in its sight; -1 if none. Of cells equally near the first in
+   * the grid is taken: least z, then least x. Up to `SIGHT_TRIES` lines of sight are followed, so
+   * a fish that keeps asking where none is in sight should keep the answer for a while.
+   */
+  entry(x: number, y: number, z: number, reach: number): number {
+    if (this.phase !== DONE) throw new Error('Route.entry: the way is not built yet; build() it');
+    return this.nearest(x, y, z, reach);
+  }
+
+  /** The point `ahead` along the way from cell `start`, as `entry` gives it. */
+  from(start: number, ahead: number): [number, number] {
+    if (this.phase !== DONE) throw new Error('Route.from: the way is not built yet; build() it');
+    if ((this.length[start] ?? Infinity) === Infinity) {
+      throw new Error(`Route.from: cell ${start} has no way to the hollow; take one from entry()`);
+    }
+    let c = start;
     let gone = 0;
     while (gone < ahead) {
       const ix = c % this.nx;
@@ -210,7 +229,11 @@ export class Route {
     return [this.xOf(c), this.zOf(c)];
   }
 
-  /** The cell with a way to the hollow nearest (x, z) and in sight of (x, y, z); -1 if none. */
+  /** Water samples taken along lines of sight, while building and by `entry`, since the start. */
+  get sightSamplesTaken(): number {
+    return this.sampled;
+  }
+
   private nearest(x: number, y: number, z: number, reach: number): number {
     const [ix0, ix1] = this.span(x, reach, this.x0, this.nx);
     const [iz0, iz1] = this.span(z, reach, this.z0, this.nz);
@@ -256,9 +279,11 @@ export class Route {
     const n = this.sightSamples(distance) - 1;
     const gap = distance / n;
     let prev = this.water.sample(ax, ay, az, this.n3);
+    this.sampled++;
     if (prev <= 0) return false;
     for (let k = 1; k <= n; k++) {
       const t = k / n;
+      this.sampled++;
       const r = this.water.sample(
         ax + (bx - ax) * t,
         ay + (by - ay) * t,
