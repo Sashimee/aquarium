@@ -272,24 +272,20 @@ test.describe('Aquarist Club in test mode', () => {
 test.describe('the Checkout redirect', () => {
   test.use({ serviceWorkers: 'block' });
 
-  async function leavesForStripe(page: Page): Promise<Promise<string>> {
-    let resolve: (url: string) => void = () => undefined;
-    const seen = new Promise<string>((done, fail) => {
-      resolve = done;
-      setTimeout(() => fail(new Error('the browser never left for Checkout within 90 s')), 90_000);
-    });
+  async function leavesForStripe(page: Page): Promise<() => string | null> {
+    let left: string | null = null;
     await page.route(
       (url) => url.origin !== APP_URL,
       (route) => {
         if (route.request().resourceType() !== 'document') return route.abort();
-        resolve(route.request().url());
+        left = route.request().url();
         return route.fulfill({
           contentType: 'text/html',
           body: '<title>Checkout stand-in</title>',
         });
       },
     );
-    return seen;
+    return () => left;
   }
 
   async function readyShop(page: Page, label: string) {
@@ -317,8 +313,7 @@ test.describe('the Checkout redirect', () => {
       .getByRole('list', { name: 'Pearl packs' })
       .getByRole('button', { name: new RegExp(`^Buy ${pack.pearls} Pearls`) })
       .click();
-    const url = await target;
-    expect(url).toMatch(/^https:\/\//);
+    await expect.poll(target, { timeout: 90_000 }).toMatch(/^https:\/\//);
     await expect(page).toHaveTitle('Checkout stand-in');
   });
 
@@ -332,7 +327,7 @@ test.describe('the Checkout redirect', () => {
         name: `Join the Aquarist Club for €${(economy.subscription.priceCents / 100).toFixed(2)} a month`,
       })
       .click();
-    expect(await target).toMatch(/^https:\/\//);
+    await expect.poll(target, { timeout: 90_000 }).toMatch(/^https:\/\//);
     await expect(page).toHaveTitle('Checkout stand-in');
   });
 
