@@ -185,7 +185,7 @@ jobs:
           - name: decor
             args: decor.spec reminders.spec
           - name: switch-tanks
-            args: tank-type-switch.spec toys.spec background.spec
+            args: tank-type-switch.spec toys.spec background.spec phone-hud.spec
           - name: loading
             args: loading.spec pwa.spec haptics.spec
           - name: ktx2-feed-auth-death
