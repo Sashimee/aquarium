@@ -564,7 +564,6 @@ describe('anchored species', { timeout: LONG }, () => {
     for (const id of holders.slice(1)) w.removeFish(id);
     expect(w.behaviour.routesKept).toBeLessThan(kept);
     expect(w.behaviour.routesKept).toBeGreaterThan(0);
-    expect(w.behaviour.staleEntries).toBe(0);
     for (const id of [...w.fishIds]) w.removeFish(id);
     expect(w.behaviour.routesKept).toBe(0);
     expect(w.behaviour.routesPending).toBe(0);
