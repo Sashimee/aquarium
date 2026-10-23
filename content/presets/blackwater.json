@@ -22,6 +22,12 @@
       "scale": 0.85
     },
     {
+      "assetId": "driftwood-branch",
+      "position": [0.24, 0.074, 0.0],
+      "rotationY": 2.4,
+      "scale": 0.8
+    },
+    {
       "assetId": "catappa-leaf-card",
       "position": [-0.22, 0.068, 0.1],
       "rotationY": 1.9,
@@ -92,12 +98,6 @@
       "position": [-0.44, 0.106, -0.06],
       "rotationY": 3.6,
       "scale": 0.6
-    },
-    {
-      "assetId": "driftwood-branch",
-      "position": [0.34, 0.074, 0.0],
-      "rotationY": 2.4,
-      "scale": 0.8
     },
     {
       "assetId": "driftwood-branch",
