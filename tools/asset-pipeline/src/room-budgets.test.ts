@@ -210,6 +210,12 @@ describe('ambienceLoudnessProblems', () => {
     expect(ambienceLoudnessProblems(rooms, index([-26, -26.1, -25.2]))).toEqual([]);
   });
 
+  it('rejects a spread of 1.2 LU, so the 1 LU gate holds', () => {
+    const problems = ambienceLoudnessProblems(rooms, index([-26, -24.8, -25.5]));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('1.2 LU');
+  });
+
   it('names the quiet outlier, as the cabin loop was at -34.1 LUFS', () => {
     const problems = ambienceLoudnessProblems(rooms, index([-26, -34.1, -26]));
     expect(problems).toHaveLength(1);

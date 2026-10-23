@@ -21,7 +21,7 @@ import type { OutputAsset } from './index-schema.ts';
 export const AUDIO_BITRATE_KBPS = 64;
 export const PEAK_CEILING_DB = -1;
 /** AAC reconstruction overshot the sample peak by up to 0.8 dB when measured, so limited clips stop 1.5 dB short of the plain ceiling. */
-const LIMITER_CEILING_DB = PEAK_CEILING_DB - 1.5;
+export const LIMITER_CEILING_DB = PEAK_CEILING_DB - 1.5;
 const LIMITER_LOOKAHEAD_S = 0.005;
 const SILENCE_THRESHOLD_DB = -50;
 const SILENCE_MARGIN_S = 0.005;
@@ -220,7 +220,7 @@ export function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio
     );
   notes.push(
     processed.peakLimited
-      ? `gain limited by the ${PEAK_CEILING_DB} dBFS peak ceiling, so the loudness is ${processed.loudnessLufs.toFixed(1)} LUFS instead of the ${recipe.targetLufs} LUFS target`
+      ? `gain limited by the ${recipe.limit ? LIMITER_CEILING_DB : PEAK_CEILING_DB} dBFS peak ceiling, so the loudness is ${processed.loudnessLufs.toFixed(1)} LUFS instead of the ${recipe.targetLufs} LUFS target`
       : `normalised to ${recipe.targetLufs} LUFS`,
   );
   notes.push(`encoded as AAC-LC ${AUDIO_BITRATE_KBPS} kbit/s in .m4a`);
