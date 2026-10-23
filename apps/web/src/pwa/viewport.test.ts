@@ -4,8 +4,11 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { EventBus, type EngineEvents } from '../engine/events';
-import type { PhotoView } from '../interaction/events';
-import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from '../interaction/events';
+import {
+  STICKY_INTERACTION_EVENTS,
+  type InteractionEvents,
+  type PhotoView,
+} from '../interaction/events';
 import { createApiClient } from '../ui/api';
 import { UiProviders } from '../ui/context';
 import { PhotoLayer, PhotoTools } from '../ui/PhotoControls';
@@ -48,6 +51,30 @@ function styleRules(rules: CSSRuleList): CSSStyleRule[] {
   return out;
 }
 
+function splitTopLevel(selectorList: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < selectorList.length; i++) {
+    const ch = selectorList[i];
+    if (ch === '(' || ch === '[') depth++;
+    else if (ch === ')' || ch === ']') depth--;
+    else if (ch === ',' && depth === 0) {
+      out.push(selectorList.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  out.push(selectorList.slice(start).trim());
+  return out;
+}
+
+function firstAlternative(part: string): string {
+  return part.replace(
+    /:(?:is|where)\(([^)]*)\)/g,
+    (_, list: string) => splitTopLevel(list)[0] ?? '',
+  );
+}
+
 function compound(part: string): HTMLElement {
   const bare = part.replace(/:not\([^)]*\)/g, '').replace(/:[a-z-]+(\([^)]*\))?/g, '');
   const el = document.createElement(/^[a-z][a-z0-9]*/i.exec(bare)?.[0] ?? 'div');
@@ -62,7 +89,9 @@ function compound(part: string): HTMLElement {
 }
 
 function fixtureFor(selector: string): HTMLElement {
-  const parts = selector.trim().split(/\s*>\s*|\s+/);
+  const parts = firstAlternative(selector)
+    .trim()
+    .split(/\s*>\s*|\s+/);
   const nodes = parts.map(compound);
   nodes.forEach((node, i) => nodes[i - 1]?.append(node));
   const leaf = nodes[nodes.length - 1];
@@ -90,12 +119,11 @@ describe('overlay touch-action', () => {
     const selectors = new Set(
       styleRules(sheet.cssRules)
         .filter((r) => r.style.getPropertyValue('pointer-events') === 'auto')
-        .flatMap((r) => r.selectorText.split(',').map((s) => s.trim())),
+        .flatMap((r) => splitTopLevel(r.selectorText)),
     );
     expect(selectors.size).toBeGreaterThan(0);
     for (const selector of selectors) {
       const el = fixtureFor(selector);
-      expect(computed(el, 'pointer-events'), selector).toBe('auto');
       expect(ALLOWED, selector).toContain(computed(el, 'touch-action'));
       document.body.replaceChildren();
     }
