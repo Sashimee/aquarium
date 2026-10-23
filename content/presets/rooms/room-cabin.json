@@ -1,11 +1,30 @@
 {
   "roomId": "room-cabin",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-scandinavian-masonry-heater",
+      "position": [-2.5, -0.75, 0.32],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-rockingchair-01",
+      "position": [-1.3, -0.75, 1.5],
+      "rotationY": 0.698,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-vintage-oil-lamp",
+      "position": [-1.4, -0.75, -0.05],
+      "rotationY": 0,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#ffcf99",
-    "keyIntensity": 2.0,
+    "keyIntensity": 2,
     "ambientColor": "#f0dcc2",
     "ambientIntensity": 0.45,
-    "windowPosition": [1.2, 0.9, -1.5]
+    "windowPosition": [1.2, 0.75, -0.37]
   }
 }

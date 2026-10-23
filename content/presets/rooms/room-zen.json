@@ -1,11 +1,42 @@
 {
   "roomId": "room-zen",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-chinese-tea-table",
+      "position": [-1.8, -0.75, 0.9],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-ceramic-vase-01",
+      "position": [-1.8, -0.251, 0.9],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-chinese-stool",
+      "position": [-2.6, -0.75, 0.9],
+      "rotationY": 1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-chinese-stool",
+      "position": [-1, -0.75, 0.9],
+      "rotationY": -1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-chinese-stool",
+      "position": [-1.8, -0.75, 1.7],
+      "rotationY": 3.142,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#fff3dc",
-    "keyIntensity": 2.0,
+    "keyIntensity": 2,
     "ambientColor": "#f1ead6",
     "ambientIntensity": 0.6,
-    "windowPosition": [1.2, 0.9, -1.5]
+    "windowPosition": [1.2, 0.7, -0.37]
   }
 }

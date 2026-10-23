@@ -1,11 +1,30 @@
 {
   "roomId": "room-living",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-sofa-03",
+      "position": [-2.64, -0.75, 1.25],
+      "rotationY": 1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-modern-coffee-table-01",
+      "position": [-1.6, -0.75, 0.9],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-mid-century-lounge-chair",
+      "position": [2.45, -0.75, 0.9],
+      "rotationY": -1.571,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#fff1d6",
     "keyIntensity": 2.2,
     "ambientColor": "#ffe9cc",
     "ambientIntensity": 0.5,
-    "windowPosition": [1.2, 0.9, -1.5]
+    "windowPosition": [1.2, 0.75, -0.37]
   }
 }

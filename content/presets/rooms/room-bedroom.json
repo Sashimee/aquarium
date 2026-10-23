@@ -1,11 +1,30 @@
 {
   "roomId": "room-bedroom",
-  "layout": [],
+  "layout": [
+    {
+      "asset": "polyhaven-vintage-day-bed",
+      "position": [-2.72, -0.75, 1.25],
+      "rotationY": 1.571,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-painted-wooden-nightstand",
+      "position": [-2.9, -0.75, -0.1],
+      "rotationY": 0,
+      "scale": 1
+    },
+    {
+      "asset": "polyhaven-throw-pillows-01",
+      "position": [-2.72, -0.3, 0.5],
+      "rotationY": 1.571,
+      "scale": 1
+    }
+  ],
   "light": {
     "keyColor": "#ffd9b0",
     "keyIntensity": 1.6,
     "ambientColor": "#e9dcff",
     "ambientIntensity": 0.45,
-    "windowPosition": [1.2, 0.9, -1.5]
+    "windowPosition": [1.2, 0.8, -0.37]
   }
 }

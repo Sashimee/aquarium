@@ -157,13 +157,32 @@ function bookshelf(frame: Frame, z: number, seed: number): { box: RoomBox; books
   return { box, books };
 }
 
-function windowFor(tank: TankExtent, frame: Frame): WindowSlot {
-  const x = tank.length / 2 + WINDOW_CLEARANCE + WINDOW_SIZE[0] / 2;
+function backWallZ(tank: TankExtent): number {
+  return -(tank.depth / 2 + WALL_GAP);
+}
+
+/**
+ * The window on the back wall, set to the right of the tank so that it follows the tank's length.
+ * `centreY` tunes its height per room, in tank space; the default is the sill height of T57's rooms.
+ */
+export function windowSlotFor(
+  tank: TankExtent,
+  centreY = -STAND_HEIGHT + WINDOW_SILL + WINDOW_SIZE[1] / 2,
+): WindowSlot {
+  const backZ = backWallZ(tank);
   return {
     id: 'window-main',
-    centre: [x, frame.floorY + WINDOW_SILL + WINDOW_SIZE[1] / 2, frame.backZ],
+    centre: [tank.length / 2 + WINDOW_CLEARANCE + WINDOW_SIZE[0] / 2, centreY, backZ],
     size: WINDOW_SIZE,
-    paneZ: frame.backZ - 0.02,
+    paneZ: backZ - 0.02,
+  };
+}
+
+export function roomShell(tank: TankExtent): Bounds {
+  const halfWidth = roomHalfWidth(tank);
+  return {
+    min: [-halfWidth, -STAND_HEIGHT, backWallZ(tank)],
+    max: [halfWidth, -STAND_HEIGHT + ROOM_HEIGHT, FRONT_Z],
   };
 }
 
@@ -248,16 +267,13 @@ export function planRoom(preset: RoomPreset, tank: TankExtent, seed = 1): RoomLa
   }
   const floorY = -STAND_HEIGHT;
   const halfWidth = roomHalfWidth(tank);
-  const backZ = -(tank.depth / 2 + WALL_GAP);
+  const backZ = backWallZ(tank);
   const frame: Frame = { floorY, backZ, halfWidth, leftFree: -(tank.length / 2 + TANK_CLEARANCE) };
-  const slot = windowFor(tank, frame);
+  const slot = windowSlotFor(tank);
   const built = preset === 'office' ? office(tank, frame, seed) : livingRoom(tank, frame, seed);
   return {
     preset,
-    shell: {
-      min: [-halfWidth, floorY, backZ],
-      max: [halfWidth, floorY + ROOM_HEIGHT, FRONT_Z],
-    },
+    shell: roomShell(tank),
     tank: {
       min: [-tank.length / 2, 0, -tank.depth / 2],
       max: [tank.length / 2, tank.height, tank.depth / 2],
