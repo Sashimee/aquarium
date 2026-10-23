@@ -43,6 +43,7 @@
 #ui .life-status:not(:empty),
 #ui .toast:not([hidden]) {
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
 #ui :focus-visible,
@@ -427,6 +428,7 @@
   padding: 1rem;
   background: rgba(2, 8, 14, 0.6);
   pointer-events: auto;
+  touch-action: manipulation;
   z-index: 6;
 }
 
@@ -704,6 +706,7 @@ progress {
   z-index: 1;
   max-height: 45vh;
   pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .replay-veil {
@@ -824,5 +827,6 @@ progress {
   background: var(--surface);
   color: var(--ink);
   pointer-events: auto;
+  touch-action: manipulation;
   z-index: 50;
 }
