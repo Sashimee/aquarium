@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesContentSchema, type Collider } from '@aquarium/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { BEHAVIOUR, grazeSpotFor, lineClear, type Anchor, type GrazeProbe } from './behaviour.ts';
 import {
   ARCHETYPES,
@@ -101,6 +101,25 @@ function walledIn(x0: number, z0: number, half: number, thick: number): Collider
     wall('e', half, 0, thick, span),
     wall('w', -half, 0, thick, span),
   ];
+}
+
+/** `walledIn`, but with a `gap` wide opening in the middle of the -z wall. */
+function gappedIn(x0: number, z0: number, half: number, thick: number, gap: number): Collider[] {
+  const [n, s, e, w] = walledIn(x0, z0, half, thick);
+  if (n === undefined || s === undefined || e === undefined || w === undefined) {
+    throw new Error('walledIn gave fewer than four walls');
+  }
+  const side = (half + thick - gap / 2) / 2;
+  const part = (id: string, dx: number): Collider =>
+    s.kind === 'box'
+      ? {
+          ...s,
+          id,
+          center: [x0 + dx, s.center[1], s.center[2]],
+          halfExtents: [side, s.halfExtents[1], s.halfExtents[2]],
+        }
+      : s;
+  return [n, part('sw', -gap / 2 - side), part('se', gap / 2 + side), e, w];
 }
 
 function anchorOf(id: string): (typeof REEF_ANCHORS)[number] {
@@ -660,6 +679,70 @@ describe('anchored species', { timeout: LONG }, () => {
       expect(now.cells, id).toEqual(was.cells);
       for (const k of [0, 1]) expect(now.routes[k], `${id} slot ${String(k)}`).toBe(was.routes[k]);
     }
+  });
+
+  it('keeps each remaining fish its own narrow-way slot when one leaves mid-list (#1537)', () => {
+    // Each cave sits in a box whose only way in is a gap too tight for the wide way (the fish's
+    // radius) but not for the narrow one, so a gramma outside can only look along the narrow way.
+    const xs = [-0.6, -0.2, 0.2, 0.6];
+    const y0 = 0.15;
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor: xs.flatMap((x, k) =>
+        gappedIn(x, 0, 0.08, 0.005, 0.05).map((c) => ({ ...c, id: `${c.id}${String(k)}` })),
+      ),
+      anchors: xs.map((x, k) => ({
+        id: `cave${String(k)}`,
+        kind: 'cave' as const,
+        position: [x, y0, 0] as const,
+        radius: 0.03,
+        facing: [0, 0, -1] as const,
+      })),
+      fish: [],
+    });
+    xs.forEach((x, k) => {
+      w.addFish(
+        { id: `gramma${String(k)}`, species: royalGramma.id },
+        { position: [x, y0, -0.2], heading: Math.PI },
+      );
+    });
+    const length = toSimSpecies(royalGramma).bodyLength;
+    expect(0.05 / 2).toBeLessThan(at(w.radius, 0));
+    expect(0.05 / 2).toBeGreaterThan(BEHAVIOUR.caveRouteClearanceBodyLengths * length);
+    w.setLight(0);
+    const tail = [1, 2, 3];
+    const looked = (): boolean => {
+      const seen = tail.map((i) => w.behaviour.entrySlots(i));
+      return (
+        seen.every((s) => s.routes[1] != null && (s.cells[1] ?? -1) >= 0) &&
+        new Set(seen.map((s) => s.routes[1])).size === tail.length &&
+        new Set(seen.map((s) => s.cells[1])).size === tail.length
+      );
+    };
+    let t = 0;
+    while (!looked()) {
+      w.step();
+      if (++t > 3000) throw new Error('the fish never looked along their narrow ways');
+    }
+    const before = new Map(w.fishIds.map((id, i) => [id, w.behaviour.entrySlots(i)]));
+    const gone = w.fishIds[1];
+    if (gone === undefined) throw new Error('no fish to remove');
+    w.removeFish(gone);
+    for (const [i, id] of w.fishIds.entries()) {
+      const was = before.get(id);
+      if (was === undefined) throw new Error(`fish ${id} was not there before`);
+      const now = w.behaviour.entrySlots(i);
+      expect(now.cells, id).toEqual(was.cells);
+      for (const k of [0, 1]) expect(now.routes[k], `${id} slot ${String(k)}`).toBe(was.routes[k]);
+    }
+  });
+
+  it('hands out the ways in its entry slots read-only', () => {
+    type Slot = NonNullable<ReturnType<World['behaviour']['entrySlots']>['routes'][number]>;
+    expectTypeOf<Slot>().not.toHaveProperty('build');
+    expectTypeOf<Slot>().toHaveProperty('ready').toEqualTypeOf<boolean>();
   });
 
   it('keeps where it joins the way for a while when no cell of it is in sight (#1515)', () => {

@@ -347,7 +347,7 @@ export class World {
   private intent: Float64Array;
   private targetYaw: Float64Array;
   private targetPitch: Float64Array;
-  private targetSpeed: Float64Array;
+  private _targetSpeed: Float64Array;
   private schoolGroup: Int32Array;
   private readonly kMax: number;
   private readonly speciesById: ReadonlyMap<string, number>;
@@ -388,6 +388,11 @@ export class World {
 
   get speed(): Float64Array {
     return this._speed;
+  }
+
+  /** The speed each fish's steering asked for on the last step, which a coast glides down to. */
+  get targetSpeed(): Float64Array {
+    return this._targetSpeed;
   }
 
   get yawRate(): Float64Array {
@@ -537,7 +542,7 @@ export class World {
     this.intent = new Float64Array(n * 3);
     this.targetYaw = new Float64Array(n);
     this.targetPitch = new Float64Array(n);
-    this.targetSpeed = new Float64Array(n);
+    this._targetSpeed = new Float64Array(n);
     this._forward = new Float64Array(n * 3);
     this._distSq = new Float64Array(n * n);
     this.schoolGroup = new Int32Array(n);
@@ -1198,7 +1203,7 @@ export class World {
     this.intent = edit.array(this.intent, 3);
     this.targetYaw = edit.array(this.targetYaw);
     this.targetPitch = edit.array(this.targetPitch);
-    this.targetSpeed = edit.array(this.targetSpeed);
+    this._targetSpeed = edit.array(this._targetSpeed);
     this._forward = edit.array(this.forward, 3);
     this.schoolGroup = edit.array(this.schoolGroup);
     this.schoolNbr = edit.array(this.schoolNbr, k, -1);
@@ -1920,13 +1925,13 @@ export class World {
       // (avoidance against a pane, a fish outrunning its shoal), bobbing the body.
       const climb = clamp(dy / Math.max(mag, this.speed[i] ?? 0, 1e-9), -1, 1);
       this.targetPitch[i] = clamp(Math.asin(climb), -sp.maxPitch, sp.maxPitch);
-      this.targetSpeed[i] = clamp(
+      this._targetSpeed[i] = clamp(
         Math.max(mag * (0.5 + 0.5 * cosAhead), minSpeed),
         0,
         Math.max(0, maxSpeed),
       );
     } else {
-      this.targetSpeed[i] = clamp(Math.max(mag, minSpeed), 0, Math.max(0, maxSpeed));
+      this._targetSpeed[i] = clamp(Math.max(mag, minSpeed), 0, Math.max(0, maxSpeed));
     }
     // Only the horizontal share of avoidance blocks the pivot: a rock top under the station is
     // avoidance in pitch, turning on the spot over it brings the body no nearer, and turnRoom
@@ -1944,7 +1949,7 @@ export class World {
       // wherever the station lies, and the turn back to the food creeps it in onto the glass.
       const along = dx * Math.sin(faceYaw) + dz * Math.cos(faceYaw);
       this.targetYaw[i] = faceYaw;
-      this.targetSpeed[i] = clamp(Math.max(along, minSpeed), 0, Math.max(0, maxSpeed));
+      this._targetSpeed[i] = clamp(Math.max(along, minSpeed), 0, Math.max(0, maxSpeed));
     }
     if (standOff) {
       // Arrival (Reynolds 1999): slow to a stop at the station, and never press on past it
@@ -1952,7 +1957,7 @@ export class World {
       const inside = toFood < plan.arrival && fx * (plan.seekX - px) + fz * (plan.seekZ - pz) > 0;
       const upstream = Math.max(0, -(holdX * fx + holdY * fy + holdZ * fz));
       const cap = (inside ? 0 : toStation / STEERING.standOffBrakeS) + upstream;
-      this.targetSpeed[i] = Math.min(this.targetSpeed[i] ?? 0, cap);
+      this._targetSpeed[i] = Math.min(this._targetSpeed[i] ?? 0, cap);
     }
     if (!Number.isNaN(plan.yaw)) this.targetYaw[i] = plan.yaw;
     if (!Number.isNaN(plan.pitch)) {
@@ -2179,7 +2184,7 @@ export class World {
       this.thrust[i] = 0;
       this.targetYaw[i] = yaw;
       this.targetPitch[i] = pitch;
-      this.targetSpeed[i] = speed;
+      this._targetSpeed[i] = speed;
       this.reverseLeft[i] = 0;
       this.detourTimer[i] = 0;
       this.backHomeBlocked[i] = 0;
@@ -2363,7 +2368,7 @@ export class World {
     const kd = this.drag[i] ?? 0;
     const vmax = this.maxSpeed[i] ?? 0;
     const thrustMax = kd * vmax * vmax;
-    const target = this.targetSpeed[i] ?? 0;
+    const target = this._targetSpeed[i] ?? 0;
     let thrust: number;
     let glide = false;
     if (burstAndCoast) {

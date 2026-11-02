@@ -12,7 +12,7 @@ import { selectNearest } from './neighbours.ts';
 import { Night } from './night.ts';
 import { NookSearch, type NookDecor } from './nooks.ts';
 import { Personalities } from './personality.ts';
-import { Route } from './routes.ts';
+import { Route, type RouteView } from './routes.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
@@ -581,7 +581,10 @@ export class Behaviour {
    * A copy of fish `i`'s wide and narrow entry slots: the way it last looked along, and the cell
    * where it looked to join it (-1 for none).
    */
-  entrySlots(i: number): { routes: (Route | null)[]; cells: number[] } {
+  entrySlots(i: number): {
+    readonly routes: readonly (RouteView | null)[];
+    readonly cells: readonly number[];
+  } {
     if (!Number.isInteger(i) || i < 0 || 2 * i >= this.entryCell.length) {
       throw new RangeError(
         `entrySlots: no fish ${String(i)} among ${String(this.entryCell.length / 2)}`,
