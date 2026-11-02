@@ -175,13 +175,16 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
 
   await dismissToasts(page);
   await play.getByRole('button', { name: 'Start round' }).click();
-  const shyest = (await savedTanks(page))[0]?.fish
-    .filter((f) => f.name === 'Glint' || f.name === 'Bolt')
-    .reduce<{ name: string; personality: { boldness: number } } | undefined>(
-      (a, b) => (a && a.personality.boldness <= b.personality.boldness ? a : b),
-      undefined,
-    );
-  if (!shyest) throw new Error('Glint and Bolt are not in the saved tank');
+  const pair = (tank: Awaited<ReturnType<typeof savedTanks>>[number] | undefined) =>
+    (tank?.fish ?? []).filter((f) => f.name === 'Glint' || f.name === 'Bolt');
+  await expect
+    .poll(async () => pair((await savedTanks(page))[0]).length, {
+      message: 'both new fish are saved before the shyest is picked',
+    })
+    .toBe(2);
+  const shyest = pair((await savedTanks(page))[0]).reduce((a, b) =>
+    a.personality.boldness <= b.personality.boldness ? a : b,
+  );
   const round = play.getByRole('status').filter({ hasText: new RegExp(`^Feed ${shyest.name}\\.`) });
   await expect(round).toBeVisible();
   await expect(play.getByRole('button', { name: 'Stop round' })).toBeVisible();
