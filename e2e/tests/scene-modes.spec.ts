@@ -108,8 +108,7 @@ test.describe('away replay', () => {
     await expect(captions.getByRole('listitem')).toHaveCount(events);
     await expect(captions).toContainText('Biscuit');
 
-    await replay.getByRole('button', { name: 'Skip replay' }).focus();
-    await page.keyboard.press('Enter');
+    await replay.getByRole('button', { name: 'Skip replay' }).click();
     await expect(replay).toBeHidden();
   });
 

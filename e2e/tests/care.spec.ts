@@ -11,7 +11,7 @@ test('shop, acclimation bag and the three chores', async ({ page }) => {
   await registerVerifiedUser(page, 'care');
   await openTank(page);
   await createFirstTank(page);
-  const status = page.locator('.life-status');
+  const status = page.locator('.life-status:not(.birth-status)');
 
   await openDock(page, 'Shop', 'Fish shop');
   await page.getByLabel('Name for the new fish').fill('Pip');

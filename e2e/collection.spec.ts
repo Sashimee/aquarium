@@ -25,7 +25,7 @@ test('the collection book shows kept species, locked silhouettes and achievement
   await openDock(page, 'Shop', 'Fish shop');
   await page.getByLabel('Name for the new fish').fill('Pip');
   await page.getByRole('button', { name: 'Add', exact: true }).first().click();
-  await expect(page.locator('.life-status')).toContainText('Pip is in a bag');
+  await expect(page.locator('.life-status:not(.birth-status)')).toContainText('Pip is in a bag');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
 
   const opener = page.getByRole('button', { name: 'Collection book' });
