@@ -290,6 +290,7 @@ export class World {
   private _stage: Uint8Array;
   private _sex: Uint8Array;
   private _thrust: Float64Array;
+  private _gliding: Uint8Array;
   private _contactCount: Uint32Array;
   /** 1 for a walker, set at spawn so the step loops need not look the species up. */
   private walker: Uint8Array;
@@ -439,6 +440,14 @@ export class World {
     return this._thrust;
   }
 
+  /**
+   * 1 for a fish whose last step was a burst-and-coast glide, 0 otherwise. Zero thrust alone does
+   * not mean a glide: a fish braking against drag also reports 0.
+   */
+  get gliding(): Uint8Array {
+    return this._gliding;
+  }
+
   /** Per-fish share of `contacts`. */
   get contactCount(): Uint32Array {
     return this._contactCount;
@@ -509,6 +518,7 @@ export class World {
     this._stage = new Uint8Array(n);
     this._sex = new Uint8Array(n);
     this._thrust = new Float64Array(n);
+    this._gliding = new Uint8Array(n);
     this._contactCount = new Uint32Array(n);
     this.walker = new Uint8Array(n);
     this.coasting = new Uint8Array(n);
@@ -1167,6 +1177,7 @@ export class World {
     this._stage = edit.array(this.stage);
     this._sex = edit.array(this.sex);
     this._thrust = edit.array(this.thrust);
+    this._gliding = edit.array(this.gliding);
     this._contactCount = edit.array(this.contactCount);
     this.walker = edit.array(this.walker);
     this.coasting = edit.array(this.coasting);
@@ -2177,6 +2188,7 @@ export class World {
       this.yawRate[i] = 0;
       this.pitchRate[i] = 0;
       this.thrust[i] = 0;
+      this.gliding[i] = 0;
       this.targetYaw[i] = yaw;
       this.targetPitch[i] = pitch;
       this.targetSpeed[i] = speed;
@@ -2303,6 +2315,7 @@ export class World {
     const gain = STEERING.turnGainPerS * (coasting ? BEHAVIOUR.coastTurnGain : 1);
     const smooth = Math.min(1, dt / STEERING.turnSmoothingS);
 
+    this.gliding[i] = 0;
     const yaw = this.yaw[i] ?? 0;
     const pitch = this.pitch[i] ?? 0;
     this.backHomeBlocked[i] = Math.max(0, (this.backHomeBlocked[i] ?? 0) - dt);
@@ -2392,6 +2405,7 @@ export class World {
       );
     }
     this.thrust[i] = thrustMax > 0 ? clamp(thrust / thrustMax, 0, 1) : 0;
+    this.gliding[i] = glide ? 1 : 0;
     // A glide relaxes exponentially with a fixed time constant (Calovi et al. 2018), not with the
     // quadratic body drag, which at tetra cruise speeds would stretch a coast past a second.
     const nextV = glide
@@ -2776,6 +2790,7 @@ export class World {
       out[o + 14] = this.behaviour.display[i] ?? 0;
       out[o + 15] = this.behaviour.gillFlare[i] ?? 0;
       out[o + 16] = this.behaviour.brood.fan[i] ?? 0;
+      out[o + 17] = this.gliding[i] ?? 0;
     }
   }
 }
