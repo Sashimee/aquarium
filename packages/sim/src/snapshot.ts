@@ -47,7 +47,7 @@ export const SnapshotField = {
   Speed: 7,
   YawRate: 8,
   State: 9,
-  /** Caudal thrust as a fraction of the maximum, 0 while coasting; drives the tail beat. */
+  /** Caudal thrust as a fraction of the maximum, 0 while coasting or braking; drives the tail beat. */
   Thrust: 10,
   /**
    * Walkers: leg cycle phase in [0, 1), advancing one cycle per stride; 0 for swimmers. The body's
@@ -64,8 +64,13 @@ export const SnapshotField = {
   GillFlare: 15,
   /** 0 to 1: pectoral fanning over a clutch, eased in and out; 0 away from the eggs. */
   Fan: 16,
+  /**
+   * 1 while a burst-and-coast swimmer glides unpowered, 0 otherwise; eased between steps. Draw the
+   * straight-bodied glide from this, not from `Thrust`, which is also 0 for a fish braking.
+   */
+  Glide: 17,
 } as const;
-export const SNAPSHOT_STRIDE = 17;
+export const SNAPSHOT_STRIDE = 18;
 
 export interface Snapshot {
   /**
