@@ -544,6 +544,52 @@ describe('checkAssets', () => {
     expect(modificationProblems(none, unused)).toHaveLength(1);
   });
 
+  it('gives an asset that only borrows a source just the notes naming it', () => {
+    const credit = (id: string) =>
+      manifestAsset({ id, licence: 'CC-BY-4.0', author: 'Ann', modifications: [] });
+    const manifest = manifestOf(credit('src-a'), credit('src-b'));
+    const fish = {
+      ...fishAsset(),
+      sources: ['src-a', 'src-b'],
+      modifications: ['scaled to standard length', 'texture from src-b', 'merged meshes'],
+    };
+    const derived = derivedModifications(inputFor([fish]).index, manifest);
+    expect(derived.get('src-a')).toEqual([
+      'scaled to standard length',
+      'texture from src-b',
+      'merged meshes',
+    ]);
+    expect(derived.get('src-b')).toEqual(['texture from src-b']);
+  });
+
+  it('gives a borrowed source an empty list when no note names it, and handles no assets', () => {
+    const credit = (id: string) =>
+      manifestAsset({ id, licence: 'CC-BY-4.0', author: 'Ann', modifications: [] });
+    const manifest = manifestOf(credit('src-a'), credit('src-b'));
+    const fish = { ...fishAsset(), sources: ['src-a', 'src-b'], modifications: ['scaled'] };
+    const index = inputFor([fish]).index;
+    expect(derivedModifications(index, manifest).get('src-b')).toEqual([]);
+    expect(derivedModifications(index, manifest).get('src-a')).toEqual(['scaled']);
+    expect(derivedModifications({ ...index, assets: [] }, manifest).get('src-b')).toEqual([]);
+    expect(derivedModifications(index, manifestOf()).size).toBe(0);
+  });
+
+  it('applies the filter per asset and prefixes only the notes that survive', () => {
+    const credit = (id: string) =>
+      manifestAsset({ id, licence: 'CC-BY-4.0', author: 'Ann', modifications: [] });
+    const manifest = manifestOf(credit('src-a'), credit('src-b'));
+    const primary = { ...fishAsset(), id: 'one', sources: ['src-b'], modifications: ['own note'] };
+    const borrower = {
+      ...fishAsset(),
+      id: 'two',
+      sources: ['src-a', 'src-b'],
+      modifications: ['unrelated', 'blended src-b colour'],
+    };
+    const derived = derivedModifications(inputFor([primary, borrower]).index, manifest);
+    expect(derived.get('src-b')).toEqual(['one: own note', 'two: blended src-b colour']);
+    expect(derived.get('src-a')).toEqual(['unrelated', 'blended src-b colour']);
+  });
+
   it('derives modifications for a reference photo that feeds a built asset, and none for an unused one', () => {
     const photo = (modifications: string[]) =>
       manifestAsset({
