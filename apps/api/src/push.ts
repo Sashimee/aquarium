@@ -42,8 +42,9 @@ export function parseVapidKeys(publicKey: string, privateKey: string): VapidKeys
   const pub = Buffer.from(publicKey, 'base64url');
   const scalar = Buffer.from(privateKey, 'base64url');
   if (pub.length !== 65 || pub[0] !== 0x04) bad('public key must be an uncompressed P-256 point');
-  if (scalar.length === 0 || scalar.length > 32) bad('private key must be 32 bytes');
-  // Node's ECDH getPrivateKey() drops leading zero bytes, so about 1 key in 256 arrives shorter.
+  if (scalar.length < 28 || scalar.length > 32)
+    bad('private key must be 32 bytes (28 to 32 accepted)');
+  // Node's ECDH getPrivateKey() drops leading zero bytes, so about 1 key in 256 arrives shorter; more than 4 stripped bytes means a bad key.
   const d = Buffer.concat([Buffer.alloc(32 - scalar.length), scalar]);
   const ecdh = createECDH('prime256v1');
   ecdh.setPrivateKey(d);
