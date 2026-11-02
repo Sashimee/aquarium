@@ -1,11 +1,9 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { checkHandle } from '../sync/gifts';
+import { describeSyncError } from '../sync/messages';
 import { useApi } from './context';
 
 type Loaded = { kind: 'loading' } | { kind: 'failed'; message: string } | { kind: 'ready' };
-
-const messageOf = (err: unknown): string =>
-  err instanceof Error ? err.message : 'Something went wrong. Try again.';
 
 export function PlayerHandle() {
   const api = useApi();
@@ -27,7 +25,7 @@ export function PlayerHandle() {
         setLoaded({ kind: 'ready' });
       },
       (err: unknown) => {
-        if (live) setLoaded({ kind: 'failed', message: messageOf(err) });
+        if (live) setLoaded({ kind: 'failed', message: describeSyncError(err) });
       },
     );
     return () => {
@@ -51,7 +49,7 @@ export function PlayerHandle() {
         setSaving(false);
       },
       (err: unknown) => {
-        setProblem(messageOf(err));
+        setProblem(describeSyncError(err));
         setSaving(false);
       },
     );

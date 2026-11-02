@@ -108,6 +108,7 @@ export function TanksPanel({ newTankBiome }: { newTankBiome: CreatableBiome | nu
     <Gate
       noTank={(session, state) => (
         <div>
+          <PlayerHandle />
           <p>You have no tank yet. Start one and add your first fish.</p>
           <NewTankForm
             session={session}

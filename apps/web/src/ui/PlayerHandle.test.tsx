@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const api = { myHandle: vi.fn(), setMyHandle: vi.fn() };
 vi.mock('./context', () => ({ useApi: () => api }));
 
+import { ApiRequestError } from './api';
+
 const { PlayerHandle } = await import('./PlayerHandle');
 
 describe('the player handle section', () => {
@@ -89,9 +91,23 @@ describe('the player handle section', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('already your handle');
   });
 
+  it('says why a reserved handle is refused, not a generic message', async () => {
+    const { createApiClient } = await vi.importActual<typeof import('./api')>('./api');
+    api.myHandle.mockResolvedValue(null);
+    api.setMyHandle.mockImplementation((h: string) => createApiClient(vi.fn()).setMyHandle(h));
+    await show();
+    await type('admin');
+    await submit();
+    const text = container.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(text).toMatch(/reserved/);
+    expect(text).not.toContain('highlighted fields');
+  });
+
   it('shows the server refusal and keeps the old handle', async () => {
     api.myHandle.mockResolvedValue('mossy');
-    api.setMyHandle.mockRejectedValue(new Error('That handle is taken. Pick another.'));
+    api.setMyHandle.mockRejectedValue(
+      new ApiRequestError(409, 'conflict', 'That handle is taken. Pick another.'),
+    );
     await show();
     await type('reef_fan');
     await submit();
@@ -102,9 +118,11 @@ describe('the player handle section', () => {
   });
 
   it('says so when the handle cannot be loaded', async () => {
-    api.myHandle.mockRejectedValue(new Error('Sign in required.'));
+    api.myHandle.mockRejectedValue(
+      new ApiRequestError(401, 'unauthenticated', 'Sign in required.'),
+    );
     await show();
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Sign in required.');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('signed out');
     expect(container.querySelector('form')).toBeNull();
   });
 });
