@@ -1,4 +1,11 @@
-import { createPublicKey, generateKeyPairSync, randomUUID, verify } from 'node:crypto';
+import {
+  createECDH,
+  createPublicKey,
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+  verify,
+} from 'node:crypto';
 import {
   apiErrorSchema,
   dataExportSchema,
@@ -609,6 +616,20 @@ describe('web push', () => {
       loadConfig({ ...base, VAPID_PUBLIC_KEY: 'abc', VAPID_PRIVATE_KEY: 'def' }),
     ).toThrow(/VAPID keys invalid/);
     expect(() => loadConfig({ ...base, VAPID_SUBJECT: 'ftp://x' })).toThrow(/VAPID_SUBJECT/);
+  });
+
+  it('accepts a private key whose leading zero byte was stripped', () => {
+    const ecdh = createECDH('prime256v1');
+    ecdh.setPrivateKey(Buffer.concat([Buffer.from([0]), randomBytes(31)]));
+    const pub = ecdh.getPublicKey().toString('base64url');
+    const stripped = ecdh.getPrivateKey();
+    expect(stripped).toHaveLength(31);
+    const keys = parseVapidKeys(pub, stripped.toString('base64url'));
+    expect(keys.publicKey).toBe(pub);
+    expect(() => parseVapidKeys(pub, Buffer.alloc(33, 1).toString('base64url'))).toThrow(
+      /32 bytes/,
+    );
+    expect(() => parseVapidKeys(pub, '')).toThrow(/base64url/);
   });
 
   it('parses a valid key pair and refuses a mismatched one', () => {
