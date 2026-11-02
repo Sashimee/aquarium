@@ -562,7 +562,7 @@ describe('checkAssets', () => {
     expect(derived.get('src-b')).toEqual(['texture from src-b']);
   });
 
-  it('gives a borrowed source an empty list when no note names it, and handles no assets', () => {
+  it('flags a borrowed CC-BY source that no note names, and handles no assets', () => {
     const credit = (id: string) =>
       manifestAsset({ id, licence: 'CC-BY-4.0', author: 'Ann', modifications: [] });
     const manifest = manifestOf(credit('src-a'), credit('src-b'));
@@ -571,6 +571,10 @@ describe('checkAssets', () => {
     expect(derivedModifications(index, manifest).get('src-b')).toEqual([]);
     expect(derivedModifications(index, manifest).get('src-a')).toEqual(['scaled']);
     expect(derivedModifications({ ...index, assets: [] }, manifest).get('src-b')).toEqual([]);
+    expect(modificationProblems(index, manifest).join('\n')).toContain(
+      'manifest asset src-b: used only as a borrowed source by tetra',
+    );
+    expect(modificationProblems({ ...index, assets: [] }, manifest)).toEqual([]);
     expect(derivedModifications(index, manifestOf()).size).toBe(0);
   });
 
