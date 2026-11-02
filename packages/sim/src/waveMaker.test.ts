@@ -250,7 +250,7 @@ describe('a wave maker in the world', { timeout: 120_000 }, () => {
     // All three take the same no-current branch, so only a pinned trajectory catches a change to
     // that branch itself. The pin covers every species' movement, so any change to sim behaviour,
     // fixtures or the RNG needs a new one; two sim PRs that each pass alone can still turn dev red.
-    expect(bitDigest(base.position)).toBe('0855d268');
+    expect(bitDigest(base.position)).toBe('3fde12dd');
     expect(none.position).toEqual(base.position);
     expect(zero.position).toEqual(base.position);
     expect(zero.speed).toEqual(base.speed);

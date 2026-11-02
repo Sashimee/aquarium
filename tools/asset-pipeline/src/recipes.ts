@@ -246,8 +246,14 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     maxTriangles: 4000,
     minTriangles: 12,
     leafColourVariation: { spread: 0.14, yellowing: 0.1 },
+    leafAtlas: {
+      sourceId: 'sketchfab-f34fac65',
+      file: 'gltf/textures/tripo_mat_46d92b9d_baseColor.jpeg',
+      crop: { left: 1085, top: 30, width: 250, height: 1290 },
+      cell: { width: 128, height: 256 },
+    },
     modifications: [
-      'colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower',
+      "the 24 flat-green leaf materials are merged into one primitive: each leaf gets its own cell of a 1024 px atlas holding a crop of a leaf with midrib and veins from the java-fern texture of sketchfab-f34fac65, UVs projected along the leaf, multiplied by that leaf's deterministic shade, lighter or darker and a little yellower",
     ],
   },
   {

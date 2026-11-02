@@ -4,7 +4,6 @@ import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { priceOrFree } from '../sync/economy';
 import { NO_ROOM_TITLE, ROOM_ENTRIES, roomTitle } from '../sync/roomCatalog';
 import type { SessionState, TankSession } from '../sync/session';
-import { ROOM_PRESET_DATA } from '../scene/room/roomScene';
 import { useRoomState } from './context';
 import { useOptionalSession, useSessionState } from './session';
 import { useSpend } from './spend';
@@ -21,13 +20,12 @@ const NO_ROOM_SWATCH = 'linear-gradient(135deg, #1b2733, #0d141b)';
 
 const CHOICES: readonly Choice[] = [
   ...ROOM_ENTRIES.map((entry) => {
-    const light = ROOM_PRESET_DATA[entry.id].light;
     return {
       id: entry.id,
       title: entry.name,
       hasWindow: entry.hasWindow,
       price: BUNDLED_ECONOMY.rooms[entry.id],
-      swatch: `linear-gradient(135deg, ${light.keyColor}, ${light.ambientColor})`,
+      swatch: `linear-gradient(135deg, ${entry.swatch.key}, ${entry.swatch.ambient})`,
     };
   }),
   { id: null, title: NO_ROOM_TITLE, hasWindow: false, price: 0, swatch: NO_ROOM_SWATCH },

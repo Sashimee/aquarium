@@ -362,6 +362,7 @@ function createGlassFace(
 ): GlassFace {
   const material = new MeshStandardNodeMaterial({ roughness: 0.03, metalness: 0 });
   material.name = 'glass-face';
+  material.envNode = interior.reflectionNode();
   material.colorNode = vec3(0);
   material.opacityNode = schlick(GLASS_F0);
   premultipliedBlend(material);

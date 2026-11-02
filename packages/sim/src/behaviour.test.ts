@@ -35,6 +35,14 @@ const firefish = speciesContentSchema.parse(
 );
 const n3 = new Float64Array(3);
 
+function contentSpecies(id: string): SpeciesInput {
+  return speciesContentSchema.parse(
+    JSON.parse(
+      readFileSync(join(import.meta.dirname, `../../../content/species/${id}.json`), 'utf8'),
+    ),
+  );
+}
+
 function at(a: ArrayLike<number>, i: number): number {
   const v = a[i];
   if (v === undefined) throw new RangeError(`index ${i} out of range`);
@@ -123,6 +131,50 @@ describe('burst-and-coast', { timeout: LONG }, () => {
     expect(m).toBeGreaterThanOrEqual(0.3);
     expect(m).toBeLessThanOrEqual(1);
   });
+  it.each(['neon-tetra', 'cardinal-tetra', 'rummy-nose-tetra'])(
+    '%s glides about 0.5 s with τ0 ≈ 0.8 s speed decay (Calovi et al. 2018)',
+    (id) => {
+      const w = new World({
+        seed: 4,
+        tank: SHOW_TANK,
+        species: [contentSpecies(id)],
+        decor: SHOW_DECOR,
+        fish: spawnMany(id, 11),
+      });
+      const start = new Int32Array(w.count).fill(-1);
+      const startSpeed = new Float64Array(w.count);
+      const lengths: number[] = [];
+      const decays: number[] = [];
+      let capped = 0;
+      for (let t = 0; t < 30 * 80; t++) {
+        const before = Float64Array.from(w.speed);
+        w.step();
+        for (let i = 0; i < w.count; i++) {
+          const coasting = at(w.thrust, i) === 0;
+          if (coasting && at(start, i) < 0) {
+            start[i] = t;
+            startSpeed[i] = at(before, i);
+          } else if (!coasting && at(start, i) >= 0) {
+            const steps = t - at(start, i);
+            const v0 = at(startSpeed, i);
+            const v1 = at(before, i);
+            if (t > 30 * 20 && steps > 2 && v0 > 0 && v1 > 0) {
+              const s = steps * STEP_DT;
+              lengths.push(s);
+              decays.push(Math.log(v0 / v1) / s);
+              if (s >= BEHAVIOUR.coastMaxS - 1e-9) capped++;
+            }
+            start[i] = -1;
+          }
+        }
+      }
+      expect(lengths.length).toBeGreaterThan(300);
+      expect(median(lengths)).toBeGreaterThanOrEqual(0.4);
+      expect(median(lengths)).toBeLessThanOrEqual(0.6);
+      expect(median(decays)).toBeGreaterThanOrEqual(1);
+      expect(capped / lengths.length).toBeLessThan(0.05);
+    },
+  );
 });
 
 describe('labriform hovering', { timeout: LONG }, () => {
@@ -567,6 +619,47 @@ describe('anchored species', { timeout: LONG }, () => {
     for (const id of [...w.fishIds]) w.removeFish(id);
     expect(w.behaviour.routesKept).toBe(0);
     expect(w.behaviour.routesPending).toBe(0);
+  });
+
+  it('keeps each remaining fish its own entry slots when one leaves mid-list (#1537)', () => {
+    const w = new World({
+      seed: 3,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, firefish],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS.filter((a) => a.kind !== 'cave'),
+      fish: spawnMany(firefish.id, 4),
+    });
+    w.setLight(0);
+    // The leaving fish and every one after it have looked along a way of their own, each from its
+    // own cell, so a slot pair shifted by one would show as another fish's way and cells.
+    const tail = [1, 2, 3];
+    const looked = (): boolean => {
+      const seen = tail.map((i) => w.behaviour.entrySlots(i));
+      return (
+        seen.every((s) => s.routes[0] != null && s.cells.some((c) => c >= 0)) &&
+        new Set(seen.map((s) => s.routes[0])).size === tail.length &&
+        new Set(seen.map((s) => s.cells.join())).size === tail.length
+      );
+    };
+    let t = 0;
+    while (!looked()) {
+      w.step();
+      if (++t > 3000) throw new Error('the fish never looked where to join their ways');
+    }
+    const before = new Map(w.fishIds.map((id, i) => [id, w.behaviour.entrySlots(i)]));
+    const gone = w.fishIds[1];
+    if (gone === undefined) throw new Error('no fish to remove');
+    w.removeFish(gone);
+    expect(w.fishIds).not.toContain(gone);
+    expect(() => w.behaviour.entrySlots(w.count)).toThrow(RangeError);
+    for (const [i, id] of w.fishIds.entries()) {
+      const was = before.get(id);
+      if (was === undefined) throw new Error(`fish ${id} was not there before`);
+      const now = w.behaviour.entrySlots(i);
+      expect(now.cells, id).toEqual(was.cells);
+      for (const k of [0, 1]) expect(now.routes[k], `${id} slot ${String(k)}`).toBe(was.routes[k]);
+    }
   });
 
   it('keeps where it joins the way for a while when no cell of it is in sight (#1515)', () => {

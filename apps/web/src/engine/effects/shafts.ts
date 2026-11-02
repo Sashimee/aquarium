@@ -36,6 +36,14 @@ const PHASE_G = 0.6;
  * glass are 20% or more, so their texels barely bleed onto each other.
  */
 export const DEPTH_TOLERANCE = 0.01;
+/**
+ * Texel offsets `denoise` averages. Interleaved gradient noise spreads its values evenly over any
+ * 3×3 block (Jimenez 2014), so the box takes the march jitter's lattice to under a fifth of its
+ * amplitude where no temporal resolve averages it over frames.
+ */
+export const DENOISE_TAPS: readonly (readonly [number, number])[] = [-1, 0, 1].flatMap((dy) =>
+  [-1, 0, 1].map((dx) => [dx, dy] as const),
+);
 
 /**
  * How much a low-resolution shaft texel marched to view depth `tapDepth` counts towards a pixel at
@@ -127,6 +135,29 @@ export class WaterShafts {
         );
       });
       return vec4(shafts, view.z.negate());
+    })();
+  }
+
+  /**
+   * `rays` from `node` with its jitter averaged over the `DENOISE_TAPS` box, at the same
+   * resolution and with the centre texel's depth kept in alpha. Texels marched to another surface
+   * count as little as they do in `upscale`, so the shafts behind a fish stay off it.
+   */
+  denoise(rays: TextureNode): Node<'vec4'> {
+    return Fn(() => {
+      const coord = uv();
+      // @types/three types TextureSizeNode as an untyped Node; three builds it as a uvec2.
+      const size = vec2(textureSize(rays, int(0)) as unknown as Node<'uvec2'>);
+      const centre = rays.sample(coord).toVar();
+      const sum = vec3(0).toVar();
+      const total = float(0).toVar();
+      for (const [dx, dy] of DENOISE_TAPS) {
+        const tap = dx === 0 && dy === 0 ? centre : rays.sample(coord.add(vec2(dx, dy).div(size)));
+        const weight = upscaleWeight(float(1), tap.a, centre.a).toVar();
+        sum.addAssign(tap.rgb.mul(weight));
+        total.addAssign(weight);
+      }
+      return vec4(sum.div(max(total, 1e-6)), centre.a);
     })();
   }
 

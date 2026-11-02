@@ -970,6 +970,7 @@
       "rigged": false,
       "notes": "Set of aquarium plants (java fern, vallisneria, broadleaf, bromeliad-like with flower). 130k faces: split per plant and decimate to LOD0 under 8k each for instancing. Verified from the downloaded glTF: 130860 triangles, not rigged (no skins). Zip sha256 dbc5f7f014815de1bcc4b96ee78c52aa5336285c4fcb00173880fac203dbf2fe; sha256 is the aggregate over files[]. Five materials, four of them 4096x4096: split per plant and downscale.",
       "modifications": [
+        "amazon-sword: the 24 flat-green leaf materials are merged into one primitive: each leaf gets its own cell of a 1024 px atlas holding a crop of a leaf with midrib and veins from the java-fern texture of sketchfab-f34fac65, UVs projected along the leaf, multiplied by that leaf's deterministic shade, lighter or darker and a little yellower",
         "java-fern: merged meshes, dropped unused attributes, skeleton and animation",
         "java-fern: origin at the centre of the base, scaled so the longest edge is 0.3 m",
         "java-fern: LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
@@ -4913,8 +4914,8 @@
         "merged meshes, dropped unused attributes, skeleton and animation",
         "origin at the centre of the base, scaled so the longest edge is 0.3 m",
         "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
-        "no textures: flat base colours kept as material factors, PBR metallic-roughness",
-        "colour variation: the 24 flat-green leaf materials each get their own deterministic shade of the source green, lighter or darker and a little yellower"
+        "texture: one 1024 px leaf atlas re-encoded to KTX2 and used for both tiers, PBR metallic-roughness with constant roughness",
+        "the 24 flat-green leaf materials are merged into one primitive: each leaf gets its own cell of a 1024 px atlas holding a crop of a leaf with midrib and veins from the java-fern texture of sketchfab-f34fac65, UVs projected along the leaf, multiplied by that leaf's deterministic shade, lighter or darker and a little yellower"
       ],
       "status": "downloaded",
       "files": [

@@ -221,15 +221,15 @@ export class RoomStage implements LitRoom {
   /**
    * Shows `roomId`, or the default studio and no room for null, around a tank of `tank`'s size.
    * Settles once the room is complete or a newer show overtook it. Rejects for an unknown room or
-   * one planned with more lamps than `ROOM_LAMP_SLOTS`, which keeps the room on show, and for a
-   * failed load, which keeps the shell and falls back to the default studio's light. Showing what is already on show or loading changes nothing.
+   * one it cannot plan, such as one with more lamps than `ROOM_LAMP_SLOTS`, which keeps the room
+   * on show, and for a failed load, which keeps the shell and falls back to the default studio's
+   * light. Showing what is already on show or loading changes nothing.
    */
   show(roomId: string | null, tank: TankExtent, tier: Tier): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('RoomStage: show() after dispose()'));
     if (roomId !== null && !isRoomId(roomId)) {
       return Promise.reject(new RangeError(`RoomStage: unknown room "${roomId}"`));
     }
-    this.shown = { roomId, tank };
     const roomTier = roomTierFor(tier, this.options.mobile);
     const key =
       roomId === null ? 'none' : [roomId, tank.length, tank.depth, tank.height, roomTier].join('|');
@@ -244,6 +244,7 @@ export class RoomStage implements LitRoom {
         return Promise.reject(cause instanceof Error ? cause : new Error(String(cause)));
       }
     }
+    this.shown = { roomId, tank };
     this.key = key;
 
     this.controller?.abort();

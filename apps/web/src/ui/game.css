@@ -369,9 +369,23 @@
 }
 
 @media (max-width: 480px) {
+  .stage {
+    padding-top: calc(var(--hud-h, 18rem) + 0.5rem);
+  }
+
+  #ui .status-card .gauges {
+    display: none;
+  }
+
+  #ui .round {
+    width: 2.75rem;
+    height: 2.75rem;
+    min-height: 2.75rem;
+  }
+
   .hud {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 0.5rem;
   }
@@ -385,23 +399,54 @@
     grid-column: 1;
     grid-row: 1;
     width: auto;
+    min-width: 9rem;
   }
 
   .hud-buttons {
-    grid-column: 2;
-    grid-row: 1;
+    grid-column: 1;
+    grid-row: 2;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  #ui .chem-chip {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
   }
 
   .camera-controls {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 4;
     justify-self: start;
   }
 
-  .tank-type {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: end;
+  #ui .tank-type {
+    grid-column: 1;
+    grid-row: 5;
+    justify-self: start;
+    max-width: 100%;
+    padding: 0.35rem 0.4rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  #ui .tank-type[data-more-end='true'] {
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+  }
+
+  #ui .tank-type[data-more-start='true'] {
+    mask-image: linear-gradient(to right, transparent, #000 1.75rem);
+  }
+
+  #ui .tank-type[data-more-start='true'][data-more-end='true'] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 1.75rem,
+      #000 calc(100% - 1.75rem),
+      transparent
+    );
   }
 
   #ui .segmented button {

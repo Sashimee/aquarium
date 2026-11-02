@@ -1,6 +1,7 @@
 import {
   Color,
   Group,
+  InstancedMesh,
   Material,
   Matrix4,
   Mesh,
@@ -187,9 +188,60 @@ interface BleachableMaterial {
   readonly emissive: Color;
 }
 
+/** The shared draws of every untinted, non-coral item of one asset: one `InstancedMesh` per primitive. */
+class InstanceBatch {
+  private meshes: InstancedMesh[] = [];
+  private count = 0;
+
+  constructor(
+    private readonly group: Group,
+    private readonly name: (primitive: number) => string,
+    private readonly primitives: LoadedModel['primitives'],
+  ) {}
+
+  add(matrix: Matrix4): number {
+    const slot = this.count++;
+    if (this.meshes.length === 0 || slot >= (this.meshes[0]?.instanceMatrix.count ?? 0))
+      this.grow();
+    this.setMatrix(slot, matrix);
+    for (const mesh of this.meshes) mesh.count = this.count;
+    return slot;
+  }
+
+  setMatrix(slot: number, matrix: Matrix4): void {
+    for (const mesh of this.meshes) {
+      mesh.setMatrixAt(slot, matrix);
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.boundingSphere = null;
+      mesh.boundingBox = null;
+    }
+  }
+
+  private grow(): void {
+    const capacity = Math.max(4, this.count * 2);
+    this.meshes = this.primitives.map((primitive, i) => {
+      const previous = this.meshes[i];
+      const mesh = new InstancedMesh(primitive.geometry, primitive.material, capacity);
+      mesh.name = this.name(i);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      if (previous) {
+        mesh.instanceMatrix.array.set(previous.instanceMatrix.array);
+        previous.removeFromParent();
+        previous.dispose();
+      }
+      this.group.add(mesh);
+      return mesh;
+    });
+  }
+}
+
 export class Hardscape {
   readonly group = new Group();
   private readonly meshesByItem: Mesh[][] = [];
+  private readonly batches = new Map<string, InstanceBatch>();
+  private readonly instanced = new Map<number, { batch: InstanceBatch; slot: number }>();
+  private itemCount = 0;
   private readonly tintedMaterials: Material[] = [];
   private readonly bleachables: BleachableMaterial[][] = [];
   private readonly swellNodes = new Map<number, Node<'vec3'>>();
@@ -204,12 +256,28 @@ export class Hardscape {
 
   add(entry: CatalogEntry, model: LoadedModel, item: DecorItem): void {
     const matrix = decorMatrix(item);
+    const index = this.itemCount++;
+    const key = item.tintSeed ?? legacyTintSeed(item);
+    const tint = coralTint(item.assetId, key);
+    if (entry.kind !== 'coral' && !tint) {
+      let batch = this.batches.get(item.assetId);
+      if (!batch) {
+        batch = new InstanceBatch(
+          this.group,
+          (i) => `${entry.id}:${model.primitives[i]?.material.name ?? i}`,
+          model.primitives,
+        );
+        this.batches.set(item.assetId, batch);
+      }
+      this.instanced.set(index, { batch, slot: batch.add(matrix) });
+      this.meshesByItem.push([]);
+      this.bleachables.push([]);
+      return;
+    }
     const meshes: Mesh[] = [];
     this.meshesByItem.push(meshes);
     const bleachables: BleachableMaterial[] = [];
     this.bleachables.push(bleachables);
-    const key = item.tintSeed ?? legacyTintSeed(item);
-    const tint = coralTint(item.assetId, key);
     for (const primitive of model.primitives) {
       let material: Material = primitive.material;
       if (tint) {
@@ -267,6 +335,8 @@ export class Hardscape {
 
   setItem(index: number, item: DecorItem): void {
     const matrix = decorMatrix(item);
+    const shared = this.instanced.get(index);
+    if (shared) shared.batch.setMatrix(shared.slot, matrix);
     for (const mesh of this.meshesByItem[index] ?? []) mesh.matrix.copy(matrix);
   }
 
@@ -279,6 +349,7 @@ export class Hardscape {
 
   dispose(): void {
     this.group.removeFromParent();
+    for (const child of this.group.children) (child as Partial<InstancedMesh>).dispose?.();
     this.group.clear();
     for (const material of this.tintedMaterials) material.dispose();
   }

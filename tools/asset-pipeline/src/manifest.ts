@@ -185,7 +185,7 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
   return problems;
 }
 
-/** Modifications of every built asset deriving from each credit-requiring source, reference photo, sound or background (whatever its licence), prefixed with the asset id when a source feeds several; empty for unused sources; reference photos appear only when a built asset uses them as a source. */
+/** Modifications of every built asset deriving from each credit-requiring source, reference photo, sound or background (whatever its licence), prefixed with the asset id when a source feeds several; an asset that only borrows a source as its second or later one contributes just the notes that name it; empty for unused sources; reference photos appear only when a built asset uses them as a source. */
 export function derivedModifications(index: AssetIndex, manifest: Manifest): Map<string, string[]> {
   const users = new Map<string, OutputAsset[]>(
     manifest.assets
@@ -205,7 +205,9 @@ export function derivedModifications(index: AssetIndex, manifest: Manifest): Map
   for (const [sourceId, assets] of users) {
     const list: string[] = [];
     for (const asset of assets) {
+      const secondary = asset.sources[0] !== sourceId;
       for (const note of asset.modifications) {
+        if (secondary && !note.includes(sourceId)) continue;
         const line = assets.length > 1 ? `${asset.id}: ${note}` : note;
         if (!list.includes(line)) list.push(line);
       }

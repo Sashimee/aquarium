@@ -295,6 +295,24 @@ describe('the room backdrop', () => {
     expect(evening.interior.roomLevel.value).toBe(night);
   });
 
+  it('dims the mirrored room as far as the daylight through its window, lamps aside (#1549)', () => {
+    const r = rig();
+    applyDayLighting(r, at('12:00'));
+    expect(r.interior.reflectionLevel.value).toBe(1);
+    const night = roomDaylightAt(parseClock('23:00'));
+    r.roomDaylight = night;
+    applyDayLighting(r, at('12:00'));
+    expect(r.interior.reflectionLevel.value).toBeCloseTo(night, 12);
+    expect(r.interior.reflectionLevel.value).toBeLessThan(r.interior.roomLevel.value / 4);
+    r.roomDaylight = roomDaylightAt(parseClock('19:30'));
+    applyDayLighting(r, at('12:00'));
+    expect(r.interior.reflectionLevel.value).toBeGreaterThan(night);
+    expect(r.interior.reflectionLevel.value).toBeLessThan(1);
+    r.roomDaylight = -3;
+    applyDayLighting(r, at('12:00'));
+    expect(r.interior.reflectionLevel.value).toBe(0);
+  });
+
   it('goes dark when the daytime level is zero', () => {
     const r = rig();
     r.roomBackgroundIntensity = 0;

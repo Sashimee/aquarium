@@ -242,11 +242,15 @@ export class PostPipeline {
 
     let colour: Node<'vec4'> = scenePass.getTextureNode('output');
     if (settings.godRays) {
-      const rays = rtt(shafts.node(depth), null, null, {
-        resolutionScale: SHAFT_RESOLUTION,
-        depthBuffer: false,
-      });
+      const target = { resolutionScale: SHAFT_RESOLUTION, depthBuffer: false };
+      let rays = rtt(shafts.node(depth), null, null, target);
       this.owned.push(rays);
+      // Without TRAA the march jitter stays put on screen, and the upscale magnifies it into a
+      // lattice (#1542).
+      if (!this.temporal) {
+        rays = rtt(shafts.denoise(rays), null, null, target);
+        this.owned.push(rays);
+      }
       colour = vec4(max(colour.rgb.add(shafts.upscale(rays, depth)), 0), colour.a);
     }
     if (chain === 'smaa-bloom' || chain === 'taa-bloom') {

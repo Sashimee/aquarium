@@ -106,6 +106,20 @@ export async function resizeImage(image: Rgba, maxDim: number): Promise<Rgba> {
   };
 }
 
+export async function fitImage(image: Rgba, width: number, height: number): Promise<Rgba> {
+  const { data, info } = await sharp(image.data, {
+    raw: { width: image.width, height: image.height, channels: 4 },
+  })
+    .resize(width, height, { fit: 'fill', kernel: 'lanczos3' })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return {
+    width: info.width,
+    height: info.height,
+    data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+  };
+}
+
 export async function cropImage(
   image: Rgba,
   rect: { left: number; top: number; width: number; height: number },

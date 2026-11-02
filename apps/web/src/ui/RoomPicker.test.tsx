@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { RoomId } from '@aquarium/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
+import { ROOM_ENTRIES } from '../sync/roomCatalog';
 import type { TankSession } from '../sync/session';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -19,6 +20,10 @@ vi.mock('./session', () => ({
   useOptionalSession: () => hooks.session,
   useSessionState: () => hooks.state,
 }));
+
+vi.mock('../scene/room/roomScene', () => {
+  throw new Error('the room picker must not load the room scene presets');
+});
 
 const { RoomPicker, RoomPickerView, RoomReadout } = await import('./RoomPicker');
 
@@ -89,6 +94,15 @@ describe('the room picker', () => {
     expect(button('none')?.textContent).toContain('No room');
     expect(button('room-living')?.getAttribute('aria-pressed')).toBe('true');
     expect(button('room-bedroom')?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('paints each swatch from the room catalog colours without loading the room scene', async () => {
+    await render(fakeSession(0), stateWith());
+    for (const entry of ROOM_ENTRIES) {
+      const style = button(entry.id)?.querySelector('.room-swatch')?.getAttribute('style') ?? '';
+      expect(style, entry.id).toContain(entry.swatch.key);
+      expect(style, entry.id).toContain(entry.swatch.ambient);
+    }
   });
 
   it('shows the plain studio as chosen when the tank has no room', async () => {

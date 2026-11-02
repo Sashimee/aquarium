@@ -9,3 +9,12 @@ export function awaitTankModules<T>(tank: Promise<T>, events: EventBus<EngineEve
     throw new Error(TANK_LOAD_FAILED, { cause });
   });
 }
+
+/** Both imports start before the first await, so the room code loads beside the tank code. */
+export function awaitAppModules<T, R>(
+  tank: Promise<T>,
+  room: Promise<R>,
+  events: EventBus<EngineEvents>,
+): Promise<[T, R]> {
+  return awaitTankModules(Promise.all([tank, room]), events);
+}

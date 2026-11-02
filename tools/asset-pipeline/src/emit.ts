@@ -7,7 +7,7 @@ import {
   type Primitive,
   type Texture,
 } from '@gltf-transform/core';
-import { cloneDocument, prune } from '@gltf-transform/functions';
+import { cloneDocument, join, prune } from '@gltf-transform/functions';
 import {
   bindKtx2Textures,
   sha256,
@@ -35,6 +35,8 @@ export interface LodPlan {
   minTriangles: number;
   keepSeams?: boolean;
   sloppyFallback?: boolean;
+  /** Merges the primitives that share a material once each is simplified, so one draw call covers them and no triangle crosses between them. */
+  joinPrimitives?: boolean;
   /** Runs on each primitive of LOD `level` before simplification. */
   prepare?: (prim: Primitive, level: number) => void;
   /** Runs on each primitive of LOD `level` after simplification. */
@@ -288,6 +290,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
         });
         plan.finish?.(prim, level);
       }
+    if (plan.joinPrimitives) await doc.transform(join({ keepMeshes: false, keepNamed: false }));
     for (const mesh of doc.getRoot().listMeshes()) renormaliseMouth(mesh.listPrimitives());
     await doc.transform(prune(pruneOptions));
     if (input.meta.fish && level === IMPOSTOR_SOURCE_LOD) {
