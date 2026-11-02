@@ -1069,3 +1069,26 @@ describe('api client Pearls contract', () => {
     expect(error).toMatchObject({ status: 402, code: 'insufficient_pearls' });
   });
 });
+
+describe('the player handle', () => {
+  it('reads and sets it on /api/me/handle', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json({ handle: null }))
+      .mockResolvedValueOnce(json({ handle: 'mossy' }));
+    const api = createApiClient(fetcher);
+    expect(await api.myHandle()).toBeNull();
+    expect(await api.setMyHandle('mossy')).toBe('mossy');
+    const calls = fetcher.mock.calls as [string, RequestInit | undefined][];
+    expect(calls[1]?.[0]).toBe('/api/me/handle');
+    expect(calls[1]?.[1]).toMatchObject({ method: 'PUT', body: '{"handle":"mossy"}' });
+  });
+
+  it('rejects a malformed handle locally', async () => {
+    const fetcher = vi.fn();
+    await expect(createApiClient(fetcher).setMyHandle('No')).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});

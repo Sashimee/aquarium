@@ -27,6 +27,7 @@ import { useAuth, useBridge } from './context';
 import { Co2Control } from './Co2Control';
 import { CoralSection } from './Corals';
 import { FishCards } from './FishCard';
+import { PlayerHandle } from './PlayerHandle';
 import { AcceptsGiftsToggle, GiftFishButton, GiftNotice, GiftOffers } from './Gifts';
 import { Link } from './screens';
 import WaterTest from './WaterTest';
@@ -119,6 +120,7 @@ export function TanksPanel({ newTankBiome }: { newTankBiome: CreatableBiome | nu
       {({ session, state, tank }) => (
         <>
           <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
+          <PlayerHandle />
           <AcceptsGiftsToggle key={tank.id} session={session} state={state} tank={tank} />
           <GiftOffers session={session} state={state} />
           <Bag session={session} state={state} />

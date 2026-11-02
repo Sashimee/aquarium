@@ -44,6 +44,7 @@ import {
   communityFeedResponseSchema,
   communityStateSchema,
   handleResponseSchema,
+  setHandleRequestSchema,
   dataExportSchema,
   privacyPolicySchema,
   publicTankSchema,
@@ -338,6 +339,7 @@ export interface ApiClient {
   communityFeed(request: CommunityFeedRequest): Promise<CommunityFeedResponse>;
   communityAte(reports: readonly AteReport[], batchId?: string): Promise<CommunityState>;
   myHandle(): Promise<string | null>;
+  setMyHandle(handle: string): Promise<string | null>;
   gifts(): Promise<GiftListResponse>;
   createGift(request: CreateGiftRequest): Promise<CreateGiftResponse>;
   acceptGift(offerId: string, request: AcceptGiftRequest): Promise<AcceptGiftResponse>;
@@ -972,6 +974,10 @@ export function createApiClient(
       const res = await send('/api/me/handle');
       if (!res.ok) throw await toError(res);
       return (await parsed(res, handleResponseSchema)).handle;
+    },
+    async setMyHandle(handle) {
+      const body = validate(setHandleRequestSchema, { handle });
+      return (await parsed(await put('/api/me/handle', body), handleResponseSchema)).handle;
     },
     async communityFeed(request) {
       const body = validate(communityFeedRequestSchema, request);
