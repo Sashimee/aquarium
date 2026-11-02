@@ -325,6 +325,11 @@ async function boot(): Promise<void> {
       if (colliders === null) delete canvas.dataset['simDecor'];
       else canvas.dataset['simDecor'] = colliderDigest(colliders);
     });
+    engine.onFrame(() => {
+      const weather = roomLight.light?.weather?.state;
+      if (weather === undefined) delete canvas.dataset['weather'];
+      else if (canvas.dataset['weather'] !== weather) canvas.dataset['weather'] = weather;
+    });
   }
   const feedGate = new FeedGate();
   let firstSceneMounted = (): void => undefined;
