@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { RoomId } from '@aquarium/shared';
@@ -21,9 +24,24 @@ vi.mock('./session', () => ({
   useSessionState: () => hooks.state,
 }));
 
-vi.mock('../scene/room/roomScene', () => {
-  throw new Error('the room picker must not load the room scene presets');
-});
+function relativeImportGraph(entry: string): Set<string> {
+  const seen = new Set<string>();
+  const queue = [entry];
+  const specifier = /(?:from|import)\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/g;
+  for (let file = queue.pop(); file !== undefined; file = queue.pop()) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const source = readFileSync(file, 'utf8').replace(/(?:import|export)\s+type\s[^;]*?;/gs, '');
+    for (const [, spec] of source.matchAll(specifier)) {
+      const base = resolve(dirname(file), spec as string);
+      const found = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find(
+        (candidate) => existsSync(candidate) && /\.tsx?$/.test(candidate),
+      );
+      if (found) queue.push(found);
+    }
+  }
+  return seen;
+}
 
 const { RoomPicker, RoomPickerView, RoomReadout } = await import('./RoomPicker');
 
@@ -46,6 +64,13 @@ const stateWith = (over: Partial<SessionState> = {}): SessionState => ({
 });
 
 describe('the room picker', () => {
+  it('never reaches the room scene presets through any import chain', () => {
+    const entry = resolve(dirname(fileURLToPath(import.meta.url)), 'RoomPicker.tsx');
+    const graph = [...relativeImportGraph(entry)];
+    expect(graph.length).toBeGreaterThan(3);
+    expect(graph.filter((file) => /scene\/room\/roomScene\.tsx?$/.test(file))).toEqual([]);
+  });
+
   let container: HTMLElement;
   let root: Root;
 
