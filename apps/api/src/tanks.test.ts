@@ -15,7 +15,7 @@ import {
   tankListSchema,
   tankSchema,
 } from '@aquarium/shared';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -1851,6 +1851,12 @@ describe('removable heater', () => {
     await addFish(h, cookie, heated.id, 'betta', 'Warm');
     await addFish(h, cookie, bare.id, 'betta', 'Cold');
     expect((await heater(cookie, bare.id, 'remove')).statusCode).toBe(200);
+    // New-fish disease onset is rolled from the random fish id, so a fresh fish can fall ill in the
+    // warm tank by chance and mask the temperature stress this test isolates.
+    await h.database.db
+      .update(schema.fish)
+      .set({ introducedAt: null })
+      .where(inArray(schema.fish.tankId, [heated.id, bare.id]));
 
     await advance(h, 7 * DAY);
     const warm = await read(cookie, heated.id);
