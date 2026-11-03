@@ -133,6 +133,11 @@
 }
 
 .photo-pad {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 0.4rem;
+  background: var(--glass-strong);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.4rem;

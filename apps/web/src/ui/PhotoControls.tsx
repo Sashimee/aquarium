@@ -243,6 +243,11 @@ export function PhotoTools() {
   const lens = dof.enabled && dof.available;
   return (
     <section className="photo-tools" aria-label="Photo controls">
+      <div role="group" aria-label="Move the camera" className="photo-pad">
+        {MOVES.map((m) => (
+          <HoldButton key={m.move} {...m} />
+        ))}
+      </div>
       <fieldset className="photo-filters">
         <legend>Filter</legend>
         {PHOTO_FILTERS.map((f) => (
@@ -319,11 +324,6 @@ export function PhotoTools() {
         <span>Freeze the fish</span>
       </label>
 
-      <div role="group" aria-label="Move the camera" className="photo-pad">
-        {MOVES.map((m) => (
-          <HoldButton key={m.move} {...m} />
-        ))}
-      </div>
       <p className="hint">
         Drag to look around, pinch or scroll to zoom. Keys: W A S D move, Q and E go down and up,
         arrows turn, plus and minus zoom, H hides the controls, Escape leaves.
