@@ -51,6 +51,7 @@ import {
   type DisplayPreference,
 } from './displayPreference';
 import { EffectsRecovery, EffectsSlot } from './effectsSlot';
+import { compileInParallel, type ParallelCompile } from './parallelCompile';
 import { materialUse, PipelineFailureHandler, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL, type RoomLighting } from './environment';
 import { GltfPropSource } from './room/gltfPropSource';
@@ -215,6 +216,7 @@ export class Engine {
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
+  private parallelCompile: ParallelCompile | null = null;
   private readonly materialRebuild = new MaterialRebuild();
   private sceneRevisionValue = 0;
   /** Later tier changes warm what they turn on themselves. */
@@ -341,6 +343,7 @@ export class Engine {
       () => this.materialRebuild.request(performance.now()),
     );
     cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
+    if (backend === 'webgl2') this.installParallelCompile();
 
     container.appendChild(renderer.domElement);
     cleanup.add(() => renderer.domElement.remove());
@@ -638,6 +641,24 @@ export class Engine {
     await this.cleanup.dispose();
   }
 
+  /**
+   * Only the scene's own objects may show up late: a post pass or the room's PMREM bake skipped
+   * for a frame would put a black or wrong frame on screen. Captures draw outside `frame` and so
+   * still wait for every pipeline.
+   */
+  private installParallelCompile(): void {
+    try {
+      const parallel = compileInParallel(
+        this.renderer,
+        (renderObject) => Reflect.get(renderObject, 'scene') === this.scene,
+      );
+      this.cleanup.add(() => parallel.restore());
+      this.parallelCompile = parallel;
+    } catch (cause) {
+      this.reportError('New objects will compile on the main thread and may stall frames', cause);
+    }
+  }
+
   private reportError(message: string, cause: unknown): void {
     if (!this.disposed) this.events.emit('engine:error', { message, cause });
   }
@@ -843,7 +864,8 @@ export class Engine {
       this.quality.stall(nowMs);
     }
     try {
-      this.draw();
+      if (this.parallelCompile === null) this.draw();
+      else this.parallelCompile.during(() => this.draw());
     } finally {
       this.cullPrewarm.end();
     }

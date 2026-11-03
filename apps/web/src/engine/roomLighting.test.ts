@@ -21,15 +21,24 @@ function ktx2Serving(hdri: CompressedTexture): Ktx2Textures {
 }
 
 function spyGenerators() {
-  vi.spyOn(PMREMGenerator.prototype, 'fromScene').mockImplementation(
-    () => new RenderTarget(ROOM_CUBE_SIZE, ROOM_CUBE_SIZE),
-  );
+  const drewStudio: PMREMGenerator[] = [];
+  vi.spyOn(PMREMGenerator.prototype, 'fromScene').mockImplementation(function (
+    this: PMREMGenerator,
+  ) {
+    drewStudio.push(this);
+    return new RenderTarget(ROOM_CUBE_SIZE, ROOM_CUBE_SIZE);
+  });
+  const drewHdri: PMREMGenerator[] = [];
   const fromEquirectangular = vi.spyOn(PMREMGenerator.prototype, 'fromEquirectangular');
+  fromEquirectangular.mockImplementation(function (this: PMREMGenerator, _hdri, target) {
+    drewHdri.push(this);
+    return target ?? new RenderTarget();
+  });
   const disposed: PMREMGenerator[] = [];
   vi.spyOn(PMREMGenerator.prototype, 'dispose').mockImplementation(function (this: PMREMGenerator) {
     disposed.push(this);
   });
-  return { fromEquirectangular, disposed };
+  return { fromEquirectangular, drewStudio, drewHdri, disposed };
 }
 
 describe('installRoomLighting', () => {
@@ -37,9 +46,8 @@ describe('installRoomLighting', () => {
     vi.restoreAllMocks();
   });
 
-  it('draws the HDRI into the room PMREM and frees its generator and texture', async () => {
-    const { fromEquirectangular, disposed } = spyGenerators();
-    fromEquirectangular.mockImplementation((_hdri, target) => target ?? new RenderTarget());
+  it('draws every HDRI with the studio generator and frees it only with the room', async () => {
+    const { drewStudio, drewHdri, disposed } = spyGenerators();
     const hdri = bc6hHdri(4 * ROOM_CUBE_SIZE);
     const hdriDisposed = vi.fn();
     hdri.addEventListener('dispose', hdriDisposed);
@@ -47,15 +55,19 @@ describe('installRoomLighting', () => {
 
     const lighting = installRoomLighting(renderer, ktx2Serving(hdri), new Scene(), 'hdri', onError);
     await vi.waitFor(() => expect(hdriDisposed).toHaveBeenCalledOnce());
+    await lighting.bake('other', 0);
 
-    expect(fromEquirectangular).toHaveBeenCalledOnce();
-    expect(disposed).toHaveLength(2);
+    expect(drewStudio).toHaveLength(1);
+    expect(drewHdri).toHaveLength(2);
+    expect(drewHdri.every((generator) => generator === drewStudio[0])).toBe(true);
+    expect(disposed).toHaveLength(0);
     expect(onError).not.toHaveBeenCalled();
     lighting.dispose();
+    expect(disposed).toEqual(drewStudio);
   });
 
-  it('frees the HDRI generator when drawing the HDRI throws, and keeps the studio', async () => {
-    const { fromEquirectangular, disposed } = spyGenerators();
+  it('keeps the generator and the studio when drawing the HDRI throws', async () => {
+    const { fromEquirectangular, drewStudio, disposed } = spyGenerators();
     const failure = new Error('pipeline failed');
     fromEquirectangular.mockImplementation(() => {
       throw failure;
@@ -73,9 +85,9 @@ describe('installRoomLighting', () => {
     await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
 
     expect(onError).toHaveBeenCalledWith('Could not load the room HDRI from hdri', failure);
-    expect(disposed).toHaveLength(2);
-    expect(new Set(disposed).size).toBe(2);
+    expect(disposed).toHaveLength(0);
     expect(scene.environment).toBe(lighting.texture);
     lighting.dispose();
+    expect(disposed).toEqual(drewStudio);
   });
 });
