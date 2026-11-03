@@ -4,35 +4,74 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BufferAttribute, MeshStandardMaterial, SphereGeometry } from 'three/webgpu';
 import { TIER_SETTINGS, type Tier, type TierSettings } from '../engine/quality/tiers';
 import { ModelLibrary, type LoadedModel } from './assets';
+import { ColliderField } from './colliders';
 import { loadPreset } from './preset';
 import { TankScene } from './TankScene';
 import { fakeEngine } from './tankSceneHarness';
 
-const slices = vi.hoisted(() => ({ onYield: (): void => undefined }));
+const slices = vi.hoisted(() => ({
+  onYield: (): void => undefined,
+  onEuphylliaGenerated: (): void => undefined,
+  fitting: false,
+}));
+
+// fitPresetToCatalog generates every euphyllia in its own single slice; that step is a known
+// unsliced cost and is excluded from the per-slice euphyllia bound.
+vi.mock('./presetFit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./presetFit')>();
+  return {
+    ...actual,
+    fitPresetToTank: (...args: Parameters<typeof actual.fitPresetToTank>) => {
+      slices.fitting = true;
+      try {
+        return actual.fitPresetToTank(...args);
+      } finally {
+        slices.fitting = false;
+      }
+    },
+  };
+});
+
+vi.mock('./euphyllia', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./euphyllia')>();
+  return {
+    ...actual,
+    generateEuphyllia: (...args: Parameters<typeof actual.generateEuphyllia>) => {
+      if (!slices.fitting) slices.onEuphylliaGenerated();
+      return actual.generateEuphyllia(...args);
+    },
+  };
+});
 
 vi.mock('./yieldTask', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./yieldTask')>();
   return {
     yieldTask: () => {
-      slices.onYield();
-      return actual.yieldTask();
+      return actual.yieldTask().then(() => slices.onYield());
     },
   };
 });
 
 /**
- * Each slice of the reef mount may load at most one model between two yields. Wall-clock spans
- * flaked on loaded CI runners, so the guarantee is asserted on the slicing instead: when the build
- * ran as one task, every model loaded back to back with no yield in between.
+ * Each slice of the mount may load at most one model and generate at most one euphyllia between
+ * two yields, and the patch scatter (the heaviest pure-CPU step, seen through its collider
+ * queries) gets a slice of its own. Wall-clock spans flaked on loaded CI runners, so the
+ * guarantee is asserted on the slicing instead. The reef preset guards the hardscape and
+ * euphyllia loops (it has one plant asset, no anemones and no plant patches); the freshwater
+ * preset guards the patch scatter. The plant and anemone loops are not covered.
  */
 const MAX_LOADS_PER_SLICE = 1;
+const MAX_EUPHYLLIAS_PER_SLICE = 1;
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-async function stubReefLibrary(onLoad: (count: number) => void = () => undefined) {
+async function stubReefLibrary(
+  onLoad: (count: number) => void = () => undefined,
+  onCollision: () => void = () => undefined,
+) {
   const index = await readFile(join(__dirname, '../../public/assets/index.json'), 'utf8');
   vi.stubGlobal(
     'fetch',
@@ -55,9 +94,10 @@ async function stubReefLibrary(onLoad: (count: number) => void = () => undefined
     onLoad(++loads);
     return Promise.resolve(model(id, lod));
   });
-  vi.spyOn(ModelLibrary.prototype, 'collisionGeometry').mockImplementation(() =>
-    Promise.resolve([new SphereGeometry(0.1, 8, 8)]),
-  );
+  vi.spyOn(ModelLibrary.prototype, 'collisionGeometry').mockImplementation(() => {
+    onCollision();
+    return Promise.resolve([new SphereGeometry(0.1, 8, 8)]);
+  });
 }
 
 function reefEngine() {
@@ -77,29 +117,69 @@ function reefEngine() {
 }
 
 describe('reef mount', () => {
-  it('never holds the main thread for one long task', async () => {
-    let loadsInSlice = 0;
-    let largestSlice = 0;
-    let yields = 0;
-    let loads = 0;
-    slices.onYield = () => {
-      yields++;
-      largestSlice = Math.max(largestSlice, loadsInSlice);
-      loadsInSlice = 0;
-    };
-    await stubReefLibrary(() => {
-      loads++;
-      loadsInSlice++;
-    });
-    const h = reefEngine();
-    const scene = await TankScene.create(h.engine, loadPreset('reef'), { colliders: false });
-    await scene.dispose();
-    h.stop();
-    slices.onYield = () => undefined;
-    expect(loads).toBeGreaterThan(5);
-    expect(yields).toBeGreaterThanOrEqual(loads);
-    expect(largestSlice).toBeLessThanOrEqual(MAX_LOADS_PER_SLICE);
-  });
+  it.each([
+    { biome: 'reef', euphyllias: true },
+    { biome: 'freshwater', euphyllias: false },
+  ] as const)(
+    '$biome mount never holds the main thread for one long task',
+    async ({ biome, euphyllias }) => {
+      const slice = { loads: 0, euphyllias: 0, scatter: 0, collisions: 0 };
+      const largest = { loads: 0, euphyllias: 0 };
+      const total = { yields: 0, loads: 0, euphyllias: 0, scatter: 0 };
+      let scatterMixedWithOtherWork = false;
+      const close = () => {
+        largest.loads = Math.max(largest.loads, slice.loads);
+        largest.euphyllias = Math.max(largest.euphyllias, slice.euphyllias);
+        if (
+          slice.scatter > 0 &&
+          (slice.loads > 0 || slice.euphyllias > 0 || slice.collisions > 0)
+        ) {
+          scatterMixedWithOtherWork = true;
+        }
+        slice.loads = slice.euphyllias = slice.scatter = slice.collisions = 0;
+      };
+      slices.onYield = () => {
+        total.yields++;
+        close();
+      };
+      slices.onEuphylliaGenerated = () => {
+        total.euphyllias++;
+        slice.euphyllias++;
+      };
+      const realHard = ColliderField.prototype.hard;
+      vi.spyOn(ColliderField.prototype, 'hard').mockImplementation(function (
+        this: ColliderField,
+        ...args
+      ) {
+        total.scatter++;
+        slice.scatter++;
+        return realHard.apply(this, args);
+      });
+      await stubReefLibrary(
+        () => {
+          total.loads++;
+          slice.loads++;
+        },
+        () => {
+          slice.collisions++;
+        },
+      );
+      const h = reefEngine();
+      const scene = await TankScene.create(h.engine, loadPreset(biome), { colliders: false });
+      close();
+      await scene.dispose();
+      h.stop();
+      slices.onYield = () => undefined;
+      slices.onEuphylliaGenerated = () => undefined;
+      expect(total.loads).toBeGreaterThan(5);
+      expect(total.euphyllias > 0).toBe(euphyllias);
+      expect(total.scatter > 0).toBe(biome !== 'reef');
+      expect(total.yields).toBeGreaterThanOrEqual(total.loads);
+      expect(largest.loads).toBeLessThanOrEqual(MAX_LOADS_PER_SLICE);
+      expect(largest.euphyllias).toBeLessThanOrEqual(MAX_EUPHYLLIAS_PER_SLICE);
+      expect(scatterMixedWithOtherWork).toBe(false);
+    },
+  );
 
   it('frees everything when aborted part-way through the chunked build', async () => {
     const controller = new AbortController();
