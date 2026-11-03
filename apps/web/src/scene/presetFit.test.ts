@@ -14,6 +14,7 @@ import {
 import { AssetCatalog } from './assets';
 import { offersShelter } from './caves';
 import { generateEuphyllia } from './euphyllia';
+import { DEFAULT_CURRENT } from './TankScene';
 import { loadPreset } from './preset';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { GLASS_SHRINK_FLOOR } from './placement';
@@ -329,11 +330,7 @@ describe('full-detail euphyllia bounds', () => {
           throw new Error('no catalog');
         },
       },
-      {
-        speed: 0.05,
-        gustDepth: 0,
-        pumpMps: 0,
-      } as never,
+      DEFAULT_CURRENT,
     )('euphyllia-hammer-7');
     expect(model?.bounds).toBe(cached.bounds);
   });

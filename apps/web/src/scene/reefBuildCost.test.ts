@@ -39,8 +39,8 @@ vi.mock('./yieldTask', async (importOriginal) => {
  * two yields, and the patch scatter (the heaviest pure-CPU step, seen through its collider
  * queries) gets a slice of its own. Wall-clock spans flaked on loaded CI runners, so the
  * guarantee is asserted on the slicing instead. The layout fit counts too: the colonies are
- * generated one per slice ahead of it, and the fit and the build reuse them. The reef preset guards the hardscape and
- * euphyllia loops (it has one plant asset, no anemones and no plant patches); the freshwater
+ * generated one per slice ahead of it, and the fit and the build reuse them. The reef preset
+ * guards the hardscape and euphyllia loops (it has one plant asset, no anemones and no plant patches); the freshwater
  * preset guards the patch scatter. The plant and anemone loops are not covered.
  */
 const MAX_LOADS_PER_SLICE = 1;

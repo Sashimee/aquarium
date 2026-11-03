@@ -61,7 +61,7 @@ export function footprintShare(size: TankSize): number {
   return Math.min(1, lengthRatio * depthRatio);
 }
 
-const FULL_DETAIL_CACHE_SIZE = 64;
+const FULL_DETAIL_CACHE_SIZE = 16;
 const fullDetailCache = new Map<string, EuphylliaMesh>();
 
 /** The colony at full detail, generated once: the fit reads its bounds and the build reuses the mesh. */
