@@ -88,7 +88,8 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   await expect(inTank.getByRole('button').first()).toBeVisible({ timeout: 60_000 });
   const startCount = await inTank.getByRole('button').count();
 
-  await inTank.getByRole('button').first().click();
+  // The starter tank is packed: a boulder at full size has no clear floor until the long driftwood branch goes.
+  await inTank.getByRole('button', { name: 'Driftwood branch', exact: true }).click();
   await panel.getByRole('button', { name: 'Remove' }).click();
   await expect(inTank.getByRole('button')).toHaveCount(startCount - 1);
   await expect(panel.getByText('Changes saved.')).toBeVisible();
