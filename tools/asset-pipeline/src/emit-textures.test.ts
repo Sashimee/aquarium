@@ -34,20 +34,22 @@ describe('writeTextureEntries', () => {
   });
 
   it('writes a separate 2k file when it is larger', async () => {
+    // Sizes snap to powers of two and a normal map's slots cap at 512 and 1024, so a 1024 px normal is the cheapest source with a distinct 2k tier.
     const root = mkdtempSync(join(tmpdir(), 'emit-tex-'));
     roots.push(root);
     const { files, textures } = await writeTextureEntries(root, 'decor/x', [
       {
-        name: 'x_basecolor',
-        source: { role: 'baseColor', codec: 'etc1s', image: image(2048) },
-        colorSpace: 'srgb',
+        name: 'x_normal',
+        source: { role: 'normal', codec: 'etc1s', image: image(1024) },
+        colorSpace: 'linear',
       },
     ]);
     const variants = textures[0]?.variants;
     expect(variants?.['2k'].file).not.toBe(variants?.['1k'].file);
-    expect(variants?.['2k'].size).toBe(2048);
+    expect(variants?.['1k'].size).toBe(512);
+    expect(variants?.['2k'].size).toBe(1024);
     expect(files).toHaveLength(2);
-  }, 60_000);
+  });
 });
 
 describe('buildDocument texture reuse', () => {

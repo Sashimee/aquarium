@@ -282,6 +282,7 @@ export class CommunityController {
   private started = false;
   private handle: string | null | undefined = undefined;
   private offHandle: (() => void) | null = null;
+  private handleAnnounced = false;
 
   constructor(private readonly deps: CommunityControllerDeps) {
     this.now = deps.now ?? Date.now;
@@ -299,10 +300,11 @@ export class CommunityController {
     if (this.started) return;
     this.started = true;
     void this.refreshQuota();
-    void this.loadHandle();
     this.offHandle = onOwnHandleChanged((handle) => {
       this.handle = handle;
+      this.handleAnnounced = true;
     });
+    void this.loadHandle();
     void this.runStream();
   }
 
@@ -380,7 +382,9 @@ export class CommunityController {
   private async loadHandle(): Promise<void> {
     try {
       const handle = await this.deps.api.myHandle?.();
-      if (handle !== undefined && !this.lifetime.signal.aborted) this.handle = handle;
+      if (handle !== undefined && !this.handleAnnounced && !this.lifetime.signal.aborted) {
+        this.handle = handle;
+      }
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 401) return;
       console.warn(

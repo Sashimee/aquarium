@@ -228,5 +228,16 @@ export function modificationProblems(index: AssetIndex, manifest: Manifest): str
       );
     }
   }
+  for (const asset of manifest.assets) {
+    if (!requiresCredit(asset.licence)) continue;
+    const users = index.assets.filter((a) => a.sources.includes(asset.id));
+    const borrowers = users.filter((a) => a.sources[0] !== asset.id && a.modifications.length > 0);
+    const primary = users.some((a) => a.sources[0] === asset.id);
+    if (primary || borrowers.length === 0) continue;
+    if (borrowers.some((a) => a.modifications.some((note) => note.includes(asset.id)))) continue;
+    problems.push(
+      `manifest asset ${asset.id}: used only as a borrowed source by ${borrowers.map((a) => a.id).join(', ')}, whose modification notes never name it, so its attribution lists no changes (name ${asset.id} in those notes)`,
+    );
+  }
   return problems;
 }

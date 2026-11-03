@@ -480,6 +480,24 @@ describe('live feed and scene', () => {
       controller.dispose();
     });
 
+    it('keeps a handle saved while the first load is in flight', async () => {
+      let resolveHandle: (h: string | null) => void = () => undefined;
+      const { controller, drops, frame, answer } = pendingFeed(
+        () => new Promise<string | null>((r) => (resolveHandle = r)),
+      );
+      controller.start();
+      announceOwnHandle('reef_fan');
+      resolveHandle('mossy');
+      await settle();
+      const pending = controller.feed('flakes', 0.5);
+      await settle();
+      frame('reef_fan');
+      answer();
+      await pending;
+      expect(drops).toHaveLength(1);
+      controller.dispose();
+    });
+
     it('stops listening for handle changes once disposed', async () => {
       const { controller, drops, frame, answer } = pendingFeed(() => Promise.resolve('mossy'));
       controller.start();

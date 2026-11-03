@@ -459,6 +459,43 @@ describe('feeding AI', { timeout: LONG }, () => {
     expect(slowest * STEP_DT).toBeLessThan(4);
   });
 
+  it('swims on along a dive or climb to a flake steeper than it can pitch, not hover over it', () => {
+    // Turning on the spot only swaps a flake straight below from one side to the other, so a
+    // tetra braking for it would hang over a column of flakes for 4 to 12 s.
+    const sp = toSimSpecies(neonTetra);
+    for (let seed = 1; seed <= 4; seed++) {
+      const w = tank([{ id: 'a', species: neonTetra.id }], seed);
+      const rain = new FoodRain(SHOW_TANK);
+      for (let k = 0; k < 80; k++) {
+        rain.place('flakes', -0.3 + (k % 10) * 0.06, 0.2 + 0.02 * Math.floor(k / 10), 0, 0, 0);
+      }
+      let steep = 0;
+      let run = 0;
+      let longest = 0;
+      for (let t = 0; t < 3000; t++) {
+        rain.feed(w);
+        w.step();
+        rain.eat(w.takeAteEvents());
+        const k = at(w.behaviour.feeding.target, 0);
+        let hanging = false;
+        if (k >= 0) {
+          const dx = at(w.food.position, k * 3) - at(w.position, 0);
+          const dy = at(w.food.position, k * 3 + 1) - at(w.position, 1);
+          const dz = at(w.food.position, k * 3 + 2) - at(w.position, 2);
+          const near = Math.hypot(dx, dy, dz) < FEEDING.brakeBodyLengths * sp.bodyLength;
+          if (near && Math.abs(dy) > Math.tan(sp.maxPitch) * Math.hypot(dx, dz)) {
+            steep++;
+            hanging = at(w.speed, 0) < 0.25 * sp.cruiseSpeed;
+          }
+        }
+        run = hanging ? run + 1 : 0;
+        longest = Math.max(longest, run);
+      }
+      expect(steep, `seed ${seed}: steps with a steep flake close by`).toBeGreaterThan(300);
+      expect(longest * STEP_DT, `seed ${seed}: longest hover over a steep flake`).toBeLessThan(1);
+    }
+  });
+
   it('takes its favourite food and leaves food off its diet alone', () => {
     const tang = new World({
       seed: 2,

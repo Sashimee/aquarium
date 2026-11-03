@@ -10,7 +10,8 @@ import {
 import { describe, expect, it } from 'vitest';
 import { findNooks } from './nooks.ts';
 import type { Anchor } from './behaviour.ts';
-import { World, type FishSpawn } from './world.ts';
+import { BEHAVIOUR } from './behaviour.ts';
+import { STEP_DT, World, type FishSpawn } from './world.ts';
 
 const LONG = 120_000;
 const CAVE_DWELLER = 'apistogramma-hongsloi';
@@ -170,6 +171,67 @@ describe('the blackwater presets, which have no scene cave', { timeout: LONG }, 
     expect(stay?.held).toBeGreaterThan(0.95);
     expect(stay?.farthest).toBeLessThan(2);
   });
+});
+
+function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)] ?? NaN;
+}
+
+// The demo stock at the sizes the web app gives it, where #1532 measured coasts twice too long.
+describe('burst-and-coast in the blackwater demo tank', { timeout: LONG }, () => {
+  it.each(
+    SEEDS.flatMap((seed) => ['cardinal-tetra', 'rummy-nose-tetra'].map((id) => ({ seed, id }))),
+  )(
+    'seed $seed: $id glides about 0.5 s and kicks again at 0.7 of the speed it wants',
+    ({ seed, id }) => {
+      const w = world('standard', 'decor', seed);
+      const k = w.species.findIndex((s) => s.id === id);
+      expect(k).toBeGreaterThanOrEqual(0);
+      const start = new Int32Array(w.count).fill(-1);
+      const startSpeed = new Float64Array(w.count);
+      const lastShare = new Float64Array(w.count);
+      const lengths: number[] = [];
+      const decays: number[] = [];
+      const releases: number[] = [];
+      let capped = 0;
+      for (let t = 0; t < 30 * 80; t++) {
+        const before = Float64Array.from(w.speed);
+        w.step();
+        for (let i = 0; i < w.count; i++) {
+          if (w.speciesIndex[i] !== k) continue;
+          const coasting = at(w.thrust, i) === 0;
+          const share = at(before, i) / at(w.targetSpeed, i);
+          if (coasting && at(start, i) < 0) {
+            start[i] = t;
+            startSpeed[i] = at(before, i);
+          } else if (!coasting && at(start, i) >= 0) {
+            const steps = t - at(start, i);
+            const v0 = at(startSpeed, i);
+            const v1 = at(before, i);
+            if (t > 30 * 20 && steps > 2 && v0 > 0 && v1 > 0) {
+              const s = steps * STEP_DT;
+              lengths.push(s);
+              decays.push(Math.log(v0 / v1) / s);
+              // The last glide step is the one that found the fish slow enough to kick again.
+              releases.push(at(lastShare, i));
+              if (s >= BEHAVIOUR.coastMaxS - 1e-9) capped++;
+            }
+            start[i] = -1;
+          }
+          lastShare[i] = share;
+        }
+      }
+      expect(lengths.length).toBeGreaterThan(300);
+      expect(median(lengths)).toBeGreaterThanOrEqual(0.4);
+      expect(median(lengths)).toBeLessThanOrEqual(0.6);
+      expect(median(decays)).toBeGreaterThanOrEqual(1);
+      expect(capped / lengths.length).toBeLessThan(0.05);
+      // 0.67 to 0.68 at coastReleaseFactor 0.7, against 0.71 to 0.73 at 0.75 and 0.62 to 0.63 at 0.65.
+      expect(median(releases)).toBeGreaterThan(0.65);
+      expect(median(releases)).toBeLessThanOrEqual(0.7);
+    },
+  );
 });
 
 function homesOf(w: World): { i: number; a: Anchor }[] {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { STEP_DT, World } from '@aquarium/sim';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { demoTank } from './demoStock';
@@ -9,20 +9,17 @@ const WARM_UP_S = 20;
 const MEASURED_S = 100;
 /** Slower than this a fish hovers on its idle undulation, coasting or not. */
 const SWIMMING_BODY_LENGTHS_PER_S = 0.3;
-/** A brake from top speed down to a forage or hover speed, on drag alone. */
-const LONGEST_BRAKE_S = 2.5;
 
 interface BrakeTrace {
-  /** Swimming frames on which the sim's thrust is exactly 0. */
-  unpowered: number;
-  /** Swimming frames drawn tail-still (drive below 0.5) while the speed held or rose. */
-  stillUnslowed: number;
-  longestStillS: number;
+  /** Swimming frames on which the sim gives no thrust and does not glide: braking on drag. */
+  braking: number;
+  /** Braking frames drawn tail-still (drive below 0.5). */
+  stillBraking: number;
 }
 
 /**
- * The freshwater demo run as `FishSystem` feeds it: the sim's speed, turn rate, thrust and state
- * into each fish's `SwimState` at 30 Hz, against the top speed the sim normalises thrust by.
+ * The freshwater demo run as `FishSystem` feeds it: the sim's speed, turn rate, glide and state
+ * into each fish's `SwimState` at 30 Hz.
  */
 function trace(speciesId: string, light: number): BrakeTrace {
   const { config } = demoTank(DEFAULT_TANK, SEED, 'freshwater');
@@ -39,15 +36,12 @@ function trace(speciesId: string, light: number): BrakeTrace {
       content.locomotion.strouhal,
       SWIM_MODES[mode],
       i,
-      world.maxSpeed[i] ?? 0,
     );
   });
   const watched = config.fish.flatMap((f, i) => (f.species === speciesId ? [i] : []));
   if (watched.length === 0) throw new Error(`the freshwater demo stocks no ${speciesId}`);
 
-  const result: BrakeTrace = { unpowered: 0, stillUnslowed: 0, longestStillS: 0 };
-  const previous = new Map<number, number>();
-  const stillRun = new Map<number, number>();
+  const result: BrakeTrace = { braking: 0, stillBraking: 0 };
   const steps = Math.round((WARM_UP_S + MEASURED_S) / STEP_DT);
   const warmUp = Math.round(WARM_UP_S / STEP_DT);
   for (let step = 0; step < steps; step++) {
@@ -56,26 +50,17 @@ function trace(speciesId: string, light: number): BrakeTrace {
       swim.advance(STEP_DT, {
         speed: world.speed[i] ?? 0,
         yawRate: world.yawRate[i] ?? 0,
-        thrust: world.thrust[i] ?? 0,
+        glide: world.gliding[i] ?? 0,
         state: world.state[i] ?? -1,
       }),
     );
+    if (step < warmUp) continue;
     for (const i of watched) {
       const speed = world.speed[i] ?? 0;
-      const before = previous.get(i) ?? speed;
-      previous.set(i, speed);
-      if (step < warmUp) continue;
-      const length = world.bodyLength[i] ?? 0;
-      if (speed <= SWIMMING_BODY_LENGTHS_PER_S * length) {
-        stillRun.set(i, 0);
-        continue;
-      }
-      if (world.thrust[i] === 0) result.unpowered++;
-      const still = (swims[i]?.drive ?? 1) < 0.5;
-      if (still && speed >= before) result.stillUnslowed++;
-      const run = still ? (stillRun.get(i) ?? 0) + 1 : 0;
-      stillRun.set(i, run);
-      result.longestStillS = Math.max(result.longestStillS, run * STEP_DT);
+      if (speed <= SWIMMING_BODY_LENGTHS_PER_S * (world.bodyLength[i] ?? 0)) continue;
+      if (world.thrust[i] !== 0 || world.gliding[i] !== 0) continue;
+      result.braking++;
+      if ((swims[i]?.drive ?? 1) < 0.5) result.stillBraking++;
     }
   }
   return result;
@@ -86,18 +71,17 @@ describe.each([
   ['bronze-corydoras', 'day', 1],
   ['betta', 'night', 0],
   ['betta', 'day', 1],
-] as const)('braking %s at %s under the powered-frame rule', (speciesId, _, light) => {
-  const result = trace(speciesId, light);
-
-  it('meets braking runs, where the sim gives no thrust without coasting', () => {
-    expect(result.unpowered).toBeGreaterThan(0);
+] as const)('braking %s at %s', (speciesId, _, light) => {
+  let result: BrakeTrace;
+  beforeAll(() => {
+    result = trace(speciesId, light);
   });
 
-  it('stills the tail only while the sim slows the fish', () => {
-    expect(result.stillUnslowed).toBe(0);
+  it('meets braking runs, where the sim gives no thrust without gliding', () => {
+    expect(result.braking).toBeGreaterThan(0);
   });
 
-  it('beats again within one brake from top speed', () => {
-    expect(result.longestStillS).toBeLessThan(LONGEST_BRAKE_S);
+  it('never stills the tail while braking', () => {
+    expect(result.stillBraking).toBe(0);
   });
 });
