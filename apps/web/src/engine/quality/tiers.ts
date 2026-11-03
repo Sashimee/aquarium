@@ -8,6 +8,8 @@ export type CausticMethod = 'texture' | 'procedural' | 'procedural-dispersion';
 
 export type PostChain = 'none' | 'smaa' | 'smaa-bloom' | 'taa-bloom';
 
+export type GlassDetail = 'full' | 'lite';
+
 export interface TierSettings {
   /** Multiplies the device pixel ratio after it is clamped to `maxPixelRatio`. */
   resolutionScale: number;
@@ -27,6 +29,11 @@ export interface TierSettings {
    * surface's and the glass's shaders.
    */
   surfaceReflection: number;
+  /**
+   * `full` traces the water the inner panes mirror and grows algae from fractal and cell noise;
+   * `lite` mirrors the water's haze and grows algae from one octave of noise.
+   */
+  glassDetail: GlassDetail;
   /** Suspended particulates drifting in the water. */
   particleCount: number;
   /** Bubbles in the airstone column. */
@@ -52,6 +59,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     causticMethod: 'texture',
     causticLayers: 1,
     surfaceReflection: 0,
+    glassDetail: 'lite',
     particleCount: 150,
     bubbleCount: 12,
     fishLod: { midDistance: 0.6, impostorDistance: 1.6 },
@@ -69,6 +77,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     causticMethod: 'procedural',
     causticLayers: 1,
     surfaceReflection: 0,
+    glassDetail: 'full',
     particleCount: 400,
     bubbleCount: 24,
     fishLod: { midDistance: 0.9, impostorDistance: 2.4 },
@@ -86,6 +95,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     causticMethod: 'procedural',
     causticLayers: 2,
     surfaceReflection: 0.5,
+    glassDetail: 'full',
     particleCount: 900,
     bubbleCount: 40,
     fishLod: { midDistance: 1.4, impostorDistance: 3.5 },
@@ -105,6 +115,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     causticMethod: 'procedural-dispersion',
     causticLayers: 2,
     surfaceReflection: 0.5,
+    glassDetail: 'full',
     particleCount: 1600,
     bubbleCount: 64,
     fishLod: { midDistance: 2, impostorDistance: 5 },

@@ -44,6 +44,7 @@ import {
   mix,
   mrt,
   mx_fractal_noise_float,
+  mx_noise_float,
   mx_worley_noise_float,
   normalView,
   normalWorldGeometry,
@@ -68,6 +69,7 @@ import {
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BACKGROUND_TIERS } from '@aquarium/shared';
+import type { GlassDetail } from '../quality/tiers';
 import type { InteriorLight } from '../water/interior';
 import type { WaterMedium } from '../water/medium';
 import { AIR_IOR, fresnelDielectric, WATER_IOR } from '../water/optics';
@@ -120,12 +122,15 @@ const ALGAE_IRRADIANCE_GAIN = 4;
 /**
  * Algae growing on the inside of the glass, below the waterline: a mottled film that thickens
  * with `amount` and, past about a third, hard green spots. Composited over the pane's
- * premultiplied output, so it occludes what is behind it.
+ * premultiplied output, so it occludes what is behind it. `lite` draws the mottle and the spots
+ * from one octave of gradient noise each instead of fractal and cell noise, which a
+ * weak GPU pays on every pixel of glass.
  */
 function overlayAlgae(
   pane: Node<'vec4'>,
   amount: UniformNode<'float', number>,
   medium: WaterMedium,
+  detail: GlassDetail,
 ): Node<'vec4'> {
   return Fn(() => {
     const result = vec4(pane).toVar();
@@ -133,7 +138,11 @@ function overlayAlgae(
       const p = positionWorld;
       const onPane = vec2(p.x.add(p.z), p.y);
       const below = step(p.y, medium.boxMax.y).mul(step(medium.boxMin.y, p.y));
-      const mottle = mx_fractal_noise_float(vec3(onPane.mul(7), 0.5), 3, 2, 0.5)
+      const mottle = (
+        detail === 'full'
+          ? mx_fractal_noise_float(vec3(onPane.mul(7), 0.5), 3, 2, 0.5)
+          : mx_noise_float(vec3(onPane.mul(7), 0.5))
+      )
         .mul(0.5)
         .add(0.5);
       const film = smoothstep(
@@ -141,8 +150,15 @@ function overlayAlgae(
         amount.oneMinus().mul(0.8).add(0.35),
         mottle,
       ).mul(amount.mul(0.7).add(0.1));
-      const spots = smoothstep(0.06, 0.11, mx_worley_noise_float(vec3(onPane.mul(45), 2.5), 1, 0))
-        .oneMinus()
+      const spots = (
+        detail === 'full'
+          ? smoothstep(
+              0.06,
+              0.11,
+              mx_worley_noise_float(vec3(onPane.mul(45), 2.5), 1, 0),
+            ).oneMinus()
+          : smoothstep(0.45, 0.6, mx_noise_float(vec3(onPane.mul(45), 2.5)))
+      )
         .mul(smoothstep(0.3, 0.8, amount))
         .mul(step(0.35, mottle));
       const cover = saturate(film.add(spots)).mul(below).toVar();
@@ -340,8 +356,11 @@ const HIDDEN_BACKDROP = 0.5;
 
 interface GlassFace {
   material: MeshStandardNodeMaterial;
-  /** The output, with the tank's contents in the mirror if `contents`, else its traced walls. */
-  output(contents: boolean): Node<'vec4'>;
+  /**
+   * The output, with the tank's contents in the mirror if `contents`, else its traced walls, or
+   * only the water's haze at `lite` detail.
+   */
+  output(contents: boolean, detail: GlassDetail): Node<'vec4'>;
 }
 
 /**
@@ -376,8 +395,12 @@ function createGlassFace(
   const mirrored = reflect(inWater, normalWorldGeometry).toVar();
   const traced = waterAlongRay(medium, interior, mirrored, sky, backdrop);
   const haze = medium.inScatter(vec3(0), medium.boxMax.y.sub(positionWorld.y));
-  const fallback = mix(traced, haze, HIDDEN_BACKDROP).toVar();
-  const faceOutput = (contents: boolean): Node<'vec4'> => {
+  const fallbacks: Record<GlassDetail, Node<'vec3'>> = {
+    full: mix(traced, haze, HIDDEN_BACKDROP).toVar(),
+    lite: haze.toVar(),
+  };
+  const faceOutput = (contents: boolean, detail: GlassDetail): Node<'vec4'> => {
+    const fallback = fallbacks[detail];
     let seen: Node<'vec3'> = fallback;
     if (contents) {
       const end = positionWorld.add(mirrored.mul(medium.exit(positionWorld, mirrored).distance));
@@ -386,9 +409,9 @@ function createGlassFace(
     }
     const inner = vec4(seen.mul(reflectance), reflectance);
     const pane = mix(output, inner, towardsWater);
-    return medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
+    return medium.applyPremultiplied(overlayAlgae(pane, algae, medium, detail));
   };
-  material.outputNode = faceOutput(false);
+  material.outputNode = faceOutput(false, 'full');
   return { material, output: faceOutput };
 }
 
@@ -567,6 +590,7 @@ export class Tank {
   private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
   private readonly glassFaces: Mesh;
   private readonly glassFace: GlassFace;
+  private glassDetailNow: GlassDetail = 'full';
   private readonly glassEdges: Mesh;
   private readonly backdrop: Mesh;
   private readonly volume: readonly Mesh[];
@@ -670,8 +694,24 @@ export class Tank {
       ? output(this.reflection.mirror(normal.xz.mul(RIPPLE_MIRROR_SHIFT), traced, boxMin, boxMax))
       : output();
     material.needsUpdate = true;
-    this.glassFace.material.outputNode = this.glassFace.output(enabled);
-    this.glassFace.material.needsUpdate = true;
+    this.refitGlass();
+  }
+
+  /** `lite` drops the glass's traced mirror and fractal algae for the low tier's weak GPUs. */
+  setGlassDetail(detail: GlassDetail): void {
+    if (detail === this.glassDetailNow) return;
+    this.glassDetailNow = detail;
+    this.refitGlass();
+  }
+
+  get glassDetail(): GlassDetail {
+    return this.glassDetailNow;
+  }
+
+  private refitGlass(): void {
+    const { material, output } = this.glassFace;
+    material.outputNode = output(this.reflection.enabled, this.glassDetailNow);
+    material.needsUpdate = true;
   }
 
   get surfaceReflection(): boolean {

@@ -735,6 +735,7 @@ export class Engine {
           this.reportError('The tank background failed to load at the new tier', cause),
         );
     });
+    this.quality.register('glass-detail', (s) => this.tank.setGlassDetail(s.glassDetail));
     this.quality.register('surface-reflection', (s) => {
       const wasOn = this.tank.surfaceReflection;
       this.tank.setSurfaceReflection(s.surfaceReflection);
