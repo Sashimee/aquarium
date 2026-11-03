@@ -89,12 +89,13 @@ export function installRoomLighting(
   onError: (message: string, cause: unknown) => void,
 ): RoomLighting {
   const studio = new RoomEnvironment();
-  const studioGenerator = new PMREMGenerator(renderer);
-  const room = studioGenerator.fromScene(studio, 0.04, undefined, undefined, {
+  // One generator for the room's life: a new one per bake builds its GGX and blur materials
+  // afresh, and once the last one's were disposed their programs had to link again.
+  const generator = new PMREMGenerator(renderer);
+  const room = generator.fromScene(studio, 0.04, undefined, undefined, {
     size: ROOM_CUBE_SIZE,
   });
   studio.dispose();
-  studioGenerator.dispose();
 
   scene.environment = room.texture;
   scene.background = room.texture;
@@ -106,12 +107,7 @@ export function installRoomLighting(
     scene,
     defaultUrl: hdriUrl,
     draw: (hdri) => {
-      const generator = new PMREMGenerator(renderer);
-      try {
-        generator.fromEquirectangular(hdri, room);
-      } finally {
-        generator.dispose();
-      }
+      generator.fromEquirectangular(hdri, room);
     },
   });
 
@@ -126,6 +122,7 @@ export function installRoomLighting(
     bake: baker.bake,
     dispose() {
       baker.dispose();
+      generator.dispose();
       room.dispose();
     },
   };
