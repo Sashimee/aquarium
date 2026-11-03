@@ -150,7 +150,7 @@ interface VisualKey {
   readonly cheapSubstrate: boolean;
 }
 
-function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
+export function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
   return {
     euphylliaDetail: EUPHYLLIA_DETAIL[tier],
     plantLod: PLANT_LOD[tier],
@@ -160,7 +160,7 @@ function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
   };
 }
 
-function sameKey(a: VisualKey, b: VisualKey): boolean {
+export function sameKey(a: VisualKey, b: VisualKey): boolean {
   return (
     a.euphylliaDetail === b.euphylliaDetail &&
     a.plantLod === b.plantLod &&
@@ -168,6 +168,16 @@ function sameKey(a: VisualKey, b: VisualKey): boolean {
     a.textureSize === b.textureSize &&
     a.cheapSubstrate === b.cheapSubstrate
   );
+}
+
+export function substrateReload(
+  current: { readonly textureSize: number; readonly cheap: boolean } | null,
+  key: VisualKey,
+  hasAccent: boolean,
+): { reload: boolean; cheap: boolean } {
+  const cheap = key.cheapSubstrate && hasAccent;
+  const reload = !current || current.textureSize !== key.textureSize || current.cheap !== cheap;
+  return { reload, cheap };
 }
 
 /**
@@ -1098,13 +1108,12 @@ export class TankScene {
       return abandoned();
     };
     try {
-      if (
-        !this.substrate ||
-        this.substrate.textureSize !== key.textureSize ||
-        this.substrate.cheap !== key.cheapSubstrate
-      ) {
-        substrate = await this.loadSubstrate(key.textureSize, key.cheapSubstrate);
-      }
+      const plan = substrateReload(
+        this.substrate,
+        key,
+        Boolean(this.preset.substrate?.accentAssetId),
+      );
+      if (plan.reload) substrate = await this.loadSubstrate(key.textureSize, plan.cheap);
       await yieldTask();
       build: {
         for (const { item, kind } of items) {
