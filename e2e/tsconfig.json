@@ -3,7 +3,8 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "lib": ["ES2023", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    "paths": { "@aquarium/shared": ["../packages/shared/src/index.ts"] }
   },
   "include": ["."]
 }
