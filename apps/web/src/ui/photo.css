@@ -38,6 +38,7 @@
 }
 
 .photo-tools {
+  scroll-padding-top: 6.5rem;
   position: absolute;
   z-index: 4;
   left: max(0.5rem, env(safe-area-inset-left));
