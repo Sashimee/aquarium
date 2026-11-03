@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0: second release candidate
+
+The expansion (PLAN §9) plus its fix wave. Verified on devfish at `91fff38d`; the on-demand e2e run passed 29/29 shards.
+
+### New tanks and rooms
+
+- Three more tank types: Amazon blackwater, Rift Lake cichlid and brackish mangrove, each with its own water look, backgrounds, fish, wood, roots and mud. Salt, buffer and botanicals care actions, and CO2 control with a tier picker.
+- Mudskippers haul out onto an emergent bank in the mangrove tank; the figure-8 puffer joins freshwater.
+- Ten tank backgrounds, a background chooser in decorate mode, and nano, 200 L and long 300 L tank sizes with per-size stocking limits.
+- Twelve rooms behind the tank with their own lighting, window weather, props and ambience; buy and pick them from the room picker.
+- Cherry and cleaner shrimp, nerite snails and hermit crabs, a cleaner wrasse with a cleaning station, and a clean-up crew that grazes and scavenges, also while you are away.
+
+### Living tank
+
+- Chemistry with a nitrogen cycle and seeded filters; a water test kit with strips and a persistent chemistry chip.
+- Breeding with fry that grow, egg tending and hiding; fish personalities that come to the glass when you visit.
+- Diseases (ich, fin rot, velvet) with medicine, treatment and a quarantine tank; move fish between tanks.
+- Growing plants that take up nitrate, spread and can be trimmed; corals that grow, bleach in bad water and can be fragged.
+- A wave maker current, equipment tiers, a lamp schedule, and a heater you can remove and reinstall from Care.
+- Fish rest at night, polyps extend, and lights on and off startle the school.
+- Play: mirror, ping-pong ball and shy-fish feeding game.
+
+### Social and shop
+
+- Pearls wallet, a shop with equipment tiers, Pearl packs and the Aquarist Club through Stripe (off unless configured).
+- Public tank links with reactions, a read-only viewer, a tank of the week gallery with weekly votes, a shared community tank, player handles, and gifting or trading fish.
+- A collection book and achievements; an away replay timeline with fast-forward.
+
+### Device and polish
+
+- Installable PWA with an offline page and install prompt, care reminders by mail and web push, haptics, and a Web Audio engine with ambience and glass tap.
+- Photo mode with capture, save and share, and a loading screen with real progress.
+- Distant fish use octahedral impostors at low and medium tiers; settings for refresh rate and full resolution.
+
+### Fix wave
+
+- Tank algae show on the glass; the photo camera pad stays in view above the sliders and its release step honours opposite and fast keys.
+- Faster scene start: pipelines link in parallel, one PMREM generator is kept, reef builds yield between steps; lighter glass, plants and substrate at the low tier.
+- Fish draw their coast from the sim's glide weight; a VAPID key with a stripped leading zero is accepted; the device-room migration runs once per device; the community handle refreshes after a save.
+- Security review fixes: payments hardening (#1386) and a cap on fish held in a trade or shown publicly (#1444).
+- End-to-end shards rebalanced and the pre-release e2e failures fixed.
+
 ## 0.1.0: first release candidate
 
 First release of the aquarium. `main` held only the bootstrap skeleton before this.
