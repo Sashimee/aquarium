@@ -179,6 +179,55 @@ describe('Tank', () => {
     expect(material.version).toBeGreaterThan(version);
   });
 
+  it.each(['webgpu', 'webgl'] as const)(
+    'drops the traced mirror and the fractal and cell noise from lite glass for %s',
+    (backend: ShaderBackend) => {
+      const t = tank();
+      const glass = meshes(t).get('glass-faces');
+      if (glass === undefined) throw new Error('no glass-faces mesh');
+      const full = buildShaders(glass, backend).fragment;
+      expect(full).toMatch(/mx_fractal_noise_float/);
+      expect(full).toMatch(/mx_worley_distance/);
+
+      t.setGlassDetail('lite');
+      const lite = buildShaders(glass, backend).fragment;
+      expect(lite).not.toMatch(/mx_fractal_noise_float|mx_worley_distance/);
+      expect(lite).toMatch(/mx_perlin_noise_float/);
+      // The full trace samples the backdrop and the room's sky on both of its segments.
+      expect(lookups(lite).length).toBeLessThan(lookups(full).length);
+      expect(lite.length).toBeLessThan(full.length * 0.8);
+    },
+  );
+
+  it('rebuilds the glass only when its detail changes, and keeps it across the reflection', () => {
+    const t = tank();
+    const glass = meshes(t).get('glass-faces');
+    if (glass === undefined) throw new Error('no glass-faces mesh');
+    const material = glass.material as MeshStandardNodeMaterial;
+    const shader = () => buildShaders(glass, 'webgl').fragment;
+    expect(t.glassDetail).toBe('full');
+    const full = shader();
+    const fullNode = material.outputNode;
+
+    t.setGlassDetail('full');
+    expect(material.outputNode).toBe(fullNode);
+
+    const version = material.version;
+    t.setGlassDetail('lite');
+    const lite = shader();
+    expect(lite).not.toBe(full);
+    expect(material.version).toBeGreaterThan(version);
+
+    t.setSurfaceReflection(0.5);
+    expect(shader()).not.toBe(lite);
+    t.setSurfaceReflection(0);
+    expect(shader()).toBe(lite);
+    expect(t.glassDetail).toBe('lite');
+
+    t.setGlassDetail('full');
+    expect(shader()).toBe(full);
+  });
+
   it('rebuilds the glass, water and stand for a new size and moves its water box in place', () => {
     const t = tank();
     const bounds = t.waterBounds;
