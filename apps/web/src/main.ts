@@ -16,6 +16,7 @@ import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from './interaction/events';
 import { followTankSize, TankSizeSource } from './interaction/tankSize';
+import { followGlassAlgae, GlassAlgaeSource } from './interaction/glassAlgae';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { PhotoController } from './interaction/photo/controller';
 import { bindPhotoKeys } from './interaction/photo/keys';
@@ -82,6 +83,7 @@ async function boot(): Promise<void> {
   const roomSeed = new RoomSeedFeed(interaction);
   const shownRoom = new ShownRoom(interaction);
   const tankSize = new TankSizeSource(interaction);
+  const glassAlgae = new GlassAlgaeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
   const playChoices = new PlayChoices(interaction);
@@ -426,6 +428,7 @@ async function boot(): Promise<void> {
     scenes.rebuild();
   });
   const stopTankSize = followTankSize(engine, tankSize, engine.tankSize);
+  const stopGlassAlgae = followGlassAlgae(engine, glassAlgae);
 
   switches.attach({
     assets: assetWatch,
@@ -447,6 +450,8 @@ async function boot(): Promise<void> {
     shownRoom.stop();
     stopIdleInput();
     stopTankSize();
+    stopGlassAlgae();
+    glassAlgae.stop();
     tankSize.stop();
     assetWatch.stop();
     tracker.dispose();
