@@ -13,6 +13,8 @@ import {
 } from '@aquarium/shared';
 import { AssetCatalog } from './assets';
 import { offersShelter } from './caves';
+import { generateEuphyllia } from './euphyllia';
+import { DEFAULT_CURRENT } from './TankScene';
 import { loadPreset } from './preset';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { GLASS_SHRINK_FLOOR } from './placement';
@@ -24,6 +26,8 @@ import {
   fitPresetToTank,
   footprintShare,
   MIN_PLANT_FIT,
+  boundsFromCatalog,
+  fullDetailEuphyllia,
   type BoundsOf,
 } from './presetFit';
 
@@ -311,5 +315,23 @@ describe('plant patches the glass squeezes', () => {
     expect(crossing?.radius).toBe(inside?.radius);
     expect(crossing?.count).toBe(inside?.count);
     expect(crossing?.scale).toEqual(inside?.scale);
+  });
+});
+
+describe('full-detail euphyllia bounds', () => {
+  it('match a fresh generation and reuse one mesh per colony', () => {
+    const fresh = generateEuphyllia('hammer', 7, 2);
+    const cached = fullDetailEuphyllia('hammer', 7);
+    expect(cached.bounds).toEqual(fresh.bounds);
+    expect(fullDetailEuphyllia('hammer', 7)).toBe(cached);
+    const model = boundsFromCatalog(
+      {
+        get: () => {
+          throw new Error('no catalog');
+        },
+      },
+      DEFAULT_CURRENT,
+    )('euphyllia-hammer-7');
+    expect(model?.bounds).toBe(cached.bounds);
   });
 });

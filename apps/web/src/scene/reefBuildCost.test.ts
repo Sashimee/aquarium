@@ -12,32 +12,14 @@ import { fakeEngine } from './tankSceneHarness';
 const slices = vi.hoisted(() => ({
   onYield: (): void => undefined,
   onEuphylliaGenerated: (): void => undefined,
-  fitting: false,
 }));
-
-// fitPresetToCatalog generates every euphyllia in its own single slice; that step is a known
-// unsliced cost and is excluded from the per-slice euphyllia bound.
-vi.mock('./presetFit', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./presetFit')>();
-  return {
-    ...actual,
-    fitPresetToTank: (...args: Parameters<typeof actual.fitPresetToTank>) => {
-      slices.fitting = true;
-      try {
-        return actual.fitPresetToTank(...args);
-      } finally {
-        slices.fitting = false;
-      }
-    },
-  };
-});
 
 vi.mock('./euphyllia', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./euphyllia')>();
   return {
     ...actual,
     generateEuphyllia: (...args: Parameters<typeof actual.generateEuphyllia>) => {
-      if (!slices.fitting) slices.onEuphylliaGenerated();
+      slices.onEuphylliaGenerated();
       return actual.generateEuphyllia(...args);
     },
   };
@@ -56,8 +38,9 @@ vi.mock('./yieldTask', async (importOriginal) => {
  * Each slice of the mount may load at most one model and generate at most one euphyllia between
  * two yields, and the patch scatter (the heaviest pure-CPU step, seen through its collider
  * queries) gets a slice of its own. Wall-clock spans flaked on loaded CI runners, so the
- * guarantee is asserted on the slicing instead. The reef preset guards the hardscape and
- * euphyllia loops (it has one plant asset, no anemones and no plant patches); the freshwater
+ * guarantee is asserted on the slicing instead. The layout fit counts too: the colonies are
+ * generated one per slice ahead of it, and the fit and the build reuse them. The reef preset
+ * guards the hardscape and euphyllia loops (it has one plant asset, no anemones and no plant patches); the freshwater
  * preset guards the patch scatter. The plant and anemone loops are not covered.
  */
 const MAX_LOADS_PER_SLICE = 1;

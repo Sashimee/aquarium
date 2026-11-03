@@ -53,7 +53,13 @@ import {
   PLANT_KIND,
 } from './hardscape';
 import { routeDecor } from './decorRouting';
-import { boundsFromCatalog, fitPresetToTank, glassSqueezes, MIN_KEPT_PATCH } from './presetFit';
+import {
+  boundsFromCatalog,
+  fitPresetToTank,
+  fullDetailEuphyllia,
+  glassSqueezes,
+  MIN_KEPT_PATCH,
+} from './presetFit';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
@@ -318,6 +324,13 @@ export class TankScene {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
     const dimensions = engine.tank.dimensions;
+    for (const id of new Set(authored.decor.map((item) => item.assetId))) {
+      const procedural = parseEuphylliaId(id);
+      if (!procedural) continue;
+      await yieldTask();
+      signal?.throwIfAborted();
+      fullDetailEuphyllia(procedural.variant, procedural.seed);
+    }
     await yieldTask();
     signal?.throwIfAborted();
     const preset = fitPresetToCatalog(authored, engine.tankSize, dimensions, catalog);
@@ -389,7 +402,7 @@ export class TankScene {
     for (const [i, entry] of euphylliaItems.entries()) {
       await yieldTask();
       signal?.throwIfAborted();
-      const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
+      const fullDetail = fullDetailEuphyllia(entry.variant, entry.seed);
       euphylliaItems[i] = { ...entry, fullDetail };
       checkEuphylliaClearOfGlass(entry.item, fullDetail.bounds, current, extent);
       colliders.push(euphylliaCollider(fullDetail.bounds, entry.item));
