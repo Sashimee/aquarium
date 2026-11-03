@@ -247,6 +247,39 @@ describe('held keys and pad buttons', () => {
       }
     });
 
+    it('counts only the time since the opposite key was released', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        interaction.emit('photo:request', { type: 'hold', move: 'back', down: true });
+        vi.advanceTimersByTime(80);
+        interaction.emit('photo:request', { type: 'hold', move: 'back', down: false });
+        vi.advanceTimersByTime(40);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledTimes(1);
+        expect(port.move).toHaveBeenCalledWith(0, 0, MOVE_SPEED * 0.04);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('counts only the time since fast was released', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction, controller, key } = setup();
+        key('Shift');
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        vi.advanceTimersByTime(80);
+        controller.keyUp('Shift');
+        vi.advanceTimersByTime(40);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledWith(0, 0, MOVE_SPEED * 0.04);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('applies a held fast modifier', () => {
       vi.useFakeTimers();
       try {
