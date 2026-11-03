@@ -7,6 +7,7 @@ import {
   normalWorld,
   normalize,
   positionWorld,
+  sin,
   smoothstep,
   texture,
   uv,
@@ -36,6 +37,7 @@ export function createSubstrateMaterial(
   layers: SubstrateLayers,
   options: Pick<PresetSubstrate, 'tint' | 'tileMeters'>,
   tank: TankDimensions,
+  cheap = false,
 ): MeshStandardNodeMaterial {
   const tile = options.tileMeters;
   const top = positionWorld.xz.div(tile);
@@ -45,7 +47,7 @@ export function createSubstrateMaterial(
     vec2((tank.length - 2 * tank.glass) / tile, (tank.depth - 2 * tank.glass) / tile),
   );
 
-  const sample = (set: SubstrateTextures) => {
+  const sample = (set: SubstrateTextures, withNormal = true) => {
     const colourTop = texture(set.baseColor, top).rgb;
     const colourSide = texture(set.baseColor, side).rgb;
     const armTop = texture(set.arm, top).rgb;
@@ -54,7 +56,9 @@ export function createSubstrateMaterial(
       colour: mix(colourSide, colourTop, isTop),
       arm: mix(armSide, armTop, isTop),
       // @types/three types NormalMapNode without the node operator extensions.
-      normal: normalMap(texture(set.normal, uvTop)) as unknown as Node<'vec3'>,
+      normal: withNormal
+        ? (normalMap(texture(set.normal, uvTop)) as unknown as Node<'vec3'>)
+        : normalView,
     };
   };
 
@@ -64,16 +68,17 @@ export function createSubstrateMaterial(
   let normal: Node<'vec3'> = base.normal;
 
   if (layers.accent) {
-    const accent = sample(layers.accent);
-    const drift = mx_noise_float(positionWorld.mul(vec3(3.1, 0, 3.1)).add(7.3))
-      .mul(0.5)
-      .add(0.5)
-      .add(positionWorld.x.mul(0.35))
-      .sub(positionWorld.z.mul(0.55));
+    const accent = sample(layers.accent, !cheap);
+    const wobble = cheap
+      ? sin(positionWorld.x.mul(5.3).add(positionWorld.z.mul(2.1)))
+          .mul(sin(positionWorld.z.mul(4.7).sub(positionWorld.x.mul(1.3))))
+          .mul(0.35)
+      : mx_noise_float(positionWorld.mul(vec3(3.1, 0, 3.1)).add(7.3)).mul(0.5);
+    const drift = wobble.add(0.5).add(positionWorld.x.mul(0.35)).sub(positionWorld.z.mul(0.55));
     const mask = smoothstep(0.62, 0.72, drift);
     colour = mix(colour, accent.colour, mask);
     arm = mix(arm, accent.arm, mask);
-    normal = mix(normal, accent.normal, mask);
+    if (!cheap) normal = mix(normal, accent.normal, mask);
   }
 
   const material = new MeshStandardNodeMaterial({ metalness: 0 });

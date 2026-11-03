@@ -68,6 +68,24 @@ export function plantLodFor(assetId: string, tierLod: ModelLod): ModelLod {
   return CARPET.has(assetId) ? (Math.min(2, tierLod + 1) as ModelLod) : tierLod;
 }
 
+const LARGE_LEAF: ReadonlySet<string> = new Set([
+  'amazon-sword',
+  'vallisneria',
+  'water-plant',
+  'pond-weed',
+  'universal-plant',
+]);
+
+/** Low-tier share of the tier's plant density kept by species whose leaves cover the most pixels. */
+const LOW_TIER_DENSITY_SCALE = { carpet: 0.5, largeLeaf: 0.75 } as const;
+
+export function plantDensityFor(tier: Tier, assetId: string, density: number): number {
+  if (tier !== 'low') return density;
+  if (CARPET.has(assetId)) return density * LOW_TIER_DENSITY_SCALE.carpet;
+  if (LARGE_LEAF.has(assetId)) return density * LOW_TIER_DENSITY_SCALE.largeLeaf;
+  return density;
+}
+
 /** Gap kept between the tallest leaf tip and the water surface, which ripples. */
 export const SURFACE_MARGIN = 0.03;
 
