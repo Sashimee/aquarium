@@ -141,7 +141,18 @@ test.describe('tank type switch', () => {
     });
     const page = await context.newPage();
     await registerVerifiedUser(page, 'switch');
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/?backend=webgl&tier=low', { waitUntil: 'domcontentloaded' });
+    // The loading screen is modal until the renderer either starts or fails; with no WebGL it
+    // fails, and its card sits over the page until it is dismissed.
+    const loading = page.locator('.loading');
+    await expect(
+      loading.getByRole('alert'),
+      'the renderer fails without a WebGL context',
+    ).toBeVisible({
+      timeout: 60_000,
+    });
+    await loading.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(loading).toHaveCount(0);
 
     await pressType(page, 'Reef');
     await expect(page.getByLabel('Kind of tank')).toHaveValue('reef');

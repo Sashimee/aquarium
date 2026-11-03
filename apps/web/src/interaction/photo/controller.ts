@@ -48,6 +48,7 @@ export const TURN_SPEED = 1;
 export const ZOOM_SPEED = 40;
 const REFERENCE_FOV = 40;
 const MAX_STEP_S = 0.1;
+const MIN_TAP_S = 0.016;
 
 const KEYS: Readonly<Record<string, HeldAction>> = {
   w: 'forward',
@@ -112,6 +113,7 @@ function isFormField(target: EventTarget | null): boolean {
 
 export class PhotoController {
   private readonly held = new Set<HeldAction>();
+  private readonly unserved = new Map<HeldAction, number>();
   private capturing = false;
   private readonly stops: (() => void)[];
 
@@ -166,8 +168,8 @@ export class PhotoController {
         if (port.active) port.setUiHidden(command.hidden);
         return;
       case 'hold':
-        if (command.down) this.held.add(command.move);
-        else this.held.delete(command.move);
+        if (command.down) this.press(command.move);
+        else this.release(command.move);
         return;
       case 'capture':
         void this.capture();
@@ -177,14 +179,19 @@ export class PhotoController {
 
   /** Applies the keys and pad buttons that are held, for the time since the last frame. */
   update(deltaS: number): void {
+    if (!this.options.port.active || this.held.size === 0) return;
+    this.unserved.clear();
+    this.step(this.held, deltaS);
+  }
+
+  private step(actions: ReadonlySet<HeldAction>, deltaS: number): void {
     const { port } = this.options;
-    if (!port.active || this.held.size === 0) return;
     const dt = Math.min(Math.max(deltaS, 0), MAX_STEP_S);
     const axis = (plus: HeldAction, minus: HeldAction) =>
-      (this.held.has(plus) ? 1 : 0) - (this.held.has(minus) ? 1 : 0);
+      (actions.has(plus) ? 1 : 0) - (actions.has(minus) ? 1 : 0);
     const { fov } = port.state;
 
-    const speed = MOVE_SPEED * dt * (this.held.has('fast') ? FAST_FACTOR : 1);
+    const speed = MOVE_SPEED * dt * (actions.has('fast') ? FAST_FACTOR : 1);
     const right = axis('right', 'left');
     const up = axis('up', 'down');
     const forward = axis('forward', 'back');
@@ -240,17 +247,33 @@ export class PhotoController {
     }
     const action = actionForKey(event.key);
     if (action === null) return false;
-    this.held.add(action);
+    this.press(action);
     return true;
   }
 
   keyUp(key: string): void {
     const action = actionForKey(key);
-    if (action !== null) this.held.delete(action);
+    if (action !== null) this.release(action);
   }
 
   releaseAll(): void {
     this.held.clear();
+    this.unserved.clear();
+  }
+
+  private press(action: HeldAction): void {
+    if (!this.held.has(action)) this.unserved.set(action, performance.now());
+    this.held.add(action);
+  }
+
+  /** A press that ended before any frame ran still moves the view, as far as it was held. */
+  private release(action: HeldAction): void {
+    const since = this.unserved.get(action);
+    this.held.delete(action);
+    this.unserved.delete(action);
+    if (since === undefined || !this.options.port.active) return;
+    const heldS = (performance.now() - since) / 1000;
+    if (heldS >= MIN_TAP_S) this.step(new Set([action]), heldS);
   }
 
   private async capture(): Promise<void> {

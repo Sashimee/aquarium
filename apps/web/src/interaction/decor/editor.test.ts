@@ -225,6 +225,17 @@ describe('the shipped presets', () => {
   for (const biome of ['freshwater', 'reef'] as const) {
     const pieces = numberPieces(splitLayout(loadPreset(biome).decor, SPECS).pieces);
 
+    if (biome === 'freshwater') {
+      it('freshwater: a full-size boulder fits once the long driftwood branch is removed, not before', () => {
+        const branch = must(pieces.find((p) => p.item.assetId === 'driftwood-branch'));
+        const packed = editor(pieces, 'freshwater');
+        expect(packed.add('boulder-01')).toEqual({ rejection: 'no-room' });
+        const roomy = editor(pieces, 'freshwater');
+        roomy.remove(branch.id);
+        expect(roomy.add('boulder-01')).toHaveProperty('id');
+      });
+    }
+
     it(`${biome}: moving a piled-up piece either clears its neighbours or puts it back`, () => {
       expect(pieces.length).toBeGreaterThan(0);
       const first = must(pieces[0]);
