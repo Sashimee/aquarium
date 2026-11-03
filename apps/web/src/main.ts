@@ -15,8 +15,8 @@ import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from './interaction/events';
-import { followTankSize, TankSizeSource } from './interaction/tankSize';
 import { followGlassAlgae, GlassAlgaeSource } from './interaction/glassAlgae';
+import { followTankSize, TankSizeSource } from './interaction/tankSize';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { PhotoController } from './interaction/photo/controller';
 import { bindPhotoKeys } from './interaction/photo/keys';
@@ -158,6 +158,7 @@ async function boot(): Promise<void> {
     coralFeed.stop();
     roomSeed.stop();
     shownRoom.stop();
+    glassAlgae.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();

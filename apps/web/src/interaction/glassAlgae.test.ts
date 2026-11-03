@@ -57,3 +57,15 @@ describe('followGlassAlgae', () => {
     expect(shown).toEqual([0]);
   });
 });
+
+describe('GlassAlgaeSource.stop', () => {
+  it('unsubscribes from the bus and drops its listeners', () => {
+    const { interaction, source } = setup();
+    let calls = 0;
+    source.onChange(() => calls++);
+    source.stop();
+    interaction.emit('tank:water', { tankId: 't1', water: water(0.7) });
+    expect(source.current()).toBe(0);
+    expect(calls).toBe(0);
+  });
+});
