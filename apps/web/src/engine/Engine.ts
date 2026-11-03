@@ -643,8 +643,8 @@ export class Engine {
 
   /**
    * Only the scene's own objects may show up late: a post pass or the room's PMREM bake skipped
-   * for a frame would put a black or wrong frame on screen. Captures draw outside `frame` and so
-   * still wait for every pipeline.
+   * for a frame would put a black or wrong frame on screen. Captures draw outside `frame`, after
+   * `effectsReady` has waited for the links already in flight, so they miss nothing.
    */
   private installParallelCompile(): void {
     try {
@@ -817,10 +817,12 @@ export class Engine {
   }
 
   private async effectsReady(): Promise<void> {
-    const ready = this.effectsLoad.then(() => this.effects.ready());
+    const ready = this.effectsLoad
+      .then(() => this.effects.ready())
+      .then(() => this.parallelCompile?.settled());
     if (!(await settlesWithin(ready, CAPTURE_EFFECTS_WAIT_MS))) {
       throw new Error(
-        `Render effects not ready after ${CAPTURE_EFFECTS_WAIT_MS} ms; try the capture again`,
+        `Render effects or new shaders not ready after ${CAPTURE_EFFECTS_WAIT_MS} ms; try the capture again`,
       );
     }
   }

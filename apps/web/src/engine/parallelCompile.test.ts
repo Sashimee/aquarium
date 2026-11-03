@@ -31,28 +31,29 @@ function fakeCache() {
   return { renderer: { _pipelines: pipelines }, pipelines, links, calls };
 }
 
-const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+const flushTasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('compileInParallel', () => {
   it('starts accepted pipelines in parallel only inside during()', async () => {
     const { renderer, pipelines, links, calls } = fakeCache();
-    const scene = {};
-    const quad = {};
-    const parallel = compileInParallel(renderer, (ro) => ro === scene);
+    const fish = { object: {} };
+    const plant = { object: {} };
+    const quad = { object: {} };
+    const parallel = compileInParallel(renderer, (ro) => ro !== quad);
 
-    pipelines.updateForRender(scene);
+    pipelines.updateForRender(plant);
     parallel.during(() => {
-      pipelines.updateForRender(scene);
+      pipelines.updateForRender(fish);
       pipelines.updateForRender(quad);
     });
-    pipelines.updateForRender(scene);
+    pipelines.updateForRender({ object: {} });
 
     expect(calls.map((c) => c.parallel)).toEqual([false, true, false, false]);
     expect(calls[2]?.renderObject).toBe(quad);
     expect(parallel.started).toBe(1);
     expect(parallel.pending).toBe(1);
     links[0]?.resolve();
-    await settled();
+    await flushTasks();
     expect(parallel.pending).toBe(0);
     expect(parallel.started).toBe(1);
   });
@@ -67,7 +68,7 @@ describe('compileInParallel', () => {
     expect(parallel.pending).toBe(2);
     links[0]?.reject(new Error('lost context'));
     links[1]?.resolve();
-    await settled();
+    await flushTasks();
     expect(parallel.pending).toBe(0);
   });
 
@@ -91,6 +92,48 @@ describe('compileInParallel', () => {
       pipelines.updateForRender({});
     });
     expect(calls.map((c) => c.parallel)).toEqual([true, true]);
+  });
+
+  it('starts every pass of an object new this frame in parallel, and a rebuild after it in sync', () => {
+    const { renderer, pipelines, calls } = fakeCache();
+    const parallel = compileInParallel(renderer, () => true);
+    const fish = {};
+    parallel.during(() => {
+      pipelines.updateForRender({ object: fish, pass: 'main' });
+      pipelines.updateForRender({ object: fish, pass: 'shadow' });
+    });
+    parallel.during(() => pipelines.updateForRender({ object: fish, pass: 'tier change' }));
+    expect(calls.map((c) => c.parallel)).toEqual([true, true, false]);
+  });
+
+  it('keeps a rebuild synchronous for an object a capture drew first', () => {
+    const { renderer, pipelines, calls } = fakeCache();
+    const parallel = compileInParallel(renderer, () => true);
+    const fish = {};
+    pipelines.updateForRender({ object: fish });
+    parallel.during(() => pipelines.updateForRender({ object: fish }));
+    expect(calls.map((c) => c.parallel)).toEqual([false, false]);
+  });
+
+  it('settles once every link in flight has, at once when none is', async () => {
+    const { renderer, pipelines, links } = fakeCache();
+    const parallel = compileInParallel(renderer, () => true);
+    let settled = false;
+    await parallel.settled();
+
+    parallel.during(() => {
+      pipelines.updateForRender({});
+      pipelines.updateForRender({});
+    });
+    void parallel.settled().then(() => {
+      settled = true;
+    });
+    links[0]?.resolve();
+    await flushTasks();
+    expect(settled).toBe(false);
+    links[1]?.reject(new Error('lost context'));
+    await flushTasks();
+    expect(settled).toBe(true);
   });
 
   it('puts the cache back on restore, and not over a later patch', () => {
@@ -143,4 +186,75 @@ describe('compileInParallel', () => {
     expect(drawn().some((d) => d.parallel)).toBe(false);
     parallel.restore();
   });
+
+  it('lets a capture that waits for settled() draw an object whose link was in flight', async () => {
+    const { renderer, scene, box, camera, draws, links } = await linkingRenderer();
+    const parallel = compileInParallel(renderer, (ro) => Reflect.get(ro, 'scene') === scene);
+
+    parallel.during(() => renderer.render(scene, camera));
+    expect(draws()).toEqual([]);
+    renderer.render(scene, camera);
+    expect(draws(), 'a capture before the link finishes misses the box').toEqual([]);
+
+    const ready = parallel.settled();
+    for (const link of links.splice(0)) link();
+    await ready;
+    renderer.render(scene, camera);
+    expect(draws()).toEqual([box]);
+    parallel.restore();
+  });
+
+  it('rebuilds the pipeline of an object already on screen synchronously and keeps drawing it', async () => {
+    const { renderer, scene, box, camera, draws, links } = await linkingRenderer();
+    const parallel = compileInParallel(renderer, (ro) => Reflect.get(ro, 'scene') === scene);
+    parallel.during(() => renderer.render(scene, camera));
+    for (const link of links.splice(0)) link();
+    await parallel.settled();
+    parallel.during(() => renderer.render(scene, camera));
+    expect(draws()).toEqual([box]);
+
+    box.material.transparent = true;
+    box.material.needsUpdate = true;
+    parallel.during(() => renderer.render(scene, camera));
+    expect(draws(), 'the tier change frame still draws the box').toEqual([box]);
+    expect(links).toEqual([]);
+    expect(parallel.started).toBe(1);
+    parallel.restore();
+  });
 });
+
+/**
+ * three's renderer on the inert backend, made to link like WebGL with KHR_parallel_shader_compile:
+ * a pipeline started with a promise list is ready only once the test runs its link.
+ */
+async function linkingRenderer() {
+  const { renderer } = await createInertRenderer();
+  const backend = renderer.backend;
+  const backendData: unknown = Reflect.get(backend, 'data');
+  if (!(backendData instanceof WeakMap)) throw new Error('three changed its backend data map');
+  const links: (() => void)[] = [];
+  const drawn: object[] = [];
+  Reflect.set(
+    backend,
+    'createRenderPipeline',
+    (renderObject: object, promises: Promise<void>[] | null) => {
+      const pipeline: unknown = Reflect.get(renderObject, 'pipeline');
+      if (typeof pipeline !== 'object' || pipeline === null) throw new Error('no pipeline to link');
+      const link = (): void => {
+        backendData.set(pipeline, { pipeline: {} });
+      };
+      if (promises === null) link();
+      else promises.push(new Promise<void>((resolve) => links.push(() => (link(), resolve()))));
+    },
+  );
+  Reflect.set(backend, 'draw', (renderObject: object) => {
+    drawn.push(Reflect.get(renderObject, 'object') as object);
+  });
+  const scene = new Scene();
+  const box = new Mesh(new BoxGeometry(), new MeshBasicNodeMaterial());
+  scene.add(box);
+  const camera = new PerspectiveCamera();
+  camera.position.z = 5;
+  const draws = (): object[] => drawn.splice(0).filter((object) => object === box);
+  return { renderer, scene, box, camera, draws, links };
+}
