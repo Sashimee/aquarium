@@ -86,14 +86,10 @@ export const MIN_TURN_SPEED_BODY_LENGTHS_PER_S = 0.5;
 export const MAX_BEND = 3;
 const BEND_SMOOTHING_S = 0.08;
 /**
- * The sim reports thrust as a fraction of the drag at top speed, so holding speed v takes
- * (v/vmax)² of it: under 1e-3 for a guppy below 0.53 BL/s. A frame counts as powered while the
- * thrust covers at least this share of the drag at the current speed, so only a real glide, with
- * the thrust near zero, goes tail-still. Coasting tetras hold the body "passive and straight"
- * (Li et al. 2021, Commun Biol 4:68), so the beat dies out within one tail period: e^-3, 5% left,
- * after one period. A kick restarts it about as fast as the sim's 0.1 s burst response.
+ * Coasting tetras hold the body "passive and straight" (Li et al. 2021, Commun Biol 4:68), so the
+ * beat dies out within one tail period of a glide: e^-3, 5% left, after one period. A kick restarts
+ * it about as fast as the sim's 0.1 s burst response.
  */
-export const POWERED_DRAG_SHARE = 0.5;
 const COAST_DECAY_PER_PERIOD = 3;
 /**
  * Opercular pumping of a small teleost at rest and at full exertion, in beats per second; visual
@@ -189,8 +185,11 @@ export function envelopeAt(mode: SwimModeParams, s: number): number {
 export interface SwimSample {
   speed: number;
   yawRate: number;
-  /** Caudal thrust as a fraction of the maximum, 0 while coasting; 1 for scripted poses. */
-  thrust: number;
+  /**
+   * The sim's burst-and-coast glide, 0 powered .. 1 gliding unpowered; blended between snapshots,
+   * so a weight rather than a flag. 0 for scripted poses and for a fish braking against drag.
+   */
+  glide: number;
   /** The sim's `FishState`; -1 for a fish the sim does not move. */
   state: number;
 }
@@ -241,11 +240,8 @@ export class SwimState {
     readonly strouhal: number,
     readonly mode: SwimModeParams,
     phaseOffset: number,
-    /** The sim's top speed for this fish in m/s, which its thrust is normalised against. */
-    readonly maxSpeed: number,
   ) {
     requirePositiveLength(length);
-    if (!(maxSpeed > 0)) throw new RangeError(`swim: max speed must be > 0, got ${maxSpeed}`);
     this.phase = phaseOffset % TAU;
     this.finPhase = (phaseOffset * 1.618) % TAU;
     this.ventilationPhase = (phaseOffset * 2.414) % TAU;
@@ -283,10 +279,9 @@ export class SwimState {
     if (!(dt >= 0)) throw new RangeError(`swim: dt must be >= 0, got ${dt}`);
     const { length } = this;
     this.frequency = tailBeatHz(sample.speed, length, this.strouhal);
-    const relative = sample.speed / this.maxSpeed;
-    const powered = sample.thrust > POWERED_DRAG_SHARE * relative * relative;
-    const tau = powered ? DRIVE_RISE_S : 1 / (COAST_DECAY_PER_PERIOD * this.frequency);
-    this.drive += ((powered ? 1 : 0) - this.drive) * (1 - Math.exp(-dt / tau));
+    const powered = 1 - clamp(sample.glide, 0, 1);
+    const tau = powered > this.drive ? DRIVE_RISE_S : 1 / (COAST_DECAY_PER_PERIOD * this.frequency);
+    this.drive += (powered - this.drive) * (1 - Math.exp(-dt / tau));
     const posing = sample.state === FishState.Pose ? 1 : 0;
     this.stillness += (posing - this.stillness) * (1 - Math.exp(-dt / POSE_SETTLE_S));
     this.amplitude =
