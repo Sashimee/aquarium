@@ -37,7 +37,7 @@ import {
   shouldShowAway,
   speciesNameMap,
 } from './life';
-import { DEVICE_ROOM_KEY, planRoomMigration } from './roomMigration';
+import { DEVICE_ROOM_DONE_KEY, DEVICE_ROOM_KEY, planRoomMigration } from './roomMigration';
 import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
 import { moveRefusalText } from './moveFish';
@@ -438,6 +438,7 @@ export class TankSession {
     if (loadId !== this.loadId || this.state.phase !== 'ready') return;
     let deviceRoom: string | null = null;
     try {
+      if (storage.getItem(DEVICE_ROOM_DONE_KEY) !== null) return;
       deviceRoom = storage.getItem(DEVICE_ROOM_KEY);
     } catch {
       // Some privacy modes throw on any storage read; the device room is then simply absent.
@@ -458,7 +459,12 @@ export class TankSession {
       try {
         storage.removeItem(DEVICE_ROOM_KEY);
       } catch {
-        // Same privacy modes that block reads; the key stays and the next load re-plans harmlessly.
+        // A browser that blocks removal keeps the key, so a flag records that it was consumed.
+        try {
+          storage.setItem(DEVICE_ROOM_DONE_KEY, '1');
+        } catch {
+          // Storage is fully blocked: the read above fails too, so nothing re-runs.
+        }
       }
     }
   }

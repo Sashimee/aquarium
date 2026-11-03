@@ -21,7 +21,9 @@ async function buyFish(
     .getByRole('button', { name: 'Add', exact: true })
     .click();
   if (options.confirm) await page.getByRole('button', { name: 'Yes, buy it' }).click();
-  await expect(page.locator('.life-status')).toContainText(`${fishName} is in a bag`);
+  await expect(page.locator('.life-status:not(.birth-status)')).toContainText(
+    `${fishName} is in a bag`,
+  );
   await page.getByRole('button', { name: `Release ${fishName} now` }).click();
 }
 

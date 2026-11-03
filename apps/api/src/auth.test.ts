@@ -1300,7 +1300,7 @@ describe('mail abuse limits', () => {
       mailLimits: {
         perRecipient: { max: 1, windowMs: 3_600_000 },
         verificationCooldown: { max: 100, windowMs: 1000 },
-        perIpSignup: { max: 3, windowMs: 3_600_000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
         global: { max: 1000, windowMs: 3_600_000 },
       },
     });
@@ -1320,7 +1320,7 @@ describe('mail abuse limits', () => {
       redirect: Record<string, string>,
     ) => {
       const statuses: number[] = [];
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 4; i++) {
         const res = await h.app.inject({
           method: 'POST',
           url,
@@ -1332,17 +1332,22 @@ describe('mail abuse limits', () => {
       }
       return statuses;
     };
-    for (const [n, [url, redirect]] of (
-      [
-        ['/api/auth/send-verification-email', { callbackURL: '/verify-email' }],
-        ['/api/auth/request-password-reset', { redirectTo: '/reset-password' }],
-      ] as const
-    ).entries()) {
-      const forKnown = await sequence(`203.0.113.${10 + n}`, url, known, redirect);
-      const forUnknown = await sequence(`203.0.113.${20 + n}`, url, nextEmail(), redirect);
-      expect(forKnown).toEqual([200, 200, 200, 429, 429]);
-      expect(forUnknown).toEqual(forKnown);
-    }
+    // Better Auth holds each admitted resend/reset for a 500 ms floor, so the four sequences run
+    // side by side; each has its own IP, so they cannot affect each other's budget.
+    const flows = [
+      ['/api/auth/send-verification-email', { callbackURL: '/verify-email' }],
+      ['/api/auth/request-password-reset', { redirectTo: '/reset-password' }],
+    ] as const;
+    await Promise.all(
+      flows.map(async ([url, redirect], n) => {
+        const [forKnown, forUnknown] = await Promise.all([
+          sequence(`203.0.113.${10 + n}`, url, known, redirect),
+          sequence(`203.0.113.${20 + n}`, url, nextEmail(), redirect),
+        ]);
+        expect(forKnown).toEqual([200, 200, 429, 429]);
+        expect(forUnknown).toEqual(forKnown);
+      }),
+    );
     await h.close();
   });
 

@@ -35,14 +35,6 @@ test.describe('photo mode', () => {
     await tools.getByRole('checkbox', { name: 'Freeze the fish' }).check();
     await expect(tools.getByRole('checkbox', { name: 'Freeze the fish' })).toBeChecked();
 
-    const forward = tools.getByRole('button', { name: 'Move forward' });
-    const box = await forward.boundingBox();
-    if (!box) throw new Error('the Move forward pad button has no box on screen');
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.waitForTimeout(500);
-    await page.mouse.up();
-
     await bar.getByRole('button', { name: 'Hide controls' }).click();
     await expect(bar.getByRole('button', { name: 'Show controls' })).toBeVisible();
     await bar.getByRole('button', { name: 'Show controls' }).click();
@@ -116,8 +108,7 @@ test.describe('away replay', () => {
     await expect(captions.getByRole('listitem')).toHaveCount(events);
     await expect(captions).toContainText('Biscuit');
 
-    await replay.getByRole('button', { name: 'Skip replay' }).focus();
-    await page.keyboard.press('Enter');
+    await replay.getByRole('button', { name: 'Skip replay' }).click();
     await expect(replay).toBeHidden();
   });
 

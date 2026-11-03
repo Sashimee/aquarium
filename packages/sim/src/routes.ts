@@ -42,6 +42,9 @@ const DONE = 3;
  * The way is found piecemeal by `build`, a bounded amount of work at a time, so that finding many
  * ways at once (after the rock moved, say) is spread over several steps of the sim.
  */
+/** What a caller outside the sim may see of a way: it cannot be built on from outside. */
+export type RouteView = Readonly<Pick<Route, 'y' | 'clearance' | 'ready'>>;
+
 export class Route {
   readonly y: number;
   readonly clearance: number;

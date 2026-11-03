@@ -83,7 +83,9 @@ function expectRestsOnGoal(rig: CameraRig, cam: { pos: Vec3 }, hz: number, label
   expect(gap(cam.pos, rig.goalPosition), arrived).toBeLessThan(1e-3);
   for (let held = 0; held < HOLD_SECONDS * hz; held++) {
     rig.update(1 / hz);
-    expect(gap(cam.pos, rig.goalPosition), `${arrived}, held ${held / hz} s`).toBeLessThan(1e-3);
+    expect(gap(cam.pos, rig.goalPosition), `${arrived}, held ${(held + 1) / hz} s`).toBeLessThan(
+      1e-3,
+    );
   }
 }
 

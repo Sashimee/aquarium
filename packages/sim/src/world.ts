@@ -290,6 +290,7 @@ export class World {
   private _stage: Uint8Array;
   private _sex: Uint8Array;
   private _thrust: Float64Array;
+  private _gliding: Uint8Array;
   private _contactCount: Uint32Array;
   /** 1 for a walker, set at spawn so the step loops need not look the species up. */
   private walker: Uint8Array;
@@ -347,7 +348,7 @@ export class World {
   private intent: Float64Array;
   private targetYaw: Float64Array;
   private targetPitch: Float64Array;
-  private targetSpeed: Float64Array;
+  private _targetSpeed: Float64Array;
   private schoolGroup: Int32Array;
   private readonly kMax: number;
   private readonly speciesById: ReadonlyMap<string, number>;
@@ -388,6 +389,11 @@ export class World {
 
   get speed(): Float64Array {
     return this._speed;
+  }
+
+  /** The speed each fish's steering asked for on the last step, which a coast glides down to. */
+  get targetSpeed(): Float64Array {
+    return this._targetSpeed;
   }
 
   get yawRate(): Float64Array {
@@ -437,6 +443,14 @@ export class World {
   /** Caudal thrust as a fraction of the maximum; 0 while coasting. */
   get thrust(): Float64Array {
     return this._thrust;
+  }
+
+  /**
+   * 1 for a fish whose last step was a burst-and-coast glide, 0 otherwise. Zero thrust alone does
+   * not mean a glide: a fish braking against drag also reports 0.
+   */
+  get gliding(): Uint8Array {
+    return this._gliding;
   }
 
   /** Per-fish share of `contacts`. */
@@ -509,6 +523,7 @@ export class World {
     this._stage = new Uint8Array(n);
     this._sex = new Uint8Array(n);
     this._thrust = new Float64Array(n);
+    this._gliding = new Uint8Array(n);
     this._contactCount = new Uint32Array(n);
     this.walker = new Uint8Array(n);
     this.coasting = new Uint8Array(n);
@@ -537,7 +552,7 @@ export class World {
     this.intent = new Float64Array(n * 3);
     this.targetYaw = new Float64Array(n);
     this.targetPitch = new Float64Array(n);
-    this.targetSpeed = new Float64Array(n);
+    this._targetSpeed = new Float64Array(n);
     this._forward = new Float64Array(n * 3);
     this._distSq = new Float64Array(n * n);
     this.schoolGroup = new Int32Array(n);
@@ -1167,6 +1182,7 @@ export class World {
     this._stage = edit.array(this.stage);
     this._sex = edit.array(this.sex);
     this._thrust = edit.array(this.thrust);
+    this._gliding = edit.array(this.gliding);
     this._contactCount = edit.array(this.contactCount);
     this.walker = edit.array(this.walker);
     this.coasting = edit.array(this.coasting);
@@ -1198,7 +1214,7 @@ export class World {
     this.intent = edit.array(this.intent, 3);
     this.targetYaw = edit.array(this.targetYaw);
     this.targetPitch = edit.array(this.targetPitch);
-    this.targetSpeed = edit.array(this.targetSpeed);
+    this._targetSpeed = edit.array(this._targetSpeed);
     this._forward = edit.array(this.forward, 3);
     this.schoolGroup = edit.array(this.schoolGroup);
     this.schoolNbr = edit.array(this.schoolNbr, k, -1);
@@ -1920,13 +1936,13 @@ export class World {
       // (avoidance against a pane, a fish outrunning its shoal), bobbing the body.
       const climb = clamp(dy / Math.max(mag, this.speed[i] ?? 0, 1e-9), -1, 1);
       this.targetPitch[i] = clamp(Math.asin(climb), -sp.maxPitch, sp.maxPitch);
-      this.targetSpeed[i] = clamp(
+      this._targetSpeed[i] = clamp(
         Math.max(mag * (0.5 + 0.5 * cosAhead), minSpeed),
         0,
         Math.max(0, maxSpeed),
       );
     } else {
-      this.targetSpeed[i] = clamp(Math.max(mag, minSpeed), 0, Math.max(0, maxSpeed));
+      this._targetSpeed[i] = clamp(Math.max(mag, minSpeed), 0, Math.max(0, maxSpeed));
     }
     // Only the horizontal share of avoidance blocks the pivot: a rock top under the station is
     // avoidance in pitch, turning on the spot over it brings the body no nearer, and turnRoom
@@ -1944,7 +1960,7 @@ export class World {
       // wherever the station lies, and the turn back to the food creeps it in onto the glass.
       const along = dx * Math.sin(faceYaw) + dz * Math.cos(faceYaw);
       this.targetYaw[i] = faceYaw;
-      this.targetSpeed[i] = clamp(Math.max(along, minSpeed), 0, Math.max(0, maxSpeed));
+      this._targetSpeed[i] = clamp(Math.max(along, minSpeed), 0, Math.max(0, maxSpeed));
     }
     if (standOff) {
       // Arrival (Reynolds 1999): slow to a stop at the station, and never press on past it
@@ -1952,7 +1968,7 @@ export class World {
       const inside = toFood < plan.arrival && fx * (plan.seekX - px) + fz * (plan.seekZ - pz) > 0;
       const upstream = Math.max(0, -(holdX * fx + holdY * fy + holdZ * fz));
       const cap = (inside ? 0 : toStation / STEERING.standOffBrakeS) + upstream;
-      this.targetSpeed[i] = Math.min(this.targetSpeed[i] ?? 0, cap);
+      this._targetSpeed[i] = Math.min(this._targetSpeed[i] ?? 0, cap);
     }
     if (!Number.isNaN(plan.yaw)) this.targetYaw[i] = plan.yaw;
     if (!Number.isNaN(plan.pitch)) {
@@ -2177,9 +2193,10 @@ export class World {
       this.yawRate[i] = 0;
       this.pitchRate[i] = 0;
       this.thrust[i] = 0;
+      this.gliding[i] = 0;
       this.targetYaw[i] = yaw;
       this.targetPitch[i] = pitch;
-      this.targetSpeed[i] = speed;
+      this._targetSpeed[i] = speed;
       this.reverseLeft[i] = 0;
       this.detourTimer[i] = 0;
       this.backHomeBlocked[i] = 0;
@@ -2303,6 +2320,7 @@ export class World {
     const gain = STEERING.turnGainPerS * (coasting ? BEHAVIOUR.coastTurnGain : 1);
     const smooth = Math.min(1, dt / STEERING.turnSmoothingS);
 
+    this.gliding[i] = 0;
     const yaw = this.yaw[i] ?? 0;
     const pitch = this.pitch[i] ?? 0;
     this.backHomeBlocked[i] = Math.max(0, (this.backHomeBlocked[i] ?? 0) - dt);
@@ -2363,7 +2381,7 @@ export class World {
     const kd = this.drag[i] ?? 0;
     const vmax = this.maxSpeed[i] ?? 0;
     const thrustMax = kd * vmax * vmax;
-    const target = this.targetSpeed[i] ?? 0;
+    const target = this._targetSpeed[i] ?? 0;
     let thrust: number;
     let glide = false;
     if (burstAndCoast) {
@@ -2392,6 +2410,7 @@ export class World {
       );
     }
     this.thrust[i] = thrustMax > 0 ? clamp(thrust / thrustMax, 0, 1) : 0;
+    this.gliding[i] = glide ? 1 : 0;
     // A glide relaxes exponentially with a fixed time constant (Calovi et al. 2018), not with the
     // quadratic body drag, which at tetra cruise speeds would stretch a coast past a second.
     const nextV = glide
@@ -2776,6 +2795,7 @@ export class World {
       out[o + 14] = this.behaviour.display[i] ?? 0;
       out[o + 15] = this.behaviour.gillFlare[i] ?? 0;
       out[o + 16] = this.behaviour.brood.fan[i] ?? 0;
+      out[o + 17] = this.gliding[i] ?? 0;
     }
   }
 }

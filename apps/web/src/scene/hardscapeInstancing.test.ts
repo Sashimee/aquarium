@@ -97,7 +97,7 @@ describe('Hardscape instancing', () => {
     const entry: CatalogEntry = { id: 'rock-a', kind: 'rock', lods: [{ file: 'x.glb' }] };
     const model = fakeModel(3);
     for (let i = 0; i < 9; i++) {
-      const item = { assetId: 'rock-a', position: [i, 0, 0], rotationY: 0, scale: 1 } as DecorItem;
+      const item: DecorItem = { assetId: 'rock-a', position: [i, 0, 0], rotationY: 0, scale: 1 };
       hardscape.add(entry, model, item);
     }
     expect(hardscape.group.children).toHaveLength(3);

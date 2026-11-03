@@ -67,8 +67,22 @@ describe('interpolateSnapshots', () => {
     expect(out[SnapshotField.GillFlare]).toBeCloseTo(0.25, 6);
   });
 
-  it('lerps the pectoral fan, the last field of each record, fish by fish', () => {
-    expect(SnapshotField.Fan).toBe(SNAPSHOT_STRIDE - 1);
+  it('lerps the glide flag, the last field of each record, fish by fish', () => {
+    expect(SnapshotField.Glide).toBe(SNAPSHOT_STRIDE - 1);
+    const a = new Float32Array(2 * SNAPSHOT_STRIDE);
+    const b = new Float32Array(2 * SNAPSHOT_STRIDE);
+    a.set(fish(0, 0, 0.1, FishState.School), 0);
+    a.set(fish(1, 0, 0.1, FishState.School), SNAPSHOT_STRIDE);
+    b.set(fish(0, 0, 0.1, FishState.School), 0);
+    b.set(fish(1, 0, 0.1, FishState.School), SNAPSHOT_STRIDE);
+    b[SnapshotField.Glide] = 1;
+    const out = new Float32Array(2 * SNAPSHOT_STRIDE);
+    interpolateSnapshots(a, b, 0.25, out);
+    expect(out[SnapshotField.Glide]).toBeCloseTo(0.25, 6);
+    expect(out[SNAPSHOT_STRIDE + SnapshotField.Glide]).toBe(0);
+  });
+
+  it('lerps the pectoral fan fish by fish', () => {
     const a = new Float32Array(2 * SNAPSHOT_STRIDE);
     const b = new Float32Array(2 * SNAPSHOT_STRIDE);
     a.set(fish(0, 0, 0, FishState.Station), 0);

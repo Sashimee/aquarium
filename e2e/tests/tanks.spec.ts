@@ -23,7 +23,9 @@ test('switching tanks swaps the fish and keeps both saved', async ({ page }) => 
   await page.getByLabel('Tank name').fill('Second tank');
   await page.getByRole('button', { name: 'Create tank' }).click();
   await page.getByRole('button', { name: 'Yes, buy it' }).click();
-  await expect(page.locator('.life-status')).toContainText('Second tank is ready.');
+  await expect(page.locator('.life-status:not(.birth-status)')).toContainText(
+    'Second tank is ready.',
+  );
   const switcher = page.getByLabel('Active tank');
   await expect(switcher.locator('option')).toHaveCount(2);
   await expect(await openReport(page)).toContainText('Second tank, a freshwater tank.');
