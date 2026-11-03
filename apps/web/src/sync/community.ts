@@ -1,3 +1,4 @@
+import { onOwnHandleChanged } from './handleChange';
 import {
   COMMUNITY_HEARTBEAT_MS,
   communityEventSchema,
@@ -280,6 +281,7 @@ export class CommunityController {
   private uploader: AteUploader | null = null;
   private started = false;
   private handle: string | null | undefined = undefined;
+  private offHandle: (() => void) | null = null;
 
   constructor(private readonly deps: CommunityControllerDeps) {
     this.now = deps.now ?? Date.now;
@@ -298,6 +300,9 @@ export class CommunityController {
     this.started = true;
     void this.refreshQuota();
     void this.loadHandle();
+    this.offHandle = onOwnHandleChanged((handle) => {
+      this.handle = handle;
+    });
     void this.runStream();
   }
 
@@ -308,6 +313,8 @@ export class CommunityController {
     const uploader = this.uploader;
     this.uploader = null;
     if (uploader) void uploader.flushNow().finally(() => uploader.dispose());
+    this.offHandle?.();
+    this.offHandle = null;
     this.listeners.clear();
   }
 

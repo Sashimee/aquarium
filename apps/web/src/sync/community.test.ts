@@ -1,3 +1,4 @@
+import { announceOwnHandle } from './handleChange';
 import type { CommunityEvent, CommunityQuota, CommunityState, Tank } from '@aquarium/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -463,6 +464,34 @@ describe('live feed and scene', () => {
       await pending;
       expect(drops).toHaveLength(2);
       controller.dispose();
+    });
+
+    it('matches own feeds on the new handle right after it is saved', async () => {
+      const { controller, drops, frame, answer } = pendingFeed(() => Promise.resolve('mossy'));
+      controller.start();
+      await settle();
+      announceOwnHandle('reef_fan');
+      const pending = controller.feed('flakes', 0.5);
+      await settle();
+      frame('reef_fan');
+      answer();
+      await pending;
+      expect(drops).toHaveLength(1);
+      controller.dispose();
+    });
+
+    it('stops listening for handle changes once disposed', async () => {
+      const { controller, drops, frame, answer } = pendingFeed(() => Promise.resolve('mossy'));
+      controller.start();
+      await settle();
+      controller.dispose();
+      announceOwnHandle('reef_fan');
+      const pending = controller.feed('flakes', 0.5);
+      await settle();
+      frame('mossy');
+      answer();
+      await pending;
+      expect(drops).toHaveLength(1);
     });
 
     it('matches on food and portion after a 401, so a later own feed drops once', async () => {

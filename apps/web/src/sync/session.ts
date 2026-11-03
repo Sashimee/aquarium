@@ -463,7 +463,7 @@ export class TankSession {
         try {
           storage.setItem(DEVICE_ROOM_DONE_KEY, '1');
         } catch {
-          // Storage is fully blocked: the read above fails too, so nothing re-runs.
+          // The flag could not be written (quota full or storage blocked): the migration re-runs next load.
         }
       }
     }
