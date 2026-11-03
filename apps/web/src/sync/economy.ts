@@ -116,12 +116,14 @@ export function shortfallSentence(result: Shortfall): string {
 }
 
 export function heaterWarning(
-  tank: Pick<Tank, 'equipment'>,
+  tank: Pick<Tank, 'equipment' | 'heaterOwnedTier'>,
   species: Pick<SpeciesSummary, 'warmWater' | 'commonName'>,
   roomC: number,
 ): string | null {
   if (!species.warmWater || tank.equipment.heater.tier > 0) return null;
-  return `This tank has no heater, so the water cools to room temperature, about ${roomC} °C. ${species.commonName} likes warmer water and can get stressed and sick. You can still add it, or buy a heater first.`;
+  const remedy =
+    tank.heaterOwnedTier > 0 ? 'reinstall your heater in Care for free' : 'buy a heater first';
+  return `This tank has no heater, so the water cools to room temperature, about ${roomC} °C. ${species.commonName} likes warmer water and can get stressed and sick. You can still add it, or ${remedy}.`;
 }
 
 export function purchaseWarning(

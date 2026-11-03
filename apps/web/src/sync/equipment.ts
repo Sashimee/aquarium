@@ -86,7 +86,7 @@ export type TierState = 'installed' | 'better-installed' | 'owned' | 'available'
 
 type EquipmentTank = Pick<Tank, 'biome' | 'equipment' | 'co2OwnedTier' | 'heaterOwnedTier'>;
 
-/** The server refuses a purchase at or below this: the best tier installed or, for CO2, ever bought. */
+/** The server refuses a purchase at or below this: the best tier installed or, for the heater and CO2, ever bought. */
 function ownedBaseline(tank: EquipmentTank, device: Device): number {
   const running = tank.equipment[device].tier;
   if (device === 'co2') return Math.max(running, tank.co2OwnedTier);

@@ -43,6 +43,7 @@ export interface LifeTank extends Omit<ApiTank, 'fish'> {
     waveMaker: { tier: number };
     light: { tier: number; intensity: number; onHour: number; offHour: number };
   };
+  chemistry: { temperatureC: number };
   co2OwnedTier: number;
   heaterOwnedTier: number;
   recentVisitDays: number;

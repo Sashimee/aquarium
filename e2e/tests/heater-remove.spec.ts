@@ -6,8 +6,7 @@ import { advanceDays, readTank } from '../support/life.ts';
 const ROOM_C = 21;
 
 const waterC = async (page: Parameters<typeof readTank>[0], tankId: string): Promise<number> => {
-  const tank = (await readTank(page, tankId)) as unknown as { chemistry: { temperatureC: number } };
-  return tank.chemistry.temperatureC;
+  return (await readTank(page, tankId)).chemistry.temperatureC;
 };
 
 test.describe('removing and reinstalling the heater', () => {
