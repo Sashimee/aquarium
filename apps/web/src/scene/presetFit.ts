@@ -21,7 +21,13 @@ import {
   PERCH_MIN_FIT,
 } from './bank';
 import type { CurrentParameters } from './current';
-import { euphylliaReach, generateEuphyllia, parseEuphylliaId } from './euphyllia';
+import {
+  euphylliaReach,
+  generateEuphyllia,
+  parseEuphylliaId,
+  type EuphylliaMesh,
+  type EuphylliaVariant,
+} from './euphyllia';
 import { isMudBankId, mudBankBounds } from './mudBank';
 import { GLASS_SHRINK_FLOOR } from './placement';
 import { SURFACE_MARGIN } from './plants';
@@ -55,6 +61,22 @@ export function footprintShare(size: TankSize): number {
   return Math.min(1, lengthRatio * depthRatio);
 }
 
+const FULL_DETAIL_CACHE_SIZE = 64;
+const fullDetailCache = new Map<string, EuphylliaMesh>();
+
+/** The colony at full detail, generated once: the fit reads its bounds and the build reuses the mesh. */
+export function fullDetailEuphyllia(variant: EuphylliaVariant, seed: number): EuphylliaMesh {
+  const key = `${variant}-${seed}`;
+  const cached = fullDetailCache.get(key);
+  if (cached) return cached;
+  const mesh = generateEuphyllia(variant, seed, 2);
+  fullDetailCache.set(key, mesh);
+  if (fullDetailCache.size > FULL_DETAIL_CACHE_SIZE) {
+    fullDetailCache.delete(fullDetailCache.keys().next().value as string);
+  }
+  return mesh;
+}
+
 /** The model of an asset at scale 1, or null when the catalog has no bounds for it. */
 export type BoundsOf = (assetId: string) => FitModel | null;
 
@@ -65,7 +87,7 @@ export function boundsFromCatalog(
   return (assetId) => {
     const procedural = parseEuphylliaId(assetId);
     if (procedural) {
-      const { bounds } = generateEuphyllia(procedural.variant, procedural.seed, 2);
+      const { bounds } = fullDetailEuphyllia(procedural.variant, procedural.seed);
       return { bounds, swayReach: (item) => euphylliaReach(bounds, item, current) };
     }
     if (isMudBankId(assetId)) return { bounds: mudBankBounds(), swayReach: null };
