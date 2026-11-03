@@ -68,6 +68,7 @@ import {
   type PlantInstance,
 } from './placement';
 import { RebuildQueue } from './rebuildQueue';
+import { yieldTask } from './yieldTask';
 import {
   PlantGroup,
   maxSway,
@@ -302,7 +303,11 @@ export class TankScene {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
     const dimensions = engine.tank.dimensions;
+    await yieldTask();
+    signal?.throwIfAborted();
     const preset = fitPresetToCatalog(authored, engine.tankSize, dimensions, catalog);
+    await yieldTask();
+    signal?.throwIfAborted();
 
     const routed = routeDecor(preset.decor, (assetId) => catalog.get(assetId).kind);
     const { hardItems, layoutPlants, anemoneItems } = routed;
@@ -333,6 +338,8 @@ export class TankScene {
       return list;
     };
 
+    await yieldTask();
+    signal?.throwIfAborted();
     colliders.push(
       ...scatterPresetPatches(
         preset,
@@ -365,12 +372,16 @@ export class TankScene {
 
     const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
     for (const [i, entry] of euphylliaItems.entries()) {
+      await yieldTask();
+      signal?.throwIfAborted();
       const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
       euphylliaItems[i] = { ...entry, fullDetail };
       checkEuphylliaClearOfGlass(entry.item, fullDetail.bounds, current, extent);
       colliders.push(euphylliaCollider(fullDetail.bounds, entry.item));
     }
 
+    await yieldTask();
+    signal?.throwIfAborted();
     const scene = new TankScene(
       engine,
       library,
@@ -388,6 +399,7 @@ export class TankScene {
     );
     adopted();
     try {
+      await yieldTask();
       scene.current.configure(preset.current ?? DEFAULT_CURRENT);
       scene.releases.push(engine.onFrame((deltaS) => scene.current.advance(deltaS)));
       scene.releases.push(
@@ -985,6 +997,7 @@ export class TankScene {
           groups.push(kept);
           continue;
         }
+        await yieldTask();
         const model = await this.library.load(
           assetId,
           plantLodFor(assetId, key.plantLod),
@@ -1065,28 +1078,41 @@ export class TankScene {
     const anemones: AnemoneGroup[] = [];
     const euphyllias: EuphylliaGroup[] = [];
     let substrate: SubstrateInstall | null = null;
+    const abandoned = () => this.disposed || isStale();
+    const stepped = async () => {
+      await yieldTask();
+      return abandoned();
+    };
     try {
       if (!this.substrate || this.substrate.textureSize !== key.textureSize) {
         substrate = await this.loadSubstrate(key.textureSize);
       }
-      for (const { item, kind } of items) {
-        if (kind === PLANT_KIND) continue;
-        const entry = this.library.catalog.get(item.assetId);
-        const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
-        hardscape.add(entry, model, item);
-      }
-      built = await this.buildPlantGroups(key, items);
-      for (const item of this.anemoneItems) {
-        const entry = this.library.catalog.get(item.assetId);
-        const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
-        anemones.push(new AnemoneGroup(entry, model, item, this.current, this.polyps.node));
-      }
-      for (const { item, variant, seed, fullDetail } of this.euphylliaItems) {
-        const mesh =
-          key.euphylliaDetail === 2 && fullDetail
-            ? fullDetail
-            : generateEuphyllia(variant, seed, key.euphylliaDetail);
-        euphyllias.push(new EuphylliaGroup(mesh, item, this.current, this.polyps.node));
+      await yieldTask();
+      build: {
+        for (const { item, kind } of items) {
+          if (kind === PLANT_KIND) continue;
+          if (await stepped()) break build;
+          const entry = this.library.catalog.get(item.assetId);
+          const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
+          hardscape.add(entry, model, item);
+        }
+        if (await stepped()) break build;
+        built = await this.buildPlantGroups(key, items);
+        for (const item of this.anemoneItems) {
+          if (await stepped()) break build;
+          const entry = this.library.catalog.get(item.assetId);
+          const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
+          anemones.push(new AnemoneGroup(entry, model, item, this.current, this.polyps.node));
+        }
+        for (const { item, variant, seed, fullDetail } of this.euphylliaItems) {
+          if (await stepped()) break build;
+          const mesh =
+            key.euphylliaDetail === 2 && fullDetail
+              ? fullDetail
+              : generateEuphyllia(variant, seed, key.euphylliaDetail);
+          euphyllias.push(new EuphylliaGroup(mesh, item, this.current, this.polyps.node));
+        }
+        await yieldTask();
       }
     } catch (error) {
       hardscape.dispose();
