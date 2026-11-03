@@ -204,6 +204,126 @@ describe('held keys and pad buttons', () => {
     expect(port.move).toHaveBeenCalledTimes(1);
   });
 
+  describe('a press that ends before any frame ran', () => {
+    it('moves the view for as long as it was held, capped like a frame', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        vi.advanceTimersByTime(500);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledTimes(1);
+        expect(port.move).toHaveBeenCalledWith(0, 0, MOVE_SPEED * 0.1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does nothing when a frame already moved it', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction, controller } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        vi.advanceTimersByTime(500);
+        controller.update(0.05);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('is cancelled by a held opposite key, like a frame step', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        interaction.emit('photo:request', { type: 'hold', move: 'back', down: true });
+        vi.advanceTimersByTime(50);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('counts only the time since the opposite key was released', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        interaction.emit('photo:request', { type: 'hold', move: 'back', down: true });
+        vi.advanceTimersByTime(80);
+        interaction.emit('photo:request', { type: 'hold', move: 'back', down: false });
+        vi.advanceTimersByTime(40);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledTimes(1);
+        expect(port.move).toHaveBeenCalledWith(0, 0, MOVE_SPEED * 0.04);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('counts only the time since fast was released', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction, controller, key } = setup();
+        key('Shift');
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        vi.advanceTimersByTime(80);
+        controller.keyUp('Shift');
+        vi.advanceTimersByTime(40);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledWith(0, 0, MOVE_SPEED * 0.04);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('applies a held fast modifier', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction, key } = setup();
+        key('Shift');
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        vi.advanceTimersByTime(50);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledTimes(1);
+        expect(port.move).toHaveBeenCalledWith(0, 0, MOVE_SPEED * 0.05 * FAST_FACTOR);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('is forgotten when photo mode exits, so a later release does not jump', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        interaction.emit('photo:request', { type: 'exit' });
+        interaction.emit('photo:request', { type: 'enter' });
+        vi.advanceTimersByTime(500);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('ignores a release inside one frame of the press', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        vi.advanceTimersByTime(5);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it('turns and zooms with arrows and plus/minus', () => {
     const { port, controller, key } = setup({ fov: 40 });
     key('ArrowLeft');
@@ -338,6 +458,21 @@ describe('describeCaptureError', () => {
 });
 
 describe('dispose', () => {
+  it('forgets hold start times', () => {
+    vi.useFakeTimers();
+    try {
+      const { port, controller } = setup();
+      controller.handle({ type: 'hold', move: 'forward', down: true });
+      controller.dispose();
+      controller.handle({ type: 'enter' });
+      vi.advanceTimersByTime(500);
+      controller.handle({ type: 'hold', move: 'forward', down: false });
+      expect(port.move).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stops listening and leaves photo mode', () => {
     const { port, controller, interaction } = setup();
     controller.dispose();

@@ -289,9 +289,24 @@ test.describe('the Checkout redirect', () => {
   }
 
   async function checkoutUrl(page: Page, press: () => Promise<void>): Promise<string> {
-    const response = page.waitForResponse((r) => r.url().includes('/api/payments/checkout/'));
+    // The page navigates away as soon as the response lands, which drops the browser's copy of the
+    // body; the route handler keeps its own.
+    let settle: { resolve: (body: unknown) => void; reject: (error: Error) => void } | undefined;
+    const captured = new Promise<unknown>((resolve, reject) => {
+      settle = { resolve, reject };
+    });
+    await page.route('**/api/payments/checkout/**', async (route) => {
+      try {
+        const response = await route.fetch();
+        const body: unknown = await response.json();
+        await route.fulfill({ response });
+        settle?.resolve(body);
+      } catch (error) {
+        settle?.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
     await press();
-    const body: unknown = await (await response).json();
+    const body = await captured;
     if (
       typeof body !== 'object' ||
       body === null ||
