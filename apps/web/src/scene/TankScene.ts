@@ -73,6 +73,7 @@ import {
   PlantGroup,
   maxSway,
   PLANT_LOD,
+  plantDensityFor,
   plantLodFor,
   surfaceScaleCeiling,
   SURFACE_MARGIN,
@@ -126,6 +127,7 @@ interface SubstrateInstall {
   readonly material: MeshStandardNodeMaterial;
   readonly textures: readonly Texture[];
   readonly textureSize: 1024 | 2048;
+  readonly cheap: boolean;
 }
 
 interface EuphylliaItem {
@@ -145,6 +147,7 @@ interface VisualKey {
   readonly plantLod: ModelLod;
   readonly hardscapeLod: ModelLod;
   readonly textureSize: 1024 | 2048;
+  readonly cheapSubstrate: boolean;
 }
 
 function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
@@ -153,6 +156,7 @@ function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
     plantLod: PLANT_LOD[tier],
     hardscapeLod: HARDSCAPE_LOD[tier],
     textureSize: settings.textureSize,
+    cheapSubstrate: tier === 'low',
   };
 }
 
@@ -161,7 +165,8 @@ function sameKey(a: VisualKey, b: VisualKey): boolean {
     a.euphylliaDetail === b.euphylliaDetail &&
     a.plantLod === b.plantLod &&
     a.hardscapeLod === b.hardscapeLod &&
-    a.textureSize === b.textureSize
+    a.textureSize === b.textureSize &&
+    a.cheapSubstrate === b.cheapSubstrate
   );
 }
 
@@ -508,7 +513,7 @@ export class TankScene {
       }
       this.engine.scene.add(hardscape.group);
       for (const group of built.created) {
-        group.setDensity(this.engine.quality.settings.plantDensity);
+        group.setDensity(this.plantDensity(group.assetId));
         this.engine.scene.add(group.object);
       }
       this.syncGrowth();
@@ -850,7 +855,6 @@ export class TankScene {
   }
 
   private syncOffsets(entries: ReadonlyMap<string, readonly PlantEntry[]>): void {
-    const density = this.engine.quality.settings.plantDensity;
     for (const assetId of new Set([...entries.keys(), ...this.offsetGroups.keys()])) {
       const list = entries.get(assetId) ?? [];
       const host = this.plantGroups.find((g) => g.assetId === assetId);
@@ -866,7 +870,7 @@ export class TankScene {
         this.current,
         offsetCapacity(list.length),
       );
-      group.setDensity(density);
+      group.setDensity(this.plantDensity(assetId));
       this.offsetGroups.set(assetId, group);
       this.engine.scene.add(group.object);
     }
@@ -961,6 +965,11 @@ export class TankScene {
     return substrateHeight(this.engine.tank.dimensions, x, z);
   }
 
+  private plantDensity(assetId: string): number {
+    const { tier, settings } = this.engine.quality;
+    return plantDensityFor(tier, assetId, settings.plantDensity);
+  }
+
   /** Resolves when any quality-triggered rebuild has finished. */
   async settled(): Promise<void> {
     await this.queue.settled();
@@ -968,7 +977,9 @@ export class TankScene {
 
   private applyTier(tier: Tier, settings: Readonly<TierSettings>): void {
     if (this.disposed) return;
-    for (const group of this.plantGroups) group.setDensity(settings.plantDensity);
+    for (const group of this.plantGroups) {
+      group.setDensity(plantDensityFor(tier, group.assetId, settings.plantDensity));
+    }
     this.queue.request(keyFor(tier, settings));
   }
 
@@ -1019,7 +1030,10 @@ export class TankScene {
     return { groups, created };
   }
 
-  private async loadSubstrate(textureSize: 1024 | 2048): Promise<SubstrateInstall | null> {
+  private async loadSubstrate(
+    textureSize: 1024 | 2048,
+    cheap: boolean,
+  ): Promise<SubstrateInstall | null> {
     const spec = this.preset.substrate;
     if (!spec) return null;
     const textures: Texture[] = [];
@@ -1039,8 +1053,8 @@ export class TankScene {
         base: await loadSet(spec.assetId),
         accent: spec.accentAssetId ? await loadSet(spec.accentAssetId) : null,
       };
-      const material = createSubstrateMaterial(layers, spec, this.engine.tank.dimensions);
-      return { material, textures, textureSize };
+      const material = createSubstrateMaterial(layers, spec, this.engine.tank.dimensions, cheap);
+      return { material, textures, textureSize, cheap };
     } catch (error) {
       for (const texture of textures) this.library.releaseTexture(texture);
       throw error;
@@ -1084,8 +1098,12 @@ export class TankScene {
       return abandoned();
     };
     try {
-      if (!this.substrate || this.substrate.textureSize !== key.textureSize) {
-        substrate = await this.loadSubstrate(key.textureSize);
+      if (
+        !this.substrate ||
+        this.substrate.textureSize !== key.textureSize ||
+        this.substrate.cheap !== key.cheapSubstrate
+      ) {
+        substrate = await this.loadSubstrate(key.textureSize, key.cheapSubstrate);
       }
       await yieldTask();
       build: {
@@ -1147,7 +1165,7 @@ export class TankScene {
     for (const anemone of anemones) this.engine.scene.add(anemone.object);
     for (const coral of euphyllias) this.engine.scene.add(coral.object);
     for (const group of built.groups) {
-      group.setDensity(this.engine.quality.settings.plantDensity);
+      group.setDensity(this.plantDensity(group.assetId));
       this.engine.scene.add(group.object);
     }
     this.syncGrowth();
