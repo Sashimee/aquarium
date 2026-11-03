@@ -8,13 +8,24 @@ import { loadPreset } from './preset';
 import { TankScene } from './TankScene';
 import { fakeEngine } from './tankSceneHarness';
 
+const slices = vi.hoisted(() => ({ onYield: (): void => undefined }));
+
+vi.mock('./yieldTask', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./yieldTask')>();
+  return {
+    yieldTask: () => {
+      slices.onYield();
+      return actual.yieldTask();
+    },
+  };
+});
+
 /**
- * No single synchronous piece of the reef mount may hold the main thread longer than this. On
- * CI's software renderer every frame already costs far more than in Node, so a long task here
- * starves `requestAnimationFrame` there. Measured in Node: about 40 ms now, 410-530 ms when the
- * build ran as one task with an eagerly drawn collider overlay.
+ * Each slice of the reef mount may load at most one model between two yields. Wall-clock spans
+ * flaked on loaded CI runners, so the guarantee is asserted on the slicing instead: when the build
+ * ran as one task, every model loaded back to back with no yield in between.
  */
-const LONGEST_TASK_MS = 120;
+const MAX_LOADS_PER_SLICE = 1;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -65,32 +76,29 @@ function reefEngine() {
   };
 }
 
-async function longestBlock(run: () => Promise<unknown>): Promise<number> {
-  let longest = 0;
-  let last = performance.now();
-  let running = true;
-  const beat = () => {
-    const now = performance.now();
-    longest = Math.max(longest, now - last);
-    last = now;
-    if (running) setImmediate(beat);
-  };
-  setImmediate(beat);
-  await run();
-  running = false;
-  return longest;
-}
-
 describe('reef mount', () => {
   it('never holds the main thread for one long task', async () => {
-    await stubReefLibrary();
-    const h = reefEngine();
-    const worst = await longestBlock(async () => {
-      const scene = await TankScene.create(h.engine, loadPreset('reef'), { colliders: false });
-      await scene.dispose();
+    let loadsInSlice = 0;
+    let largestSlice = 0;
+    let yields = 0;
+    let loads = 0;
+    slices.onYield = () => {
+      yields++;
+      largestSlice = Math.max(largestSlice, loadsInSlice);
+      loadsInSlice = 0;
+    };
+    await stubReefLibrary(() => {
+      loads++;
+      loadsInSlice++;
     });
+    const h = reefEngine();
+    const scene = await TankScene.create(h.engine, loadPreset('reef'), { colliders: false });
+    await scene.dispose();
     h.stop();
-    expect(worst).toBeLessThan(LONGEST_TASK_MS);
+    slices.onYield = () => undefined;
+    expect(loads).toBeGreaterThan(5);
+    expect(yields).toBeGreaterThanOrEqual(loads);
+    expect(largestSlice).toBeLessThanOrEqual(MAX_LOADS_PER_SLICE);
   });
 
   it('frees everything when aborted part-way through the chunked build', async () => {
