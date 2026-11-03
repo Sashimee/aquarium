@@ -111,7 +111,7 @@ function isFormField(target: EventTarget | null): boolean {
   return typeof tag === 'string' && FORM_TAGS.has(tag);
 }
 
-const OPPOSITE: Partial<Record<HeldAction, HeldAction>> = {
+const OPPOSITE: Record<Exclude<HeldAction, 'fast'>, HeldAction> = {
   right: 'left',
   left: 'right',
   up: 'down',
@@ -277,21 +277,35 @@ export class PhotoController {
   }
 
   private press(action: HeldAction): void {
-    if (!this.held.has(action)) this.unserved.set(action, performance.now());
+    if (!this.held.has(action)) {
+      this.restartAffected(action);
+      this.unserved.set(action, performance.now());
+    }
     this.held.add(action);
+  }
+
+  // Time spent under a different opposite/fast state must not count toward a later release step.
+  private restartAffected(changed: HeldAction): void {
+    const now = performance.now();
+    for (const other of this.unserved.keys()) {
+      if (changed === 'fast' || (other !== 'fast' && OPPOSITE[other] === changed)) {
+        this.unserved.set(other, now);
+      }
+    }
   }
 
   /** A press that ended before any frame ran still moves the view, as far as it was held. */
   private release(action: HeldAction): void {
     const since = this.unserved.get(action);
     const context = new Set<HeldAction>([action]);
-    for (const other of [OPPOSITE[action], 'fast'] as const) {
+    for (const other of [action === 'fast' ? undefined : OPPOSITE[action], 'fast'] as const) {
       if (other !== undefined && this.held.has(other)) context.add(other);
     }
     this.held.delete(action);
     this.unserved.delete(action);
+    const heldS = since === undefined ? 0 : (performance.now() - since) / 1000;
+    this.restartAffected(action);
     if (since === undefined || !this.options.port.active) return;
-    const heldS = (performance.now() - since) / 1000;
     if (heldS >= MIN_TAP_S) this.step(context, heldS);
   }
 
