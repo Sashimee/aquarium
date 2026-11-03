@@ -91,7 +91,6 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   await inTank.getByRole('button').first().click();
   await panel.getByRole('button', { name: 'Remove' }).click();
   await expect(inTank.getByRole('button')).toHaveCount(startCount - 1);
-  // A save still in flight answers with the server's layout, which would drop the piece added next.
   await expect(panel.getByText('Changes saved.')).toBeVisible();
   await expect
     .poll(async () => (await savedTanks(page))[0]?.decorLayout.length, {
@@ -108,6 +107,7 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   });
   expect(licence.status(), await licence.text()).toBe(200);
   await panel.getByRole('button', { name: 'Add Boulder', exact: true }).click();
+  await expect(panel.locator('.decor-status'), 'the editor refused the add').toHaveText('');
   await expect(inTank.getByRole('button')).toHaveCount(startCount);
   await expect(panel.getByText('Changes saved.')).toBeVisible();
   await expect
