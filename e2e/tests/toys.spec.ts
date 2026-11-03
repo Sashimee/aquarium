@@ -33,30 +33,19 @@ async function canvasPoint(page: Page, fx: number, fy: number): Promise<{ x: num
   return { x: box.x + box.width * fx, y: box.y + box.height * fy };
 }
 
-async function tapCanvas(page: Page, fx: number, fy: number): Promise<void> {
-  const at = await canvasPoint(page, fx, fy);
-  await page.mouse.click(at.x, at.y);
-}
-
-async function ballAt(page: Page): Promise<{ x: number; z: number } | null> {
-  const raw = await page.locator('canvas#tank').getAttribute('data-ball');
-  if (raw === null) return null;
-  const [x, z] = raw.split(' ').map(Number);
-  return { x: x ?? NaN, z: z ?? NaN };
-}
-
 /**
- * The drag runs inside the page: a flick is read from the time between pointer events, and a
- * software-rendered frame can stretch a driver-side drag from milliseconds to seconds.
+ * The pointer events run inside the page: a tap is read from the time between them (350 ms at
+ * most), and a software-rendered frame can stretch a driver-side press and release past that.
  */
-async function flickAcross(
+async function pointerPath(
   page: Page,
   from: { x: number; y: number },
   to: { x: number; y: number },
+  steps: number,
 ): Promise<void> {
   await page.mouse.move(from.x, from.y);
   await page.evaluate(
-    ({ from, to }) => {
+    ({ from, to, steps }) => {
       const canvas = document.querySelector('canvas#tank');
       if (!canvas) throw new Error('the tank canvas is missing');
       const fire = (type: string, x: number, y: number): void => {
@@ -73,7 +62,6 @@ async function flickAcross(
           }),
         );
       };
-      const steps = 6;
       fire('pointerdown', from.x, from.y);
       for (let i = 1; i <= steps; i++) {
         const until = performance.now() + 4;
@@ -86,9 +74,52 @@ async function flickAcross(
       }
       fire('pointerup', to.x, to.y);
     },
-    { from, to },
+    { from, to, steps },
   );
 }
+
+async function tapCanvas(page: Page, fx: number, fy: number): Promise<void> {
+  const at = await canvasPoint(page, fx, fy);
+  await pointerPath(page, at, at, 0);
+}
+
+async function ballAt(page: Page): Promise<{ x: number; z: number } | null> {
+  const raw = await page.locator('canvas#tank').getAttribute('data-ball');
+  if (raw === null) return null;
+  const [x, z] = raw.split(' ').map(Number);
+  return { x: x ?? NaN, z: z ?? NaN };
+}
+
+const flickAcross = (
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<void> => pointerPath(page, from, to, 6);
+
+/**
+ * Polling the ball samples a few frames of a fast flick, and a slow frame can skip the whole
+ * overshoot; this records the lowest x of every frame the canvas reports.
+ */
+async function trackBallMinX(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const canvas = document.querySelector('canvas#tank');
+    if (!canvas) throw new Error('the tank canvas is missing');
+    const w = window as unknown as { __ballMinX?: number };
+    w.__ballMinX = Infinity;
+    const read = (): void => {
+      const x = Number(canvas.getAttribute('data-ball')?.split(' ')[0]);
+      if (Number.isFinite(x)) w.__ballMinX = Math.min(w.__ballMinX ?? Infinity, x);
+    };
+    read();
+    new MutationObserver(read).observe(canvas, {
+      attributes: true,
+      attributeFilter: ['data-ball'],
+    });
+  });
+}
+
+const ballMinX = (page: Page): Promise<number> =>
+  page.evaluate(() => (window as unknown as { __ballMinX?: number }).__ballMinX ?? Infinity);
 
 /** A tap on the canvas closes the open sheet, so the panel is reopened to read the toys. */
 const openPlay = (page: Page) => openDock(page, 'Play', 'Play with the fish');
@@ -136,6 +167,7 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
   await tapCanvas(page, ...RIGHT_TANK);
   await expect.poll(() => ballAt(page), { message: 'the ball is in the water' }).not.toBeNull();
   const before = await ballAt(page);
+  await trackBallMinX(page);
   await flickAcross(
     page,
     await canvasPoint(page, ...RIGHT_TANK),
@@ -143,16 +175,12 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
   );
   // The default current pushes the ball towards +x, so only a drag and a flick take it to -x,
   // and only a flick takes it past the point where the finger let go.
-  let furthest = Infinity;
   await expect
-    .poll(
-      async () => {
-        furthest = Math.min(furthest, (await ballAt(page))?.x ?? Infinity);
-        return (dropPoint?.x ?? NaN) - furthest;
-      },
-      { message: 'the flick carries the ball past the release point' },
-    )
+    .poll(async () => (dropPoint?.x ?? NaN) - (await ballMinX(page)), {
+      message: 'the flick carries the ball past the release point',
+    })
     .toBeGreaterThan(0.02);
+  const furthest = await ballMinX(page);
   expect((before?.x ?? NaN) - furthest, 'the ball followed the finger').toBeGreaterThan(0.2);
 
   await openPlay(page);
@@ -177,13 +205,16 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
 
   await dismissToasts(page);
   await play.getByRole('button', { name: 'Start round' }).click();
-  const shyest = (await savedTanks(page))[0]?.fish
-    .filter((f) => f.name === 'Glint' || f.name === 'Bolt')
-    .reduce<{ name: string; personality: { boldness: number } } | undefined>(
-      (a, b) => (a && a.personality.boldness <= b.personality.boldness ? a : b),
-      undefined,
-    );
-  if (!shyest) throw new Error('Glint and Bolt are not in the saved tank');
+  const pair = (tank: Awaited<ReturnType<typeof savedTanks>>[number] | undefined) =>
+    (tank?.fish ?? []).filter((f) => f.name === 'Glint' || f.name === 'Bolt');
+  await expect
+    .poll(async () => pair((await savedTanks(page))[0]).length, {
+      message: 'both new fish are saved before the shyest is picked',
+    })
+    .toBe(2);
+  const shyest = pair((await savedTanks(page))[0]).reduce((a, b) =>
+    a.personality.boldness <= b.personality.boldness ? a : b,
+  );
   const round = play.getByRole('status').filter({ hasText: new RegExp(`^Feed ${shyest.name}\\.`) });
   await expect(round).toBeVisible();
   await expect(play.getByRole('button', { name: 'Stop round' })).toBeVisible();
