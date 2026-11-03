@@ -1,6 +1,7 @@
 import { Texture, type MeshStandardNodeMaterial } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import { TIERS, TIER_SETTINGS } from '../engine/quality/tiers';
+import { keyFor, sameKey, substrateReload } from './TankScene';
 import { plantDensityFor } from './plants';
 import { createSubstrateMaterial, type SubstrateTextures } from './substrate';
 
@@ -14,6 +15,16 @@ function textures(): SubstrateTextures {
     normal: new Texture(),
     arm: new Texture(),
   };
+}
+
+function samplesTexture(material: MeshStandardNodeMaterial, map: Texture): boolean {
+  let found = false;
+  const visit = (node: object) => {
+    if ((node as { value?: unknown }).value === map) found = true;
+  };
+  material.normalNode?.traverse(visit);
+  material.colorNode?.traverse(visit);
+  return found;
 }
 
 function nodeCount(material: MeshStandardNodeMaterial): number {
@@ -52,9 +63,40 @@ describe('createSubstrateMaterial cheap path', () => {
     expect(nodeCount(cheap)).toBeLessThan(nodeCount(full));
   });
 
-  it('defaults to the full material', () => {
-    const a = createSubstrateMaterial(layers, options, tank);
-    const b = createSubstrateMaterial(layers, options, tank, false);
-    expect(nodeCount(a)).toBe(nodeCount(b));
+  it('defaults to the full material, which samples the accent normal map the cheap one skips', () => {
+    const accentNormal = layers.accent.normal;
+    const implicit = createSubstrateMaterial(layers, options, tank);
+    const full = createSubstrateMaterial(layers, options, tank, false);
+    const cheap = createSubstrateMaterial(layers, options, tank, true);
+    expect(samplesTexture(implicit, accentNormal)).toBe(true);
+    expect(samplesTexture(full, accentNormal)).toBe(true);
+    expect(samplesTexture(cheap, accentNormal)).toBe(false);
+  });
+});
+
+describe('substrate rebuild key', () => {
+  const settings = TIER_SETTINGS.low;
+
+  it('differs between low and medium through cheapSubstrate alone', () => {
+    const low = keyFor('low', settings);
+    expect(sameKey(low, { ...low, cheapSubstrate: false })).toBe(false);
+  });
+
+  it('reloads when the cheap flag flips on a tank with an accent layer', () => {
+    const low = keyFor('low', settings);
+    const current = { textureSize: low.textureSize, cheap: false };
+    expect(substrateReload(current, low, true)).toEqual({ reload: true, cheap: true });
+  });
+
+  it('keeps the substrate on a low-tier switch when there is no accent layer', () => {
+    const low = keyFor('low', settings);
+    const current = { textureSize: low.textureSize, cheap: false };
+    expect(substrateReload(current, low, false)).toEqual({ reload: false, cheap: false });
+  });
+
+  it('still reloads for a texture size change or a missing install without an accent', () => {
+    const low = keyFor('low', settings);
+    expect(substrateReload({ textureSize: 99, cheap: false }, low, false).reload).toBe(true);
+    expect(substrateReload(null, low, false).reload).toBe(true);
   });
 });
