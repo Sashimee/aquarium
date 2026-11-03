@@ -1,3 +1,4 @@
+import { onOwnHandleChanged } from './handleChange';
 import {
   COMMUNITY_HEARTBEAT_MS,
   communityEventSchema,
@@ -280,6 +281,8 @@ export class CommunityController {
   private uploader: AteUploader | null = null;
   private started = false;
   private handle: string | null | undefined = undefined;
+  private offHandle: (() => void) | null = null;
+  private handleAnnounced = false;
 
   constructor(private readonly deps: CommunityControllerDeps) {
     this.now = deps.now ?? Date.now;
@@ -297,6 +300,10 @@ export class CommunityController {
     if (this.started) return;
     this.started = true;
     void this.refreshQuota();
+    this.offHandle = onOwnHandleChanged((handle) => {
+      this.handle = handle;
+      this.handleAnnounced = true;
+    });
     void this.loadHandle();
     void this.runStream();
   }
@@ -308,6 +315,8 @@ export class CommunityController {
     const uploader = this.uploader;
     this.uploader = null;
     if (uploader) void uploader.flushNow().finally(() => uploader.dispose());
+    this.offHandle?.();
+    this.offHandle = null;
     this.listeners.clear();
   }
 
@@ -373,7 +382,9 @@ export class CommunityController {
   private async loadHandle(): Promise<void> {
     try {
       const handle = await this.deps.api.myHandle?.();
-      if (handle !== undefined && !this.lifetime.signal.aborted) this.handle = handle;
+      if (handle !== undefined && !this.handleAnnounced && !this.lifetime.signal.aborted) {
+        this.handle = handle;
+      }
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 401) return;
       console.warn(

@@ -10,6 +10,7 @@ import {
   TOTAL_TIMEOUT_FACTOR,
   createApiClient,
 } from './api';
+import { onOwnHandleChanged } from '../sync/handleChange';
 import { TANK_A, tankFixture } from '../sync/fixtures';
 
 function json(body: unknown, status = 200): Response {
@@ -1083,6 +1084,20 @@ describe('the player handle', () => {
     const calls = fetcher.mock.calls as [string, RequestInit | undefined][];
     expect(calls[1]?.[0]).toBe('/api/me/handle');
     expect(calls[1]?.[1]).toMatchObject({ method: 'PUT', body: '{"handle":"mossy"}' });
+  });
+
+  it('announces the saved handle to listeners, and only on success', async () => {
+    const heard: (string | null)[] = [];
+    const off = onOwnHandleChanged((h) => heard.push(h));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json({ handle: 'mossy' }))
+      .mockResolvedValueOnce(json({ error: { code: 'conflict', message: 'taken' } }, 409));
+    const api = createApiClient(fetcher);
+    await api.setMyHandle('mossy');
+    await expect(api.setMyHandle('reef_fan')).rejects.toBeInstanceOf(ApiRequestError);
+    off();
+    expect(heard).toEqual(['mossy']);
   });
 
   it('rejects a malformed handle locally', async () => {

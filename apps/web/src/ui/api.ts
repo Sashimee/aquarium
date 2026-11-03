@@ -1,3 +1,4 @@
+import { announceOwnHandle } from '../sync/handleChange';
 import {
   achievementListSchema,
   addFishRequestSchema,
@@ -977,7 +978,12 @@ export function createApiClient(
     },
     async setMyHandle(handle) {
       const body = validate(setHandleRequestSchema, { handle });
-      return (await parsed(await put('/api/me/handle', body), handleResponseSchema)).handle;
+      const { handle: saved } = await parsed(
+        await put('/api/me/handle', body),
+        handleResponseSchema,
+      );
+      announceOwnHandle(saved);
+      return saved;
     },
     async communityFeed(request) {
       const body = validate(communityFeedRequestSchema, request);
