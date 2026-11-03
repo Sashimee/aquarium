@@ -111,6 +111,21 @@ function isFormField(target: EventTarget | null): boolean {
   return typeof tag === 'string' && FORM_TAGS.has(tag);
 }
 
+const OPPOSITE: Partial<Record<HeldAction, HeldAction>> = {
+  right: 'left',
+  left: 'right',
+  up: 'down',
+  down: 'up',
+  forward: 'back',
+  back: 'forward',
+  'turn-left': 'turn-right',
+  'turn-right': 'turn-left',
+  'turn-up': 'turn-down',
+  'turn-down': 'turn-up',
+  'zoom-in': 'zoom-out',
+  'zoom-out': 'zoom-in',
+};
+
 export class PhotoController {
   private readonly held = new Set<HeldAction>();
   private readonly unserved = new Map<HeldAction, number>();
@@ -130,7 +145,7 @@ export class PhotoController {
 
   dispose(): void {
     this.stops.forEach((stop) => stop());
-    this.held.clear();
+    this.releaseAll();
     if (this.options.port.active) this.options.port.exit();
   }
 
@@ -141,7 +156,7 @@ export class PhotoController {
         port.enter({ uiLayer: this.options.uiLayer() });
         return;
       case 'exit':
-        this.held.clear();
+        this.releaseAll();
         port.exit();
         return;
       case 'filter':
@@ -269,11 +284,15 @@ export class PhotoController {
   /** A press that ended before any frame ran still moves the view, as far as it was held. */
   private release(action: HeldAction): void {
     const since = this.unserved.get(action);
+    const context = new Set<HeldAction>([action]);
+    for (const other of [OPPOSITE[action], 'fast'] as const) {
+      if (other !== undefined && this.held.has(other)) context.add(other);
+    }
     this.held.delete(action);
     this.unserved.delete(action);
     if (since === undefined || !this.options.port.active) return;
     const heldS = (performance.now() - since) / 1000;
-    if (heldS >= MIN_TAP_S) this.step(new Set([action]), heldS);
+    if (heldS >= MIN_TAP_S) this.step(context, heldS);
   }
 
   private async capture(): Promise<void> {

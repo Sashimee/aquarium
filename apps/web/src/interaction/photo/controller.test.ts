@@ -233,6 +233,50 @@ describe('held keys and pad buttons', () => {
       }
     });
 
+    it('is cancelled by a held opposite key, like a frame step', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        interaction.emit('photo:request', { type: 'hold', move: 'back', down: true });
+        vi.advanceTimersByTime(50);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('applies a held fast modifier', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction, key } = setup();
+        key('Shift');
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        vi.advanceTimersByTime(50);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).toHaveBeenCalledTimes(1);
+        expect(port.move).toHaveBeenCalledWith(0, 0, MOVE_SPEED * 0.05 * FAST_FACTOR);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('is forgotten when photo mode exits, so a later release does not jump', () => {
+      vi.useFakeTimers();
+      try {
+        const { port, interaction } = setup();
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: true });
+        interaction.emit('photo:request', { type: 'exit' });
+        interaction.emit('photo:request', { type: 'enter' });
+        vi.advanceTimersByTime(500);
+        interaction.emit('photo:request', { type: 'hold', move: 'forward', down: false });
+        expect(port.move).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('ignores a release inside one frame of the press', () => {
       vi.useFakeTimers();
       try {
@@ -381,6 +425,21 @@ describe('describeCaptureError', () => {
 });
 
 describe('dispose', () => {
+  it('forgets hold start times', () => {
+    vi.useFakeTimers();
+    try {
+      const { port, controller } = setup();
+      controller.handle({ type: 'hold', move: 'forward', down: true });
+      controller.dispose();
+      controller.handle({ type: 'enter' });
+      vi.advanceTimersByTime(500);
+      controller.handle({ type: 'hold', move: 'forward', down: false });
+      expect(port.move).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stops listening and leaves photo mode', () => {
     const { port, controller, interaction } = setup();
     controller.dispose();
