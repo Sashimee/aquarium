@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  APP_URL,
   awaitLoaded,
   createFirstTank,
   dockButton,
@@ -26,6 +27,16 @@ test('a background is picked in decorate mode, previewed, saved and kept after a
   await openTank(page);
   await createFirstTank(page);
   expect(await savedBackground(page)).toBe('bg-fw-planted-stream');
+
+  // Only a tank type's default background is free; saving any other one needs its licence.
+  const tankId = (await savedTanks(page))[0]?.id;
+  for (const id of ['bg-fw-root-tangle', 'bg-fw-misty-lake']) {
+    const licence = await page.request.post('/api/shop/purchase', {
+      headers: { origin: APP_URL },
+      data: { idempotencyKey: crypto.randomUUID(), itemRef: `background:${id}`, tankId },
+    });
+    expect(licence.status(), await licence.text()).toBe(200);
+  }
 
   const panel = await startDecorating(page);
   const chooser = panel.getByRole('group', { name: 'Background' });

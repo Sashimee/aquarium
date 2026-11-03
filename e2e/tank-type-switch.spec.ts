@@ -60,6 +60,13 @@ async function open(page: Page, url: string): Promise<void> {
 const typeButton = (page: Page, name: 'Freshwater' | 'Reef') =>
   page.getByRole('group', { name: 'Tank type' }).getByRole('button', { name, exact: true });
 
+// A click on a disabled button waits for the whole test timeout; this fails after the expect timeout.
+async function pressType(page: Page, name: 'Freshwater' | 'Reef'): Promise<void> {
+  const button = typeButton(page, name);
+  await expect(button, `the ${name} switch is enabled`).toBeEnabled();
+  await button.click();
+}
+
 const sceneBiome = (page: Page) => page.locator('#app');
 
 const biomeParam = (page: Page) => new URL(page.url()).searchParams.get('biome');
@@ -136,18 +143,20 @@ test.describe('tank type switch', () => {
     await registerVerifiedUser(page, 'switch');
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-    await typeButton(page, 'Reef').click();
+    await pressType(page, 'Reef');
     await expect(page.getByLabel('Kind of tank')).toHaveValue('reef');
     await page.getByRole('button', { name: 'Create tank' }).click();
     await expect(typeButton(page, 'Reef')).toHaveAttribute('aria-pressed', 'true');
 
-    await typeButton(page, 'Freshwater').click();
+    await pressType(page, 'Freshwater');
     await expect(page.getByLabel('Kind of tank')).toHaveValue('freshwater');
     await page.getByRole('button', { name: 'Create tank' }).click();
-    await page.getByRole('button', { name: 'Yes, buy it' }).click();
+    const confirm = page.getByRole('button', { name: 'Yes, buy it' });
+    await expect(confirm, 'the second tank asks for confirmation').toBeVisible();
+    await confirm.click();
     await expect(typeButton(page, 'Freshwater')).toHaveAttribute('aria-pressed', 'true');
 
-    await typeButton(page, 'Reef').click();
+    await pressType(page, 'Reef');
     await expect(typeButton(page, 'Reef')).toHaveAttribute('aria-pressed', 'true');
     await context.close();
   });
