@@ -560,6 +560,9 @@ describe('checkAssets', () => {
       'merged meshes',
     ]);
     expect(derived.get('src-b')).toEqual(['texture from src-b']);
+    expect(modificationProblems(inputFor([fish]).index, manifest).join('\n')).not.toContain(
+      'used only as a borrowed source',
+    );
   });
 
   it('flags a borrowed CC-BY source that no note names, and handles no assets', () => {
@@ -592,6 +595,10 @@ describe('checkAssets', () => {
     const derived = derivedModifications(inputFor([primary, borrower]).index, manifest);
     expect(derived.get('src-b')).toEqual(['one: own note', 'two: blended src-b colour']);
     expect(derived.get('src-a')).toEqual(['unrelated', 'blended src-b colour']);
+    const unnamed = { ...borrower, modifications: ['unrelated'] };
+    expect(
+      modificationProblems(inputFor([primary, unnamed]).index, manifest).join('\n'),
+    ).not.toContain('used only as a borrowed source');
   });
 
   it('derives modifications for a reference photo that feeds a built asset, and none for an unused one', () => {
