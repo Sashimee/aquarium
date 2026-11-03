@@ -29,7 +29,7 @@ async function createTank(
   await page.getByLabel('Tank name').fill(name);
   await page.getByRole('button', { name: 'Create tank' }).click();
   if (paid) await page.getByRole('button', { name: 'Yes, buy it' }).click();
-  await expect(page.locator('.life-status')).toContainText(`${name} is ready.`);
+  await expect(page.locator('.life-status:not(.birth-status)')).toContainText(`${name} is ready.`);
 }
 
 async function buyShrimp(
@@ -46,7 +46,9 @@ async function buyShrimp(
     .getByRole('button', { name: 'Add', exact: true })
     .click();
   if (options.confirm) await page.getByRole('button', { name: 'Yes, buy it' }).click();
-  await expect(page.locator('.life-status')).toContainText(`${fishName} is in a bag`);
+  await expect(page.locator('.life-status:not(.birth-status)')).toContainText(
+    `${fishName} is in a bag`,
+  );
   const release = page.getByRole('button', { name: `Release ${fishName} now` });
   // The bag releases itself after the acclimation, which removes the button; a click delayed past
   // that point on a loaded runner has nothing left to hit, and the fish is already free.

@@ -288,6 +288,20 @@ test.describe('the Checkout redirect', () => {
     return () => left;
   }
 
+  async function checkoutUrl(page: Page, press: () => Promise<void>): Promise<string> {
+    const response = page.waitForResponse((r) => r.url().includes('/api/payments/checkout/'));
+    await press();
+    const body: unknown = await (await response).json();
+    if (
+      typeof body !== 'object' ||
+      body === null ||
+      !('url' in body) ||
+      typeof body.url !== 'string'
+    )
+      throw new Error('the checkout response has no url');
+    return body.url;
+  }
+
   async function readyShop(page: Page, label: string) {
     await registerVerifiedUser(page, label);
     await createTank(page, { name: 'Pond' });
@@ -309,11 +323,13 @@ test.describe('the Checkout redirect', () => {
     const shop = await readyShop(page, 'redirect');
     const pack = webPack('pearls-550');
 
-    await shop
-      .getByRole('list', { name: 'Pearl packs' })
-      .getByRole('button', { name: new RegExp(`^Buy ${pack.pearls} Pearls`) })
-      .click();
-    await expect.poll(target, { timeout: 90_000 }).toMatch(/^https:\/\//);
+    const url = await checkoutUrl(page, () =>
+      shop
+        .getByRole('list', { name: 'Pearl packs' })
+        .getByRole('button', { name: new RegExp(`^Buy ${pack.pearls} Pearls`) })
+        .click(),
+    );
+    await expect.poll(target, { timeout: 90_000 }).toBe(url);
     await expect(page).toHaveTitle('Checkout stand-in');
   });
 
@@ -322,12 +338,14 @@ test.describe('the Checkout redirect', () => {
     const target = await leavesForStripe(page);
     const shop = await readyShop(page, 'redirectsub');
 
-    await shop
-      .getByRole('button', {
-        name: `Join the Aquarist Club for €${(economy.subscription.priceCents / 100).toFixed(2)} a month`,
-      })
-      .click();
-    await expect.poll(target, { timeout: 90_000 }).toMatch(/^https:\/\//);
+    const url = await checkoutUrl(page, () =>
+      shop
+        .getByRole('button', {
+          name: `Join the Aquarist Club for €${(economy.subscription.priceCents / 100).toFixed(2)} a month`,
+        })
+        .click(),
+    );
+    await expect.poll(target, { timeout: 90_000 }).toBe(url);
     await expect(page).toHaveTitle('Checkout stand-in');
   });
 

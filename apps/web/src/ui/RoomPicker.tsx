@@ -19,15 +19,13 @@ interface Choice {
 const NO_ROOM_SWATCH = 'linear-gradient(135deg, #1b2733, #0d141b)';
 
 const CHOICES: readonly Choice[] = [
-  ...ROOM_ENTRIES.map((entry) => {
-    return {
-      id: entry.id,
-      title: entry.name,
-      hasWindow: entry.hasWindow,
-      price: BUNDLED_ECONOMY.rooms[entry.id],
-      swatch: `linear-gradient(135deg, ${entry.swatch.key}, ${entry.swatch.ambient})`,
-    };
-  }),
+  ...ROOM_ENTRIES.map((entry) => ({
+    id: entry.id,
+    title: entry.name,
+    hasWindow: entry.hasWindow,
+    price: BUNDLED_ECONOMY.rooms[entry.id],
+    swatch: `linear-gradient(135deg, ${entry.swatch.key}, ${entry.swatch.ambient})`,
+  })),
   { id: null, title: NO_ROOM_TITLE, hasWindow: false, price: 0, swatch: NO_ROOM_SWATCH },
 ];
 

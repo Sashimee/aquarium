@@ -22,7 +22,7 @@ import {
   yellowTang,
 } from './fixtures.ts';
 import { SIGHT_SAMPLES_PER_CELL, SIGHT_TRIES } from './routes.ts';
-import { FishState } from './snapshot.ts';
+import { FishState, SNAPSHOT_STRIDE, SnapshotField } from './snapshot.ts';
 import { TankSdf, type Sdf } from './sdf.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
 import { STEP_DT, World, type FishSpawn } from './world.ts';
@@ -175,6 +175,39 @@ describe('burst-and-coast', { timeout: LONG }, () => {
       expect(capped / lengths.length).toBeLessThan(0.05);
     },
   );
+  it('flags the unpowered coast steps as a glide in the world and the snapshot', () => {
+    const w = showTank(spawnMany(neonTetra.id, 12), 5, false);
+    const snap = new Float32Array(w.count * SNAPSHOT_STRIDE);
+    let glides = 0;
+    for (let t = 0; t < 900; t++) {
+      w.step();
+      w.writeSnapshot(snap);
+      for (let i = 0; i < w.count; i++) {
+        const gliding = at(w.gliding, i);
+        if (gliding === 1) {
+          glides++;
+          expect(at(w.thrust, i)).toBe(0);
+        }
+        expect(at(snap, i * SNAPSHOT_STRIDE + SnapshotField.Glide)).toBe(gliding);
+      }
+    }
+    expect(glides / (900 * w.count)).toBeGreaterThan(0.2);
+  });
+  it.each([
+    ['bronze corydoras', bronzeCorydoras],
+    ['betta', betta],
+  ])('a %s braking at zero thrust is not gliding (#1572)', (_, species) => {
+    const w = showTank(spawnMany(species.id, 4), 7);
+    let braking = 0;
+    for (let t = 0; t < 3000; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        if (at(w.thrust, i) === 0 && at(w.speed, i) > 0) braking++;
+        expect(at(w.gliding, i)).toBe(0);
+      }
+    }
+    expect(braking).toBeGreaterThan(0);
+  });
 });
 
 describe('labriform hovering', { timeout: LONG }, () => {

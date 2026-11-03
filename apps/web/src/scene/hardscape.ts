@@ -349,7 +349,7 @@ export class Hardscape {
 
   dispose(): void {
     this.group.removeFromParent();
-    for (const child of this.group.children) (child as Partial<InstancedMesh>).dispose?.();
+    for (const child of this.group.children) if (child instanceof InstancedMesh) child.dispose();
     this.group.clear();
     for (const material of this.tintedMaterials) material.dispose();
   }

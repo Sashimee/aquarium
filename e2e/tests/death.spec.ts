@@ -40,7 +40,7 @@ test('a fish that starves while you are away is reported, netted and remembered'
 
   const confirm = page.getByRole('dialog', { name: 'Net Biscuit?' });
   await confirm.getByRole('button', { name: 'Net Biscuit' }).click();
-  await expect(page.locator('.life-status')).toContainText('Biscuit was netted');
+  await expect(page.locator('.life-status:not(.birth-status)')).toContainText('Biscuit was netted');
   await expect(page.getByRole('region', { name: 'Memorial' })).toContainText('Biscuit');
   await expect(page.getByRole('region', { name: 'Fish that have died' })).toBeHidden();
 

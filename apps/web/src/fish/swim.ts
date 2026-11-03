@@ -87,7 +87,7 @@ export const MAX_BEND = 3;
 const BEND_SMOOTHING_S = 0.08;
 /**
  * The sim reports thrust as a fraction of the drag at top speed, so holding speed v takes
- * (v/vmax)² of it: under 1e-3 for a guppy below 0.47 BL/s. A frame counts as powered while the
+ * (v/vmax)² of it: under 1e-3 for a guppy below 0.53 BL/s. A frame counts as powered while the
  * thrust covers at least this share of the drag at the current speed, so only a real glide, with
  * the thrust near zero, goes tail-still. Coasting tetras hold the body "passive and straight"
  * (Li et al. 2021, Commun Biol 4:68), so the beat dies out within one tail period: e^-3, 5% left,
