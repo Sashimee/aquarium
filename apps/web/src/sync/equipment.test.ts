@@ -70,7 +70,7 @@ describe('deviceOffers', () => {
       'available',
     ]);
     expect(filter?.tiers.map((t) => t.skipped)).toEqual([0, 0, 0]);
-    const bare = withTiers({ heater: 0 });
+    const bare = { ...withTiers({ heater: 0 }), heaterOwnedTier: 0 };
     const heater = deviceOffers(bare, economy, cp).find((o) => o.device === 'heater');
     expect(heater?.tiers.map((t) => t.skipped)).toEqual([0, 1, 2]);
   });

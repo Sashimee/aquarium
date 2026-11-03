@@ -41,6 +41,8 @@ function apiMocks() {
     purchase: vi.fn(),
     saveLight: vi.fn(),
     setCo2: vi.fn(),
+    removeHeater: vi.fn(),
+    reinstallHeater: vi.fn(),
     netFish: vi.fn(),
     care: vi.fn(),
     treat: vi.fn(),
@@ -1663,6 +1665,30 @@ describe('Pearls and the T70 request contract', () => {
     );
     expect(await session.setCo2(3)).toBe(false);
     expect(session.getState().error).toContain('this tank has not bought CO2 tier 3');
+  });
+
+  it('removes the heater, applies the returned tank and says the water will cool', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    const base = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+    api.removeHeater.mockResolvedValue({
+      ...base,
+      equipment: { ...base.equipment, heater: { tier: 0 } },
+    });
+    expect(await session.removeHeater()).toBe(true);
+    expect(api.removeHeater).toHaveBeenCalledWith(TANK_A);
+    expect(session.activeTank?.equipment.heater.tier).toBe(0);
+    expect(session.getState().notice).toContain('room temperature');
+  });
+
+  it('shows the server message when the heater reinstall is refused', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.reinstallHeater.mockRejectedValue(
+      new ApiRequestError(409, 'conflict', 'This tank has no heater to reinstall.'),
+    );
+    expect(await session.reinstallHeater()).toBe(false);
+    expect(session.getState().error).toContain('no heater to reinstall');
   });
 
   it('saves the lamp schedule in UTC hours and shows the saved tank', async () => {

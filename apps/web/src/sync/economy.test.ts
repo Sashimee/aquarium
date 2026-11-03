@@ -114,6 +114,7 @@ describe('heater warning', () => {
   const heated = tankFixture();
   const cold = tankFixture({
     equipment: { ...heated.equipment, heater: { tier: 0 } },
+    heaterOwnedTier: 0,
   });
 
   it('warns before a warm-water species goes into a tank with no heater', () => {
@@ -121,6 +122,18 @@ describe('heater warning', () => {
     expect(warning).toContain('no heater');
     expect(warning).toContain('21');
     expect(warning).toContain('Betta');
+    expect(warning).toContain('buy a heater first');
+    expect(warning).not.toContain('reinstall');
+  });
+
+  it('points to the free reinstall when the player already owns a removed heater', () => {
+    const removed = tankFixture({
+      equipment: { ...heated.equipment, heater: { tier: 0 } },
+      heaterOwnedTier: 2,
+    });
+    const warning = heaterWarning(removed, warm, 21);
+    expect(warning).toContain('reinstall your heater in Care for free');
+    expect(warning).not.toContain('buy a heater');
   });
 
   it('stays quiet with a working heater, at any tier', () => {

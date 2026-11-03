@@ -84,12 +84,19 @@ export function devicesForBiome(biome: Biome): Device[] {
 
 export type TierState = 'installed' | 'better-installed' | 'owned' | 'available';
 
-type EquipmentTank = Pick<Tank, 'biome' | 'equipment' | 'co2OwnedTier'>;
+type EquipmentTank = Pick<Tank, 'biome' | 'equipment' | 'co2OwnedTier' | 'heaterOwnedTier'>;
 
-/** The server refuses a purchase at or below this: the best tier installed or, for CO2, ever bought. */
+/** The server refuses a purchase at or below this: the best tier installed or, for the heater and CO2, ever bought. */
 function ownedBaseline(tank: EquipmentTank, device: Device): number {
   const running = tank.equipment[device].tier;
-  return device === 'co2' ? Math.max(running, tank.co2OwnedTier) : running;
+  if (device === 'co2') return Math.max(running, tank.co2OwnedTier);
+  if (device === 'heater') return Math.max(running, tank.heaterOwnedTier);
+  return running;
+}
+
+/** Tiers bought earlier that the player can put back for free instead of buying again. */
+function reclaimable(tank: EquipmentTank, device: Device): boolean {
+  return device === 'co2' || (device === 'heater' && tank.equipment.heater.tier === 0);
 }
 
 export interface TierOffer {
@@ -123,7 +130,7 @@ export function deviceOffers(
           ? 'installed'
           : tier > baseline
             ? 'available'
-            : device === 'co2'
+            : reclaimable(tank, device)
               ? 'owned'
               : 'better-installed';
       return {
@@ -155,10 +162,10 @@ export function chooseEquipment(
   const price = economy.items.equipment[device][tier - 1];
   if (price === undefined) return { ok: false, reason: `There is no tier ${tier} ${label}.` };
   const current = ownedBaseline(tank, device);
-  if (device === 'co2' && tier <= current) {
+  if (reclaimable(tank, device) && tier <= current) {
     return {
       ok: false,
-      reason: `This tank already owns a tier ${current} ${label}; pick tier ${tier} in Care for free.`,
+      reason: `This tank already owns a tier ${current} ${label}; get it back in Care for free.`,
     };
   }
   if (tier === current)

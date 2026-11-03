@@ -916,6 +916,17 @@ describe('api client Pearls contract', () => {
     expect(JSON.parse(init.body as string)).toEqual({ co2: { tier: 0 } });
   });
 
+  it('posts heater remove and reinstall to the tank', async () => {
+    const fetcher = vi.fn().mockImplementation(async () => json(tankFixture()));
+    const client = createApiClient(fetcher);
+    await client.removeHeater(TANK_A);
+    await client.reinstallHeater(TANK_A);
+    expect(fetcher.mock.calls.map((c) => [c[0], (c[1] as RequestInit).method])).toEqual([
+      [`/api/tanks/${TANK_A}/heater/remove`, 'POST'],
+      [`/api/tanks/${TANK_A}/heater/reinstall`, 'POST'],
+    ]);
+  });
+
   it('refuses a lamp schedule whose on and off hours are equal', async () => {
     const fetcher = vi.fn();
     const error = await createApiClient(fetcher)
