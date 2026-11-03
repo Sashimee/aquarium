@@ -25,8 +25,8 @@ export interface Pose {
   /** Drives the tail beat as if the fish swam at this speed (m/s). */
   speed: number;
   yawRate: number;
-  /** The sim's caudal thrust, 0 coasting .. 1; the fixed animations here leave it at 1. */
-  thrust: number;
+  /** The sim's glide weight, 0 powered .. 1 coasting; the fixed animations here leave it at 0. */
+  glide: number;
   /** Scales the body wave and fin motion: 1 alive, 0 limp. */
   liveliness: number;
 }
@@ -55,7 +55,7 @@ export function createPose(): Pose {
     roll: 0,
     speed: 0,
     yawRate: 0,
-    thrust: 1,
+    glide: 0,
     liveliness: 1,
   };
 }

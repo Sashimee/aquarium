@@ -545,7 +545,7 @@ export class FishSystem {
     velvet: 0,
   };
   private readonly pose = createPose();
-  private readonly swimSample: SwimSample = { speed: 0, yawRate: 0, thrust: 1, state: -1 };
+  private readonly swimSample: SwimSample = { speed: 0, yawRate: 0, glide: 0, state: -1 };
   private readonly walkSample: WalkSample = {
     speed: 0,
     state: -1,
@@ -1321,7 +1321,6 @@ export class FishSystem {
             input.locomotion.strouhal,
             swimModeFor(SWIM_MODES[swimmingMode], profile),
             phaseOffset,
-            (input.locomotion.maxSpeedMps * length) / input.locomotion.bodyLengthM,
           )
         : new WalkState(length, phaseOffset, walkerGait(batch.locomotion)),
       seed,
@@ -1674,7 +1673,7 @@ export class FishSystem {
   private place(rt: FishRuntime, deltaS: number, frame: Float32Array | null): boolean {
     const pose = this.pose;
     const { fish } = rt;
-    pose.thrust = 1;
+    pose.glide = 0;
     const walk = this.walkSample;
     const swim = this.swimSample;
     walk.state = -1;
@@ -1720,7 +1719,7 @@ export class FishSystem {
         pose.speed = frame[o + SnapshotField.Speed] ?? 0;
         pose.yawRate = frame[o + SnapshotField.YawRate] ?? 0;
         pose.liveliness = 1;
-        pose.thrust = frame[o + SnapshotField.Thrust] ?? 1;
+        pose.glide = frame[o + SnapshotField.Glide] ?? 0;
         walk.state = frame[o + SnapshotField.State] ?? -1;
         swim.state = walk.state;
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
@@ -1847,7 +1846,7 @@ export class FishSystem {
         const swim = this.swimSample;
         swim.speed = this.pose.speed;
         swim.yawRate = this.pose.yawRate;
-        swim.thrust = this.pose.thrust;
+        swim.glide = this.pose.glide;
         motion.advance(deltaS * liveliness, swim);
       }
       rt.lastPosition.copy(this.position);
