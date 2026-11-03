@@ -109,16 +109,14 @@ function gappedIn(x0: number, z0: number, half: number, thick: number, gap: numb
   if (n === undefined || s === undefined || e === undefined || w === undefined) {
     throw new Error('walledIn gave fewer than four walls');
   }
+  if (s.kind !== 'box') throw new Error(`gappedIn needs a box -z wall, got ${s.kind}`);
   const side = (half + thick - gap / 2) / 2;
-  const part = (id: string, dx: number): Collider =>
-    s.kind === 'box'
-      ? {
-          ...s,
-          id,
-          center: [x0 + dx, s.center[1], s.center[2]],
-          halfExtents: [side, s.halfExtents[1], s.halfExtents[2]],
-        }
-      : s;
+  const part = (id: string, dx: number): Collider => ({
+    ...s,
+    id,
+    center: [x0 + dx, s.center[1], s.center[2]],
+    halfExtents: [side, s.halfExtents[1], s.halfExtents[2]],
+  });
   return [n, part('sw', -gap / 2 - side), part('se', gap / 2 + side), e, w];
 }
 

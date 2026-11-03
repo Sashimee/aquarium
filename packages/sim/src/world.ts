@@ -392,7 +392,7 @@ export class World {
   }
 
   /** The speed each fish's steering asked for on the last step, which a coast glides down to. */
-  get targetSpeed(): Float64Array {
+  get targetSpeed(): ArrayLike<number> {
     return this._targetSpeed;
   }
 
@@ -440,7 +440,7 @@ export class World {
     return this._sex;
   }
 
-  /** Caudal thrust as a fraction of the maximum; 0 while coasting. */
+  /** Caudal thrust as a fraction of the maximum; 0 while coasting or braking. */
   get thrust(): Float64Array {
     return this._thrust;
   }

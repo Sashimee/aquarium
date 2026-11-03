@@ -228,8 +228,10 @@ describe('burst-and-coast in the blackwater demo tank', { timeout: LONG }, () =>
       expect(median(decays)).toBeGreaterThanOrEqual(1);
       expect(capped / lengths.length).toBeLessThan(0.05);
       // 0.67 to 0.68 at coastReleaseFactor 0.7, against 0.71 to 0.73 at 0.75 and 0.62 to 0.63 at 0.65.
+      // The release rule alone keeps uncapped coasts at or under 0.7, so a bound of 0.7 could
+      // not fail; 0.69 is the measured spread with a little room.
       expect(median(releases)).toBeGreaterThan(0.65);
-      expect(median(releases)).toBeLessThanOrEqual(0.7);
+      expect(median(releases)).toBeLessThan(0.69);
     },
   );
 });
