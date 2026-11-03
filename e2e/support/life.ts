@@ -44,6 +44,7 @@ export interface LifeTank extends Omit<ApiTank, 'fish'> {
     light: { tier: number; intensity: number; onHour: number; offHour: number };
   };
   co2OwnedTier: number;
+  heaterOwnedTier: number;
   recentVisitDays: number;
   away?: { births?: { fishId: string; parentId: string; species: string }[] };
 }

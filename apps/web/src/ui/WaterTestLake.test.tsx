@@ -133,6 +133,7 @@ describe('the lake notes in the water test kit', () => {
         chemistry: { ...base.chemistry, ph: 7.0 },
         equipment: { ...base.equipment, co2: { tier: co2Tier } },
         co2OwnedTier: co2Tier,
+        heaterOwnedTier: 1,
       };
     };
 

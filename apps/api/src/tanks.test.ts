@@ -1781,3 +1781,95 @@ describe('share throttle', () => {
     }
   });
 });
+
+describe('removable heater', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  const heater = (cookie: string, tankId: string, action: 'remove' | 'reinstall') =>
+    call(h, cookie, 'POST', `/api/tanks/${tankId}/heater/${action}`);
+  const read = async (cookie: string, tankId: string) =>
+    tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tankId}`)).json());
+
+  it('removes the heater, keeps the owned tier and reinstalls it again', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    expect(tank.heaterOwnedTier).toBe(1);
+
+    const removed = tankSchema.parse((await heater(cookie, tank.id, 'remove')).json());
+    expect(removed.equipment.heater.tier).toBe(0);
+    expect(removed.heaterOwnedTier).toBe(1);
+
+    const back = tankSchema.parse((await heater(cookie, tank.id, 'reinstall')).json());
+    expect(back.equipment.heater.tier).toBe(1);
+    expect((await read(cookie, tank.id)).equipment.heater.tier).toBe(1);
+  });
+
+  it('rejects a double remove, a reinstall over a heater and a reinstall with none owned', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    const over = await heater(cookie, tank.id, 'reinstall');
+    expect(over.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(over.json()).error.code).toBe('conflict');
+
+    expect((await heater(cookie, tank.id, 'remove')).statusCode).toBe(200);
+    const twice = await heater(cookie, tank.id, 'remove');
+    expect(twice.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(twice.json()).error.message).toContain('no heater');
+
+    await h.database.db
+      .update(schema.tanks)
+      .set({ heaterOwnedTier: 0 })
+      .where(eq(schema.tanks.id, tank.id));
+    const none = await heater(cookie, tank.id, 'reinstall');
+    expect(none.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(none.json()).error.message).toContain('Buy one');
+  });
+
+  it("does not let another user touch a tank's heater", async () => {
+    const alice = await signedIn(h);
+    const bob = await signedIn(h);
+    const tank = await createTank(h, alice);
+    expect((await heater(bob, tank.id, 'remove')).statusCode).toBe(404);
+    expect((await heater(bob, tank.id, 'reinstall')).statusCode).toBe(404);
+    expect((await read(alice, tank.id)).equipment.heater.tier).toBe(1);
+    const anonymous = await h.app.inject({
+      method: 'POST',
+      url: `/api/tanks/${tank.id}/heater/remove`,
+      headers: jsonHeaders,
+    });
+    expect(anonymous.statusCode).toBe(401);
+  });
+
+  it('drifts to room temperature offline and stresses a warm species, which a heater avoids', async () => {
+    const cookie = await signedIn(h);
+    const heated = await createTank(h, cookie);
+    const bare = await createTank(h, cookie);
+    await addFish(h, cookie, heated.id, 'betta', 'Warm');
+    await addFish(h, cookie, bare.id, 'betta', 'Cold');
+    expect((await heater(cookie, bare.id, 'remove')).statusCode).toBe(200);
+
+    await advance(h, 7 * DAY);
+    const warm = await read(cookie, heated.id);
+    const cold = await read(cookie, bare.id);
+    expect(warm.chemistry.temperatureC).toBeGreaterThan(24);
+    expect(cold.chemistry.temperatureC).toBeLessThan(22);
+    expect(cold.chemistry.temperatureC).toBeGreaterThan(20.9);
+    expect(warm.fish[0]?.health).toBeGreaterThan(cold.fish[0]?.health ?? 1);
+    expect(cold.fish[0]?.health).toBeLessThan(1);
+  });
+
+  it('warms the water back up once the heater is reinstalled', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    await heater(cookie, tank.id, 'remove');
+    await advance(h, 3 * DAY);
+    expect((await read(cookie, tank.id)).chemistry.temperatureC).toBeLessThan(22);
+    await heater(cookie, tank.id, 'reinstall');
+    await advance(h, 3 * DAY);
+    expect((await read(cookie, tank.id)).chemistry.temperatureC).toBeGreaterThan(24);
+  });
+});

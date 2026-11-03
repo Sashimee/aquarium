@@ -694,6 +694,31 @@ describe('wallet, shop and ledger', () => {
       expect((await purchase(h, who, 'equipment:heater:3', tank.id)).statusCode).toBe(200);
     });
 
+    it('reinstalls a removed heater at the owned tier for free, and sells only tiers above it', async () => {
+      const { who, tank } = await primed(h);
+      const [, , tier3] = economy.items.equipment.heater;
+      expect((await purchase(h, who, 'equipment:heater:2', tank.id)).statusCode).toBe(200);
+      const url = (action: string) => `/api/tanks/${tank.id}/heater/${action}`;
+      const removed = tankSchema.parse((await call(h, who, 'POST', url('remove'))).json());
+      expect(removed.equipment.heater.tier).toBe(0);
+      expect(removed.heaterOwnedTier).toBe(2);
+
+      await setBalance(h, who, 0);
+      expect((await purchase(h, who, 'equipment:heater:2', tank.id)).statusCode).toBe(409);
+      const back = tankSchema.parse((await call(h, who, 'POST', url('reinstall'))).json());
+      expect(back.equipment.heater.tier).toBe(2);
+      expect(await balance(h, who)).toBe(0);
+
+      await call(h, who, 'POST', url('remove'));
+      await setBalance(h, who, tier3 ?? 0);
+      expect((await purchase(h, who, 'equipment:heater:3', tank.id)).statusCode).toBe(200);
+      const upgraded = tankSchema.parse(
+        (await call(h, who, 'GET', `/api/tanks/${tank.id}`)).json(),
+      );
+      expect(upgraded.equipment.heater.tier).toBe(3);
+      expect(upgraded.heaterOwnedTier).toBe(3);
+    });
+
     it('lowers CO2, turns it off and restores an owned tier without charging', async () => {
       const { who, tank } = await primed(h);
       const [tier1, tier2] = economy.items.equipment.co2;

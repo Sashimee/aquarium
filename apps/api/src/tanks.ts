@@ -659,6 +659,7 @@ export async function render(
     inGallery: tank.inGallery,
     acceptsGifts: tank.acceptsGifts,
     co2OwnedTier: tank.co2OwnedTier,
+    heaterOwnedTier: tank.heaterOwnedTier,
     shareToken: issuedShareToken,
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
@@ -1268,6 +1269,46 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       });
     }),
   );
+
+  for (const action of ['remove', 'reinstall'] as const) {
+    app.post(
+      `/api/tanks/:tankId/heater/${action}`,
+      guarded(async (req) => {
+        const user = await authorize(req);
+        const { tankId } = tankParamsSchema.parse(req.params);
+        throttle(user.id, 'care');
+        return withTank(user, tankId, async (tx, ticked) => {
+          const current = equipmentSchema.parse(ticked.tank.equipment);
+          const installed = current.heater.tier;
+          const owned = ticked.tank.heaterOwnedTier;
+          if (action === 'remove' && installed === 0) {
+            throw new HttpError(409, apiError('conflict', 'This tank has no heater installed.'));
+          }
+          if (action === 'reinstall' && installed > 0) {
+            throw new HttpError(
+              409,
+              apiError('conflict', 'This tank already has its heater installed.'),
+            );
+          }
+          if (action === 'reinstall' && owned === 0) {
+            throw new HttpError(
+              409,
+              apiError('conflict', 'This tank has no heater to reinstall. Buy one in the shop.'),
+            );
+          }
+          const [row] = await tx
+            .update(schema.tanks)
+            .set({
+              equipment: { ...current, heater: { tier: action === 'remove' ? 0 : owned } },
+              updatedAt: new Date(clock.now()),
+            })
+            .where(eq(schema.tanks.id, tankId))
+            .returning();
+          return render(tx, { ...ticked, tank: row ?? ticked.tank });
+        });
+      }),
+    );
+  }
 
   app.post(
     '/api/tanks/:tankId/share',
