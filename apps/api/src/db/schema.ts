@@ -198,6 +198,8 @@ export const tanks = pgTable(
       ),
     // The highest CO2 tier this tank has been bought up to; the installed tier can sit below it.
     co2OwnedTier: integer('co2_owned_tier').notNull().default(0),
+    // The heater tier the player owns; removing the heater sets the installed tier to 0 and keeps this.
+    heaterOwnedTier: integer('heater_owned_tier').notNull().default(1),
   },
   (t) => [
     index('tanks_owner_id_idx').on(t.ownerId),

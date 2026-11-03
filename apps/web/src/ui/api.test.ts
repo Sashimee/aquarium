@@ -188,6 +188,7 @@ describe('api client', () => {
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       co2OwnedTier: 0,
+      heaterOwnedTier: 1,
       recentVisitDays: 0,
       fish: [],
       memorials: [],

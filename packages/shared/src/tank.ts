@@ -169,6 +169,11 @@ export const tankSchema = z.object({
     .min(0)
     .max(MAX_EQUIPMENT_TIER)
     .describe('highest CO2 tier bought; any tier up to it can be switched to for free'),
+  heaterOwnedTier: z
+    .int()
+    .min(0)
+    .max(MAX_EQUIPMENT_TIER)
+    .describe('heater tier bought; reinstalling a removed heater restores it for free'),
   recentVisitDays: z
     .number()
     .int()

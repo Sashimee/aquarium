@@ -192,6 +192,7 @@ export function registerShopRoutes(ctx: ShopContext): void {
       const owned = Math.max(
         equipment[item.device].tier,
         item.device === 'co2' ? ticked.tank.co2OwnedTier : 0,
+        item.device === 'heater' ? ticked.tank.heaterOwnedTier : 0,
       );
       if (item.tier <= owned) {
         throw conflict(`This tank already has a ${item.device} of tier ${item.tier} or better.`);
@@ -213,6 +214,9 @@ export function registerShopRoutes(ctx: ShopContext): void {
           equipment: upgraded,
           ...(item.device === 'co2'
             ? { co2OwnedTier: Math.max(ticked.tank.co2OwnedTier, item.tier) }
+            : {}),
+          ...(item.device === 'heater'
+            ? { heaterOwnedTier: Math.max(ticked.tank.heaterOwnedTier, item.tier) }
             : {}),
           updatedAt: new Date(nowMs),
         })
