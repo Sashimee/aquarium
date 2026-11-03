@@ -8,7 +8,7 @@ The expansion (PLAN §9) plus its fix wave. Verified on devfish at `91fff38d`; t
 
 - Three more tank types: Amazon blackwater, Rift Lake cichlid and brackish mangrove, each with its own water look, backgrounds, fish, wood, roots and mud. Salt, buffer and botanicals care actions, and CO2 control with a tier picker.
 - Mudskippers haul out onto an emergent bank in the mangrove tank; the figure-8 puffer joins freshwater.
-- Ten tank background photos, a background chooser in decorate mode, and nano, 200 L and long 300 L tank sizes with per-size stocking limits.
+- Ten tank backgrounds, a background chooser in decorate mode, and nano, 200 L and long 300 L tank sizes with per-size stocking limits.
 - Twelve rooms behind the tank with their own lighting, window weather, props and ambience; buy and pick them from the room picker.
 - Cherry and cleaner shrimp, nerite snails and hermit crabs, a cleaner wrasse with a cleaning station, and a clean-up crew that grazes and scavenges, also while you are away.
 
@@ -39,6 +39,7 @@ The expansion (PLAN §9) plus its fix wave. Verified on devfish at `91fff38d`; t
 - Tank algae show on the glass; the photo camera pad stays in view above the sliders and its release step honours opposite and fast keys.
 - Faster scene start: pipelines link in parallel, one PMREM generator is kept, reef builds yield between steps; lighter glass, plants and substrate at the low tier.
 - Fish draw their coast from the sim's glide weight; a VAPID key with a stripped leading zero is accepted; the device-room migration runs once per device; the community handle refreshes after a save.
+- Security review fixes: payments hardening (#1386) and a cap on fish held in a trade or shown publicly (#1444).
 - End-to-end shards rebalanced and the pre-release e2e failures fixed.
 
 ## 0.1.0: first release candidate
