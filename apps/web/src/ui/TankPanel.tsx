@@ -25,6 +25,7 @@ import { salinityNotice, type SalinityNotice } from '../sync/salinityCare';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth, useBridge } from './context';
 import { Co2Control } from './Co2Control';
+import { HeaterControl } from './HeaterControl';
 import { CoralSection } from './Corals';
 import { FishCards } from './FishCard';
 import { PlayerHandle } from './PlayerHandle';
@@ -168,6 +169,7 @@ function CareSections({ session, state, tank, onShop }: Ready & { onShop(): void
         onWaterChange={() => session.careAction({ type: 'water_change' })}
         onCo2Off={() => session.setCo2(0)}
       />
+      <HeaterControl session={session} state={state} tank={tank} />
       <Co2Control session={session} state={state} tank={tank} onShop={onShop} />
       <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
       <GiftNotice session={session} />

@@ -234,7 +234,7 @@ function DeviceRow({
                 )}
                 {t.state === 'owned' && (
                   <p id={note} className="hint">
-                    You already own this tier. Pick it in Care, for free.
+                    You already own this tier. Get it back in Care, for free.
                   </p>
                 )}
                 {t.skipped > 0 && (
