@@ -205,7 +205,7 @@ jobs:
           - name: fish-life
             args: fish-life.spec living-tank.spec
           - name: shop-equipment
-            args: shop-equipment.spec
+            args: shop-equipment.spec heater-remove.spec
           - name: scene-photo
             args: scene-modes.spec
             describe: photo mode
