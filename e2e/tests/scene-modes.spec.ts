@@ -30,6 +30,22 @@ test.describe('photo mode', () => {
     const tools = page.getByRole('region', { name: 'Photo controls' });
     await expect(tools).toBeVisible();
 
+    const canvas = page.locator('canvas#tank');
+    const eyeBefore = await canvas.getAttribute('data-photo-camera');
+    expect(eyeBefore, 'photo camera pose exposed in photo mode').toMatch(/^(-?[\d.]+ ?){5}$/);
+    const pad = await page
+      .getByRole('group', { name: 'Move the camera' })
+      .getByRole('button', { name: 'Move forward' })
+      .boundingBox();
+    if (!pad) throw new Error('the Move forward pad has no box');
+    await page.mouse.move(pad.x + pad.width / 2, pad.y + pad.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(500);
+    await page.mouse.up();
+    await expect
+      .poll(() => canvas.getAttribute('data-photo-camera'), { message: 'the pad moves the eye' })
+      .not.toBe(eyeBefore);
+
     await tools.getByRole('radio', { name: 'Black and white' }).check();
     await expect(tools.getByRole('radio', { name: 'Black and white' })).toBeChecked();
     await tools.getByRole('checkbox', { name: 'Freeze the fish' }).check();

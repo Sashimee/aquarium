@@ -295,6 +295,14 @@ async function boot(): Promise<void> {
     const p = rig.position;
     const pose = [p.x, p.y, p.z, x, y, z].map((v) => v.toFixed(3)).join(' ');
     if (canvas.dataset['camera'] !== pose) canvas.dataset['camera'] = pose;
+    const eye = engine.photo.active ? engine.photo.pose : null;
+    const photoPose = eye
+      ? [eye.position.x, eye.position.y, eye.position.z, eye.yaw, eye.pitch]
+          .map((v) => v.toFixed(3))
+          .join(' ')
+      : '';
+    if (photoPose === '') delete canvas.dataset['photoCamera'];
+    else if (canvas.dataset['photoCamera'] !== photoPose) canvas.dataset['photoCamera'] = photoPose;
   });
 
   const fish = startFish(engine, {
