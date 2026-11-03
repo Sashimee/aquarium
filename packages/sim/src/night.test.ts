@@ -377,7 +377,9 @@ describe('resting tetras in the dark', { timeout: LONG }, () => {
       expect(coasting / resting, `seed ${seed}: share of resting steps tail-still`).toBeLessThan(
         0.45,
       );
-      expect(longest, `seed ${seed}: longest tail-still run above 1 BL/s`).toBeLessThan(1);
+      // Steady swimming leaves such runs at 0.4 s at most; back on burst-and-coast while resting
+      // they reach 0.6 to 1.4 s, which a 1 s bound would let through on some seeds.
+      expect(longest, `seed ${seed}: longest tail-still run above 1 BL/s`).toBeLessThan(0.5);
     }
   });
 });
