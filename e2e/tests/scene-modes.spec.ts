@@ -31,8 +31,11 @@ test.describe('photo mode', () => {
     await expect(tools).toBeVisible();
 
     const canvas = page.locator('canvas#tank');
+    await expect(canvas, 'photo camera pose exposed in photo mode').toHaveAttribute(
+      'data-photo-camera',
+      /^(-?[\d.]+ ?){5}$/,
+    );
     const eyeBefore = await canvas.getAttribute('data-photo-camera');
-    expect(eyeBefore, 'photo camera pose exposed in photo mode').toMatch(/^(-?[\d.]+ ?){5}$/);
     const pad = await page
       .getByRole('group', { name: 'Move the camera' })
       .getByRole('button', { name: 'Move forward' })
