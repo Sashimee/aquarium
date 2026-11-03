@@ -74,6 +74,8 @@ export class ColliderOverlay {
   readonly group = new Group();
   private readonly hardMaterial: MeshBasicNodeMaterial;
   private readonly softMaterial: MeshBasicNodeMaterial;
+  private colliders: readonly Collider[] = [];
+  private built = false;
 
   constructor(colliders: readonly Collider[]) {
     this.group.name = 'collider-overlay';
@@ -84,10 +86,20 @@ export class ColliderOverlay {
     this.setColliders(colliders);
   }
 
-  /** Redraws the wireframes for a new collider list, e.g. after the decor moved. */
+  /**
+   * Redraws the wireframes for a new collider list, e.g. after the decor moved. Hull corners cost
+   * a cubic plane search, so a hidden overlay only keeps the list and draws it when shown.
+   */
   setColliders(colliders: readonly Collider[]): void {
+    this.colliders = colliders;
     this.clearMeshes();
-    for (const collider of colliders) {
+    this.built = false;
+    if (this.group.visible) this.build();
+  }
+
+  private build(): void {
+    this.built = true;
+    for (const collider of this.colliders) {
       const material = collider.hard ? this.hardMaterial : this.softMaterial;
       const mesh =
         collider.kind === 'capsule'
@@ -104,6 +116,7 @@ export class ColliderOverlay {
 
   set visible(value: boolean) {
     this.group.visible = value;
+    if (value && !this.built) this.build();
   }
 
   dispose(): void {

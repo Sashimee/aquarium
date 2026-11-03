@@ -42,6 +42,7 @@ describe('ColliderOverlay.setColliders', () => {
 
   it('redraws for a moved piece and frees the old wireframes', () => {
     const overlay = new ColliderOverlay([fitHull(box(-0.2)), capsule]);
+    overlay.visible = true;
     const freed = new Set<BufferGeometry>();
     for (const child of overlay.group.children) {
       const geometry = (child as Mesh).geometry;
@@ -54,6 +55,24 @@ describe('ColliderOverlay.setColliders', () => {
     expect(freed.size).toBe(2);
     const moved = new Box3().setFromObject(overlay.group.children[0] as Mesh);
     expect(moved.min.x).toBeCloseTo(0.15, 3);
+    overlay.dispose();
+  });
+
+  it('draws nothing while hidden and draws the latest list when shown', () => {
+    const overlay = new ColliderOverlay([fitHull(box(-0.2)), capsule]);
+    expect(overlay.group.children).toHaveLength(0);
+
+    overlay.setColliders([fitHull(box(0.2)), capsule]);
+    expect(overlay.group.children).toHaveLength(0);
+
+    overlay.visible = true;
+    expect(overlay.group.children).toHaveLength(2);
+    const moved = new Box3().setFromObject(overlay.group.children[0] as Mesh);
+    expect(moved.min.x).toBeCloseTo(0.15, 3);
+
+    overlay.visible = false;
+    overlay.visible = true;
+    expect(overlay.group.children).toHaveLength(2);
     overlay.dispose();
   });
 
