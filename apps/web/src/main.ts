@@ -9,7 +9,7 @@ import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig, orbitDistanceFor, tankBounds } from './interaction/camera';
 import { syncRoomLimit } from './interaction/roomLimit';
 import { ShownRoom } from './interaction/shownRoom';
-import { bindRoomLight } from './interaction/roomLight';
+import { bindRoomLight, showLitRoom } from './interaction/roomLight';
 import { IdleOrbit, bindIdleInput } from './interaction/idleOrbit';
 import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
@@ -207,10 +207,7 @@ async function boot(): Promise<void> {
   });
   const limitToRoom = (): void => syncRoomLimit(rig, engine.room?.layout ?? null);
   const showRoom = (): void => {
-    void engine.setRoom(shownRoom.snapshot()).then(() => {
-      roomLight.sync();
-      limitToRoom();
-    });
+    void showLitRoom(() => engine.setRoom(shownRoom.snapshot()), roomLight, limitToRoom);
   };
   limitToRoom();
   const stopRoomLimit = [
@@ -383,7 +380,8 @@ async function boot(): Promise<void> {
       sceneBiome = scene.biome;
       showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
-      void engine.useRoomIndex({ assets: [...scene.catalogEntries()] }).then(showRoom);
+      void engine.useRoomIndex({ assets: [...scene.catalogEntries()] });
+      showRoom();
       fish.setAnchors([...scene.anchors, ...scene.banks]);
       detachAnchors = scene.onAnchorsChanged((anchors) =>
         fish.setAnchors([...anchors, ...scene.banks]),

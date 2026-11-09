@@ -6,7 +6,7 @@ import { RoomLight } from '../engine/room';
 import { minuteOfDay } from '../engine/daylight';
 import { roomLightAt } from '../engine/room';
 import { weatherAt } from '../engine/room/weather';
-import { bindRoomLight } from './roomLight';
+import { bindRoomLight, showLitRoom } from './roomLight';
 
 function setup(initial: RoomId | null = null, clock: number | null = null, engineRoom = true) {
   let shown: RoomId | null = initial;
@@ -168,5 +168,38 @@ describe('bindRoomLight', () => {
     expect(frames.size).toBe(0);
     expect(seedListeners.size).toBe(0);
     expect(() => light.update({ nowMs: 0, minute: 0, hood: 1 })).toThrow(/after dispose/);
+  });
+});
+
+describe('showLitRoom', () => {
+  it('lights the room before the load settles, so the first draw sees final materials', async () => {
+    const order: string[] = [];
+    let built = false;
+    let finish = (): void => undefined;
+    const sync = vi.fn(() => order.push(built ? 'sync:built' : 'sync:unbuilt'));
+    const loading = showLitRoom(
+      () => {
+        built = true;
+        order.push('show');
+        return new Promise<void>((resolve) => (finish = resolve));
+      },
+      { sync },
+      () => order.push('limit'),
+    );
+    expect(order).toEqual(['show', 'sync:built', 'limit']);
+    finish();
+    await loading;
+    expect(order).toEqual(['show', 'sync:built', 'limit', 'sync:built', 'limit']);
+  });
+
+  it('still lights the old room when the load fails', async () => {
+    const sync = vi.fn();
+    const result = showLitRoom(
+      () => Promise.reject(new Error('boom')),
+      { sync },
+      () => undefined,
+    );
+    expect(sync).toHaveBeenCalledTimes(1);
+    await expect(result).rejects.toThrow('boom');
   });
 });

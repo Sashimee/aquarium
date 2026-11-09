@@ -95,3 +95,22 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
     },
   };
 }
+
+/**
+ * Shows a room and lights it in the same turn: the shell is built by the time `show` returns, so
+ * the light attaches before the room's first draw and its shaders are final when they compile.
+ * The furniture that streams in afterwards is dressed by the light's own revision check.
+ */
+export function showLitRoom(
+  show: () => Promise<void>,
+  light: Pick<RoomLightHandle, 'sync'>,
+  limit: () => void,
+): Promise<void> {
+  const loading = show();
+  light.sync();
+  limit();
+  return loading.then(() => {
+    light.sync();
+    limit();
+  });
+}
