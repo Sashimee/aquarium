@@ -381,7 +381,11 @@ async function boot(): Promise<void> {
       showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
       void engine.useRoomIndex({ assets: [...scene.catalogEntries()] });
-      showRoom();
+      try {
+        showRoom();
+      } catch (cause) {
+        events.emit('engine:error', { message: 'The room light failed to start', cause });
+      }
       fish.setAnchors([...scene.anchors, ...scene.banks]);
       detachAnchors = scene.onAnchorsChanged((anchors) =>
         fish.setAnchors([...anchors, ...scene.banks]),

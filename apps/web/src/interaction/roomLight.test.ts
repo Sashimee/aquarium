@@ -192,7 +192,7 @@ describe('showLitRoom', () => {
     expect(order).toEqual(['show', 'sync:built', 'limit', 'sync:built', 'limit']);
   });
 
-  it('still lights the old room when the load fails', async () => {
+  it('syncs the light once before rejecting when the load fails', async () => {
     const sync = vi.fn();
     const result = showLitRoom(
       () => Promise.reject(new Error('boom')),
