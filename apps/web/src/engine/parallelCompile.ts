@@ -44,16 +44,16 @@ function drawnObject(renderObject: object): object {
  * KHR_parallel_shader_compile the backend polls the link once a frame and three skips the
  * object's draws until it is ready, so it appears a few frames late rather than freezing the page.
  * Only an object's first draw goes that way: an object drawn in an earlier frame links a rebuilt
- * pipeline synchronously, as before, so a tier or material change never makes it vanish. Without
- * the extension (SwiftShader) three links synchronously as before.
+ * pipeline synchronously, as before, so a tier or material change does not make it vanish. The
+ * exception is a rebuilt pipeline whose cache key matches one a first draw started earlier in the
+ * same frame: three hands it the pipeline still linking, and the object skips its draws until the
+ * link is done. Without the extension (SwiftShader) three links synchronously as before.
  *
- * On WebGPU the same path calls `createRenderPipelineAsync`. A synchronous `createRenderPipeline`
- * returns at once but makes the next submit wait for the driver's compile, which on a cold shader
- * cache (D3D on Windows) froze the first look at late room furniture for a frame or more (#1641).
- * three pushes an error scope before an async pipeline and pops it after the await, so pipelines
- * started together pop each other's scopes; that only swaps which one would carry an unrelated
- * error raised meanwhile, since an async pipeline reports its own failure by rejecting, and pushes
- * and pops still pair up.
+ * Only for the WebGL backend. three's WebGPU async path pushes a `validation` error scope before
+ * `createRenderPipelineAsync` and pops it only after awaiting the pipeline, so the scope stays open
+ * across the frames that follow. Any validation error raised in them (a submit, a bind group) is
+ * caught by that scope instead of reaching `onuncapturederror`. three then marks the innocent
+ * pipeline failed and never draws it again, and the error is reported against the wrong material.
  */
 export function compileInParallel(
   renderer: object,

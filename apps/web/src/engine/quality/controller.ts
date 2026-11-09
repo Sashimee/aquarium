@@ -36,6 +36,11 @@ export interface ControllerConfig {
    * but hitches arrives for `downHoldMs`: then the device is overloaded, not hitching (#1456).
    */
   ignoreAboveMs: number;
+  /**
+   * The longest a step up that came due waits behind `holdUpgrades`, so a camera that never rests
+   * cannot keep a device below the tier it has headroom for.
+   */
+  maxUpgradeDelayMs: number;
   minTier: Tier;
   maxTier: Tier;
 }
@@ -55,6 +60,7 @@ export const DEFAULT_CONTROLLER_CONFIG: Omit<
   probationMs: 20_000,
   reentryHoldMs: 60_000,
   ignoreAboveMs: 250,
+  maxUpgradeDelayMs: 20_000,
   minTier: 'low',
   maxTier: 'ultra',
 };
@@ -74,7 +80,9 @@ export class TierController {
   private current: Tier;
   private readonly window: number[] = [];
   private overSince: number | null = null;
-  private underSince: number | null = null;
+  /** When each tier above the current one last began to have headroom, and has had it since. */
+  private readonly headroomSince = new Map<Tier, number>();
+  private dueSince: number | null = null;
   private hitches: { since: number; count: number } | null = null;
   private lastChangeAt = Number.NEGATIVE_INFINITY;
   private lastUpgrade: { tier: Tier; at: number } | null = null;
@@ -82,7 +90,7 @@ export class TierController {
   private readonly blockedUntil = new Map<Tier, number>();
   private pausedUntil = Number.NEGATIVE_INFINITY;
   private upgradesHeldUntil = Number.NEGATIVE_INFINITY;
-  private heldAtPause: { overMs: number | null; underMs: number | null } | null = null;
+  private heldAtPause: { overMs: number | null; headroomMs: Map<Tier, number> } | null = null;
 
   constructor(initial: Tier, config: ControllerConfig) {
     if (!(config.targetMs > 0)) throw new RangeError('TierController: targetMs must be > 0');
@@ -125,7 +133,8 @@ export class TierController {
   /**
    * Keeps a step up that comes due from being taken before `untilMs`, while headroom is still
    * measured: a step up rebuilds pipelines, which stalls the frames of a camera on the move. It is
-   * taken as soon as the hold ends if the headroom lasted. Steps down are not held.
+   * taken as soon as the hold ends if the headroom lasted, or once it has waited
+   * `maxUpgradeDelayMs`. Steps down are not held.
    */
   holdUpgrades(untilMs: number): void {
     this.upgradesHeldUntil = Math.max(this.upgradesHeldUntil, untilMs);
@@ -141,10 +150,10 @@ export class TierController {
     if (this.heldAtPause === null) {
       this.heldAtPause = {
         overMs: this.overSince === null ? null : nowMs - this.overSince,
-        underMs: this.underSince === null ? null : nowMs - this.underSince,
+        headroomMs: new Map([...this.headroomSince].map(([tier, since]) => [tier, nowMs - since])),
       };
       this.overSince = null;
-      this.underSince = null;
+      this.headroomSince.clear();
     }
     this.pausedUntil = Math.max(this.pausedUntil, nowMs + this.config.cooldownMs);
   }
@@ -167,7 +176,7 @@ export class TierController {
     const meanMs = this.window.reduce((sum, v) => sum + v, 0) / this.window.length;
 
     if (meanMs > c.targetMs * c.downRatio * this.share(this.current)) {
-      this.underSince = null;
+      this.loseHeadroom();
       this.overSince ??= nowMs;
       if (nowMs - this.overSince >= c.downHoldMs && this.current !== c.minTier) {
         return this.stepDown(meanMs, nowMs);
@@ -177,16 +186,52 @@ export class TierController {
 
     this.overSince = null;
     const next = this.nextUp(nowMs);
-    if (next !== null && this.hasHeadroomFor(next, meanMs)) {
-      this.underSince ??= nowMs;
-      const heldMs = nowMs - this.underSince;
-      if (heldMs >= this.upHoldFor(next) && nowMs >= this.upgradesHeldUntil) {
-        return this.stepUp(this.upTarget(next, meanMs, heldMs, nowMs), meanMs, nowMs);
-      }
+    if (next === null || !this.hasHeadroomFor(next, meanMs)) {
+      this.loseHeadroom();
       return null;
     }
+    this.trackHeadroom(next, meanMs, nowMs);
+    const target = this.upTarget(next, nowMs);
+    if (target === null) {
+      this.dueSince = null;
+      return null;
+    }
+    this.dueSince ??= nowMs;
+    if (nowMs < this.upgradesHeldUntil && nowMs - this.dueSince < c.maxUpgradeDelayMs) return null;
+    return this.stepUp(target, meanMs, nowMs);
+  }
 
-    this.underSince = null;
+  private loseHeadroom(): void {
+    this.headroomSince.clear();
+    this.dueSince = null;
+  }
+
+  /**
+   * GPU timing predicts every tier, so it tracks the headroom of each tier above the current one:
+   * a step goes straight to the highest whose own headroom has lasted, as each step rebuilds every
+   * pipeline and two in a row stall twice. Frame intervals only show that the current tier keeps
+   * up, so they track the next tier alone and climb one at a time.
+   */
+  private trackHeadroom(next: Tier, meanMs: number, nowMs: number): void {
+    const top = this.config.signal === 'gpu' ? tierIndex(this.config.maxTier) : tierIndex(next);
+    for (let i = tierIndex(next); i <= tierIndex(this.config.maxTier); i++) {
+      const tier = tierAt(i);
+      if (i <= top && this.hasHeadroomFor(tier, meanMs)) {
+        if (!this.headroomSince.has(tier)) this.headroomSince.set(tier, nowMs);
+      } else {
+        this.headroomSince.delete(tier);
+      }
+    }
+  }
+
+  /** The highest unblocked tier whose own headroom has lasted its up hold, if any. */
+  private upTarget(next: Tier, nowMs: number): Tier | null {
+    for (let i = tierIndex(this.config.maxTier); i >= tierIndex(next); i--) {
+      const tier = tierAt(i);
+      if (nowMs < (this.blockedUntil.get(tier) ?? Number.NEGATIVE_INFINITY)) continue;
+      const since = this.headroomSince.get(tier);
+      if (since !== undefined && nowMs - since >= this.upHoldFor(tier)) return tier;
+    }
     return null;
   }
 
@@ -212,7 +257,8 @@ export class TierController {
     if (held === null) return;
     this.heldAtPause = null;
     this.overSince = held.overMs === null ? null : nowMs - held.overMs;
-    this.underSince = held.underMs === null ? null : nowMs - held.underMs;
+    this.headroomSince.clear();
+    for (const [tier, heldMs] of held.headroomMs) this.headroomSince.set(tier, nowMs - heldMs);
   }
 
   private hasHeadroomFor(next: Tier, meanMs: number): boolean {
@@ -232,21 +278,6 @@ export class TierController {
     if (this.current === this.config.maxTier) return null;
     const next = tierAt(tierIndex(this.current) + 1);
     return nowMs < (this.blockedUntil.get(next) ?? Number.NEGATIVE_INFINITY) ? null : next;
-  }
-
-  /**
-   * GPU timing predicts every tier, so the step goes straight to the highest one that fits and has
-   * held its headroom long enough: each step rebuilds every pipeline, and two in a row stall twice.
-   * Frame intervals only show that the current tier keeps up, so they climb one tier at a time.
-   */
-  private upTarget(next: Tier, meanMs: number, heldMs: number, nowMs: number): Tier {
-    if (this.config.signal !== 'gpu') return next;
-    for (let i = tierIndex(this.config.maxTier); i > tierIndex(next); i--) {
-      const tier = tierAt(i);
-      if (nowMs < (this.blockedUntil.get(tier) ?? Number.NEGATIVE_INFINITY)) continue;
-      if (heldMs >= this.upHoldFor(tier) && this.hasHeadroomFor(tier, meanMs)) return tier;
-    }
-    return next;
   }
 
   private stepDown(meanMs: number, nowMs: number): TierChange {
@@ -277,7 +308,7 @@ export class TierController {
     this.window.length = 0;
     this.hitches = null;
     this.overSince = null;
-    this.underSince = null;
+    this.loseHeadroom();
     this.heldAtPause = null;
     this.lastChangeAt = nowMs;
   }

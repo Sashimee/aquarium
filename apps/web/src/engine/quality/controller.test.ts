@@ -309,6 +309,22 @@ describe('TierController', () => {
     expect(run(c, 3 / TIER_COST.low, climb.end, 60_000).changes).toEqual([]);
   });
 
+  it("jumps only to a tier whose own headroom has lasted its hold, not the next tier's", () => {
+    const c = controller('low');
+    // 9 ms at low leaves room for medium (12 ms) but not high (20 ms); 3 ms leaves room for high.
+    const { end } = run(c, 9, 0, 7900);
+    const { changes } = run(c, 3, end, 3000);
+    expect(changes).toMatchObject([{ from: 'low', to: 'medium', reason: 'headroom' }]);
+  });
+
+  it('forgets the headroom of a tier that loses it, while the next tier keeps its own', () => {
+    const c = controller('low', { reentryHoldMs: 0 });
+    let { end } = run(c, 3, 0, 6000);
+    ({ end } = run(c, 9, end, 1000));
+    const { changes } = run(c, 3, end, 3000);
+    expect(changes).toMatchObject([{ from: 'low', to: 'medium' }]);
+  });
+
   it('does not jump over a tier in its re-entry hold when stepping up in one change', () => {
     const c = controller('high', { reentryHoldMs: 60_000 });
     const { end } = run(c, 30, 0, 5000);
@@ -324,7 +340,7 @@ describe('TierController', () => {
   });
 
   it('keeps a due step up until holdUpgrades() runs out, then takes it at once', () => {
-    const c = controller('medium');
+    const c = controller('medium', { maxUpgradeDelayMs: 60_000 });
     c.holdUpgrades(30_000);
     const held = run(c, 4, 0, 30_000);
     expect(held.changes).toEqual([]);
@@ -333,8 +349,22 @@ describe('TierController', () => {
     expect(after[0]?.at).toBeLessThan(held.end + 100);
   });
 
+  it('takes a due step up once it has waited maxUpgradeDelayMs, however long the hold', () => {
+    const c = controller('medium', { maxUpgradeDelayMs: 5000 });
+    const due = DEFAULT_CONTROLLER_CONFIG.upHoldMs + 200;
+    let t = 0;
+    let change = null;
+    for (; t < 60_000 && !change; t += TARGET) {
+      c.holdUpgrades(t + 2000);
+      change = c.sample(4, t);
+    }
+    expect(change).toMatchObject({ from: 'medium', to: 'high', reason: 'headroom' });
+    expect(t).toBeGreaterThanOrEqual(due + 5000 - 300);
+    expect(t).toBeLessThan(due + 5000 + 300);
+  });
+
   it('keeps the later of two upgrade holds', () => {
-    const c = controller('medium');
+    const c = controller('medium', { maxUpgradeDelayMs: 60_000 });
     c.holdUpgrades(30_000);
     c.holdUpgrades(10_000);
     expect(run(c, 4, 0, 29_000).changes).toEqual([]);

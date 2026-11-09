@@ -568,12 +568,12 @@ describe('QualityManager', () => {
   it('holds a step up for camera input that came before the probe ended', () => {
     const { quality, announced } = setup();
     quality.start(0);
-    quality.holdUpgrades(40_000);
+    quality.holdUpgrades(20_000);
     let t = feed(quality, TARGET, 12, 0, 2400);
     expect(quality.tier).toBe('high');
-    t = feed(quality, TARGET, 3, t, 39_900);
+    t = feed(quality, TARGET, 3, t, 19_900);
     expect(quality.tier).toBe('high');
-    feed(quality, TARGET, 3, t, 41_000);
+    feed(quality, TARGET, 3, t, 21_000);
     expect(announced.slice(1)).toEqual([{ from: 'high', to: 'ultra', reason: 'headroom' }]);
   });
 

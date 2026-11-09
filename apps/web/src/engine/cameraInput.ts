@@ -8,7 +8,8 @@ const PRESS_EVENTS = ['pointerdown', 'wheel', 'keydown'] as const;
 export function watchCameraInput(element: EventTarget, onInput: () => void): () => void {
   const pressed = () => onInput();
   const moved = (event: Event) => {
-    if ((event as PointerEvent).buttons !== 0) onInput();
+    const buttons: unknown = Reflect.get(event, 'buttons');
+    if (typeof buttons === 'number' && buttons !== 0) onInput();
   };
   const options = { capture: true, passive: true } as const;
   for (const type of PRESS_EVENTS) element.addEventListener(type, pressed, options);

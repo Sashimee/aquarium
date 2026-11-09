@@ -346,7 +346,7 @@ export class Engine {
       () => this.materialRebuild.request(performance.now()),
     );
     cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
-    this.installParallelCompile();
+    if (backend === 'webgl2') this.installParallelCompile();
     cleanup.add(
       watchCameraInput(container, () =>
         this.quality.holdUpgrades(performance.now() + CAMERA_QUIET_MS),
