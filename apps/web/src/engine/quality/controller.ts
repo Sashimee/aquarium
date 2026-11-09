@@ -81,6 +81,7 @@ export class TierController {
   private readonly upHold = new Map<Tier, number>();
   private readonly blockedUntil = new Map<Tier, number>();
   private pausedUntil = Number.NEGATIVE_INFINITY;
+  private upgradesHeldUntil = Number.NEGATIVE_INFINITY;
   private heldAtPause: { overMs: number | null; underMs: number | null } | null = null;
 
   constructor(initial: Tier, config: ControllerConfig) {
@@ -119,6 +120,15 @@ export class TierController {
         Math.max(this.blockedUntil.get(held) ?? Number.NEGATIVE_INFINITY, untilMs),
       );
     }
+  }
+
+  /**
+   * Keeps a step up that comes due from being taken before `untilMs`, while headroom is still
+   * measured: a step up rebuilds pipelines, which stalls the frames of a camera on the move. It is
+   * taken as soon as the hold ends if the headroom lasted. Steps down are not held.
+   */
+  holdUpgrades(untilMs: number): void {
+    this.upgradesHeldUntil = Math.max(this.upgradesHeldUntil, untilMs);
   }
 
   /**
@@ -169,8 +179,9 @@ export class TierController {
     const next = this.nextUp(nowMs);
     if (next !== null && this.hasHeadroomFor(next, meanMs)) {
       this.underSince ??= nowMs;
-      if (nowMs - this.underSince >= this.upHoldFor(next)) {
-        return this.stepUp(next, meanMs, nowMs);
+      const heldMs = nowMs - this.underSince;
+      if (heldMs >= this.upHoldFor(next) && nowMs >= this.upgradesHeldUntil) {
+        return this.stepUp(this.upTarget(next, meanMs, heldMs, nowMs), meanMs, nowMs);
       }
       return null;
     }
@@ -221,6 +232,21 @@ export class TierController {
     if (this.current === this.config.maxTier) return null;
     const next = tierAt(tierIndex(this.current) + 1);
     return nowMs < (this.blockedUntil.get(next) ?? Number.NEGATIVE_INFINITY) ? null : next;
+  }
+
+  /**
+   * GPU timing predicts every tier, so the step goes straight to the highest one that fits and has
+   * held its headroom long enough: each step rebuilds every pipeline, and two in a row stall twice.
+   * Frame intervals only show that the current tier keeps up, so they climb one tier at a time.
+   */
+  private upTarget(next: Tier, meanMs: number, heldMs: number, nowMs: number): Tier {
+    if (this.config.signal !== 'gpu') return next;
+    for (let i = tierIndex(this.config.maxTier); i > tierIndex(next); i--) {
+      const tier = tierAt(i);
+      if (nowMs < (this.blockedUntil.get(tier) ?? Number.NEGATIVE_INFINITY)) continue;
+      if (heldMs >= this.upHoldFor(tier) && this.hasHeadroomFor(tier, meanMs)) return tier;
+    }
+    return next;
   }
 
   private stepDown(meanMs: number, nowMs: number): TierChange {

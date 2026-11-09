@@ -47,8 +47,13 @@ function drawnObject(renderObject: object): object {
  * pipeline synchronously, as before, so a tier or material change never makes it vanish. Without
  * the extension (SwiftShader) three links synchronously as before.
  *
- * Only for the WebGL backend: WebGPU's async pipeline path pops an error scope after an await,
- * which other pipelines created in between would interleave with.
+ * On WebGPU the same path calls `createRenderPipelineAsync`. A synchronous `createRenderPipeline`
+ * returns at once but makes the next submit wait for the driver's compile, which on a cold shader
+ * cache (D3D on Windows) froze the first look at late room furniture for a frame or more (#1641).
+ * three pushes an error scope before an async pipeline and pops it after the await, so pipelines
+ * started together pop each other's scopes; that only swaps which one would carry an unrelated
+ * error raised meanwhile, since an async pipeline reports its own failure by rejecting, and pushes
+ * and pops still pair up.
  */
 export function compileInParallel(
   renderer: object,

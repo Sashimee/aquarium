@@ -60,6 +60,7 @@ import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
+import { watchCameraInput } from './cameraInput';
 import { ReflectedShadow } from './reflectedShadow';
 import { TierShadow } from './tierShadow';
 import { MaterialRebuild } from './materialRebuild';
@@ -112,6 +113,8 @@ const MAX_DELTA_S = 0.1;
 const EFFECTS_BOOT_WAIT_MS = 5000;
 /** A capture waits this long for the look's pipeline before giving up rather than encode another. */
 const CAPTURE_EFFECTS_WAIT_MS = 15000;
+/** A quality step up waits until the camera has been left alone this long. */
+const CAMERA_QUIET_MS = 2000;
 
 /** Hood LED, roughly 6500 K. */
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
@@ -343,7 +346,12 @@ export class Engine {
       () => this.materialRebuild.request(performance.now()),
     );
     cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
-    if (backend === 'webgl2') this.installParallelCompile();
+    this.installParallelCompile();
+    cleanup.add(
+      watchCameraInput(container, () =>
+        this.quality.holdUpgrades(performance.now() + CAMERA_QUIET_MS),
+      ),
+    );
 
     container.appendChild(renderer.domElement);
     cleanup.add(() => renderer.domElement.remove());

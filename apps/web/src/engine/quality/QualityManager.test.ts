@@ -565,4 +565,38 @@ describe('QualityManager', () => {
       { from: 'medium', to: 'high', reason: 'headroom' },
     ]);
   });
+  it('holds a step up for camera input that came before the probe ended', () => {
+    const { quality, announced } = setup();
+    quality.start(0);
+    quality.holdUpgrades(40_000);
+    let t = feed(quality, TARGET, 12, 0, 2400);
+    expect(quality.tier).toBe('high');
+    t = feed(quality, TARGET, 3, t, 39_900);
+    expect(quality.tier).toBe('high');
+    feed(quality, TARGET, 3, t, 41_000);
+    expect(announced.slice(1)).toEqual([{ from: 'high', to: 'ultra', reason: 'headroom' }]);
+  });
+
+  it('keeps holding step ups while the camera keeps moving, but not steps down', () => {
+    const { quality, announced } = setup();
+    quality.start(0);
+    let t = feed(quality, TARGET, 12, 0, 2400);
+    for (const end of [t + 10_000, t + 20_000]) {
+      quality.holdUpgrades(end + 2000);
+      t = feed(quality, TARGET, 3, t, end);
+    }
+    expect(quality.tier).toBe('high');
+    quality.holdUpgrades(t + 60_000);
+    feed(quality, 40, 30, t, t + 5000);
+    expect(announced.slice(1)).toEqual([{ from: 'high', to: 'medium', reason: 'over-budget' }]);
+  });
+
+  it('does not hold a manual tier change', () => {
+    const { quality } = setup();
+    quality.start(0);
+    const t = feed(quality, TARGET, 12, 0, 2400);
+    quality.holdUpgrades(t + 60_000);
+    quality.setTier('ultra', t);
+    expect(quality.tier).toBe('ultra');
+  });
 });
