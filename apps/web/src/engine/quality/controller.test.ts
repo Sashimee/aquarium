@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONTROLLER_CONFIG, TierController, type ControllerConfig } from './controller';
-import type { Tier } from './tiers';
+import { TIER_COST, type Tier } from './tiers';
 
 const TARGET = 1000 / 60;
 
@@ -298,7 +298,84 @@ describe('TierController', () => {
     c.holdBelow('high', 60_000);
     const { changes } = run(c, 2, 0, 59_000);
     expect(changes.map((ch) => ch.to)).toEqual(['medium']);
-    expect(run(c, 2, 59_000, 20_000).changes[0]).toMatchObject({ from: 'medium', to: 'high' });
+    expect(run(c, 2, 59_000, 20_000).changes[0]).toMatchObject({ from: 'medium', to: 'ultra' });
+  });
+
+  it('steps the gpu signal straight to the highest tier that fits, in one change', () => {
+    const c = controller('low');
+    // 3 ms at low predicts 6.7 ms at high, well inside the budget, and 11.3 ms at ultra, over its share.
+    const climb = run(c, 3, 0, 15_000);
+    expect(climb.changes).toMatchObject([{ from: 'low', to: 'high', reason: 'headroom' }]);
+    expect(run(c, 3 / TIER_COST.low, climb.end, 60_000).changes).toEqual([]);
+  });
+
+  it("jumps only to a tier whose own headroom has lasted its hold, not the next tier's", () => {
+    const c = controller('low');
+    // 9 ms at low leaves room for medium (12 ms) but not high (20 ms); 3 ms leaves room for high.
+    const { end } = run(c, 9, 0, 7900);
+    const { changes } = run(c, 3, end, 3000);
+    expect(changes).toMatchObject([{ from: 'low', to: 'medium', reason: 'headroom' }]);
+  });
+
+  it('forgets the headroom of a tier that loses it, while the next tier keeps its own', () => {
+    const c = controller('low', { reentryHoldMs: 0 });
+    let { end } = run(c, 3, 0, 6000);
+    ({ end } = run(c, 9, end, 1000));
+    const { changes } = run(c, 3, end, 3000);
+    expect(changes).toMatchObject([{ from: 'low', to: 'medium' }]);
+  });
+
+  it('does not jump over a tier in its re-entry hold when stepping up in one change', () => {
+    const c = controller('high', { reentryHoldMs: 60_000 });
+    const { end } = run(c, 30, 0, 5000);
+    expect(c.tier).toBe('medium');
+    const { changes } = run(c, 2, end, 40_000);
+    expect(changes).toEqual([]);
+  });
+
+  it('climbs one tier at a time on the frame signal', () => {
+    const c = controller('low', { signal: 'frame', maxTier: 'high' });
+    const { changes } = run(c, TARGET, 0, 60_000);
+    expect(changes.map((ch) => ch.to)).toEqual(['medium', 'high']);
+  });
+
+  it('keeps a due step up until holdUpgrades() runs out, then takes it at once', () => {
+    const c = controller('medium', { maxUpgradeDelayMs: 60_000 });
+    c.holdUpgrades(30_000);
+    const held = run(c, 4, 0, 30_000);
+    expect(held.changes).toEqual([]);
+    const after = run(c, 4, held.end, 1000).changes;
+    expect(after).toMatchObject([{ from: 'medium', to: 'high', reason: 'headroom' }]);
+    expect(after[0]?.at).toBeLessThan(held.end + 100);
+  });
+
+  it('takes a due step up once it has waited maxUpgradeDelayMs, however long the hold', () => {
+    const c = controller('medium', { maxUpgradeDelayMs: 5000 });
+    const due = DEFAULT_CONTROLLER_CONFIG.upHoldMs + 200;
+    let t = 0;
+    let change = null;
+    for (; t < 60_000 && !change; t += TARGET) {
+      c.holdUpgrades(t + 2000);
+      change = c.sample(4, t);
+    }
+    expect(change).toMatchObject({ from: 'medium', to: 'high', reason: 'headroom' });
+    expect(t).toBeGreaterThanOrEqual(due + 5000 - 300);
+    expect(t).toBeLessThan(due + 5000 + 300);
+  });
+
+  it('keeps the later of two upgrade holds', () => {
+    const c = controller('medium', { maxUpgradeDelayMs: 60_000 });
+    c.holdUpgrades(30_000);
+    c.holdUpgrades(10_000);
+    expect(run(c, 4, 0, 29_000).changes).toEqual([]);
+  });
+
+  it('does not hold a step down behind holdUpgrades()', () => {
+    const c = controller('high');
+    c.holdUpgrades(60_000);
+    const first = run(c, 30, 0, 10_000).changes[0];
+    expect(first).toMatchObject({ from: 'high', to: 'medium', reason: 'over-budget' });
+    expect(first?.at).toBeLessThan(2500);
   });
 
   it('ignores the samples around a stall reported by pause()', () => {

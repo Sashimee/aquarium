@@ -92,6 +92,7 @@ export class QualityManager {
   private contentDeadline = Infinity;
   private tierAnnounced = false;
   private signal: TimingSignal | null = null;
+  private upgradesHeldUntil = Number.NEGATIVE_INFINITY;
   private readonly table: Readonly<Record<Tier, Readonly<TierSettings>>>;
 
   constructor(
@@ -220,6 +221,19 @@ export class QualityManager {
   }
 
   /**
+   * The camera is moving: adaptation steps up no sooner than `untilMs`, so the pipeline rebuild of
+   * a step up lands when the view is still. A step that keeps coming due waits no longer than the
+   * controller's `maxUpgradeDelayMs`, so a camera that never rests still gets it. Manual changes,
+   * steps down and the probe's pick are not held: the furnished-tank probe settles the first tier
+   * once, at load, and keeping a device on a tier it measured too slow or too fast for would cost
+   * more than the one rebuild.
+   */
+  holdUpgrades(untilMs: number): void {
+    this.upgradesHeldUntil = Math.max(this.upgradesHeldUntil, untilMs);
+    this.controller?.holdUpgrades(untilMs);
+  }
+
+  /**
    * Manual override from the dev panel or settings; adaptation restarts from there. A pick above
    * `maxTier` is shown as picked, but the controller restarts clamped to `maxTier`, so its first
    * step over budget lands one below the cap: on a phone, ultra drops straight to medium.
@@ -290,6 +304,7 @@ export class QualityManager {
         signal,
       });
       controller.reset(result.tier, nowMs);
+      controller.holdUpgrades(this.upgradesHeldUntil);
       // The furnished tank measured too slow for the tiers above its pick: no climbing straight
       // back into them, which rebuilds every pipeline twice for nothing.
       if (tierIndex(result.tier) < tierIndex(measured)) {

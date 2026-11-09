@@ -44,11 +44,16 @@ function drawnObject(renderObject: object): object {
  * KHR_parallel_shader_compile the backend polls the link once a frame and three skips the
  * object's draws until it is ready, so it appears a few frames late rather than freezing the page.
  * Only an object's first draw goes that way: an object drawn in an earlier frame links a rebuilt
- * pipeline synchronously, as before, so a tier or material change never makes it vanish. Without
- * the extension (SwiftShader) three links synchronously as before.
+ * pipeline synchronously, as before, so a tier or material change does not make it vanish. The
+ * exception is a rebuilt pipeline whose cache key matches one a first draw started earlier in the
+ * same frame: three hands it the pipeline still linking, and the object skips its draws until the
+ * link is done. Without the extension (SwiftShader) three links synchronously as before.
  *
- * Only for the WebGL backend: WebGPU's async pipeline path pops an error scope after an await,
- * which other pipelines created in between would interleave with.
+ * Only for the WebGL backend. three's WebGPU async path pushes a `validation` error scope before
+ * `createRenderPipelineAsync` and pops it only after awaiting the pipeline, so the scope stays open
+ * across the frames that follow. Any validation error raised in them (a submit, a bind group) is
+ * caught by that scope instead of reaching `onuncapturederror`. three then marks the innocent
+ * pipeline failed and never draws it again, and the error is reported against the wrong material.
  */
 export function compileInParallel(
   renderer: object,
